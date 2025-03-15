@@ -222,7 +222,7 @@ pub enum AtomString<'a> {
     Dynamic(AtomTableRef<str>),
 }
 
-fn inlined_to_str<'a>(bytes: &'a [u8; 8]) -> &'a str {
+fn inlined_to_str(bytes: &[u8; 8]) -> &str {
     // allow the '\0\' atom to be represented as the 0-valued inlined atom
     let slice_len = if bytes[0] == 0 {
         1
@@ -543,61 +543,3 @@ impl AtomTable {
 
 unsafe impl Send for AtomTable {}
 unsafe impl Sync for AtomTable {}
-
-/*
-#[bitfield]
-#[repr(u64)]
-#[derive(Copy, Clone, Debug)]
-pub struct AtomCell {
-    name: B48,
-    arity: B10,
-    #[allow(unused)]
-    f: bool,
-    #[allow(unused)]
-    m: bool,
-    #[allow(unused)]
-    inlined: bool,
-    #[allow(unused)]
-    tag: B3,
-}
-
-impl AtomCell {
-    #[inline]
-    pub fn build_with(name: u64, arity: u16, tag: HeapCellValueTag) -> Self {
-        if arity > 0 {
-            debug_assert!(arity as usize <= MAX_ARITY);
-
-            AtomCell::new()
-                .with_name(name)
-                .with_arity(arity)
-                .with_f(false)
-                .with_tag(tag as u8)
-        } else {
-            AtomCell::new()
-                .with_name(name)
-                .with_f(false)
-                .with_tag(tag as u8)
-        }
-    }
-
-    #[inline]
-    pub fn get_index(self) -> usize {
-        self.name() as usize
-    }
-
-    #[inline]
-    pub fn get_name(self) -> Atom {
-        Atom::from((self.get_index() as u64) << 3)
-    }
-
-    #[inline]
-    pub fn get_arity(self) -> usize {
-        self.arity() as usize
-    }
-
-    #[inline]
-    pub fn get_name_and_arity(self) -> (Atom, usize) {
-        (Atom::from((self.get_index() as u64) << 3), self.get_arity())
-    }
-}
-*/

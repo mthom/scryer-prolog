@@ -177,6 +177,7 @@ print_comma_separated_list([VN=_, VNEq | VNEqs]) :-
 
 filter_anonymous_vars([], []).
 filter_anonymous_vars([VN=V | VNEqs0], VNEqs) :-
+    '$debug_hook',
     (  atom_concat('_', _, VN) ->
        filter_anonymous_vars(VNEqs0, VNEqs)
     ;  VNEqs = [VN=V | VNEqs1],

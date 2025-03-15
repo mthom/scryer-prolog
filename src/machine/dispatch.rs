@@ -2829,7 +2829,7 @@ impl Machine {
                                     Some(PStrCmpResult::PartialPStrMatch { string, var_loc }) => {
                                         let cell = backtrack_on_resource_error!(
                                             self.machine_st,
-                                            self.machine_st.allocate_pstr(string)
+                                            self.machine_st.heap.allocate_pstr(string)
                                         );
 
                                         self.machine_st.mode = MachineMode::Write;
@@ -2851,7 +2851,7 @@ impl Machine {
                              HeapCellValueTag::Var) => {
                                 let target_cell = backtrack_on_resource_error!(
                                     self.machine_st,
-                                    self.machine_st.allocate_pstr(string)
+                                    self.machine_st.heap.allocate_pstr(string)
                                 );
 
                                 self.machine_st.bind(
@@ -3196,7 +3196,7 @@ impl Machine {
                     &Instruction::PutPartialString(_, ref string, reg) => {
                         self.machine_st[reg] = backtrack_on_resource_error!(
                             self.machine_st,
-                            self.machine_st.allocate_pstr(&string)
+                            self.machine_st.heap.allocate_pstr(&string)
                         );
 
                         self.machine_st.p += 1;

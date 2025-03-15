@@ -1114,7 +1114,6 @@ impl Machine {
             if let Some(idx) = self.indices.code_dir.get(&(name, arity)).cloned() {
                 self.try_execute(name, arity, idx.get())
             } else {
-                println!("aaand undefined!");
                 self.undefined_procedure(name, arity)
             }
         } else if let Some(module) = self.indices.modules.get(&module_name) {

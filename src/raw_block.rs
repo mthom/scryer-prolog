@@ -19,7 +19,7 @@ pub struct RawBlock<T: RawBlockTraits> {
 
 impl<T: RawBlockTraits> RawBlock<T> {
     #[inline]
-    pub(crate) fn empty_block() -> Self {
+    fn empty_block() -> Self {
         RawBlock {
             base: ptr::null(),
             top: ptr::null(),

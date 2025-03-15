@@ -133,11 +133,14 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                 machine_st.partial_string_to_pdl(pstr_loc, l);
             }
             (HeapCellValueTag::PStrLoc, other_pstr_loc) => {
-                let cmp_result = machine_st.heap.compare_pstr_segments(pstr_loc, other_pstr_loc);
-
-                if cmp_result.continue_pstr_compare(&mut machine_st.pdl).is_some() {
-                    debug_assert!(matches!(cmp_result, PStrSegmentCmpResult::Mismatch { .. }));
-                    machine_st.fail = true;
+                match machine_st.heap.compare_pstr_segments(pstr_loc, other_pstr_loc) {
+                    PStrSegmentCmpResult::Continue(v1, v2) => {
+                        machine_st.pdl.push(v1);
+                        machine_st.pdl.push(v2);
+                    }
+                    _ => {
+                        machine_st.fail = true;
+                    }
                 }
             }
             _ => {
@@ -501,10 +504,8 @@ fn bind_with_occurs_check<U: Unifier>(unifier: &mut U, r: Ref, value: HeapCellVa
 
     let mut occurs_triggered = false;
 
-    let machine_st: &mut MachineState = unifier.deref_mut();
-    let value = machine_st.store(MachineState::deref(machine_st, value));
-
-    if value.is_ref() && !value.is_stack_var() {
+    if !value.is_constant() {
+        let machine_st: &mut MachineState = unifier.deref_mut();
         machine_st.heap[0] = value;
 
         for cell in
