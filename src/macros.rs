@@ -286,12 +286,6 @@ macro_rules! read_heap_cell_pat_body {
         #[allow(unused_braces)]
         $code
     }};
-    ($cell:ident, Atom, (_, $arity:ident), $code:expr) => {{
-        let $arity = cell_as_atom_cell!($cell).get_arity();
-        #[allow(unused_braces)]
-        $code
-    }};
-    /*
     ($cell:ident, PStr, $atom:ident, $code:expr) => {{
         let $atom = cell_as_atom!($cell);
         #[allow(unused_braces)]
@@ -312,7 +306,6 @@ macro_rules! read_heap_cell_pat_body {
         #[allow(unused_braces)]
         $code
     }};
-    */
     ($cell:ident, Fixnum, $value:ident, $code:expr) => {{
         let $value = Fixnum::from_bytes($cell.into_bytes());
         #[allow(unused_braces)]
@@ -488,7 +481,7 @@ macro_rules! step_or_resource_error {
 macro_rules! resource_error_call_result {
     ($machine_st:expr, $val:expr) => {
         step_or_resource_error!($machine_st, $val, {
-            return Err(vec![]); // TODO: return Ok(());
+            return Err(vec![]);
         })
     };
 }

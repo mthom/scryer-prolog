@@ -19,7 +19,7 @@ pub type MachineStubGen = Box<dyn Fn(&mut MachineState) -> MachineStub>;
 #[derive(Debug)]
 pub(crate) struct MachineError {
     stub: MachineStub,
-    location: Option<ParserErrorSrc>,
+    location: Option<(usize, usize)>, // line_num, col_num
 }
 
 // from 7.12.2 b) of 13211-1:1995
@@ -301,7 +301,7 @@ impl MachineState {
         }
     }
 
-    pub(super) fn resource_error(&mut self, err: ResourceError) -> MachineError {
+    pub(super) fn resource_error(err: ResourceError) -> MachineError {
         let stub = match err {
             ResourceError::FiniteMemory(size_requested) => {
                 functor!(
@@ -466,10 +466,10 @@ impl MachineState {
     fn arithmetic_error(&mut self, err: ArithmeticError) -> MachineError {
         match err {
             ArithmeticError::NonEvaluableFunctor(cell, arity) => {
-                let culprit = functor!(atom!("/"), [cell(cell), fixnum(arity)]);
-
+                let culprit = functor!(atom!("/"), [literal(cell), fixnum(arity)]);
                 self.type_error(ValidType::Evaluable, culprit)
             }
+            ArithmeticError::UninstantiatedVar => self.instantiation_error(),
         }
     }
 
@@ -609,7 +609,7 @@ impl MachineState {
     }
 
     pub(super) fn error_form(&mut self, err: MachineError, src: MachineStub) -> MachineStub {
-        if let Some(ParserErrorSrc { line_num, .. }) = err.location {
+        if let Some((line_num, _col_num)) = err.location {
             functor!(
                 atom!("error"),
                 [
@@ -665,16 +665,17 @@ pub enum CompilationError {
     InvalidRuleHead,
     InvalidUseModuleDecl,
     InvalidModuleResolution(Atom),
+    FiniteMemoryInHeap(usize),
 }
 
 #[derive(Debug)]
 pub enum DirectiveError {
-    ExpectedDirective(HeapCellValue),
+    ExpectedDirective(Term),
     InvalidDirective(Atom, usize /* arity */),
-    InvalidOpDeclNameType(HeapCellValue),
-    InvalidOpDeclSpecDomain(HeapCellValue),
+    InvalidOpDeclNameType(Term),
+    InvalidOpDeclSpecDomain(Term),
     InvalidOpDeclSpecValue(Atom),
-    InvalidOpDeclPrecType(HeapCellValue),
+    InvalidOpDeclPrecType(Term),
     InvalidOpDeclPrecDomain(Fixnum),
     ShallNotCreate(Atom),
     ShallNotModify(Atom),
@@ -695,9 +696,9 @@ impl From<ParserError> for CompilationError {
 }
 
 impl CompilationError {
-    pub(crate) fn line_and_col_num(&self) -> Option<ParserErrorSrc> {
+    pub(crate) fn line_and_col_num(&self) -> Option<(usize, usize)> {
         match self {
-            CompilationError::ParserError(err) => Some(err.err_src()),
+            CompilationError::ParserError(err) => err.line_and_col_num(),
             _ => None,
         }
     }
@@ -739,6 +740,9 @@ impl CompilationError {
             }
             CompilationError::ParserError(ref err) => {
                 functor!(err.as_atom())
+            }
+            CompilationError::FiniteMemoryInHeap(h) => {
+                vec![FunctorElement::AbsoluteCell(str_loc_as_cell!(*h))]
             }
         }
     }
@@ -1013,6 +1017,13 @@ pub enum SessionError {
     NamelessEntry,
     OpIsInfixAndPostFix(Atom),
     PredicateNotMultifileOrDiscontiguous(CompilationTarget, PredicateKey),
+}
+
+impl From<std::io::Error> for SessionError {
+    #[inline]
+    fn from(err: std::io::Error) -> SessionError {
+        SessionError::from(ParserError::from(err))
+    }
 }
 
 impl From<ParserError> for SessionError {

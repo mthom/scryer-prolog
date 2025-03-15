@@ -7,12 +7,15 @@ use crate::machine::heap::*;
 use crate::machine::machine_indices::*;
 use crate::machine::streams::*;
 use crate::parser::ast::Fixnum;
+use crate::parser::ast::Literal;
 
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
 use std::mem;
 use std::ops::{Add, Sub, SubAssign};
+
+use dashu::{Integer, Rational};
 
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
@@ -97,9 +100,7 @@ impl ConsPtr {
 
     #[inline(always)]
     pub fn as_ptr(self) -> *mut u8 {
-        unsafe {
-            mem::transmute::<_, *mut u8>(self.ptr())
-        }
+        unsafe { mem::transmute::<_, *mut u8>(self.ptr()) }
     }
 
     #[inline(always)]
@@ -306,6 +307,67 @@ impl fmt::Debug for HeapCellValue {
                 .field("f", &self.get_forwarding_bit())
                 .finish(),
         }
+    }
+}
+
+impl From<Literal> for HeapCellValue {
+    #[inline]
+    fn from(literal: Literal) -> Self {
+        match literal {
+            Literal::Atom(name) => atom_as_cell!(name),
+            Literal::CodeIndex(ptr) => {
+                untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(ptr))
+            }
+            Literal::Fixnum(n) => fixnum_as_cell!(n),
+            Literal::Integer(bigint_ptr) => {
+                typed_arena_ptr_as_cell!(bigint_ptr)
+            }
+            Literal::Rational(bigint_ptr) => {
+                typed_arena_ptr_as_cell!(bigint_ptr)
+            }
+            Literal::Float(f) => HeapCellValue::from(f.as_ptr()),
+        }
+    }
+}
+
+impl TryFrom<HeapCellValue> for Literal {
+    type Error = ();
+
+    fn try_from(value: HeapCellValue) -> Result<Literal, ()> {
+        read_heap_cell!(value,
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                if arity == 0 {
+                    Ok(Literal::Atom(name))
+                } else {
+                    Err(())
+                }
+            }
+            (HeapCellValueTag::Fixnum, n) => {
+                Ok(Literal::Fixnum(n))
+            }
+            (HeapCellValueTag::F64, f) => {
+                Ok(Literal::Float(f.as_offset()))
+            }
+            (HeapCellValueTag::Cons, cons_ptr) => {
+                match_untyped_arena_ptr!(cons_ptr,
+                     (ArenaHeaderTag::Integer, n) => {
+                         Ok(Literal::Integer(n))
+                     }
+                     (ArenaHeaderTag::Rational, n) => {
+                         Ok(Literal::Rational(n))
+                     }
+                     (ArenaHeaderTag::IndexPtr, ip) => {
+                         Ok(Literal::CodeIndex(CodeIndex::from(ip)))
+                     }
+                     _ => {
+                         Err(())
+                     }
+                )
+            }
+            _ => {
+                Err(())
+            }
+        )
     }
 }
 
@@ -677,9 +739,7 @@ impl UntypedArenaPtr {
 
     #[inline]
     pub fn get_ptr(self) -> *const ArenaHeader {
-        unsafe {
-            mem::transmute::<_, *const ArenaHeader>(self.ptr())
-        }
+        unsafe { mem::transmute::<_, *const ArenaHeader>(self.ptr()) }
     }
 
     #[inline]

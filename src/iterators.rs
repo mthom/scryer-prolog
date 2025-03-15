@@ -1,222 +1,319 @@
-use crate::atom_table::AtomCell;
+use crate::atom_table::*;
 use crate::forms::*;
-use crate::heap_iter::*;
-use crate::machine::heap::*;
-use crate::machine::stack::*;
-use crate::types::*;
+use crate::instructions::*;
+use crate::parser::ast::*;
 
-use bit_set::*;
-use fxhash::FxBuildHasher;
-use indexmap::IndexMap;
-
+use std::cell::Cell;
 use std::collections::VecDeque;
 use std::iter::*;
-use std::ops::Deref;
+use std::rc::Rc;
 use std::vec::Vec;
 
-pub(crate) trait TermIterator:
-    Deref<Target = Heap> + Iterator<Item = HeapCellValue>
-{
-    fn focus(&self) -> IterStackLoc;
-    fn level(&mut self) -> Level;
+#[allow(clippy::borrowed_box)]
+#[derive(Debug, Clone)]
+pub(crate) enum TermRef<'a> {
+    AnonVar(Level),
+    Cons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
+    Literal(Level, &'a Cell<RegType>, &'a Literal),
+    Clause(Level, &'a Cell<RegType>, Atom, &'a Vec<Term>),
+    PartialString(Level, &'a Cell<RegType>, Rc<String>, &'a Box<Term>),
+    CompleteString(Level, &'a Cell<RegType>, Rc<String>),
+    Var(Level, &'a Cell<VarReg>, VarPtr),
+}
+
+#[allow(clippy::borrowed_box)]
+#[derive(Debug)]
+pub(crate) enum TermIterState<'a> {
+    AnonVar(Level),
+    Clause(Level, usize, &'a Cell<RegType>, Atom, &'a Vec<Term>),
+    Literal(Level, &'a Cell<RegType>, &'a Literal),
+    InitialCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
+    FinalCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
+    InitialPartialString(Level, &'a Cell<RegType>, Rc<String>, &'a Box<Term>),
+    FinalPartialString(Level, &'a Cell<RegType>, Rc<String>, &'a Box<Term>),
+    CompleteString(Level, &'a Cell<RegType>, Rc<String>),
+    Var(Level, &'a Cell<VarReg>, VarPtr),
+}
+
+impl<'a> TermIterState<'a> {
+    pub(crate) fn subterm_to_state(lvl: Level, term: &'a Term) -> TermIterState<'a> {
+        match term {
+            Term::AnonVar => TermIterState::AnonVar(lvl),
+            Term::Clause(cell, name, subterms) => {
+                TermIterState::Clause(lvl, 0, cell, *name, subterms)
+            }
+            Term::Cons(cell, head, tail) => {
+                TermIterState::InitialCons(lvl, cell, head.as_ref(), tail.as_ref())
+            }
+            Term::Literal(cell, constant) => TermIterState::Literal(lvl, cell, constant),
+            Term::PartialString(cell, string_buf, tail) => {
+                TermIterState::InitialPartialString(lvl, cell, string_buf.clone(), tail)
+            }
+            Term::CompleteString(cell, string) => {
+                TermIterState::CompleteString(lvl, cell, string.clone())
+            }
+            Term::Var(cell, var_ptr) => TermIterState::Var(lvl, cell, var_ptr.clone()),
+        }
+    }
 }
 
 #[derive(Debug)]
-pub(crate) struct TargetIterator<I: FocusedHeapIter, const SKIP_ROOT: bool> {
-    shallow_terms: IndexMap<usize, BitSet<usize>, FxBuildHasher>,
-    root_terms: BitSet<usize>,
-    iter: I,
-    arg_c: usize,
+pub(crate) struct QueryIterator<'a> {
+    state_stack: Vec<TermIterState<'a>>,
 }
 
-fn record_path(
-    heap: &impl SizedHeap,
-    root_terms: &mut BitSet<usize>,
-    mut root_loc: usize,
-) -> usize {
-    loop {
-        let cell = heap[root_loc];
-        root_terms.insert(root_loc);
+impl<'a> QueryIterator<'a> {
+    fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
+        self.state_stack
+            .push(TermIterState::subterm_to_state(lvl, term));
+    }
 
-        read_heap_cell!(cell,
-            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
-                if h == root_loc {
-                    break;
-                } else {
-                    root_loc = h;
+    /*
+    fn from_rule_head_clause(terms: &'a Vec<Term>) -> Self {
+        let state_stack = terms
+            .iter()
+            .rev()
+            .map(|bt| TermIterState::subterm_to_state(Level::Shallow, bt))
+            .collect();
+
+        QueryIterator { state_stack }
+    }
+    */
+
+    fn from_term(term: &'a Term) -> Self {
+        let state = match term {
+            Term::AnonVar
+            | Term::Cons(..)
+            | Term::Literal(..)
+            | Term::PartialString(..)
+            | Term::CompleteString(..) => {
+                return QueryIterator {
+                    state_stack: vec![],
                 }
             }
-            (HeapCellValueTag::Lis) => {
-                root_terms.insert(root_loc);
-                break;
+            Term::Clause(r, name, terms) => TermIterState::Clause(Level::Root, 0, r, *name, terms),
+            Term::Var(cell, var_ptr) => TermIterState::Var(Level::Root, cell, var_ptr.clone()),
+        };
+
+        QueryIterator {
+            state_stack: vec![state],
+        }
+    }
+
+    fn extend_state(&mut self, lvl: Level, term: &'a QueryTerm) {
+        match term {
+            QueryTerm::Clause(ref cell, ClauseType::CallN(_), ref terms, _) => {
+                self.state_stack
+                    .push(TermIterState::Clause(lvl, 1, cell, atom!("$call"), terms));
             }
-            _ => {
-                if cell.is_ref() {
-                    root_terms.insert(cell.get_value() as usize);
-                }
-
-                break;
+            QueryTerm::Clause(ref cell, ref ct, ref terms, _) => {
+                self.state_stack
+                    .push(TermIterState::Clause(lvl, 0, cell, ct.name(), terms));
             }
-        );
-    }
-
-    root_loc
-}
-
-fn find_root_terms(heap: &impl SizedHeap, root_loc: usize) -> (usize, BitSet<usize>) {
-    let mut root_terms = BitSet::<usize>::default();
-    let root_loc = record_path(heap, &mut root_terms, root_loc);
-    (root_loc, root_terms)
-}
-
-fn find_shallow_terms(
-    heap: &impl SizedHeap,
-    root_loc: usize,
-) -> IndexMap<usize, BitSet<usize>, FxBuildHasher> {
-    let mut shallow_terms_map = IndexMap::with_hasher(FxBuildHasher::default());
-
-    let (h, arity) = read_heap_cell!(heap[root_loc],
-        (HeapCellValueTag::Str, s) => {
-            (s+1, cell_as_atom_cell!(heap[s]).get_arity())
-        }
-        (HeapCellValueTag::Lis, l) => {
-            (l, 2)
-        }
-        (HeapCellValueTag::Atom, (_name, arity)) => {
-            (root_loc + 1, arity)
-        }
-        _ => {
-            (root_loc, 0)
-        }
-    );
-
-    for idx in 0..arity {
-        let mut shallow_terms = BitSet::default();
-        record_path(heap, &mut shallow_terms, h + idx);
-        shallow_terms_map.insert(idx + 1, shallow_terms);
-    }
-
-    shallow_terms_map
-}
-
-impl<I: FocusedHeapIter, const SKIP_ROOT: bool> TargetIterator<I, SKIP_ROOT> {
-    fn new(iter: I, root_loc: usize, arg_c: usize) -> Self {
-        let (derefed_root_loc, root_terms) = find_root_terms(iter.deref(), root_loc);
-        let shallow_terms = find_shallow_terms(iter.deref(), derefed_root_loc);
-
-        Self {
-            shallow_terms,
-            root_terms,
-            iter,
-            arg_c,
+            _ => {}
         }
     }
 
-    fn current_level(&self, arg_c_inc: usize) -> Level {
-        let current_focus = self.iter.focus().value() as usize;
-
-        if self.root_terms.contains(current_focus) {
-            return Level::Root;
-        }
-
-        if let Some(shallow_terms) = self.shallow_terms.get(&(self.arg_c + arg_c_inc)) {
-            if shallow_terms.contains(current_focus) {
-                return Level::Shallow;
-            }
-        }
-
-        Level::Deep
+    pub fn new(term: &'a QueryTerm) -> Self {
+        let mut iter = QueryIterator {
+            state_stack: vec![],
+        };
+        iter.extend_state(Level::Root, term);
+        iter
     }
 }
 
-impl<'a, const SKIP_ROOT: bool> TermIterator for FactIterator<'a, SKIP_ROOT> {
-    fn focus(&self) -> IterStackLoc {
-        self.iter.focus()
-    }
-
-    fn level(&mut self) -> Level {
-        let lvl = self.current_level(1);
-
-        if let Level::Shallow = lvl {
-            self.arg_c += 1;
-        }
-
-        lvl
-    }
-}
-
-impl<'a, const SKIP_ROOT: bool> TermIterator for QueryIterator<'a, SKIP_ROOT> {
-    fn focus(&self) -> IterStackLoc {
-        self.iter.focus()
-    }
-
-    fn level(&mut self) -> Level {
-        let lvl = self.current_level(0);
-
-        if let Level::Shallow = lvl {
-            self.arg_c += 1;
-        }
-
-        lvl
-    }
-}
-
-impl<I: FocusedHeapIter, const SKIP_ROOT: bool> Iterator for TargetIterator<I, SKIP_ROOT> {
-    type Item = HeapCellValue;
+impl<'a> Iterator for QueryIterator<'a> {
+    type Item = TermRef<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let next_term = self.iter.next();
+        while let Some(iter_state) = self.state_stack.pop() {
+            match iter_state {
+                TermIterState::AnonVar(lvl) => {
+                    return Some(TermRef::AnonVar(lvl));
+                }
+                TermIterState::Clause(lvl, child_num, cell, name, child_terms) => {
+                    if child_num == child_terms.len() {
+                        match name {
+                            atom!("$call") if lvl == Level::Root => {
+                                self.push_subterm(Level::Shallow, &child_terms[0]);
+                            }
+                            _ => {
+                                return match lvl {
+                                    Level::Root => None,
+                                    lvl => Some(TermRef::Clause(lvl, cell, name, child_terms)),
+                                }
+                            }
+                        };
+                    } else {
+                        self.state_stack.push(TermIterState::Clause(
+                            lvl,
+                            child_num + 1,
+                            cell,
+                            name,
+                            child_terms,
+                        ));
 
-            if next_term.is_none() {
-                return None;
+                        self.push_subterm(lvl.child_level(), &child_terms[child_num]);
+                    }
+                }
+                TermIterState::InitialCons(lvl, cell, head, tail) => {
+                    self.state_stack
+                        .push(TermIterState::FinalCons(lvl, cell, head, tail));
+
+                    self.push_subterm(lvl.child_level(), tail);
+                    self.push_subterm(lvl.child_level(), head);
+                }
+                TermIterState::InitialPartialString(lvl, cell, string, tail) => {
+                    self.state_stack
+                        .push(TermIterState::FinalPartialString(lvl, cell, string, tail));
+                    self.push_subterm(lvl.child_level(), tail);
+                }
+                TermIterState::FinalPartialString(lvl, cell, string, tail) => {
+                    return Some(TermRef::PartialString(lvl, cell, string, tail));
+                }
+                TermIterState::CompleteString(lvl, cell, string) => {
+                    return Some(TermRef::CompleteString(lvl, cell, string));
+                }
+                TermIterState::FinalCons(lvl, cell, head, tail) => {
+                    return Some(TermRef::Cons(lvl, cell, head, tail));
+                }
+                TermIterState::Literal(lvl, cell, constant) => {
+                    return Some(TermRef::Literal(lvl, cell, constant));
+                }
+                TermIterState::Var(lvl, cell, var_ptr) => {
+                    return Some(TermRef::Var(lvl, cell, var_ptr));
+                }
+            };
+        }
+
+        None
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct FactIterator<'a> {
+    state_queue: VecDeque<TermIterState<'a>>,
+    iterable_root: RootIterationPolicy,
+}
+
+impl<'a> FactIterator<'a> {
+    fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
+        self.state_queue
+            .push_back(TermIterState::subterm_to_state(lvl, term));
+    }
+
+    pub(crate) fn from_rule_head_clause(terms: &'a [Term]) -> Self {
+        let state_queue = terms
+            .iter()
+            .map(|bt| TermIterState::subterm_to_state(Level::Shallow, bt))
+            .collect();
+
+        FactIterator {
+            state_queue,
+            iterable_root: RootIterationPolicy::NotIterated,
+        }
+    }
+
+    fn new(term: &'a Term, iterable_root: RootIterationPolicy) -> Self {
+        let states = match term {
+            Term::AnonVar => {
+                vec![TermIterState::AnonVar(Level::Root)]
             }
-
-            let focus = self.iter.focus().value() as usize;
-
-            if SKIP_ROOT && self.root_terms.contains(focus) {
-                continue;
-            } else {
-                return next_term;
+            Term::Clause(cell, name, terms) => {
+                vec![TermIterState::Clause(Level::Root, 0, cell, *name, terms)]
             }
+            Term::Cons(cell, head, tail) => vec![TermIterState::InitialCons(
+                Level::Root,
+                cell,
+                head.as_ref(),
+                tail.as_ref(),
+            )],
+            Term::PartialString(cell, string, tail) => {
+                vec![TermIterState::InitialPartialString(
+                    Level::Root,
+                    cell,
+                    string.clone(),
+                    tail,
+                )]
+            }
+            Term::CompleteString(cell, string) => {
+                vec![TermIterState::CompleteString(
+                    Level::Root,
+                    cell,
+                    string.clone(),
+                )]
+            }
+            Term::Literal(cell, constant) => {
+                vec![TermIterState::Literal(Level::Root, cell, constant)]
+            }
+            Term::Var(cell, var_ptr) => {
+                vec![TermIterState::Var(Level::Root, cell, var_ptr.clone())]
+            }
+        };
+
+        FactIterator {
+            state_queue: VecDeque::from(states),
+            iterable_root,
         }
     }
 }
 
-impl<I: FocusedHeapIter, const SKIP_ROOT: bool> Deref for TargetIterator<I, SKIP_ROOT> {
-    type Target = Heap;
+impl<'a> Iterator for FactIterator<'a> {
+    type Item = TermRef<'a>;
 
-    fn deref(&self) -> &Self::Target {
-        self.iter.deref()
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(state) = self.state_queue.pop_front() {
+            match state {
+                TermIterState::AnonVar(lvl) => {
+                    return Some(TermRef::AnonVar(lvl));
+                }
+                TermIterState::Clause(lvl, _, cell, name, child_terms) => {
+                    for child_term in child_terms {
+                        self.push_subterm(lvl.child_level(), child_term);
+                    }
+
+                    match lvl {
+                        Level::Root if !self.iterable_root.iterable() => continue,
+                        _ => return Some(TermRef::Clause(lvl, cell, name, child_terms)),
+                    };
+                }
+                TermIterState::InitialCons(lvl, cell, head, tail) => {
+                    self.push_subterm(Level::Deep, head);
+                    self.push_subterm(Level::Deep, tail);
+
+                    return Some(TermRef::Cons(lvl, cell, head, tail));
+                }
+                TermIterState::InitialPartialString(lvl, cell, string_buf, tail) => {
+                    self.push_subterm(Level::Deep, tail);
+                    return Some(TermRef::PartialString(lvl, cell, string_buf, tail));
+                }
+                TermIterState::CompleteString(lvl, cell, atom) => {
+                    return Some(TermRef::CompleteString(lvl, cell, atom));
+                }
+                TermIterState::Literal(lvl, cell, constant) => {
+                    return Some(TermRef::Literal(lvl, cell, constant))
+                }
+                TermIterState::Var(lvl, cell, var_ptr) => {
+                    return Some(TermRef::Var(lvl, cell, var_ptr));
+                }
+                _ => {}
+            }
+        }
+
+        None
     }
 }
 
-impl<I: FocusedHeapIter, const SKIP_ROOT: bool> FocusedHeapIter for TargetIterator<I, SKIP_ROOT> {
-    fn focus(&self) -> IterStackLoc {
-        self.iter.focus()
-    }
+pub(crate) fn post_order_iter(term: &'_ Term) -> QueryIterator {
+    QueryIterator::from_term(term)
 }
 
-pub(crate) type FactIterator<'a, const SKIP_ROOT: bool> =
-    TargetIterator<StackfulPreOrderHeapIter<'a, NonListElider>, SKIP_ROOT>;
-
-pub(crate) fn fact_iterator<'a, const SKIP_ROOT: bool>(
-    heap: &'a mut Heap,
-    stack: &'a mut Stack,
-    root_loc: usize,
-) -> FactIterator<'a, SKIP_ROOT> {
-    TargetIterator::new(stackful_preorder_iter(heap, stack, root_loc), root_loc, 0)
-}
-
-pub(crate) type QueryIterator<'a, const SKIP_ROOT: bool> =
-    TargetIterator<PostOrderIterator<StackfulPreOrderHeapIter<'a, NonListElider>>, SKIP_ROOT>;
-
-pub(crate) fn query_iterator<'a, const SKIP_ROOT: bool>(
-    heap: &'a mut Heap,
-    stack: &'a mut Stack,
-    root_loc: usize,
-) -> QueryIterator<'a, SKIP_ROOT> {
-    TargetIterator::new(stackful_post_order_iter(heap, stack, root_loc), root_loc, 1)
+pub(crate) fn breadth_first_iter(
+    term: &'_ Term,
+    iterable_root: RootIterationPolicy,
+) -> FactIterator {
+    FactIterator::new(term, iterable_root)
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -230,10 +327,7 @@ pub(crate) enum ClauseItem<'a> {
     FirstBranch(usize),
     NextBranch,
     BranchEnd(usize),
-    Chunk {
-        chunk_num: usize,
-        terms: &'a VecDeque<QueryTerm>,
-    },
+    Chunk { terms: &'a VecDeque<QueryTerm> },
 }
 
 #[derive(Debug)]
@@ -309,11 +403,8 @@ impl<'a> Iterator for ClauseIterator<'a> {
                             self.state_stack
                                 .push(ClauseIteratorState::RemainingBranches(branches, 0));
                         }
-                        &ChunkedTerms::Chunk {
-                            chunk_num,
-                            ref terms,
-                        } => {
-                            return Some(ClauseItem::Chunk { chunk_num, terms });
+                        &ChunkedTerms::Chunk { ref terms } => {
+                            return Some(ClauseItem::Chunk { terms });
                         }
                     }
                 }

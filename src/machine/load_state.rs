@@ -1150,8 +1150,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 let mut path_buf = PathBuf::from(&*filename.as_str());
                 path_buf.set_extension("pl");
 
-                let file = File::open(&path_buf)
-                    .map_err(|err| ParserError::IO(err, ParserErrorSrc::default()))?;
+                let file = File::open(&path_buf)?;
 
                 (
                     Stream::from_file_as_input(
@@ -1232,8 +1231,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             ModuleSource::File(filename) => {
                 let mut path_buf = PathBuf::from(&*filename.as_str());
                 path_buf.set_extension("pl");
-                let file = File::open(&path_buf)
-                    .map_err(|err| ParserError::IO(err, ParserErrorSrc::default()))?;
+                let file = File::open(&path_buf)?;
 
                 (
                     Stream::from_file_as_input(

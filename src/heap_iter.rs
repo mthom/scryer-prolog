@@ -34,7 +34,7 @@ pub struct EagerStackfulPreOrderHeapIter<'a> {
     start_value: HeapCellValue,
     iter_stack: Vec<HeapCellValue>,
     mark_phase: bool,
-    pub heap: &'a mut Heap,
+    heap: &'a mut Heap,
 }
 
 impl<'a> Drop for EagerStackfulPreOrderHeapIter<'a> {
@@ -253,7 +253,7 @@ impl<'a, ElideLists> Drop for StackfulPreOrderHeapIter<'a, ElideLists> {
     }
 }
 
-pub trait FocusedHeapIter: Deref<Target = Heap> + Iterator<Item = HeapCellValue> {
+pub trait FocusedHeapIter: Iterator<Item = HeapCellValue> {
     fn focus(&self) -> IterStackLoc;
 }
 
@@ -263,14 +263,6 @@ impl<'a, ElideLists: ListElisionPolicy> FocusedHeapIter
     #[inline]
     fn focus(&self) -> IterStackLoc {
         self.h
-    }
-}
-
-impl<'a, ElideLists> Deref for StackfulPreOrderHeapIter<'a, ElideLists> {
-    type Target = Heap;
-
-    fn deref(&self) -> &Self::Target {
-        &self.heap
     }
 }
 
@@ -352,7 +344,6 @@ impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists>
     #[inline]
     fn new(heap: &'a mut Heap, stack: &'a mut Stack, root_loc: usize) -> Self {
         let h = IterStackLoc::iterable_loc(root_loc, HeapOrStackTag::Heap);
-        // heap.push(cell);
 
         Self {
             heap,
@@ -539,7 +530,7 @@ pub(crate) struct PostOrderIterator<Iter: FocusedHeapIter> {
 }
 
 impl<Iter: FocusedHeapIter> Deref for PostOrderIterator<Iter> {
-    type Target = Heap;
+    type Target = Iter;
 
     fn deref(&self) -> &Self::Target {
         &self.base_iter
@@ -611,34 +602,10 @@ impl<Iter: FocusedHeapIter> FocusedHeapIter for PostOrderIterator<Iter> {
     }
 }
 
-/*
-impl<Iter: FocusedHeapIter> PostOrderIterator<Iter> {
-    /* return true if the term at heap offset idx_loc is a
-     * direct/inlined subterm of a structure at the focus of
-     * self.stack.last(). this function is used to determine, e.g.,
-     * ownership of inlined code indices.
-     */
-    #[inline]
-    pub(crate) fn direct_subterm_of_str(&self, idx_loc: usize) -> bool {
-        if let Some((_child_count, item, focus)) = self.parent_stack.last() {
-            read_heap_cell!(item,
-                (HeapCellValueTag::Atom, (_name, arity)) => {
-                    let focus = focus.value() as usize;
-                    return focus + arity >= idx_loc && focus < idx_loc;
-                }
-                _ => {}
-            );
-        }
-
-        false
-    }
-}
-*/
-
 pub(crate) type LeftistPostOrderHeapIter<'a, ElideLists> =
     PostOrderIterator<StackfulPreOrderHeapIter<'a, ElideLists>>;
 
-impl<'a, ElideLists: ListElisionPolicy> LeftistPostOrderHeapIter<'a, ElideLists> {
+impl<ElideLists: ListElisionPolicy> LeftistPostOrderHeapIter<'_, ElideLists> {
     #[inline]
     pub fn pop_stack(&mut self) {
         if let Some((child_count, ..)) = self.parent_stack.last() {
@@ -870,7 +837,7 @@ mod tests {
         // two-part complete string, then a three-part cyclic string
         // involving an uncompacted list of chars.
 
-        wam.machine_st.allocate_pstr("abc ").unwrap();
+        wam.machine_st.heap.allocate_pstr("abc ").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(1)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -891,7 +858,7 @@ mod tests {
 
         wam.machine_st.heap[1] = pstr_loc_as_cell!(heap_index!(3));
 
-        wam.machine_st.allocate_pstr("def").unwrap();
+        wam.machine_st.heap.allocate_pstr("def").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(4)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -1795,12 +1762,12 @@ mod tests {
             let mut iter = StackfulPreOrderHeapIter::<NonListElider>::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
-                1,
+                0,
             );
 
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
-                heap_loc_as_cell!(0)
+                heap_loc_as_cell!(1)
             );
 
             assert_eq!(iter.next(), None);
@@ -1857,7 +1824,7 @@ mod tests {
             let mut iter = StackfulPreOrderHeapIter::<NonListElider>::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
-                0,
+                4,
             );
 
             // the cycle will be iterated twice before being detected.
@@ -1879,15 +1846,7 @@ mod tests {
             );
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
-                list_loc_as_cell!(1)
-            );
-            assert_eq!(
-                unmark_cell_bits!(iter.next().unwrap()),
-                atom_as_cell!(a_atom)
-            );
-            assert_eq!(
-                unmark_cell_bits!(iter.next().unwrap()),
-                list_loc_as_cell!(3)
+                heap_loc_as_cell!(0)
             );
 
             assert_eq!(iter.next(), None);
@@ -1928,7 +1887,7 @@ mod tests {
         // two-part complete string, then a three-part cyclic string
         // involving an uncompacted list of chars.
 
-        wam.machine_st.allocate_pstr("abc ").unwrap();
+        wam.machine_st.heap.allocate_pstr("abc ").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(1)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -1952,7 +1911,7 @@ mod tests {
         }
 
         wam.machine_st.heap[1] = pstr_loc_as_cell!(heap_index!(3));
-        wam.machine_st.allocate_pstr("def").unwrap();
+        wam.machine_st.heap.allocate_pstr("def").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(4)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -2208,14 +2167,17 @@ mod tests {
             section.push_cell(pstr_loc_as_cell!(0));
         });
 
+        assert_eq!(wam.machine_st.heap.cell_len(), 4);
+
         {
             let mut iter = stackful_preorder_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
-                2,
+                3,
             );
 
             assert_eq!(iter.heap.slice_to_str(0, "a string".len()), "a string");
+            assert_eq!(iter.next().unwrap(), pstr_loc_as_cell!(0));
             assert_eq!(iter.next().unwrap(), empty_list_as_cell!());
             assert_eq!(iter.next(), None);
         }
@@ -2528,7 +2490,7 @@ mod tests {
         // two-part complete string, then a three-part cyclic string
         // involving an uncompacted list of chars.
 
-        wam.machine_st.allocate_pstr("abc ").unwrap();
+        wam.machine_st.heap.allocate_pstr("abc ").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(1)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -2552,7 +2514,7 @@ mod tests {
         }
 
         wam.machine_st.heap[1] = pstr_loc_as_cell!(heap_index!(3));
-        wam.machine_st.allocate_pstr("def").unwrap();
+        wam.machine_st.heap.allocate_pstr("def").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(4)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -2993,7 +2955,7 @@ mod tests {
         // two-part complete string, then a three-part cyclic string
         // involving an uncompacted list of chars.
 
-        wam.machine_st.allocate_pstr("abc ").unwrap();
+        wam.machine_st.heap.allocate_pstr("abc ").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(1)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -3016,7 +2978,7 @@ mod tests {
         wam.machine_st.heap[2] = heap_loc_as_cell!(2);
         assert_eq!(wam.machine_st.heap.cell_len(), 3);
 
-        wam.machine_st.allocate_pstr("def").unwrap();
+        wam.machine_st.heap.allocate_pstr("def").unwrap();
         assert_eq!(wam.machine_st.heap.cell_len(), 4);
 
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();

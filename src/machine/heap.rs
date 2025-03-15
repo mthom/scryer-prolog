@@ -4,12 +4,11 @@ use crate::functor_macro::*;
 use crate::types::*;
 
 use std::alloc;
+use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::ops::{Bound, Index, IndexMut, Range, RangeBounds};
 use std::ptr;
 use std::sync::Once;
-
-use super::MachineState;
 
 const ALIGN: usize = Heap::heap_cell_alignment();
 
@@ -92,9 +91,10 @@ pub struct HeapStringScan<'a> {
 }
 
 // return the string at ptr and the tail location relative to ptr.
-unsafe fn scan_slice_to_str<'a>(heap_slice: &'a [u8]) -> HeapStringScan<'a> {
+unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan {
     let string_len = heap_slice.iter().position(|b| *b == 0u8).unwrap();
     let zero_byte_addr = heap_slice.as_ptr().add(string_len);
+
     let sentinel_len = pstr_sentinel_length(zero_byte_addr as usize);
     let tail_idx = cell_index!(
         (string_len + sentinel_len).next_multiple_of(ALIGN)
@@ -111,79 +111,9 @@ unsafe fn scan_slice_to_str<'a>(heap_slice: &'a [u8]) -> HeapStringScan<'a> {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum PStrSegmentCmpResult {
-    Mismatch {
-        c1: char,
-        c2: char,
-    },
-    FirstMatch {
-        pstr_loc1: usize,
-        pstr_loc2: usize,
-        l1_offset: usize,
-    },
-    SecondMatch {
-        pstr_loc1: usize,
-        pstr_loc2: usize,
-        l2_offset: usize,
-    },
-    BothMatch {
-        pstr_loc1: usize,
-        pstr_loc2: usize,
-        null_offset: usize,
-    },
-}
-
-impl PStrSegmentCmpResult {
-    pub(crate) fn continue_pstr_compare(
-        self,
-        pdl: &mut Vec<HeapCellValue>,
-    ) -> Option<std::cmp::Ordering> {
-        match self {
-            PStrSegmentCmpResult::FirstMatch {
-                pstr_loc1,
-                pstr_loc2,
-                l1_offset,
-            } => {
-                let tail1 = Heap::pstr_tail_idx(pstr_loc1 + l1_offset);
-                let rest_of_l2 = pstr_loc_as_cell!(pstr_loc2 + l1_offset);
-
-                pdl.push(heap_loc_as_cell!(tail1));
-                pdl.push(rest_of_l2);
-            }
-            PStrSegmentCmpResult::SecondMatch {
-                pstr_loc1,
-                pstr_loc2,
-                l2_offset,
-            } => {
-                let tail2 = Heap::pstr_tail_idx(pstr_loc2 + l2_offset);
-                let rest_of_l1 = pstr_loc_as_cell!(pstr_loc1 + l2_offset);
-
-                pdl.push(rest_of_l1);
-                pdl.push(heap_loc_as_cell!(tail2));
-            }
-            PStrSegmentCmpResult::BothMatch {
-                pstr_loc1,
-                pstr_loc2,
-                null_offset,
-            } => {
-                // exhaustive match
-                let tail1 = Heap::pstr_tail_idx(pstr_loc1 + null_offset);
-                let tail2 = Heap::pstr_tail_idx(pstr_loc2 + null_offset);
-
-                pdl.push(heap_loc_as_cell!(tail1));
-                pdl.push(heap_loc_as_cell!(tail2));
-            }
-            PStrSegmentCmpResult::Mismatch { c1, c2 } => {
-                return Some(c1.cmp(&c2));
-            }
-        }
-
-        None
-    }
-}
-
-#[derive(Debug)]
-pub struct PStrWriteInfo {
-    cell: HeapCellValue,
+    Less,
+    Greater,
+    Continue(HeapCellValue, HeapCellValue),
 }
 
 #[derive(Debug)]
@@ -269,15 +199,12 @@ impl ReservedHeapSection {
                 }
 
                 self.push_cell(char_as_cell!('\u{0}'));
-
                 src = &src[1..];
             }
 
             if src.is_empty() {
                 return ret;
             }
-
-            debug_assert!(!src.is_empty());
 
             if let Some(null_char_idx) = src.find('\u{0}') {
                 debug_assert_ne!(null_char_idx, 0);
@@ -300,6 +227,7 @@ impl ReservedHeapSection {
                 self.push_cell(char_as_cell!('\u{0}'));
 
                 src = &src[null_char_idx + 1..];
+
                 if src.is_empty() {
                     return ret;
                 }
@@ -316,7 +244,6 @@ impl ReservedHeapSection {
                 }
 
                 self.push_pstr_segment(&src);
-
                 return ret;
             }
         }
@@ -449,23 +376,6 @@ impl<'a> HeapWriter<'a> {
             result,
         }
     }
-
-    #[inline]
-    pub(crate) fn truncate(&mut self, cell_offset: usize) {
-        self.section.heap_cell_len = cell_offset;
-        // self.section.pstr_vec.truncate(cell_offset);
-        *self.heap_byte_len = heap_index!(cell_offset);
-    }
-
-    #[inline]
-    pub(crate) fn is_empty(&self) -> bool {
-        self.section.heap_cell_len == 0
-    }
-
-    #[inline]
-    pub(crate) fn cell_len(&self) -> usize {
-        self.section.heap_cell_len
-    }
 }
 
 impl<'a> Index<usize> for HeapWriter<'a> {
@@ -516,8 +426,6 @@ impl<'a> SizedHeap for HeapWriter<'a> {
         }
     }
 }
-
-impl<'a> SizedHeapMut for HeapWriter<'a> {}
 
 impl Heap {
     pub(crate) fn new() -> Self {
@@ -638,16 +546,6 @@ impl Heap {
         self.inner.byte_len == 0
     }
 
-    pub(crate) fn index_of(&mut self, cell: HeapCellValue) -> Result<usize, usize> {
-        Ok(if cell.is_var() {
-            cell.get_value() as usize
-        } else {
-            let focus = self.cell_len();
-            self.push_cell(cell)?;
-            focus
-        })
-    }
-
     pub(crate) fn clear(&mut self) {
         unsafe {
             let layout = alloc::Layout::array::<u8>(self.inner.byte_cap).unwrap();
@@ -699,48 +597,69 @@ impl Heap {
         pstr_loc1: usize,
         pstr_loc2: usize,
     ) -> PStrSegmentCmpResult {
-        unsafe {
-            let slice1 = std::slice::from_raw_parts(
-                self.inner.ptr.add(pstr_loc1),
-                self.inner.byte_len - pstr_loc1,
-            );
+        let slice1 = &self.as_slice()[pstr_loc1..];
+        let slice2 = &self.as_slice()[pstr_loc2..];
 
-            let slice2 = std::slice::from_raw_parts(
-                self.inner.ptr.add(pstr_loc2),
-                self.inner.byte_len - pstr_loc2,
-            );
+        let find_tail = |null_idx: usize| -> usize { self.scan_slice_to_str(null_idx).tail_idx };
 
-            let str1 = std::str::from_utf8_unchecked(&slice1);
-            let str2 = std::str::from_utf8_unchecked(&slice2);
+        match slice1
+            .iter()
+            .zip(slice2.iter())
+            .position(|(b1, b2)| b1 != b2 || *b1 == 0 || *b2 == 0)
+        {
+            Some(pos) => {
+                if slice1[pos] == 0 {
+                    // subtract 1 from pos to offset the increment of scan_slice_to_str if the
+                    // string is "\0\".
+                    let tail1_idx = find_tail(pstr_loc1 + pos);
 
-            debug_assert!(!str1.is_empty());
-            debug_assert!(!str2.is_empty());
+                    if slice2[pos] == 0 {
+                        let tail2_idx = find_tail(pstr_loc2 + pos);
 
-            for ((idx, c1), c2) in str1.char_indices().zip(str2.chars()) {
-                if c1 == '\u{0}' && c2 == '\u{0}' {
-                    return PStrSegmentCmpResult::BothMatch {
-                        pstr_loc1,
-                        pstr_loc2,
-                        null_offset: idx,
-                    };
-                } else if c1 == '\u{0}' {
-                    return PStrSegmentCmpResult::FirstMatch {
-                        pstr_loc1,
-                        pstr_loc2,
-                        l1_offset: idx,
-                    };
-                } else if c2 == '\u{0}' {
-                    return PStrSegmentCmpResult::SecondMatch {
-                        pstr_loc1,
-                        pstr_loc2,
-                        l2_offset: idx,
-                    };
-                } else if c1 != c2 {
-                    return PStrSegmentCmpResult::Mismatch { c1, c2 };
+                        PStrSegmentCmpResult::Continue(
+                            heap_loc_as_cell!(tail1_idx),
+                            heap_loc_as_cell!(tail2_idx),
+                        )
+                    } else {
+                        PStrSegmentCmpResult::Continue(
+                            heap_loc_as_cell!(tail1_idx),
+                            pstr_loc_as_cell!(pstr_loc2 + pos),
+                        )
+                    }
+                } else if slice2[pos] == 0 {
+                    let tail2_idx = find_tail(pstr_loc2 + pos);
+
+                    PStrSegmentCmpResult::Continue(
+                        pstr_loc_as_cell!(pstr_loc1 + pos),
+                        heap_loc_as_cell!(tail2_idx),
+                    )
+                } else {
+                    // Compute 7-byte chunks with the mismatching character at pos in the middle of
+                    // each. This way, the character of which the byte at pos is a part will be
+                    // validated and reached eventually by the utf8_chunks() iterator.
+
+                    let slice1_range = pos.saturating_sub(3)..(pos + 4).min(slice1.len());
+                    let slice2_range = pos.saturating_sub(3)..(pos + 4).min(slice2.len());
+
+                    let chars1_iter = slice1[slice1_range].utf8_chunks();
+                    let chars2_iter = slice2[slice2_range].utf8_chunks();
+
+                    for (chunk1, chunk2) in chars1_iter.zip(chars2_iter) {
+                        let result = chunk1.valid().cmp(chunk2.valid());
+
+                        if result == Ordering::Greater {
+                            return PStrSegmentCmpResult::Greater;
+                        } else if result == Ordering::Less {
+                            return PStrSegmentCmpResult::Less;
+                        }
+                    }
+
+                    unreachable!()
                 }
             }
-
-            unreachable!() // PStrSegmentCmpResult::Match(std::cmp::min(str1.len(), str2.len()))
+            None => {
+                unreachable!()
+            }
         }
     }
 
@@ -833,43 +752,34 @@ impl Heap {
         Range { start, end }
     }
 
-    /*
-    pub(crate) fn splice<R: RangeBounds<usize>>(
-        &self,
-        range: R,
-    ) -> HeapView {
-        let range = self.slice_range(range);
-
-        HeapView {
-            slice: unsafe { self.inner.ptr.add(heap_index!(range.start)) },
-            cell_offset: range.start,
-            slice_cell_len: range.end - range.start,
-            // pstr_slice: &self.pstr_vec.as_bitslice()[range],
-        }
-    }
-
-    pub(crate) fn splice_mut<R: RangeBounds<usize>>(
-        &self,
-        range: R,
-    ) -> HeapViewMut {
-        let range = self.slice_range(range);
-
-        HeapViewMut {
-            slice: unsafe { self.inner.ptr.add(heap_index!(range.start)) },
-            cell_offset: range.start,
-            slice_cell_len: range.end - range.start,
-            // pstr_slice: &self.pstr_vec.as_bitslice()[range],
-        }
-    }
-    */
-
-    pub fn allocate_pstr(&mut self, src: &str) -> Result<Option<PStrWriteInfo>, usize> {
+    pub fn allocate_pstr(&mut self, src: &str) -> Result<HeapCellValue, usize> {
         let size_in_heap = Self::compute_pstr_size(src);
         let mut writer = self.reserve(size_in_heap)?;
         let HeapSectionWriteResult { result, .. } =
-            writer.write_with(|section| section.push_pstr(src));
+            writer.write_with(|section| match section.push_pstr(src) {
+                None => empty_list_as_cell!(),
+                Some(cell) => cell,
+            });
 
-        Ok(result.map(|cell| PStrWriteInfo { cell }))
+        Ok(result)
+    }
+
+    // note that allocate_cstr emits a tail cell to the string (completing it with the empty list)
+    // unlike any version of allocate_pstr.
+
+    pub fn allocate_cstr(&mut self, src: &str) -> Result<HeapCellValue, usize> {
+        let size_in_heap = Self::compute_pstr_size(src);
+        let mut writer = self.reserve(size_in_heap + 1)?;
+        let HeapSectionWriteResult { result, .. } =
+            writer.write_with(|section| match section.push_pstr(src) {
+                None => empty_list_as_cell!(),
+                Some(cell) => {
+                    section.push_cell(empty_list_as_cell!());
+                    cell
+                }
+            });
+
+        Ok(result)
     }
 
     pub const fn heap_cell_alignment() -> usize {
@@ -1007,7 +917,7 @@ impl Heap {
             // by at least two null bytes so one of them may be used
             // to mark partial strings e.g. during iteration
 
-            if (null_idx + 1) % ALIGN == 0 {
+            if (null_idx + 1).next_multiple_of(ALIGN) == null_idx + 1 {
                 byte_size += 2 * size_of::<HeapCellValue>();
             } else {
                 byte_size += size_of::<HeapCellValue>();
@@ -1107,27 +1017,6 @@ impl<'a> Iterator for PStrSegmentIter<'a> {
     }
 }
 
-impl MachineState {
-    pub(crate) fn allocate_pstr(&mut self, src: &str) -> Result<HeapCellValue, usize> {
-        match self.heap.allocate_pstr(src)? {
-            None => Ok(empty_list_as_cell!()),
-            Some(PStrWriteInfo { cell }) => Ok(cell),
-        }
-    }
-
-    // note that allocate_cstr emits a tail cell to the string (completing it with the empty list)
-    // unlike any version of allocate_pstr.
-    pub(crate) fn allocate_cstr(&mut self, src: &str) -> Result<HeapCellValue, usize> {
-        match self.heap.allocate_pstr(src)? {
-            None => Ok(empty_list_as_cell!()),
-            Some(PStrWriteInfo { cell }) => {
-                self.heap.push_cell(empty_list_as_cell!())?;
-                Ok(cell)
-            }
-        }
-    }
-}
-
 pub trait SizedHeap: Index<usize, Output = HeapCellValue> {
     // return the size of the instance in cells
     fn cell_len(&self) -> usize;
@@ -1140,8 +1029,6 @@ pub trait SizedHeap: Index<usize, Output = HeapCellValue> {
     // return true iff a partial string is stored at cell_offset.
     // fn pstr_at(&self, cell_offset: usize) -> bool;
 }
-
-pub trait SizedHeapMut: IndexMut<usize, Output = HeapCellValue> + SizedHeap {}
 
 impl Index<usize> for Heap {
     type Output = HeapCellValue;
@@ -1182,8 +1069,6 @@ impl SizedHeap for Heap {
         unsafe { std::slice::from_raw_parts(self.inner.ptr, self.inner.byte_len) }
     }
 }
-
-impl SizedHeapMut for Heap {}
 
 // sometimes we need to dereference variables that are found only in
 // the heap without access to the full WAM (e.g., while detecting

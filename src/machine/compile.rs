@@ -11,6 +11,7 @@ use crate::machine::term_stream::*;
 use crate::machine::*;
 use crate::parser::ast::*;
 
+use std::cell::Cell;
 use std::collections::VecDeque;
 use std::mem;
 use std::ops::Range;
@@ -1232,16 +1233,14 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
     fn compile_standalone_clause(
         &mut self,
-        term: TermWriteResult,
+        term: Term,
         settings: CodeGenSettings,
     ) -> Result<StandaloneCompileResult, SessionError> {
         let mut preprocessor = Preprocessor::new(settings);
-
         let clause = preprocessor.try_term_to_tl(self, term)?;
-        let machine_st = LS::machine_st(&mut self.payload);
-        let mut cg = CodeGenerator::new(settings);
 
-        let clause_code = cg.compile_predicate(&mut machine_st.heap, vec![clause])?;
+        let mut cg = CodeGenerator::new(settings);
+        let clause_code = cg.compile_predicate(vec![clause])?;
 
         Ok(StandaloneCompileResult {
             clause_code,
@@ -1262,6 +1261,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let code_len = self.wam_prelude.code.len();
         let mut code_ptr = code_len;
 
+        if key == (atom!("..."), 2) {
+            print!("");
+        }
+
         let mut clauses = vec![];
         let mut preprocessor = Preprocessor::new(settings);
 
@@ -1269,10 +1272,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             clauses.push(preprocessor.try_term_to_tl(self, term)?);
         }
 
-        let machine_st = LS::machine_st(&mut self.payload);
-
         let mut cg = CodeGenerator::new(settings);
-        let mut code = cg.compile_predicate(&mut machine_st.heap, clauses)?;
+        let mut code = cg.compile_predicate(clauses)?;
 
         if settings.is_extensible {
             let mut clause_clause_locs = VecDeque::new();
@@ -1469,7 +1470,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     pub(super) fn incremental_compile_clause(
         &mut self,
         key: PredicateKey,
-        clause: TermWriteResult,
+        clause: Term,
         compilation_target: CompilationTarget,
         non_counted_bt: bool,
         append_or_prepend: AppendOrPrepend,
@@ -2004,13 +2005,16 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 }
 
 impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
-    pub(super) fn compile_clause_clauses(
+    pub(super) fn compile_clause_clauses<ClauseIter: Iterator<Item = (Term, Term)>>(
         &mut self,
         key: PredicateKey,
         compilation_target: CompilationTarget,
-        clause_clauses: Vec<TermWriteResult>,
+        clause_clauses: ClauseIter,
         append_or_prepend: AppendOrPrepend,
     ) -> Result<(), SessionError> {
+        let clause_predicates = clause_clauses
+            .map(|(head, body)| Term::Clause(Cell::default(), atom!("$clause"), vec![head, body]));
+
         let clause_clause_compilation_target = match compilation_target {
             CompilationTarget::User => CompilationTarget::Module(atom!("builtins")),
             _ => compilation_target,
@@ -2018,7 +2022,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let mut num_clause_predicates = 0;
 
-        for clause_term in clause_clauses {
+        for clause_term in clause_predicates {
             self.incremental_compile_clause(
                 (atom!("$clause"), 2),
                 clause_term,
@@ -2102,13 +2106,15 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     }
 
     pub(super) fn compile_and_submit(&mut self) -> Result<(), SessionError> {
-        let key = match self.payload.predicates.first().map(|term| term.focus) {
-            Some(focus) => clause_predicate_key(self.machine_heap(), focus)
-                .ok_or(SessionError::NamelessEntry)?,
-            None => {
-                return Err(SessionError::NamelessEntry);
-            }
-        };
+        let key = self
+            .payload
+            .predicates
+            .first()
+            .and_then(|cl| {
+                let arity = ClauseInfo::arity(cl);
+                ClauseInfo::name(cl).map(|name| (name, arity))
+            })
+            .ok_or(SessionError::NamelessEntry)?;
 
         let listing_src_file_name = self.listing_src_file_name();
 
@@ -2247,12 +2253,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 .clause_clauses
                 .drain(0..std::cmp::min(predicates_len, clause_clauses_len))
                 .collect();
+
             let compilation_target = self.payload.predicates.compilation_target;
 
             self.compile_clause_clauses(
                 key,
                 compilation_target,
-                clauses_vec,
+                clauses_vec.into_iter(),
                 AppendOrPrepend::Append,
             )?;
         }
@@ -2281,50 +2288,15 @@ impl Machine {
 
     pub(crate) fn compile_standalone_clause(
         &mut self,
-        term_reg: RegType,
-        vars: Vec<HeapCellValue>,
+        term_loc: RegType,
+        vars: &[Term],
     ) -> Result<(), SessionError> {
-        let body_cell = self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st[term_reg]));
-
-        let new_header_loc = self.machine_st.heap.cell_len();
-        let arity = vars.len();
-        let term_loc = self.machine_st.heap.cell_len() + 1 + arity;
-
-        let mut writer = self
-            .machine_st
-            .heap
-            .reserve(4 + arity)
-            .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?;
-
-        writer.write_with(move |section| {
-            section.push_cell(atom_as_cell!(atom!(""), arity));
-
-            for var in vars {
-                section.push_cell(var);
-            }
-
-            let head_loc = if arity > 0 {
-                str_loc_as_cell!(new_header_loc)
-            } else {
-                heap_loc_as_cell!(new_header_loc)
-            };
-
-            section.push_cell(atom_as_cell!(atom!(":-"), 2));
-            section.push_cell(head_loc);
-            section.push_cell(body_cell);
-        });
-
         let mut compile = || {
             let mut loader: Loader<'_, InlineLoadState<'_>> =
                 Loader::new(self, InlineTermStream {});
 
-            let machine_st = InlineLoadState::machine_st(&mut loader.payload);
-
-            let term_loc = str_loc_as_cell!(term_loc);
-            let term = TermWriteResult::from(&mut machine_st.heap, term_loc)
-                .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?;
+            let term = loader.read_term_from_heap(term_loc);
+            let clause = build_rule_body(vars, term);
 
             let settings = CodeGenSettings {
                 global_clock_tick: None,
@@ -2332,7 +2304,7 @@ impl Machine {
                 non_counted_bt: true,
             };
 
-            loader.compile_standalone_clause(term, settings)
+            loader.compile_standalone_clause(clause, settings)
         };
 
         let StandaloneCompileResult { clause_code, .. } = compile()?;

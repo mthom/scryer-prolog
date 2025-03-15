@@ -13,6 +13,7 @@ use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::machine::Machine;
 use crate::parser::ast::*;
+use crate::read::TermWriteResult;
 use crate::types::*;
 
 use crate::parser::dashu::Integer;
@@ -22,7 +23,6 @@ use indexmap::IndexMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::ops::{Index, IndexMut, Range};
-use std::rc::Rc;
 use std::sync::Arc;
 
 pub(crate) type Registers = [HeapCellValue; MAX_ARITY + 1];
@@ -72,7 +72,7 @@ pub struct MachineState {
     pub(super) e: usize,
     pub(super) num_of_args: usize,
     pub(super) cp: usize,
-    pub(crate) attr_var_init: AttrVarInitializer,
+    pub(super) attr_var_init: AttrVarInitializer,
     pub(super) fail: bool,
     pub heap: Heap,
     pub(super) mode: MachineMode,
@@ -203,52 +203,56 @@ pub fn pstr_loc_and_offset(heap: &[HeapCellValue], index: usize) -> (usize, Fixn
 }
 */
 
-fn push_var_eq_functors(
+// size may be an upper bound.
+// true_size is calculated to compute the exact offset.
+
+fn push_var_eq_functors<'a>(
     heap: &mut Heap,
     size: usize,
-    iter: impl Iterator<Item = (usize, Var)>,
+    iter: impl Iterator<Item = (&'a VarKey, &'a HeapCellValue)>,
     atom_tbl: &AtomTable,
 ) -> Result<HeapCellValue, usize> {
     let src_h = heap.cell_len();
 
-    if size > 0 {
-        let mut writer = heap.reserve(1 + 5 * size)?;
+    let true_size = if size > 0 {
+        let mut writer = heap.reserve(2 + 5 * size)?;
 
-        writer.write_with(|section| {
-            for (var_loc, var) in iter {
-                // (var, binding) in iter {
-                let var_atom = AtomTable::build_with(atom_tbl, &var.to_string());
-                let binding = heap_loc_as_cell!(var_loc);
+        writer
+            .write_with(|section| {
+                let mut size = 0;
 
-                section.push_cell(atom_as_cell!(atom!("="), 2));
-                section.push_cell(atom_as_cell!(var_atom));
-                section.push_cell(binding);
-            }
+                for (var, binding) in iter {
+                    let var_atom = AtomTable::build_with(atom_tbl, &var.to_string());
 
-            for idx in 0..size {
-                section.push_cell(list_loc_as_cell!(section.cell_len() + 1));
-                section.push_cell(str_loc_as_cell!(src_h + 3 * idx));
-            }
+                    section.push_cell(atom_as_cell!(atom!("="), 2));
+                    section.push_cell(atom_as_cell!(var_atom));
+                    section.push_cell(*binding);
 
-            section.push_cell(empty_list_as_cell!());
-        });
+                    size += 1;
+                }
 
-        Ok(heap_loc_as_cell!(src_h + 3 * size))
+                for idx in 0..size {
+                    section.push_cell(list_loc_as_cell!(section.cell_len() + 1));
+                    section.push_cell(str_loc_as_cell!(src_h + 3 * idx));
+                }
+
+                if size > 0 {
+                    section.push_cell(empty_list_as_cell!());
+                }
+
+                size
+            })
+            .result
     } else {
-        Ok(empty_list_as_cell!())
-    }
-}
+        size
+    };
 
-/*
-pub(crate) fn copy_and_align_iter<Iter: Iterator<Item = HeapCellValue>>(
-    iter: Iter,
-    boundary: i64,
-    h: i64,
-) -> impl Iterator<Item = HeapCellValue> {
-    let diff = boundary - h;
-    iter.map(move |heap_value| heap_value - diff)
+    Ok(if true_size > 0 {
+        heap_loc_as_cell!(src_h + 3 * true_size)
+    } else {
+        empty_list_as_cell!()
+    })
 }
-*/
 
 #[derive(Debug)]
 pub struct Ball {
@@ -377,7 +381,7 @@ impl<'a> CopierTarget for CopyTerm<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct CopyBallTerm<'a> {
+pub(super) struct CopyBallTerm<'a> {
     attr_var_queue: &'a mut Vec<usize>,
     stack: &'a mut Stack,
     heap: &'a mut Heap,
@@ -385,7 +389,7 @@ pub(crate) struct CopyBallTerm<'a> {
 }
 
 impl<'a> CopyBallTerm<'a> {
-    pub(crate) fn new(
+    pub(super) fn new(
         attr_var_queue: &'a mut Vec<usize>,
         stack: &'a mut Stack,
         heap: &'a mut Heap,
@@ -629,24 +633,13 @@ impl MachineState {
 
     pub fn write_read_term_options(
         &mut self,
-        mut var_list: Vec<(Var, HeapCellValue, usize)>,
-        singletons_heap_list: HeapCellValue,
+        mut var_list: Vec<(VarKey, HeapCellValue, usize)>,
+        singleton_heap_list: HeapCellValue,
     ) -> CallResult {
         var_list.sort_by(|(_, _, idx_1), (_, _, idx_2)| idx_1.cmp(idx_2));
 
-        /*
-        let list_of_var_eqs = push_var_eq_functors(
-            &mut self.heap,
-            var_list.iter().map(|(var_name, var, _)| {
-                (var.get_value() as usize, var_name.clone())
-            }),
-            num_vars,
-            &self.atom_tbl,
-        );
-        */
-
         let singleton_addr = self.registers[3];
-        unify_fn!(*self, singletons_heap_list, singleton_addr);
+        unify_fn!(*self, singleton_heap_list, singleton_addr);
 
         if self.fail {
             return Ok(());
@@ -669,21 +662,18 @@ impl MachineState {
         }
 
         let var_names_addr = self.registers[5];
-        /*
-        let var_names_offset = heap_loc_as_cell!(iter_to_heap_list(
-            &mut self.heap,
-            list_of_var_eqs.into_iter()
-        ));
-        */
-
         let var_names_offset = resource_error_call_result!(
             self,
             push_var_eq_functors(
                 &mut self.heap,
                 var_list.len(),
-                var_list
-                    .iter()
-                    .map(|(var_name, var, _)| { (var.get_value() as usize, var_name.clone()) }),
+                var_list.iter().filter_map(|(var_name, var, _)| {
+                    if var_name.is_anon() {
+                        None
+                    } else {
+                        Some((var_name, var))
+                    }
+                }),
                 &self.atom_tbl,
             )
         );
@@ -691,37 +681,22 @@ impl MachineState {
         Ok(unify_fn!(*self, var_names_offset, var_names_addr))
     }
 
-    pub fn read_term_body(&mut self, term: TermWriteResult) -> CallResult {
-        let heap_loc = self.heap[term.focus];
-
-        /*
-        read_heap_cell!(self.heap[term.heap_loc],
-            (HeapCellValueTag::PStr) => { // | HeapCellValueTag::PStrOffset) => {
-                pstr_loc_as_cell!(term.heap_loc)
-            }
-            _ => {
-                heap_loc_as_cell!(term.heap_loc)
-            }
-        );
-        */
-
+    pub fn read_term_body(&mut self, mut term_write_result: TermWriteResult) -> CallResult {
+        let heap_loc = heap_loc_as_cell!(term_write_result.heap_loc);
         unify_fn!(*self, heap_loc, self.registers[2]);
 
         if self.fail {
             return Ok(());
         }
 
-        /*
         for var in term_write_result.var_dict.values_mut() {
             *var = heap_bound_deref(&self.heap, *var);
         }
-        */
 
         let mut singleton_var_set: IndexMap<Ref, bool> = IndexMap::new();
+        self.heap[0] = heap_loc;
 
-        for cell in
-            stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, term.focus)
-        {
+        for cell in stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, 0) {
             let cell = unmark_cell_bits!(cell);
 
             if let Some(var) = cell.as_var() {
@@ -737,38 +712,36 @@ impl MachineState {
             self,
             push_var_eq_functors(
                 &mut self.heap,
-                singleton_var_set
+                term_write_result.var_dict.len(),
+                term_write_result
+                    .var_dict
                     .iter()
-                    .filter(|(var, is_singleton)| {
-                        **is_singleton
-                            && term
-                                .inverse_var_locs
-                                .contains_key(&(var.get_value() as usize))
-                    })
-                    .count(),
-                term.inverse_var_locs
-                    .iter()
-                    .filter_map(|(var_loc, var_name)| {
-                        let r = Ref::heap_cell(*var_loc);
+                    .filter(|(var_name, binding)| {
+                        if var_name.is_anon() {
+                            return false;
+                        }
 
-                        if singleton_var_set.get(&r).cloned().unwrap_or(false) {
-                            Some((*var_loc, var_name.clone()))
+                        if let Some(r) = binding.as_var() {
+                            *singleton_var_set.get(&r).unwrap_or(&false)
                         } else {
-                            None
+                            false
                         }
                     }),
                 &self.atom_tbl,
             )
         );
 
+        for var in term_write_result.var_dict.values_mut() {
+            *var = heap_bound_deref(&self.heap, *var);
+        }
+
         let mut var_list = Vec::with_capacity(singleton_var_set.len());
 
-        for (var_loc, var_name) in term.inverse_var_locs {
-            let r = Ref::heap_cell(var_loc);
-            let cell = self.heap[var_loc];
-
-            if let Some(idx) = singleton_var_set.get_index_of(&r) {
-                var_list.push((var_name, cell, idx));
+        for (var_name, addr) in term_write_result.var_dict {
+            if let Some(var) = addr.as_var() {
+                if let Some(idx) = singleton_var_set.get_index_of(&var) {
+                    var_list.push((var_name, addr, idx));
+                }
             }
         }
 
@@ -851,8 +824,8 @@ impl MachineState {
         }
 
         loop {
-            match self.read_to_heap(stream, &indices.op_dir) {
-                Ok(term) => return self.read_term_body(term),
+            match self.read(stream, &indices.op_dir) {
+                Ok(term_write_result) => return self.read_term_body(term_write_result),
                 Err(err) => {
                     match &err {
                         CompilationError::ParserError(e) if e.is_unexpected_eof() => {
@@ -891,7 +864,7 @@ impl MachineState {
 
         let printer = match self.try_from_list(self.registers[6], stub_gen) {
             Ok(addrs) => {
-                let mut var_names: IndexMap<HeapCellValue, Var> = IndexMap::new();
+                let mut var_names: IndexMap<HeapCellValue, VarPtr> = IndexMap::new();
 
                 for addr in addrs {
                     read_heap_cell!(addr,
@@ -910,14 +883,14 @@ impl MachineState {
                                 read_heap_cell!(atom,
                                     (HeapCellValueTag::Atom, (name, _arity)) => {
                                         debug_assert_eq!(_arity, 0);
-                                        var_names.insert(var, Rc::new(name.as_str().to_owned()));
+                                        var_names.insert(var, VarPtr::from(name.as_str().to_owned()));
                                     }
                                     (HeapCellValueTag::Str, s) => {
                                         let (name, arity) = cell_as_atom_cell!(self.heap[s])
                                             .get_name_and_arity();
 
                                         debug_assert_eq!(arity, 0);
-                                        var_names.insert(var, Rc::new(name.as_str().to_owned()));
+                                        var_names.insert(var, VarPtr::from(name.as_str().to_owned()));
                                     }
                                     _ => {
                                         unreachable!();
@@ -996,18 +969,14 @@ impl MachineState {
                     }
                 );
 
-                let term_loc = self.heap.cell_len();
-
-                step_or_resource_error!(self, self.heap.push_cell(term_to_be_printed), {
-                    return Ok(None);
-                });
+                self.heap[0] = term_to_be_printed;
 
                 let mut printer = HCPrinter::new(
                     &mut self.heap,
                     &mut self.stack,
                     op_dir,
                     PrinterOutputter::new(),
-                    term_loc,
+                    0,
                 );
 
                 printer.ignore_ops = ignore_ops;
@@ -1040,7 +1009,6 @@ impl MachineState {
                 }
 
                 printer.var_names = var_names;
-
                 printer
             }
             Err(err) => {
