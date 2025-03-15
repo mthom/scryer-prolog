@@ -1791,60 +1791,60 @@ impl MachineState {
         let addr = self.store(MachineState::deref(self, addr));
 
         read_heap_cell!(addr,
-                        (HeapCellValueTag::Atom, (name, arity)) => {
-                            debug_assert_eq!(arity, 0);
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                debug_assert_eq!(arity, 0);
 
-                            return match indices.get_stream(name) {
-                                Some(stream) if !stream.is_null_stream() => Ok(stream),
-                                _ => {
-                                    let stub = functor_stub(caller, arity);
-                                    let addr = atom_as_cell!(name);
+                return match indices.get_stream(name) {
+                    Some(stream) if !stream.is_null_stream() => Ok(stream),
+                    _ => {
+                        let stub = functor_stub(caller, arity);
+                        let addr = atom_as_cell!(name);
 
-                                    let existence_error = self.existence_error(ExistenceError::Stream(addr));
+                        let existence_error = self.existence_error(ExistenceError::Stream(addr));
 
-                                    Err(self.error_form(existence_error, stub))
-                                }
-                            };
-                        }
-                        (HeapCellValueTag::Str, s) => {
-                            let (name, arity) = cell_as_atom_cell!(self.heap[s])
-                                .get_name_and_arity();
+                        Err(self.error_form(existence_error, stub))
+                    }
+                };
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                    .get_name_and_arity();
 
-                            debug_assert_eq!(arity, 0);
+                debug_assert_eq!(arity, 0);
 
-                            return match indices.get_stream(name) {
-                                Some(stream) if !stream.is_null_stream() => Ok(stream),
-                                _ => {
-                                    let stub = functor_stub(caller, arity);
-                                    let addr = atom_as_cell!(name);
+                return match indices.get_stream(name) {
+                    Some(stream) if !stream.is_null_stream() => Ok(stream),
+                    _ => {
+                        let stub = functor_stub(caller, arity);
+                        let addr = atom_as_cell!(name);
 
-                                    let existence_error = self.existence_error(ExistenceError::Stream(addr));
+                        let existence_error = self.existence_error(ExistenceError::Stream(addr));
 
-                                    Err(self.error_form(existence_error, stub))
-                                }
-                            };
-                        }
-                        (HeapCellValueTag::Cons, ptr) => {
-                            match_untyped_arena_ptr!(ptr,
-                                (ArenaHeaderTag::Stream, stream) => {
-                                    return if stream.is_null_stream() {
-                                        Err(self.open_permission_error(stream_as_cell!(stream), caller, arity))
-                                    } else {
-                                        Ok(stream)
-                                    };
-                                }
-                                (ArenaHeaderTag::Dropped, _value) => {
-                                    let stub = functor_stub(caller, arity);
-                                    let err = self.existence_error(ExistenceError::Stream(addr));
+                        Err(self.error_form(existence_error, stub))
+                    }
+                };
+            }
+            (HeapCellValueTag::Cons, ptr) => {
+                match_untyped_arena_ptr!(ptr,
+                   (ArenaHeaderTag::Stream, stream) => {
+                       return if stream.is_null_stream() {
+                           Err(self.open_permission_error(stream_as_cell!(stream), caller, arity))
+                       } else {
+                           Ok(stream)
+                       };
+                   }
+                   (ArenaHeaderTag::Dropped, _value) => {
+                       let stub = functor_stub(caller, arity);
+                       let err = self.existence_error(ExistenceError::Stream(addr));
 
-                                    return Err(self.error_form(err, stub));
-                                }
-                                _ => {
-                                }
-                            );
-                        }
-                        _ => {
-                        }
+                       return Err(self.error_form(err, stub));
+                   }
+                   _ => {
+                   }
+                );
+            }
+            _ => {
+            }
         );
 
         let stub = functor_stub(caller, arity);
@@ -1864,7 +1864,7 @@ impl MachineState {
     ) -> Result<Stream, ParserError> {
         match stream.peek_char() {
             None => Ok(stream), // empty stream is handled gracefully by Lexer::eof
-            Some(Err(e)) => Err(ParserError::IO(e, ParserErrorSrc::default())),
+            Some(Err(e)) => Err(ParserError::IO(e)),
             Some(Ok(c)) => {
                 if c == '\u{feff}' {
                     // skip UTF-8 BOM
@@ -2070,7 +2070,7 @@ impl MachineState {
                         _ => {
                             // assume the OS is out of file descriptors.
                             let stub = functor_stub(atom!("open"), 4);
-                            let err = self.resource_error(ResourceError::OutOfFiles);
+                            let err = Self::resource_error(ResourceError::OutOfFiles);
 
                             return Err(self.error_form(err, stub));
                         }

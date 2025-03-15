@@ -3,6 +3,7 @@ use crate::parser::ast::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::instructions::*;
+use crate::iterators::*;
 use crate::types::*;
 
 use std::rc::Rc;
@@ -11,7 +12,11 @@ pub(crate) struct FactInstruction;
 pub(crate) struct QueryInstruction;
 
 pub(crate) trait CompilationTarget<'a> {
-    fn to_constant(lvl: Level, cell: HeapCellValue, r: RegType) -> Instruction;
+    type Iterator: Iterator<Item = TermRef<'a>>;
+
+    fn iter(term: &'a Term) -> Self::Iterator;
+
+    fn to_constant(lvl: Level, constant: Literal, r: RegType) -> Instruction;
     fn to_list(lvl: Level, r: RegType) -> Instruction;
     fn to_structure(lvl: Level, name: Atom, arity: usize, r: RegType) -> Instruction;
 
@@ -22,7 +27,7 @@ pub(crate) trait CompilationTarget<'a> {
 
     fn incr_void_instr(instr: &mut Instruction);
 
-    fn constant_subterm(literal: HeapCellValue) -> Instruction;
+    fn constant_subterm(literal: Literal) -> Instruction;
 
     fn argument_to_variable(r: RegType, r: usize) -> Instruction;
     fn argument_to_value(r: RegType, val: usize) -> Instruction;
@@ -38,8 +43,14 @@ pub(crate) trait CompilationTarget<'a> {
 }
 
 impl<'a> CompilationTarget<'a> for FactInstruction {
-    fn to_constant(lvl: Level, cell: HeapCellValue, reg: RegType) -> Instruction {
-        Instruction::GetConstant(lvl, cell, reg)
+    type Iterator = FactIterator<'a>;
+
+    fn iter(term: &'a Term) -> Self::Iterator {
+        breadth_first_iter(term, RootIterationPolicy::NotIterated)
+    }
+
+    fn to_constant(lvl: Level, constant: Literal, reg: RegType) -> Instruction {
+        Instruction::GetConstant(lvl, HeapCellValue::from(constant), reg)
     }
 
     fn to_structure(lvl: Level, name: Atom, arity: usize, reg: RegType) -> Instruction {
@@ -68,8 +79,8 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         }
     }
 
-    fn constant_subterm(constant: HeapCellValue) -> Instruction {
-        Instruction::UnifyConstant(constant)
+    fn constant_subterm(constant: Literal) -> Instruction {
+        Instruction::UnifyConstant(HeapCellValue::from(constant))
     }
 
     fn argument_to_variable(arg: RegType, val: usize) -> Instruction {
@@ -106,8 +117,10 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
 }
 
 impl<'a> CompilationTarget<'a> for QueryInstruction {
-    fn to_constant(lvl: Level, constant: HeapCellValue, reg: RegType) -> Instruction {
-        Instruction::PutConstant(lvl, constant, reg)
+    type Iterator = QueryIterator<'a>;
+
+    fn iter(term: &'a Term) -> Self::Iterator {
+        post_order_iter(term)
     }
 
     fn to_structure(_lvl: Level, name: Atom, arity: usize, r: RegType) -> Instruction {
@@ -136,8 +149,12 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
         }
     }
 
-    fn constant_subterm(constant: HeapCellValue) -> Instruction {
-        Instruction::SetConstant(constant)
+    fn constant_subterm(constant: Literal) -> Instruction {
+        Instruction::SetConstant(HeapCellValue::from(constant))
+    }
+
+    fn to_constant(lvl: Level, constant: Literal, reg: RegType) -> Instruction {
+        Instruction::PutConstant(lvl, HeapCellValue::from(constant), reg)
     }
 
     fn argument_to_variable(arg: RegType, val: usize) -> Instruction {

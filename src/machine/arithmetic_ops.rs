@@ -1126,7 +1126,10 @@ impl MachineState {
 
                 match Number::try_from(value) {
                     Ok(n) => Ok(n),
-                    Err(_) => self.arith_eval_by_metacall(value),
+                    Err(_) => {
+                        self.heap[0] = value;
+                        self.arith_eval_by_metacall(0)
+                    }
                 }
             }
             &ArithmeticTerm::Interm(i) => Ok(mem::replace(
@@ -1152,21 +1155,11 @@ impl MachineState {
 
     pub(crate) fn arith_eval_by_metacall(
         &mut self,
-        value: HeapCellValue,
+        term_loc: usize,
     ) -> Result<Number, MachineStub> {
-        debug_assert!(value.is_ref());
-
         let stub_gen = || functor_stub(atom!("is"), 2);
-
-        let root_loc = if value.is_ref() && !value.is_stack_var() {
-            value.get_value() as usize
-        } else {
-            let type_error = self.type_error(ValidType::Evaluable, value);
-            return Err(self.error_form(type_error, stub_gen()));
-        };
-
         let mut iter =
-            stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, root_loc);
+            stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, term_loc);
 
         while let Some(value) = iter.next() {
             if value.get_forwarding_bit() {
@@ -1459,7 +1452,7 @@ mod tests {
             parse_and_write_parsed_term_to_heap(&mut wam, "3 + 4 - 1 + 2.", &op_dir).unwrap();
 
         assert_eq!(
-            wam.arith_eval_by_metacall(heap_loc_as_cell!(term_write_result.focus)),
+            wam.arith_eval_by_metacall(term_write_result.heap_loc),
             Ok(Number::Fixnum(Fixnum::build_with(8))),
         );
 
@@ -1469,7 +1462,7 @@ mod tests {
             parse_and_write_parsed_term_to_heap(&mut wam, "5 * 4 - 1.", &op_dir).unwrap();
 
         assert_eq!(
-            wam.arith_eval_by_metacall(heap_loc_as_cell!(term_write_result.focus)),
+            wam.arith_eval_by_metacall(term_write_result.heap_loc),
             Ok(Number::Fixnum(Fixnum::build_with(19))),
         );
 
@@ -1479,7 +1472,7 @@ mod tests {
             parse_and_write_parsed_term_to_heap(&mut wam, "sign(-1).", &op_dir).unwrap();
 
         assert_eq!(
-            wam.arith_eval_by_metacall(heap_loc_as_cell!(term_write_result.focus)),
+            wam.arith_eval_by_metacall(term_write_result.heap_loc),
             Ok(Number::Fixnum(Fixnum::build_with(-1)))
         );
     }
