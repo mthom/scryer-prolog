@@ -8,7 +8,6 @@ use crate::machine::machine_state::*;
 use crate::machine::*;
 use crate::types::*;
 
-use dashu::integer::IBig;
 use fxhash::FxBuildHasher;
 
 macro_rules! step_or_fail {
