@@ -458,7 +458,7 @@ replacements of these low-level arithmetic predicates, often yielding
 more general programs. See [`n_factorial/2`](#clpz-factorial) for an
 example.
 
-This library uses goal_expansion/2 to automatically rewrite
+This library uses `goal_expansion/2` to automatically rewrite
 constraints at compilation time so that low-level arithmetic
 predicates are _automatically_ used whenever possible. For example,
 the predicate:
