@@ -97,9 +97,7 @@ impl ConsPtr {
 
     #[inline(always)]
     pub fn as_ptr(self) -> *mut u8 {
-        unsafe {
-            mem::transmute::<_, *mut u8>(self.ptr())
-        }
+        unsafe { mem::transmute::<_, *mut u8>(self.ptr() as usize) }
     }
 
     #[inline(always)]
@@ -677,9 +675,7 @@ impl UntypedArenaPtr {
 
     #[inline]
     pub fn get_ptr(self) -> *const ArenaHeader {
-        unsafe {
-            mem::transmute::<_, *const ArenaHeader>(self.ptr())
-        }
+        unsafe { mem::transmute::<_, *const ArenaHeader>(self.ptr() as usize) }
     }
 
     #[inline]

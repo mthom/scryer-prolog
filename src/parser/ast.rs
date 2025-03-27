@@ -511,9 +511,49 @@ pub struct Fixnum {
     tag: B6,
 }
 
+mod private {
+    pub(crate) trait FitsInFixnumSeal {}
+
+    macro_rules! impl_fits_in_fixnum {
+        ($t:ty) => {
+            impl $crate::parser::ast::private::FitsInFixnumSeal for $t {}
+
+            impl $crate::parser::ast::FitsInFixnum for $t {
+                fn into_i56(self) -> i64 {
+                    self.into()
+                }
+            }
+        };
+    }
+
+    impl_fits_in_fixnum!(u8);
+    impl_fits_in_fixnum!(i8);
+    impl_fits_in_fixnum!(u16);
+    impl_fits_in_fixnum!(i16);
+    impl_fits_in_fixnum!(u32);
+    impl_fits_in_fixnum!(i32);
+
+    impl FitsInFixnumSeal for char {}
+    impl super::FitsInFixnum for char {
+        fn into_i56(self) -> i64 {
+            u32::from(self) as i64
+        }
+    }
+}
+
+#[allow(private_bounds)]
+pub trait FitsInFixnum: private::FitsInFixnumSeal {
+    fn into_i56(self) -> i64;
+}
+
 impl Fixnum {
     #[inline]
-    pub fn build_with(num: i64) -> Self {
+    pub fn build_with(num: impl FitsInFixnum) -> Self {
+        Self::build_with_unchecked(num.into_i56())
+    }
+
+    #[inline]
+    pub fn build_with_unchecked(num: i64) -> Self {
         Fixnum::new()
             .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 56) - 1))
             .with_tag(HeapCellValueTag::Fixnum as u8)
@@ -537,16 +577,14 @@ impl Fixnum {
     }
 
     #[inline]
-    pub fn build_with_checked(num: i64) -> Result<Self, OutOfBounds> {
-        const UPPER_BOUND: i64 = (1 << 55) - 1;
+    pub fn build_with_checked(num: impl TryInto<i64>) -> Result<Self, OutOfBounds> {
         const LOWER_BOUND: i64 = -(1 << 55);
+        const UPPER_BOUND: i64 = (1 << 55) - 1;
+
+        let num = num.try_into().map_err(|_| OutOfBounds {})?;
 
         if (LOWER_BOUND..=UPPER_BOUND).contains(&num) {
-            Ok(Fixnum::new()
-                .with_m(false)
-                .with_f(false)
-                .with_tag(HeapCellValueTag::Fixnum as u8)
-                .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 56) - 1)))
+            Ok(Self::build_with_unchecked(num))
         } else {
             Err(OutOfBounds {})
         }
@@ -566,7 +604,7 @@ impl Neg for Fixnum {
 
     #[inline]
     fn neg(self) -> Self::Output {
-        Fixnum::build_with(-self.get_num())
+        Fixnum::build_with_unchecked(-self.get_num())
     }
 }
 
