@@ -977,8 +977,8 @@ impl MachineState {
         let mut tokens = vec![];
 
         match lexer_parser.next_token() {
-            Ok(token @ Token::Literal(atom)) if atom == atom_as_cell!(atom!("-")) => {
-                tokens.push(token);
+            Ok(Token::Literal(atom)) if atom == atom_as_cell!(atom!("-")) => {
+                tokens.push(Token::Literal(atom));
 
                 if let Ok(token) = lexer_parser.next_token() {
                     tokens.push(token);

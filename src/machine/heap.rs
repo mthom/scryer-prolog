@@ -9,6 +9,9 @@ use std::ops::{Bound, Index, IndexMut, Range, RangeBounds};
 use std::ptr;
 use std::sync::Once;
 
+// only added to the prelude in 1.80 and msrv is 1.77
+use std::mem::size_of;
+
 use super::MachineState;
 
 const ALIGN: usize = Heap::heap_cell_alignment();
