@@ -5206,8 +5206,12 @@ impl Machine {
                 }
                 None => match result.as_string() {
                     Some(result) => {
-                        let result = AtomTable::build_with(&self.machine_st.atom_tbl, &result);
-                        self.machine_st.unify_complete_string(result, result_reg);
+                        let cstr_cell = step_or_resource_error!(
+                            self.machine_st,
+                            self.machine_st.allocate_cstr(&result)
+                        );
+
+                        unify!(self.machine_st, cstr_cell, self.machine_st.registers[1]);
                     }
                     None => {
                         if result.is_null() {
