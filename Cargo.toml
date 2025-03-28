@@ -72,10 +72,10 @@ sha3 = "0.10.8"
 smallvec = "1.13.2"
 static_assertions = "1.1.0"
 
-scraper = { version = "0.19.1", default-features = false, features = [
+scraper = { version = "0.23.1", default-features = false, features = [
     "errors",
 ] }
-ego-tree = "0.6.2"
+ego-tree = "0.10.0"
 
 
 serde_json = "1.0.122"
