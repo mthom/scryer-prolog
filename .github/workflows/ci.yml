@@ -153,7 +153,7 @@ jobs:
       - name: Install CLI tools
         run: |
           cargo install cargo2junit --force
-          version=`yq -ptoml -oy -r '.target.*.dev-dependencies.iai-callgrind|select(.)' Cargo.toml`
+          version=`yq -ptoml -oj -r '.package[] | select(.name == "iai-callgrind") | .version' Cargo.lock`
           echo installing iai-callgrind "$version"
           cargo install iai-callgrind-runner --force --version "$version"
           sudo apt install valgrind -y
