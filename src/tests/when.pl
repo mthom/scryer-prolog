@@ -1,10 +1,8 @@
 /**/
 
-:- module(when_tests, []).
-
 :- use_module(library(when)).
 
-:- use_module(test_framework).
+:- use_module(library(testing)).
 
 test("condition true before ground/1",(
     A = 1,
