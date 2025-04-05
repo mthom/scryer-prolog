@@ -42,7 +42,6 @@
 % FormatString are used literally, except for the following tokens
 % with special meaning:
 %
-% | `~w`     |  use the next available argument from Arguments here           |
 % | `~q`     |  use the next argument here, formatted as by `writeq/1`        |
 % | `~a`     |  use the next argument here, which must be an atom             |
 % | `~s`     |  use the next argument here, which must be a string            |
@@ -72,6 +71,7 @@
 % | `~Nn`    |  N newlines                                                    |
 % | `~i`     |  ignore the next argument                                      |
 % | `~~`     |  the literal ~                                                 |
+% | `~w`     |  format like `write/1` would; consider using `~q`, `~d`, etc.  |
 %
 % Instead of `~N`, you can write `~*` to use the next argument from
 % Arguments as the numeric argument.
