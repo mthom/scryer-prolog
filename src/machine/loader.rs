@@ -1219,7 +1219,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let code_index = self.get_or_insert_code_index(key, compilation_target);
 
-        if code_index.is_undefined() {
+        if code_index.as_ptr().is_undefined() {
             set_code_index(
                 &mut self.payload.retraction_info,
                 &compilation_target,
@@ -1378,73 +1378,72 @@ impl MachineState {
         while let Some(addr) = iter.next() {
             let addr = unmark_cell_bits!(addr);
 
-            if let Ok(literal) = Literal::try_from(addr) {
-                term_stack.push(Term::Literal(Cell::default(), literal));
-            } else {
-                read_heap_cell!(addr,
-                    (HeapCellValueTag::Lis) => {
-                        use crate::parser::parser::as_partial_string;
+            read_heap_cell!(addr,
+                (HeapCellValueTag::Lis) => {
+                    use crate::parser::parser::as_partial_string;
 
-                        let tail = term_stack.pop().unwrap();
-                        let head = term_stack.pop().unwrap();
+                    let tail = term_stack.pop().unwrap();
+                    let head = term_stack.pop().unwrap();
 
-                        match as_partial_string(head, tail) {
-                            Ok((string, Some(tail))) => {
-                                term_stack.push(Term::PartialString(Cell::default(), Rc::new(string), tail));
-                            }
-                            Ok((string, None)) => {
-                                term_stack.push(Term::CompleteString(Cell::default(), Rc::new(string)));
-                            }
-                            Err(cons_term) => term_stack.push(cons_term),
+                    match as_partial_string(head, tail) {
+                        Ok((string, Some(tail))) => {
+                            term_stack.push(Term::PartialString(Cell::default(), Rc::new(string), tail));
                         }
-                    }
-                    (HeapCellValueTag::StackVar, h) => {
-                        term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("s_{}", h))));
-                    }
-                    (HeapCellValueTag::Var | HeapCellValueTag::AttrVar, h) => {
-                        term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("_{}", h))));
-                    }
-                    (HeapCellValueTag::Atom, (name, arity)) => {
-                        let h = iter.focus().value() as usize;
-                        let mut arity = arity;
-                        let value = iter.heap[h.saturating_sub(1)];
-
-                        if let Some(idx) = get_structure_index(value) {
-                            term_stack.push(Term::Literal(Cell::default(), Literal::CodeIndex(idx)));
-                            arity += 1;
+                        Ok((string, None)) => {
+                            term_stack.push(Term::CompleteString(Cell::default(), Rc::new(string)));
                         }
-
-                        if arity == 0 {
-                            term_stack.push(Term::Literal(Cell::default(), Literal::Atom(name)));
-                        } else {
-                            let subterms = term_stack
-                                .drain(term_stack.len() - arity ..)
-                                .collect();
-
-                            term_stack.push(Term::Clause(Cell::default(), name, subterms));
-                        }
+                        Err(cons_term) => term_stack.push(cons_term),
                     }
-                    (HeapCellValueTag::PStrLoc, h) => {
-                        let HeapStringScan { string, .. } = iter.heap.scan_slice_to_str(h);
-                        let tail = term_stack.pop().unwrap();
+                }
+                (HeapCellValueTag::Cons | HeapCellValueTag::Fixnum | HeapCellValueTag::F64) => {
+                    term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
+                }
+                (HeapCellValueTag::StackVar, h) => {
+                    term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("s_{}", h))));
+                }
+                (HeapCellValueTag::Var | HeapCellValueTag::AttrVar, h) => {
+                    term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("_{}", h))));
+                }
+                (HeapCellValueTag::Atom, (name, arity)) => {
+                    let h = iter.focus().value() as usize;
+                    let mut arity = arity;
+                    let value = iter.heap[h.saturating_sub(1)];
 
-                        term_stack.push(if matches!(tail, Term::Literal(_, Literal::Atom(atom!("[]")))) {
-                            Term::CompleteString(
-                                Cell::default(),
-                                Rc::new(string.to_owned()),
-                            )
-                        } else {
-                            Term::PartialString(
-                                Cell::default(),
-                                Rc::new(string.to_owned()),
-                                Box::new(tail),
-                            )
-                        });
+                    if let Some(idx) = get_structure_index(value) {
+                        term_stack.push(Term::Literal(Cell::default(), Literal::CodeIndex(idx)));
+                        arity += 1;
                     }
-                    _ => {
+
+                    if arity == 0 {
+                        term_stack.push(Term::Literal(Cell::default(), Literal::Atom(name)));
+                    } else {
+                        let subterms = term_stack
+                            .drain(term_stack.len() - arity ..)
+                            .collect();
+
+                        term_stack.push(Term::Clause(Cell::default(), name, subterms));
                     }
-                );
-            }
+                }
+                (HeapCellValueTag::PStrLoc, h) => {
+                    let HeapStringScan { string, .. } = iter.heap.scan_slice_to_str(h);
+                    let tail = term_stack.pop().unwrap();
+
+                    term_stack.push(if matches!(tail, Term::Literal(_, Literal::Atom(atom!("[]")))) {
+                        Term::CompleteString(
+                            Cell::default(),
+                            Rc::new(string.to_owned()),
+                        )
+                    } else {
+                        Term::PartialString(
+                            Cell::default(),
+                            Rc::new(string.to_owned()),
+                            Box::new(tail),
+                        )
+                    });
+                }
+                _ => {
+                }
+            );
         }
 
         debug_assert!(term_stack.len() == 1);

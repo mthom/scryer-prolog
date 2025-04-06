@@ -610,7 +610,7 @@ impl Machine {
                             .indices
                             .code_dir
                             .get_index(predicate_idx)
-                            .map(|x| x.1.p() as usize)
+                            .map(|x| x.1.as_ptr().p() as usize)
                             .unwrap();
 
                         debug_assert!(current_pred_start <= p);
@@ -619,7 +619,7 @@ impl Machine {
                             .indices
                             .code_dir
                             .get_index(predicate_idx + 1)
-                            .map(|x| x.1.p() as usize)
+                            .map(|x| x.1.as_ptr().p() as usize)
                             .unwrap_or(self.code.len());
 
                         debug_assert!(current_pred_end >= p);
