@@ -42,7 +42,6 @@
 % FormatString are used literally, except for the following tokens
 % with special meaning:
 %
-% | `~w`     |  use the next available argument from Arguments here           |
 % | `~q`     |  use the next argument here, formatted as by `writeq/1`        |
 % | `~a`     |  use the next argument here, which must be an atom             |
 % | `~s`     |  use the next argument here, which must be a string            |
@@ -72,6 +71,7 @@
 % | `~Nn`    |  N newlines                                                    |
 % | `~i`     |  ignore the next argument                                      |
 % | `~~`     |  the literal ~                                                 |
+% | `~w`     |  format like `write/1` would; consider using `~q`, `~d`, etc.  |
 %
 % Instead of `~N`, you can write `~*` to use the next argument from
 % Arguments as the numeric argument.
@@ -90,15 +90,15 @@ format_(Fs, Args) -->
 format_args_cells(Fs, Args, Cells) :-
         must_be(chars, Fs),
         must_be(list, Args),
-        unique_variable_names(Args, VNs),
+        unique_variable_names(fabricated, Args, VNs),
         phrase(cells(Fs,Args,0,[],VNs), Cells).
 
-unique_variable_names(Term, VNs) :-
+unique_variable_names(Type, Term, VNs) :-
         term_variables(Term, Vs),
-        foldl(var_name, Vs, VNs, 0, _).
+        foldl(var_name(Type), Vs, VNs, 0, _).
 
-var_name(V, Name=V, Num0, Num) :-
-        charsio:fabricate_var_name(numbervars, Name, Num0),
+var_name(Type, V, Name=V, Num0, Num) :-
+        charsio:fabricate_var_name(Type, Name, Num0),
         Num is Num0 + 1.
 
 user:goal_expansion(format_(Fs,Args,Cs0,Cs),
@@ -574,7 +574,7 @@ portray_clause(Stream, Term) :-
         flush_output(Stream).
 
 portray_clause_(Term) -->
-        { unique_variable_names(Term, VNs) },
+        { unique_variable_names(numbervars, Term, VNs) },
         portray_(Term, VNs), ".\n".
 
 literal(Lit, VNs) -->
