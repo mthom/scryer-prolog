@@ -62,7 +62,14 @@ macro_rules! cell_as_atom_cell {
 macro_rules! cell_as_f64_ptr {
     ($cell:expr) => {{
         let offset = $cell.get_value() as usize;
-        F64Ptr::from_offset(F64Offset::new(offset))
+        F64Ptr::from_offset(F64Offset::from(offset))
+    }};
+}
+
+macro_rules! cell_as_code_index {
+    ($cell:expr) => {{
+        let offset = $cell.get_value() as usize;
+        CodeIndex::from(CodeIndexOffset::from(offset))
     }};
 }
 
@@ -140,7 +147,7 @@ macro_rules! raw_ptr_as_cell {
     ($ptr:expr) => {{
         // Cell is 64-bit, but raw ptr is 32-bit in 32-bit systems
         // TODO use <*{const,mut} _>::addr instead of as when the strict_provenance feature is stable rust-lang/rust#95228
-        // we might need <*{const,mut} _>::expose_provenance for strict provenance, dependening on how we recreate a pointer later
+        // we might need <*{const,mut} _>::expose_provenance for strict provenance, depending on how we recreate a pointer later
         let ptr : *const _ = $ptr;
         debug_assert!(!$ptr.is_null());
         HeapCellValue::from_ptr_addr(ptr as usize)
@@ -217,12 +224,6 @@ macro_rules! match_untyped_arena_ptr_pat_body {
         #[allow(unused_braces)]
         $code
     }};
-    ($ptr:ident, IndexPtr, $ip:ident, $code:expr) => {{
-        #[allow(unused_mut)]
-        let mut $ip = unsafe { $ptr.as_typed_ptr::<IndexPtr>() };
-        #[allow(unused_braces)]
-        $code
-    }};
     ($ptr:ident, $($tags:tt)|+, $s:ident, $code:expr) => {{
         let $s = Stream::from_tag($ptr.get_tag(), $ptr);
         #[allow(unused_braces)]
@@ -245,12 +246,6 @@ macro_rules! match_untyped_arena_ptr_pat {
             | ArenaHeaderTag::InputChannelStream
             | ArenaHeaderTag::StandardOutputStream
             | ArenaHeaderTag::StandardErrorStream
-    };
-    (IndexPtr) => {
-        ArenaHeaderTag::IndexPtrUndefined
-            | ArenaHeaderTag::IndexPtrDynamicUndefined
-            | ArenaHeaderTag::IndexPtrDynamicIndex
-            | ArenaHeaderTag::IndexPtrIndex
     };
     ($tag:ident) => {
         ArenaHeaderTag::$tag
@@ -279,6 +274,11 @@ macro_rules! read_heap_cell_pat_body {
     }};
     ($cell:ident, F64, $n:ident, $code:expr) => {{
         let $n = cell_as_f64_ptr!($cell);
+        #[allow(unused_braces)]
+        $code
+    }};
+    ($cell:ident, CodeIndex, $n:ident, $code:expr) => {{
+        let $n = cell_as_code_index!($cell);
         #[allow(unused_braces)]
         $code
     }};
