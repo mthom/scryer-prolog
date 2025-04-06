@@ -45,6 +45,7 @@ use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
+use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
@@ -207,13 +208,8 @@ pub(crate) fn import_builtin_impls(code_dir: &CodeDir, builtins: &mut Module) {
 #[inline]
 pub(crate) fn get_structure_index(value: HeapCellValue) -> Option<CodeIndex> {
     read_heap_cell!(value,
-        (HeapCellValueTag::Cons, cons_ptr) => {
-             match_untyped_arena_ptr!(cons_ptr,
-                 (ArenaHeaderTag::IndexPtr, ip) => {
-                     return Some(CodeIndex::from(ip));
-                 }
-                 _ => {}
-             );
+        (HeapCellValueTag::CodeIndex, ip) => {
+            return Some(ip);
         }
         _ => {
         }

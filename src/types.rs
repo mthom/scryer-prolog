@@ -6,6 +6,7 @@ use crate::forms::*;
 use crate::machine::heap::*;
 use crate::machine::machine_indices::*;
 use crate::machine::streams::*;
+use crate::offset_table::*;
 use crate::parser::ast::Fixnum;
 use crate::parser::ast::Literal;
 
@@ -31,7 +32,7 @@ pub enum HeapCellValueTag {
     Cons = 0b0,
     F64 = 0b010101,
     Fixnum = 0b011001,
-    // Char = 0b011011,
+    CodeIndex = 0b011011,
     Atom = 0b011111,
     CutPoint = 0b011101,
     // trail elements.
@@ -58,7 +59,7 @@ pub enum HeapCellValueView {
     Cons = 0b0,
     F64 = 0b010101,
     Fixnum = 0b011001,
-    Char = 0b011011,
+    CodeIndex = 0b011011,
     Atom = 0b011111,
     CutPoint = 0b011101,
     // trail elements.
@@ -315,9 +316,7 @@ impl From<Literal> for HeapCellValue {
     fn from(literal: Literal) -> Self {
         match literal {
             Literal::Atom(name) => atom_as_cell!(name),
-            Literal::CodeIndex(ptr) => {
-                untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(ptr))
-            }
+            Literal::CodeIndex(idx) => HeapCellValue::from(idx),
             Literal::Fixnum(n) => fixnum_as_cell!(n),
             Literal::Integer(bigint_ptr) => {
                 typed_arena_ptr_as_cell!(bigint_ptr)
@@ -348,6 +347,9 @@ impl TryFrom<HeapCellValue> for Literal {
             (HeapCellValueTag::F64, f) => {
                 Ok(Literal::Float(f.as_offset()))
             }
+            (HeapCellValueTag::CodeIndex, idx) => {
+                Ok(Literal::CodeIndex(idx))
+            }
             (HeapCellValueTag::Cons, cons_ptr) => {
                 match_untyped_arena_ptr!(cons_ptr,
                      (ArenaHeaderTag::Integer, n) => {
@@ -355,9 +357,6 @@ impl TryFrom<HeapCellValue> for Literal {
                      }
                      (ArenaHeaderTag::Rational, n) => {
                          Ok(Literal::Rational(n))
-                     }
-                     (ArenaHeaderTag::IndexPtr, ip) => {
-                         Ok(Literal::CodeIndex(CodeIndex::from(ip)))
                      }
                      _ => {
                          Err(())
@@ -385,6 +384,16 @@ impl From<F64Ptr> for HeapCellValue {
     #[inline]
     fn from(f64_ptr: F64Ptr) -> HeapCellValue {
         HeapCellValue::build_with(HeapCellValueTag::F64, f64_ptr.as_offset().to_u64())
+    }
+}
+
+impl From<CodeIndexPtr> for HeapCellValue {
+    #[inline]
+    fn from(code_index_ptr: CodeIndexPtr) -> HeapCellValue {
+        HeapCellValue::build_with(
+            HeapCellValueTag::CodeIndex,
+            code_index_ptr.as_offset().to_u64(),
+        )
     }
 }
 
@@ -739,22 +748,23 @@ impl UntypedArenaPtr {
     }
 
     #[inline]
-    pub fn get_ptr(self) -> *const ArenaHeader {
-        unsafe { mem::transmute::<_, *const ArenaHeader>(self.ptr()) }
+    pub fn get_ptr(self) -> *const u8 {
+        let addr: u64 = self.ptr();
+        addr as usize as *const u8
     }
 
     #[inline]
     pub fn get_tag(self) -> ArenaHeaderTag {
         unsafe {
             debug_assert!(!self.get_ptr().is_null());
-            let header = *self.get_ptr();
+            let header = *(self.get_ptr() as *const ArenaHeader);
             header.get_tag()
         }
     }
 
     #[inline]
     pub fn payload_offset(self) -> *const u8 {
-        unsafe { self.get_ptr().byte_add(mem::size_of::<ArenaHeader>()) as *const _ }
+        unsafe { self.get_ptr().add(mem::size_of::<ArenaHeader>()) }
     }
 
     /// # Safety
