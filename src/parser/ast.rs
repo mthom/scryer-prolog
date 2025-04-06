@@ -3,6 +3,7 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::machine::machine_indices::CodeIndex;
+use crate::offset_table::*;
 use crate::parser::char_reader::*;
 use crate::types::HeapCellValueTag;
 
@@ -626,8 +627,7 @@ impl fmt::Display for Literal {
             Literal::Atom(ref atom) => {
                 write!(f, "{}", atom.flat_index())
             }
-            // Literal::Char(c) => write!(f, "'{}'", *c as u32),
-            Literal::CodeIndex(i) => write!(f, "{:x}", i.as_ptr() as u64),
+            Literal::CodeIndex(i) => write!(f, "{:?}", *i.as_ptr()),
             Literal::Fixnum(n) => write!(f, "{}", n.get_num()),
             Literal::Integer(ref n) => write!(f, "{}", n),
             Literal::Rational(ref n) => write!(f, "{}", n),

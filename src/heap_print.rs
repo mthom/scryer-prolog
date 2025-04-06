@@ -12,6 +12,7 @@ use crate::machine::machine_indices::*;
 use crate::machine::partial_string::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
+use crate::offset_table::*;
 use crate::types::*;
 
 use dashu::base::Signed;
@@ -1506,21 +1507,23 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn print_index_ptr(&mut self, index_ptr: IndexPtr, max_depth: usize) {
+    fn print_index_ptr(&mut self, idx: CodeIndex, max_depth: usize) {
         if self.format_struct(max_depth, 1, atom!("$index_ptr")) {
             let atom = self.state_stack.pop().unwrap();
 
             self.state_stack.pop();
             self.state_stack.pop();
 
-            let offset = if index_ptr.is_undefined() || index_ptr.is_dynamic_undefined() {
+            let idx_ptr = idx.as_ptr();
+
+            let offset = if idx_ptr.is_undefined() || idx_ptr.is_dynamic_undefined() {
                 TokenOrRedirect::Atom(atom!("undefined"))
             } else {
-                let idx = index_ptr.p() as i64;
+                let idx_ptr_p = idx_ptr.p() as i64;
 
                 TokenOrRedirect::NumberFocus(
                     max_depth,
-                    NumberFocus::Unfocused(Number::Fixnum(Fixnum::build_with(idx))),
+                    NumberFocus::Unfocused(Number::Fixnum(Fixnum::build_with(idx_ptr_p))),
                     None,
                 )
             };
@@ -1707,6 +1710,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     });
                 }
             }
+            (HeapCellValueTag::CodeIndex, idx) => {
+                self.print_index_ptr(idx, self.max_depth);
+            }
             (HeapCellValueTag::Fixnum | HeapCellValueTag::CutPoint, n) => {
                 self.print_number(max_depth, NumberFocus::Unfocused(Number::Fixnum(n)), &op);
             }
@@ -1749,9 +1755,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                    }
                    (ArenaHeaderTag::Dropped, _value) => {
                        self.print_impromptu_atom(atom!("$dropped_value"));
-                   }
-                   (ArenaHeaderTag::IndexPtr, index_ptr) => {
-                       self.print_index_ptr(*index_ptr, max_depth);
                    }
                    _ => {
                    }
