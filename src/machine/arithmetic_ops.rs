@@ -11,6 +11,7 @@ use crate::forms::*;
 use crate::heap_iter::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_state::*;
+use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;

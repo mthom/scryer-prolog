@@ -147,7 +147,7 @@ pub(super) fn import_module_exports<'a, LS: LoadState<'a>>(
                         src_code_index.get(),
                     );
 
-                    if src_code_index.is_dynamic_undefined() {
+                    if src_code_index.as_ptr().is_dynamic_undefined() {
                         code_dir.insert(key, src_code_index);
                     }
                 } else {
@@ -486,7 +486,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 continue;
             }
 
-            if !code_index.is_undefined() && !code_index.is_dynamic_undefined() {
+            if !code_index.as_ptr().is_undefined() && !code_index.as_ptr().is_dynamic_undefined() {
                 let old_index_ptr = code_index.replace(IndexPtr::undefined());
 
                 self.payload.retraction_info.push_record(
