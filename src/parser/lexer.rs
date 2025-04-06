@@ -8,6 +8,8 @@ use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
 
+use ordered_float::OrderedFloat;
+
 use std::convert::TryFrom;
 use std::fmt;
 

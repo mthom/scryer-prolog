@@ -11,6 +11,7 @@ use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
 use crate::machine::stack::*;
 use crate::machine::unify::*;
+use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
