@@ -7,6 +7,7 @@ use crate::debray_allocator::*;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::*;
+use crate::offset_table::*;
 use crate::targets::QueryInstruction;
 use crate::types::*;
 

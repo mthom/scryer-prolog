@@ -7,9 +7,9 @@ use crate::heap_iter::{stackful_post_order_iter, NonListElider};
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{
-    ArenaHeaderTag, F64Offset, F64Ptr, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC,
-    LIB_QUERY_SUCCESS,
+    ArenaHeaderTag, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS,
 };
+use crate::offset_table::*;
 use crate::parser::ast::{Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};

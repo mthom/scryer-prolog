@@ -1468,7 +1468,7 @@ impl Machine {
         };
 
         if let Some(code_index) = index_cell {
-            if !code_index.is_undefined() {
+            if !code_index.as_ptr().is_undefined() {
                 load_registers(&mut self.machine_st, goal, goal_arity);
                 self.machine_st.neck_cut();
                 return call_at_index(self, name, arity, code_index.get());
@@ -1617,8 +1617,7 @@ impl Machine {
 
         let expanded_term = if result.is_simple_goal {
             let idx = self.get_or_insert_qualified_code_index(module_name, result.key);
-            self.machine_st.heap[result.index_ptr_loc] =
-                untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx));
+            self.machine_st.heap[result.index_ptr_loc] = HeapCellValue::from(idx);
             result.goal
         } else {
             let mut unexpanded_vars = IndexSet::with_hasher(FxBuildHasher::default());
@@ -1656,7 +1655,7 @@ impl Machine {
                     );
 
                     writer.write_with(|section| {
-                        section.push_cell(untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx)));
+                        section.push_cell(HeapCellValue::from(idx));
                         section.push_cell(atom_as_cell!(atom!("$aux"), 0));
 
                         for value in unexpanded_vars.difference(&result.supp_vars).cloned() {
@@ -1693,14 +1692,8 @@ impl Machine {
 
             let idx_cell = self.machine_st.heap[s.saturating_sub(1)];
 
-            if HeapCellValueTag::Cons == idx_cell.get_tag() {
-                match_untyped_arena_ptr!(cell_as_untyped_arena_ptr!(idx_cell),
-                     (ArenaHeaderTag::IndexPtr, _ip) => {
-                         return true;
-                     }
-                     _ => {
-                     }
-                );
+            if HeapCellValueTag::CodeIndex == idx_cell.get_tag() {
+                return true;
             }
         }
 

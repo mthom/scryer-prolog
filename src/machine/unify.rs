@@ -3,6 +3,7 @@ use crate::forms::*;
 use crate::heap_iter::{stackful_preorder_iter, NonListElider};
 use crate::machine::machine_state::*;
 use crate::machine::*;
+use crate::offset_table::*;
 use crate::types::*;
 
 use std::ops::{Deref, DerefMut};

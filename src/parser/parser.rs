@@ -7,6 +7,8 @@ use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::lexer::*;
 
+use ordered_float::OrderedFloat;
+
 use std::cell::Cell;
 use std::mem;
 use std::ops::Neg;
