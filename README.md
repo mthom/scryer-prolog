@@ -214,36 +214,36 @@ Then a `pkg` directory will be created, containing everything you need for a web
 
         // Knowledge base: Sudoku rules and problem definition
         const kb = `
-  :- use_module(library(format)).
-  :- use_module(library(clpz)).
-  :- use_module(library(lists)).
+        :- use_module(library(format)).
+        :- use_module(library(clpz)).
+        :- use_module(library(lists)).
 
-  sudoku(Rows) :-
-    length(Rows, 9), maplist(same_length(Rows), Rows),
-    append(Rows, Vs), Vs ins 1..9,
-    maplist(all_distinct, Rows),
-    transpose(Rows, Columns),
-    maplist(all_distinct, Columns),
-    Rows = [A,B,C,D,E,F,G,H,I],
-    blocks(A, B, C),
-    blocks(D, E, F),
-    blocks(G, H, I).
+        sudoku(Rows) :-
+          length(Rows, 9), maplist(same_length(Rows), Rows),
+          append(Rows, Vs), Vs ins 1..9,
+          maplist(all_distinct, Rows),
+          transpose(Rows, Columns),
+          maplist(all_distinct, Columns),
+          Rows = [A,B,C,D,E,F,G,H,I],
+          blocks(A, B, C),
+          blocks(D, E, F),
+          blocks(G, H, I).
 
-  blocks([], [], []).
-  blocks([A,B,C|T1], [D,E,F|T2], [G,H,I|T3]) :-
-    all_distinct([A,B,C,D,E,F,G,H,I]),
-    blocks(T1, T2, T3).
+        blocks([], [], []).
+        blocks([A,B,C|T1], [D,E,F|T2], [G,H,I|T3]) :-
+          all_distinct([A,B,C,D,E,F,G,H,I]),
+          blocks(T1, T2, T3).
 
-  problem(1, [[_,_,_,_,_,_,_,_,_],
-              [_,_,_,_,_,3,_,8,5],
-              [_,_,1,_,2,_,_,_,_],
-              [_,_,_,5,_,7,_,_,_],
-              [_,_,4,_,_,_,1,_,_],
-              [_,9,_,_,_,_,_,_,_],
-              [5,_,_,_,_,_,_,7,3],
-              [_,_,2,_,1,_,_,_,_],
-              [_,_,_,_,4,_,_,_,9]]).
-`;
+        problem(1, [[_,_,_,_,_,_,_,_,_],
+                    [_,_,_,_,_,3,_,8,5],
+                    [_,_,1,_,2,_,_,_,_],
+                    [_,_,_,5,_,7,_,_,_],
+                    [_,_,4,_,_,_,1,_,_],
+                    [_,9,_,_,_,_,_,_,_],
+                    [5,_,_,_,_,_,_,7,3],
+                    [_,_,2,_,1,_,_,_,_],
+                    [_,_,_,_,4,_,_,_,9]]).
+      `;
 
         machine.consultModuleString("user", kb);
 
