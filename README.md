@@ -266,17 +266,24 @@ Then a `pkg` directory will be created, containing everything you need for a web
         }
 
         // Output results
-        document.write(`<p>Sudoku solver returns:</p>`);
+        const solutionDiv = document.querySelector("#soduku-solution");
         for (const solution of formattedSolutions) {
-            document.write(`<pre>${solution}</pre>`);
+            const newPre = document.createElement("pre");
+            newPre.textContent = solution;
+            solutionDiv.appendChild(newPre);
         }
-
     </script>
 </head>
 
-<body></body>
+<body>
+    <p>Sudoku solver returns:</p>
+    <div id="soduku-solution">
+
+    </div>
+</body>
 
 </html>
+
 ```
 
 Then you can serve it with your favorite http server like `python -m http.server` or `npx serve`, and access the page with your browser.
