@@ -263,7 +263,6 @@ Then a `pkg` directory will be created, containing everything you need for a web
 
             const formatted = grid.map(row => `[${row.join(", ")}]`).join("\n");
             formattedSolutions.push(formatted);
-            console.log(formatted);
         }
 
         // Output results
