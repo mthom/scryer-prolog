@@ -101,7 +101,8 @@ impl ConsPtr {
 
     #[inline(always)]
     pub fn as_ptr(self) -> *mut u8 {
-        unsafe { mem::transmute::<_, *mut u8>(self.ptr()) }
+        let addr: u64 = self.ptr();
+        addr as usize as *mut _
     }
 
     #[inline(always)]
