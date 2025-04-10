@@ -467,7 +467,7 @@ impl AtomTable {
     }
 
     pub fn build_with(atom_table: &AtomTable, string: &str) -> Atom {
-        if 0 < string.len() && string.len() <= INLINED_ATOM_MAX_LEN {
+        if 0 < string.len() && string.len() <= INLINED_ATOM_MAX_LEN && !string.contains('\u{0}') {
             return Atom::new_inlined(string);
         }
 
