@@ -564,6 +564,12 @@ impl MachineState {
                         (HeapCellValueTag::Lis, l1) => {
                             read_heap_cell!(v2,
                                 (HeapCellValueTag::PStrLoc, l2) => {
+                                    if tabu_list.contains(&(l1, l2)) {
+                                        continue;
+                                    }
+
+                                    tabu_list.insert((l1, l2));
+
                                     // like the action of
                                     // partial_string_to_pdl here but
                                     // the ordering of PDL pushes is
