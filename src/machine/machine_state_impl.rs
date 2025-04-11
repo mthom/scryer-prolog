@@ -628,6 +628,12 @@ impl MachineState {
                         (HeapCellValueTag::PStrLoc, l1) => {
                             read_heap_cell!(v2,
                                 (HeapCellValueTag::PStrLoc, l2) => {
+                                    if tabu_list.contains(&(l1, l2)) {
+                                        continue;
+                                    }
+
+                                    tabu_list.insert((l1, l2));
+
                                     match self.heap.compare_pstr_segments(l1, l2) {
                                         PStrSegmentCmpResult::Continue(v1, v2) => {
                                             self.pdl.push(v1);
@@ -642,6 +648,12 @@ impl MachineState {
                                     }
                                 }
                                 (HeapCellValueTag::Lis, l2) => {
+                                    if tabu_list.contains(&(l1, l2)) {
+                                        continue;
+                                    }
+
+                                    tabu_list.insert((l1, l2));
+
                                     let (c, succ_cell) = self.heap.last_str_char_and_tail(l1);
 
                                     self.pdl.push(succ_cell);
@@ -651,10 +663,16 @@ impl MachineState {
                                     self.pdl.push(heap_loc_as_cell!(l2));
                                 }
                                 (HeapCellValueTag::Str, s) => {
+                                    if tabu_list.contains(&(l1, s)) {
+                                        continue;
+                                    }
+
                                     let (name, arity) = cell_as_atom_cell!(self.heap[s])
                                         .get_name_and_arity();
 
                                     if name == atom!(".") && arity == 2 {
+                                        tabu_list.insert((l1, s));
+
                                         let (c, succ_cell) = self.heap.last_str_char_and_tail(l1);
 
                                         self.pdl.push(heap_loc_as_cell!(s+2));
