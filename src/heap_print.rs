@@ -874,11 +874,15 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                                 None => {
                                     if self.max_depth == 0 || *max_depth == 0 {
                                         // otherwise, contract it to an ellipsis.
-                                        push_space_if_amb!(self, "...", {
-                                            append_str!(self, "...");
-                                        });
+                                        self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
                                     } else {
                                         debug_assert!(cell.is_ref());
+
+                                        let h = cell.get_value() as usize;
+                                        self.iter.push_stack(IterStackLoc::iterable_loc(
+                                            h,
+                                            HeapOrStackTag::Heap,
+                                        ));
 
                                         // as usual, the WAM's
                                         // optimization of the Lis tag
@@ -889,14 +893,16 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                                         // lest we find ourselves in
                                         // an infinite loop.
                                         if cell.get_tag() == HeapCellValueTag::Lis {
-                                            *max_depth -= 1;
+                                            if self.iter.heap[cell.get_value() as usize]
+                                                .get_forwarding_bit()
+                                            {
+                                                self.state_stack
+                                                    .push(TokenOrRedirect::Atom(atom!("...")));
+                                                return None;
+                                            } else {
+                                                *max_depth -= 1;
+                                            }
                                         }
-
-                                        let h = cell.get_value() as usize;
-                                        self.iter.push_stack(IterStackLoc::iterable_loc(
-                                            h,
-                                            HeapOrStackTag::Heap,
-                                        ));
 
                                         if let Some(cell) = self.iter.next() {
                                             orig_cell = cell;
