@@ -78,6 +78,7 @@ impl WasmMachine {
             ),
         }
         .into();
+        self_iterable(&query_state);
 
         Ok(query_state)
     }
@@ -172,6 +173,21 @@ impl WasmQueryState {
         } = self.inner.take().unwrap().into_heads();
         drop_channel.send(machine).unwrap();
     }
+}
+
+/// Sets a [JsValue] as the `Symbol.iterator` property of the [JsValue].
+///
+/// If the [JsValue] conforms to the [JavaScript iterator interface](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Iterators_and_generators),
+/// this function will make the [JsValue] iterable.
+#[wasm_bindgen(inline_js = "
+    export function self_iterable(obj) {
+        obj[Symbol.iterator] = function () {
+            return this;
+        };
+    }
+")]
+extern "C" {
+    fn self_iterable(obj: &JsValue);
 }
 
 impl From<LeafAnswer> for JsValue {
