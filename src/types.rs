@@ -698,7 +698,7 @@ impl HeapCellValue {
     }
 }
 
-const_assert!(mem::size_of::<HeapCellValue>() == 8);
+const_assert!(size_of::<HeapCellValue>() == 8);
 
 #[bitfield]
 #[repr(u64)]
@@ -737,7 +737,7 @@ impl From<*const IndexPtr> for UntypedArenaPtr {
 impl From<UntypedArenaPtr> for *const ArenaHeader {
     #[inline]
     fn from(ptr: UntypedArenaPtr) -> *const ArenaHeader {
-        ptr.get_ptr() as *const ArenaHeader
+        ptr.get_ptr().cast::<ArenaHeader>()
     }
 }
 
@@ -756,14 +756,14 @@ impl UntypedArenaPtr {
     #[inline]
     pub fn get_tag(self) -> ArenaHeaderTag {
         unsafe {
-            let header = *(self.get_ptr() as *const ArenaHeader);
+            let header = *self.get_ptr().cast::<ArenaHeader>();
             header.get_tag()
         }
     }
 
     #[inline]
     pub fn payload_offset(self) -> *const u8 {
-        unsafe { self.get_ptr().add(mem::size_of::<ArenaHeader>()) }
+        unsafe { self.get_ptr().add(size_of::<ArenaHeader>()) }
     }
 
     /// # Safety
