@@ -2486,14 +2486,12 @@ impl Machine {
             return;
         }
 
-        let pstr_h = self.machine_st.heap.cell_len();
-
         let pstr_loc_cell = step_or_resource_error!(
             self.machine_st,
             self.machine_st.heap.allocate_pstr(&*atom.as_str())
         );
 
-        let tail_loc = Heap::pstr_tail_idx(atom.as_str().len() + heap_index!(pstr_h));
+        let tail_loc = self.machine_st.heap.cell_len();
 
         step_or_resource_error!(
             self.machine_st,
