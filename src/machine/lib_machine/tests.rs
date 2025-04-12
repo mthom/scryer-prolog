@@ -608,3 +608,44 @@ fn errors_and_exceptions() {
         [Ok(LeafAnswer::Exception(Term::atom("a")))]
     );
 }
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn term_as_query() {
+    let mut machine = MachineBuilder::default().build();
+
+    // X = a.
+    let query = Term::compound("=", [Term::variable("X"), Term::atom("a")]);
+
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+
+    assert_eq!(
+        complete_answer,
+        [LeafAnswer::from_bindings([("X", Term::atom("a"))])]
+    );
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn complex_term_as_query() {
+    let mut machine = MachineBuilder::default().build();
+
+    let complex_term = Term::list([
+        Term::integer(10),
+        Term::rational(Rational::from_parts(7.into(), 10u32.into())),
+        Term::float(4.12),
+        Term::atom("asdf"),
+        Term::string("fdsa"),
+        Term::compound("a", [Term::atom("b"), Term::atom("c"), Term::atom("d")]),
+        Term::variable("Y"),
+    ]);
+
+    let query = Term::compound("=", [Term::variable("X"), complex_term.clone()]);
+
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+
+    assert_eq!(
+        complete_answer,
+        [LeafAnswer::from_bindings([("X", complex_term)])]
+    );
+}
