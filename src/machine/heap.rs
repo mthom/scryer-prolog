@@ -92,7 +92,10 @@ pub struct HeapStringScan<'a> {
 
 // return the string at ptr and the tail location relative to ptr.
 unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan {
-    let string_len = heap_slice.iter().position(|b| *b == 0u8).unwrap();
+    let string_len = heap_slice
+        .iter()
+        .position(|b| *b == 0u8)
+        .unwrap_or(heap_slice.len());
     let zero_byte_addr = heap_slice.as_ptr().add(string_len);
 
     let sentinel_len = pstr_sentinel_length(zero_byte_addr as usize);
@@ -889,44 +892,26 @@ impl Heap {
     /// Returns the number of bytes needed to store `src` as a `PStr`.
     /// Assumes the string will be allocated on a ALIGN-byte boundary.
     pub(crate) fn compute_pstr_size(src: &str) -> usize {
-        if src.is_empty() {
-            return 0;
-        }
-
         let mut byte_size = 0;
-        let mut null_idx = 0;
+        let mut src_bytes = src.as_bytes();
 
-        loop {
-            let src_bytes = src.as_bytes();
-
-            while null_idx < src_bytes.len() {
-                if src_bytes[null_idx] == 0u8 {
-                    break;
-                }
-
-                null_idx += 1;
+        while !src_bytes.is_empty() {
+            if src_bytes[0] == 0 {
+                // push a list_loc_as_cell! and null char atom to the heap and continue.
+                byte_size += heap_index!(2);
+                src_bytes = &src_bytes[1..];
+                continue;
             }
 
-            byte_size += null_idx + pstr_sentinel_length(null_idx);
+            let HeapStringScan { string, tail_idx } = unsafe { scan_slice_to_str(src_bytes) };
 
-            // each partial string must be buffered from its tail cell
-            // by at least two null bytes so one of them may be used
-            // to mark partial strings e.g. during iteration
-
-            if (null_idx + 1).next_multiple_of(ALIGN) == null_idx + 1 {
-                byte_size += 2 * size_of::<HeapCellValue>();
-            } else {
-                byte_size += size_of::<HeapCellValue>();
-            }
-
-            if null_idx + 1 >= src.len() {
-                break;
-            } else {
-                null_idx += 1;
-            }
+            src_bytes = &src_bytes[string.len()..];
+            byte_size += heap_index!(tail_idx);
         }
 
-        byte_size
+        // add 1 cell to make up for the final tail cell. if src == "" it's written to the heap as
+        // empty_list_as_cell!() and the pstr_size is 0 + heap_index!(1).
+        byte_size + heap_index!(1)
     }
 
     pub(crate) const fn compute_functor_byte_size(functor: &[FunctorElement]) -> usize {
