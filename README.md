@@ -254,8 +254,8 @@ Then a `pkg` directory will be created, containing everything you need for a web
         const formattedSolutions = [];
 
         // Format the answers
-        for (let solution = answers.next(); !solution.done; solution = answers.next()) {
-            const rows = solution.value.bindings["Rows"].list;
+        for (const solution of answers) {
+            const rows = solution.bindings["Rows"].list;
 
             const grid = rows.map(row =>
                 row.list.map(cell => cell.integer)
@@ -283,7 +283,6 @@ Then a `pkg` directory will be created, containing everything you need for a web
 </body>
 
 </html>
-
 ```
 
 Then you can serve it with your favorite http server like `python -m http.server` or `npx serve`, and access the page with your browser.
