@@ -131,11 +131,13 @@ impl ReservedHeapSection {
     pub(crate) fn push_cell(&mut self, cell: HeapCellValue) {
         unsafe {
             ptr::write(
-                self.heap_ptr.add(heap_index!(self.heap_cell_len)) as *mut _,
+                self.heap_ptr
+                    .add(heap_index!(self.heap_cell_len))
+                    .cast::<HeapCellValue>(),
                 cell,
             );
         }
-        // self.pstr_vec.push(false);
+
         self.heap_cell_len += 1;
     }
 
@@ -243,7 +245,7 @@ impl ReservedHeapSection {
                     }
                 }
 
-                self.push_pstr_segment(&src);
+                self.push_pstr_segment(src);
                 return ret;
             }
         }
@@ -316,7 +318,7 @@ impl Index<usize> for ReservedHeapSection {
     #[inline]
     fn index(&self, idx: usize) -> &Self::Output {
         debug_assert!(idx < self.heap_cell_len);
-        unsafe { &*(self.heap_ptr as *const HeapCellValue).add(idx) }
+        unsafe { &*self.heap_ptr.cast::<HeapCellValue>().add(idx) }
     }
 }
 
@@ -384,7 +386,13 @@ impl<'a> Index<usize> for HeapWriter<'a> {
     #[inline]
     fn index(&self, idx: usize) -> &Self::Output {
         debug_assert!(heap_index!(idx) < *self.heap_byte_len);
-        unsafe { &*(self.section.heap_ptr.add(heap_index!(idx)) as *const HeapCellValue) }
+        unsafe {
+            &*self
+                .section
+                .heap_ptr
+                .add(heap_index!(idx))
+                .cast::<HeapCellValue>()
+        }
     }
 }
 
@@ -392,7 +400,13 @@ impl<'a> IndexMut<usize> for HeapWriter<'a> {
     #[inline]
     fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
         debug_assert!(heap_index!(idx) < *self.heap_byte_len);
-        unsafe { &mut *(self.section.heap_ptr.add(heap_index!(idx)) as *mut HeapCellValue) }
+        unsafe {
+            &mut *self
+                .section
+                .heap_ptr
+                .add(heap_index!(idx))
+                .cast::<HeapCellValue>()
+        }
     }
 }
 
@@ -706,7 +720,7 @@ impl Heap {
             //   is strictly less than `self.inner.byte_cap`.
             // - Asserted: `self.cell_len() * size_of::<HeapCellvalue>() <= self.inner.byte_cap`.
             // - Invariant: from `InnerHeap`, `self.inner.byte_cap < isize::MAX`.
-            let cell_ptr = (self.inner.ptr as *mut HeapCellValue).add(self.cell_len());
+            let cell_ptr = self.inner.ptr.cast::<HeapCellValue>().add(self.cell_len());
             cell_ptr.write(cell);
             // self.pstr_vec.push(false);
             self.inner.byte_len += heap_index!(1);
@@ -714,26 +728,6 @@ impl Heap {
 
         Ok(())
     }
-
-    /*
-    pub(crate) fn pop_cell(&mut self) -> Option<HeapCellValue> {
-        unsafe {
-            if self.inner.byte_len > 0 {
-                let cell_ptr = (self.inner.ptr as *const HeapCellValue)
-                    .add(self.cell_len())
-                    .sub(1);
-                let cell = ptr::read(cell_ptr);
-
-                self.inner.byte_len -= heap_index!(1);
-                self.pstr_vec.pop();
-
-                Some(cell)
-            } else {
-                None
-            }
-        }
-    }
-    */
 
     fn slice_range<R: RangeBounds<usize>>(&self, range: R) -> Range<usize> {
         let start = match range.start_bound() {
@@ -805,14 +799,16 @@ impl Heap {
             let char_ptr = self.inner.ptr.add(loc);
             let slice = std::slice::from_raw_parts(char_ptr, self.inner.byte_len - loc);
 
-            let s = std::str::from_utf8_unchecked(&slice);
+            let s = std::str::from_utf8_unchecked(slice);
             let mut chars_iter = s.chars();
             let c = chars_iter.next().unwrap();
-            let succ_len = loc + c.len_utf8();
+            let next_char_opt = chars_iter.next();
 
-            if chars_iter.next() == Some('\u{0}') {
-                (c, heap_loc_as_cell!(Self::pstr_tail_idx(succ_len)))
+            if next_char_opt.is_none() || next_char_opt == Some('\u{0}') {
+                let tail_idx = scan_slice_to_str(slice).tail_idx + cell_index!(loc);
+                (c, heap_loc_as_cell!(tail_idx))
             } else {
+                let succ_len = loc + c.len_utf8();
                 (c, pstr_loc_as_cell!(succ_len))
             }
         }
@@ -1033,23 +1029,26 @@ pub trait SizedHeap: Index<usize, Output = HeapCellValue> {
 impl Index<usize> for Heap {
     type Output = HeapCellValue;
 
+    #[inline]
     fn index(&self, idx: usize) -> &Self::Output {
-        unsafe { &*(self.inner.ptr as *const HeapCellValue).add(idx) }
+        unsafe { &*self.inner.ptr.cast::<HeapCellValue>().add(idx) }
     }
 }
 
 impl IndexMut<usize> for Heap {
+    #[inline]
     fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
-        unsafe { &mut *(self.inner.ptr as *mut HeapCellValue).add(idx) }
+        unsafe { &mut *self.inner.ptr.cast::<HeapCellValue>().add(idx) }
     }
 }
 
 impl SizedHeap for Heap {
+    #[inline]
     fn cell_len(&self) -> usize {
         self.cell_len()
     }
 
-    fn scan_slice_to_str<'a>(&'a self, slice_loc: usize) -> HeapStringScan<'a> {
+    fn scan_slice_to_str(&self, slice_loc: usize) -> HeapStringScan {
         let HeapStringScan { string, tail_idx } = unsafe {
             let slice = std::slice::from_raw_parts(
                 self.inner.ptr.add(slice_loc),
@@ -1065,6 +1064,7 @@ impl SizedHeap for Heap {
         }
     }
 
+    #[inline]
     fn as_slice(&self) -> &[u8] {
         unsafe { std::slice::from_raw_parts(self.inner.ptr, self.inner.byte_len) }
     }
