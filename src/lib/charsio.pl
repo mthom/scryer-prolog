@@ -195,7 +195,7 @@ get_single_char(C) :-
     ;  type_error(in_character, C, get_single_char/1)
     ).
 
-%% read_from_chars(+Chars, -Term).
+%% read_from_chars(+Chars, ?Term).
 %
 % Given a string made of chars which contains a representation of
 % a Prolog term, Term is the Prolog term represented. Example:
@@ -206,10 +206,10 @@ get_single_char(C) :-
 % ```
 read_from_chars(Chars, Term) :-
     must_be(chars, Chars),
-    must_be(var, Term),
-    '$read_from_chars'(Chars, Term).
+    '$read_from_chars'(Chars, Term0),
+    Term = Term0.
 
-%% read_term_from_chars(+Chars, -Term, +Options).
+%% read_term_from_chars(+Chars, ?Term, +Options).
 %
 % Like `read_from_chars`, except the reader is configured according to
 % `Options` which are those of `read_term`.
@@ -220,9 +220,9 @@ read_from_chars(Chars, Term) :-
 % ```
 read_term_from_chars(Chars, Term, Options) :-
     must_be(chars, Chars),
-    must_be(var, Term),
     builtins:parse_read_term_options(Options, [Singletons, VariableNames, Variables], read_term_from_chars/3),
-    '$read_term_from_chars'(Chars, Term, Singletons, Variables, VariableNames).
+    '$read_term_from_chars'(Chars, Term0, Singletons, Variables, VariableNames),
+    Term = Term0.
 
 %% write_term_to_chars(+Term, +Options, -Chars).
 %
