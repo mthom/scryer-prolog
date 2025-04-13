@@ -830,16 +830,19 @@ ideally suited for use in corporations and government&nbsp;agencies
 that are subject to strict regulations pertaining to interoperability,
 standards&nbsp;compliance and warranty.
 
-Successful existing applications of Scryer Prolog include the
-[DocLog](https://github.com/aarroyoc/doclog)&nbsp;system which
-generates Scryer's own documentation and homepage, [reasoning
-about business&nbsp;grants](https://arxiv.org/abs/2406.15293)
-in the Austrian public&nbsp;administration, and parts of the
-[precautionary](https://github.com/dcnorris/precautionary/tree/main/exec/prolog)
-package for the analysis of dose-escalation trials in the
-safety-critical and highly regulated domain of oncology
-trial&nbsp;design, described in [*An Executable Specification of
-Oncology Dose-Escalation Protocols with&nbsp;Prolog*](https://arxiv.org/abs/2402.08334).
+Successful existing applications of Scryer Prolog include:
+
+- [DocLog](https://github.com/aarroyoc/doclog) which generates
+  Scryer's own documentation and homepage
+- [Grants4Companies](https://arxiv.org/abs/2406.15293): reasoning
+  about business&nbsp;grants in the Austrian public&nbsp;administration
+- parts of the [precautionary](https://github.com/dcnorris/precautionary/tree/main/exec/prolog)
+  package for the analysis of dose-escalation trials in the
+  safety-critical and highly regulated domain of oncology
+  trial&nbsp;design, described in [*An Executable Specification of
+  Oncology Dose-Escalation Protocols with&nbsp;Prolog*](https://arxiv.org/abs/2402.08334)
+- semantic reasoning and queries in [AD4M](https://github.com/coasys/ad4m),
+  an agent-centric distributed application meta-ontology.
 
 Scryer Prolog is also very well suited for teaching and learning
 Prolog, and for testing syntactic conformance and hence portability of
