@@ -87,7 +87,7 @@ impl<'ast> Visit<'ast> for StaticStrVisitor {
 const INLINED_ATOM_MAX_LEN: usize = 6;
 
 fn static_string_index(string: &str, index: usize) -> u64 {
-    if 0 < string.len() && string.len() <= INLINED_ATOM_MAX_LEN {
+    if !string.is_empty() && string.len() <= INLINED_ATOM_MAX_LEN && !string.contains('\u{0}') {
         let mut string_buf: [u8; 8] = [0u8; 8];
         string_buf[..string.len()].copy_from_slice(string.as_bytes());
         (u64::from_le_bytes(string_buf) << 1) | 1
@@ -183,8 +183,7 @@ pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStrea
         })
         .collect();
 
-    let static_strs_len = static_strs.len(); // visitor.static_strs.len();
-                                             //let static_strs: &Vec<_> = &visitor.static_strs.into_iter().collect();
+    let static_strs_len = static_strs.len();
 
     quote! {
         static STRINGS: [&str; #static_strs_len] = [

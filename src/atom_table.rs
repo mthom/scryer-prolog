@@ -49,9 +49,9 @@ const_assert!(mem::size_of::<Atom>() == 8);
 
 impl AtomCell {
     #[inline]
-    pub fn new_static(index: u64) -> Self {
+    fn new_static(index: u64) -> Self {
         // upper 23 bits of index must be 0
-        debug_assert!(index & !((1 << 49) - 1) == 0);
+        debug_assert_eq!(index & !((1 << 49) - 1), 0);
         AtomCell::new()
             .with_name(index)
             .with_arity(0u8)
@@ -62,7 +62,7 @@ impl AtomCell {
     }
 
     #[inline]
-    pub fn new_inlined(string: &str, arity: u8) -> Self {
+    fn new_inlined(string: &str, arity: u8) -> Self {
         debug_assert!(string.len() <= INLINED_ATOM_MAX_LEN);
 
         let mut string_buf: [u8; 8] = [0u8; 8];
@@ -80,6 +80,10 @@ impl AtomCell {
 
     #[inline]
     pub fn new_char_inlined(c: char) -> Self {
+        if c == '\u{0}' {
+            return Self::new_static(NULL_ATOM.flat_index());
+        }
+
         let mut char_buf = [0u8; 8];
         c.encode_utf8(&mut char_buf);
 
@@ -135,6 +139,7 @@ include!(concat!(env!("OUT_DIR"), "/static_atoms.rs"));
 // populate these in STRINGS so they can be used from build_functor
 const _: Atom = atom!(".");
 const _: Atom = atom!("[]");
+const NULL_ATOM: Atom = atom!("\0");
 
 impl<'a> From<&'a Atom> for Atom {
     #[inline]
@@ -222,16 +227,12 @@ pub enum AtomString<'a> {
     Dynamic(AtomTableRef<str>),
 }
 
+#[inline(always)]
 fn inlined_to_str(bytes: &[u8; 8]) -> &str {
-    // allow the '\0\' atom to be represented as the 0-valued inlined atom
-    let slice_len = if bytes[0] == 0 {
-        1
-    } else {
-        bytes
-            .iter()
-            .position(|&b| b == 0u8)
-            .unwrap_or(INLINED_ATOM_MAX_LEN)
-    };
+    let slice_len = bytes
+        .iter()
+        .position(|&b| b == 0u8)
+        .unwrap_or(INLINED_ATOM_MAX_LEN);
 
     unsafe { str::from_utf8_unchecked(&bytes[..slice_len]) }
 }
@@ -467,7 +468,7 @@ impl AtomTable {
     }
 
     pub fn build_with(atom_table: &AtomTable, string: &str) -> Atom {
-        if 0 < string.len() && string.len() <= INLINED_ATOM_MAX_LEN && !string.contains('\u{0}') {
+        if !string.is_empty() && string.len() <= INLINED_ATOM_MAX_LEN && !string.contains('\u{0}') {
             return Atom::new_inlined(string);
         }
 
