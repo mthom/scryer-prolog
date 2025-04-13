@@ -345,7 +345,7 @@ impl<'a> TermWriter<'a> {
     fn push_cell(&mut self, cell: HeapCellValue) -> Result<(), CompilationError> {
         self.heap
             .push_cell(cell)
-            .map_err(|h| CompilationError::FiniteMemoryInHeap(h))
+            .map_err(CompilationError::FiniteMemoryInHeap)
     }
 
     fn term_as_addr(&mut self, term: &TermRef, h: usize) -> HeapCellValue {
@@ -435,16 +435,22 @@ impl<'a> TermWriter<'a> {
                     continue;
                 }
                 TermRef::CompleteString(lvl, _, src) => {
+                    if let Level::Root = lvl {
+                        self.push_stub_addr()?;
+                    }
+
                     let cell = self
                         .heap
                         .allocate_cstr(src)
                         .map_err(CompilationError::FiniteMemoryInHeap)?;
 
-                    let h = self.heap.cell_len();
+                    let new_h = self.heap.cell_len();
                     self.push_cell(cell)?;
 
                     if !matches!(lvl, Level::Root) {
-                        self.modify_head_of_queue(&term, h);
+                        self.modify_head_of_queue(&term, new_h);
+                    } else {
+                        self.heap[h] = cell;
                     }
 
                     continue;
@@ -462,7 +468,7 @@ impl<'a> TermWriter<'a> {
                     let tail_h = self.heap.cell_len();
                     self.push_stub_addr()?;
 
-                    if let Level::Root = lvl {
+                    if matches!(lvl, Level::Root) {
                         self.heap[h] = cell;
                     } else {
                         self.push_cell(cell)?;
