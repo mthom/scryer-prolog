@@ -197,57 +197,91 @@ Then a `pkg` directory will be created, containing everything you need for a web
 ```html
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="UTF-8" />
-        <title>Scryer Prolog - Sudoku Solver Example</title>
-        <script type="module">
-        import init, { eval_code } from './pkg/scryer_prolog.js';
 
-        const run = async () => {
-            await init("./pkg/scryer_prolog_bg.wasm");
-            let code = `
-            :- use_module(library(format)).
-            :- use_module(library(clpz)).
-            :- use_module(library(lists)).
-            
-            sudoku(Rows) :-
-            length(Rows, 9), maplist(same_length(Rows), Rows),
-            append(Rows, Vs), Vs ins 1..9,
-            maplist(all_distinct, Rows),
-            transpose(Rows, Columns),
-            maplist(all_distinct, Columns),
-            Rows = [As,Bs,Cs,Ds,Es,Fs,Gs,Hs,Is],
-            blocks(As, Bs, Cs),
-            blocks(Ds, Es, Fs),
-            blocks(Gs, Hs, Is).
-            
-            blocks([], [], []).
-            blocks([N1,N2,N3|Ns1], [N4,N5,N6|Ns2], [N7,N8,N9|Ns3]) :-
-            all_distinct([N1,N2,N3,N4,N5,N6,N7,N8,N9]),
-            blocks(Ns1, Ns2, Ns3).
-            
-            problem(1, [[_,_,_,_,_,_,_,_,_],
-                        [_,_,_,_,_,3,_,8,5],
-                        [_,_,1,_,2,_,_,_,_],
-                        [_,_,_,5,_,7,_,_,_],
-                        [_,_,4,_,_,_,1,_,_],
-                        [_,9,_,_,_,_,_,_,_],
-                        [5,_,_,_,_,_,_,7,3],
-                        [_,_,2,_,1,_,_,_,_],
-                        [_,_,_,_,4,_,_,_,9]]).
-            
-            main :-
-            problem(1, Rows), sudoku(Rows), maplist(portray_clause, Rows).
-            
-            :- initialization(main).
-            `;
-            const result = eval_code(code);
-            document.write(`<p>Sudoku solver returns:</p><pre>${result}</pre>`);
+<head>
+    <meta charset="UTF-8" />
+    <title>Scryer Prolog - Sudoku Solver Example</title>
+    <script type="module">
+        import initScryer, { MachineBuilder } from "./pkg/scryer_prolog.js";
+
+        // Initialize Scryer Prolog with WASM
+        const wasm = await fetch("./pkg/scryer_prolog_bg.wasm");
+        const module = await WebAssembly.compile(await wasm.arrayBuffer());
+        await initScryer(module);
+
+        // Set up the Prolog machine
+        const machine = new MachineBuilder().build();
+
+        // Knowledge base: Sudoku rules and problem definition
+        const kb = `
+        :- use_module(library(format)).
+        :- use_module(library(clpz)).
+        :- use_module(library(lists)).
+
+        sudoku(Rows) :-
+          length(Rows, 9), maplist(same_length(Rows), Rows),
+          append(Rows, Vs), Vs ins 1..9,
+          maplist(all_distinct, Rows),
+          transpose(Rows, Columns),
+          maplist(all_distinct, Columns),
+          Rows = [A,B,C,D,E,F,G,H,I],
+          blocks(A, B, C),
+          blocks(D, E, F),
+          blocks(G, H, I).
+
+        blocks([], [], []).
+        blocks([A,B,C|T1], [D,E,F|T2], [G,H,I|T3]) :-
+          all_distinct([A,B,C,D,E,F,G,H,I]),
+          blocks(T1, T2, T3).
+
+        problem(1, [[_,_,_,_,_,_,_,_,_],
+                    [_,_,_,_,_,3,_,8,5],
+                    [_,_,1,_,2,_,_,_,_],
+                    [_,_,_,5,_,7,_,_,_],
+                    [_,_,4,_,_,_,1,_,_],
+                    [_,9,_,_,_,_,_,_,_],
+                    [5,_,_,_,_,_,_,7,3],
+                    [_,_,2,_,1,_,_,_,_],
+                    [_,_,_,_,4,_,_,_,9]]).
+      `;
+
+        machine.consultModuleString("user", kb);
+
+        // Run the query
+        const query = "problem(1, Rows), sudoku(Rows), maplist(portray_clause, Rows).";
+        const answers = machine.runQuery(query);
+
+        const formattedSolutions = [];
+
+        // Format the answers
+        for (const solution of answers) {
+            const rows = solution.bindings["Rows"].list;
+
+            const grid = rows.map(row =>
+                row.list.map(cell => cell.integer)
+            );
+
+            const formatted = grid.map(row => `[${row.join(", ")}]`).join("\n");
+            formattedSolutions.push(formatted);
         }
-        run();
-        </script>    
-    </head>
-    <body></body>
+
+        // Output results
+        const solutionDiv = document.querySelector("#soduku-solution");
+        for (const solution of formattedSolutions) {
+            const newPre = document.createElement("pre");
+            newPre.textContent = solution;
+            solutionDiv.appendChild(newPre);
+        }
+    </script>
+</head>
+
+<body>
+    <p>Sudoku solver returns:</p>
+    <div id="soduku-solution">
+
+    </div>
+</body>
+
 </html>
 ```
 
