@@ -25,7 +25,7 @@ impl MachineState {
     pub(crate) fn new() -> Self {
         let mut heap = Heap::with_cell_capacity(256 * 256).unwrap();
 
-        // this is an interstitial cell reserved for use by the runtime.
+        // the cell at index 0 is an interstitial cell reserved for use by the runtime.
         heap.push_cell(empty_list_as_cell!()).unwrap();
         heap.store_resource_error();
 
@@ -636,8 +636,8 @@ impl MachineState {
 
                                     match self.heap.compare_pstr_segments(l1, l2) {
                                         PStrSegmentCmpResult::Continue(v1, v2) => {
-                                            self.pdl.push(v1);
-                                            self.pdl.push(v2);
+                                            self.pdl.push(v1.offset_by(l1));
+                                            self.pdl.push(v2.offset_by(l2));
                                         }
                                         PStrSegmentCmpResult::Less => {
                                             return Some(Ordering::Less);
