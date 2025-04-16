@@ -136,8 +136,8 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
             (HeapCellValueTag::PStrLoc, other_pstr_loc) => {
                 match machine_st.heap.compare_pstr_segments(pstr_loc, other_pstr_loc) {
                     PStrSegmentCmpResult::Continue(v1, v2) => {
-                        machine_st.pdl.push(v1);
-                        machine_st.pdl.push(v2);
+                        machine_st.pdl.push(v1.offset_by(pstr_loc));
+                        machine_st.pdl.push(v2.offset_by(other_pstr_loc));
                     }
                     _ => {
                         machine_st.fail = true;
@@ -161,18 +161,6 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
 
                 self.fail = !(arity == 0 && name == atom);
             }
-            /*
-            (HeapCellValueTag::CStr, cstr_atom) if atom == atom!("[]") => {
-                self.fail = cstr_atom != atom!("");
-            }
-            (HeapCellValueTag::Char, c1) => {
-                if let Some(c2) = atom.as_char() {
-                    self.fail = c1 != c2;
-                } else {
-                    self.fail = true;
-                }
-            }
-            */
             (HeapCellValueTag::AttrVar, h) => {
                 Self::bind(self, Ref::attr_var(h), atom_as_cell!(atom));
             }
@@ -207,13 +195,6 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                     self.fail = true;
                 }
             }
-            /*
-            (HeapCellValueTag::Char, c2) => {
-                if c != c2 {
-                    self.fail = true;
-                }
-            }
-            */
             (HeapCellValueTag::AttrVar, h) => {
                 Self::bind(self, Ref::attr_var(h), char_as_cell!(c));
             }
@@ -433,38 +414,6 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                             tabu_list.insert((d1, d2));
                         }
                     }
-                    /*
-                    (HeapCellValueTag::CStr) => {
-                        read_heap_cell!(d2,
-                            (HeapCellValueTag::AttrVar, h) => {
-                                Self::bind(self, Ref::attr_var(h), d1);
-                                continue;
-                            }
-                            (HeapCellValueTag::Var, h) => {
-                                Self::bind(self, Ref::heap_cell(h), d1);
-                                continue;
-                            }
-                            (HeapCellValueTag::StackVar, s) => {
-                                Self::bind(self, Ref::stack_cell(s), d1);
-                                continue;
-                            }
-                            (HeapCellValueTag::Str |
-                             HeapCellValueTag::Lis |
-                             HeapCellValueTag::PStrLoc) => {
-                            }
-                            (HeapCellValueTag::CStr) => {
-                                self.fail = d1 != d2;
-                                continue;
-                            }
-                            _ => {
-                                self.fail = true;
-                                return;
-                            }
-                        );
-
-                        Self::unify_partial_string(self, d2, d1);
-                    }
-                    */
                     (HeapCellValueTag::F64, f1) => {
                         Self::unify_f64(self, f1, d2);
                     }

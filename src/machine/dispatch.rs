@@ -2815,8 +2815,6 @@ impl Machine {
                             (HeapCellValueTag::Str |
                              HeapCellValueTag::Lis |
                              HeapCellValueTag::PStrLoc) => {
-                                debug_assert!(store_v.is_ref());
-
                                 self.machine_st.heap[0] = store_v;
                                 let heap_pstr_iter = HeapPStrIter::new(&self.machine_st.heap, 0);
 
@@ -2841,8 +2839,7 @@ impl Machine {
                                         self.machine_st.mode = MachineMode::Read;
                                     }
                                     None => {
-                                        self.machine_st.backtrack();
-                                        continue;
+                                        self.machine_st.fail = true;
                                     }
                                 }
                             }
@@ -2862,8 +2859,7 @@ impl Machine {
                                 self.machine_st.mode = MachineMode::Write;
                             }
                             _ => {
-                                self.machine_st.backtrack();
-                                continue;
+                                self.machine_st.fail = true;
                             }
                         );
 
