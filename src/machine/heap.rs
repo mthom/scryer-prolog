@@ -4,7 +4,6 @@ use crate::functor_macro::*;
 use crate::types::*;
 
 use std::alloc;
-use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::ops::{Bound, Index, IndexMut, Range, RangeBounds};
 use std::ptr;
@@ -113,10 +112,93 @@ unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub(crate) enum PStrContinuable {
+    PStrOffset(usize),
+    TailIndex(usize),
+}
+
+impl PStrContinuable {
+    #[inline]
+    pub(crate) fn offset_by(&self, pstr_loc: usize) -> HeapCellValue {
+        match self {
+            Self::PStrOffset(pstr_offset) => pstr_loc_as_cell!(pstr_loc + pstr_offset),
+            Self::TailIndex(tail_idx) => heap_loc_as_cell!(tail_idx + cell_index!(pstr_loc)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum PStrSegmentCmpResult {
     Less,
     Greater,
-    Continue(HeapCellValue, HeapCellValue),
+    Continue(PStrContinuable, PStrContinuable),
+}
+
+pub(crate) fn compare_pstr_slices(slice1: &[u8], slice2: &[u8]) -> PStrSegmentCmpResult {
+    use std::cmp::Ordering;
+
+    debug_assert!(!slice1.is_empty() && !slice2.is_empty());
+    let find_tail = |slice| unsafe { scan_slice_to_str(slice).tail_idx };
+
+    match slice1
+        .iter()
+        .zip(slice2.iter())
+        .position(|(b1, b2)| b1 != b2 || *b1 == 0 || *b2 == 0)
+    {
+        Some(pos) => {
+            if slice1[pos] == 0 {
+                // subtract 1 from pos to offset the increment of scan_slice_to_str if the
+                // string is "\0\".
+                let tail1_idx = find_tail(&slice1[pos..]);
+
+                if slice2[pos] == 0 {
+                    let tail2_idx = find_tail(&slice2[pos..]);
+
+                    PStrSegmentCmpResult::Continue(
+                        PStrContinuable::TailIndex(tail1_idx + cell_index!(pos)),
+                        PStrContinuable::TailIndex(tail2_idx + cell_index!(pos)),
+                    )
+                } else {
+                    PStrSegmentCmpResult::Continue(
+                        PStrContinuable::TailIndex(tail1_idx + cell_index!(pos)),
+                        PStrContinuable::PStrOffset(pos),
+                    )
+                }
+            } else if slice2[pos] == 0 {
+                let tail2_idx = find_tail(&slice2[pos..]);
+
+                PStrSegmentCmpResult::Continue(
+                    PStrContinuable::PStrOffset(pos),
+                    PStrContinuable::TailIndex(tail2_idx + cell_index!(pos)),
+                )
+            } else {
+                // Compute 7-byte chunks with the mismatching character at pos in the middle of
+                // each. This way, the character of which the byte at pos is a part will be
+                // validated and reached eventually by the utf8_chunks() iterator.
+
+                let slice1_range = pos.saturating_sub(3)..(pos + 4).min(slice1.len());
+                let slice2_range = pos.saturating_sub(3)..(pos + 4).min(slice2.len());
+
+                let chars1_iter = slice1[slice1_range].utf8_chunks();
+                let chars2_iter = slice2[slice2_range].utf8_chunks();
+
+                for (chunk1, chunk2) in chars1_iter.zip(chars2_iter) {
+                    let result = chunk1.valid().cmp(chunk2.valid());
+
+                    if result == Ordering::Greater {
+                        return PStrSegmentCmpResult::Greater;
+                    } else if result == Ordering::Less {
+                        return PStrSegmentCmpResult::Less;
+                    }
+                }
+
+                unreachable!()
+            }
+        }
+        None => {
+            unreachable!()
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -609,6 +691,7 @@ impl Heap {
         });
     }
 
+    #[inline]
     pub(crate) fn compare_pstr_segments(
         &self,
         pstr_loc1: usize,
@@ -617,67 +700,7 @@ impl Heap {
         let slice1 = &self.as_slice()[pstr_loc1..];
         let slice2 = &self.as_slice()[pstr_loc2..];
 
-        let find_tail = |null_idx: usize| -> usize { self.scan_slice_to_str(null_idx).tail_idx };
-
-        match slice1
-            .iter()
-            .zip(slice2.iter())
-            .position(|(b1, b2)| b1 != b2 || *b1 == 0 || *b2 == 0)
-        {
-            Some(pos) => {
-                if slice1[pos] == 0 {
-                    // subtract 1 from pos to offset the increment of scan_slice_to_str if the
-                    // string is "\0\".
-                    let tail1_idx = find_tail(pstr_loc1 + pos);
-
-                    if slice2[pos] == 0 {
-                        let tail2_idx = find_tail(pstr_loc2 + pos);
-
-                        PStrSegmentCmpResult::Continue(
-                            heap_loc_as_cell!(tail1_idx),
-                            heap_loc_as_cell!(tail2_idx),
-                        )
-                    } else {
-                        PStrSegmentCmpResult::Continue(
-                            heap_loc_as_cell!(tail1_idx),
-                            pstr_loc_as_cell!(pstr_loc2 + pos),
-                        )
-                    }
-                } else if slice2[pos] == 0 {
-                    let tail2_idx = find_tail(pstr_loc2 + pos);
-
-                    PStrSegmentCmpResult::Continue(
-                        pstr_loc_as_cell!(pstr_loc1 + pos),
-                        heap_loc_as_cell!(tail2_idx),
-                    )
-                } else {
-                    // Compute 7-byte chunks with the mismatching character at pos in the middle of
-                    // each. This way, the character of which the byte at pos is a part will be
-                    // validated and reached eventually by the utf8_chunks() iterator.
-
-                    let slice1_range = pos.saturating_sub(3)..(pos + 4).min(slice1.len());
-                    let slice2_range = pos.saturating_sub(3)..(pos + 4).min(slice2.len());
-
-                    let chars1_iter = slice1[slice1_range].utf8_chunks();
-                    let chars2_iter = slice2[slice2_range].utf8_chunks();
-
-                    for (chunk1, chunk2) in chars1_iter.zip(chars2_iter) {
-                        let result = chunk1.valid().cmp(chunk2.valid());
-
-                        if result == Ordering::Greater {
-                            return PStrSegmentCmpResult::Greater;
-                        } else if result == Ordering::Less {
-                            return PStrSegmentCmpResult::Less;
-                        }
-                    }
-
-                    unreachable!()
-                }
-            }
-            None => {
-                unreachable!()
-            }
-        }
+        compare_pstr_slices(slice1, slice2)
     }
 
     #[inline]
