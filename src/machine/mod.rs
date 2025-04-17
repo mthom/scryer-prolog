@@ -618,14 +618,8 @@ impl Machine {
                         }
                     );
                 }
-                &Instruction::GetPartialString(
-                    Level::Shallow,
-                    ref string,
-                    RegType::Temp(t),
-                    // has_tail,
-                ) => {
+                &Instruction::GetPartialString(Level::Shallow, ref string, RegType::Temp(t)) => {
                     use crate::machine::partial_string::HeapPStrIter;
-
                     let cell = self.deref_register(t);
 
                     read_heap_cell!(cell,
@@ -633,7 +627,7 @@ impl Machine {
                             self.machine_st.heap[0] = cell;
                             let iter = HeapPStrIter::new(&self.machine_st.heap, 0);
 
-                            if iter.compare_pstr_to_string(&string).is_none() {
+                            if iter.compare_pstr_to_string(string).is_none() {
                                 return false;
                             }
 
