@@ -39,7 +39,8 @@
 %  represented as a list of characters.
 
 phrase_from_stream(GRBody, Stream) :-
-    stream_to_lazy_list(Stream, Ls),
+    stream_property(Stream, reposition(Reposition)),
+    stream_to_lazy_list(Reposition, Stream, Ls),
     phrase(GRBody, Ls).
 
 %% phrase_from_file(+GRBody, +File)
@@ -64,7 +65,7 @@ phrase_from_file(NT, File, Options) :-
         ;   Type = text
         ),
         setup_call_cleanup(
-            open(File, read, Stream, Options),
+            open(File, read, Stream, [reposition(true)|Options]),
             phrase_from_stream(NT, Stream),
             close(Stream)
         )
@@ -73,34 +74,41 @@ phrase_from_file(NT, File, Options) :-
 % How many chars to read from stream and buffer in each step
 chars_to_read(4096).
 
-stream_to_lazy_list(Stream, Ls) :-
-    get_stream_buffer_position(Stream, Pos),
-    freeze(Ls, render_step(Stream, Pos, Ls)).
+stream_to_lazy_list(Reposition, Stream, Ls) :-
+    get_stream_buffer_position(Reposition, Stream, Pos),
+    freeze(Ls, render_step(Reposition, Stream, Pos, Ls)).
 
-render_step(Stream, Pos, Ls) :-
-    set_stream_buffer_position(Stream, Pos),
-    (   buffer_at_end_of_stream(Stream) ->
+render_step(Reposition, Stream, Pos, Ls) :-
+    set_stream_buffer_position(Reposition, Stream, Pos),
+    (   buffer_at_end_of_stream(Reposition, Stream) ->
         Ls = []
     ;   chars_to_read(CharsToRead),
-        buffer_get_n_chars(Stream, CharsToRead, Chars),
+        buffer_get_n_chars(Reposition, Stream, CharsToRead, Chars),
         partial_string(Chars, Ls, Ls0),
-        stream_to_lazy_list(Stream, Ls0)
+        stream_to_lazy_list(Reposition, Stream, Ls0)
     ).
 
-buffer_at_end_of_stream(Stream) :-
+buffer_at_end_of_stream(true, Stream) :- at_end_of_stream(Stream).
+buffer_at_end_of_stream(false, Stream) :-
     stream_bufferids(Stream, _, BufferPosId, _),
     bb_get(BufferPosId, Pos),
     Pos = eof.
 
-get_stream_buffer_position(Stream, Pos) :-
+get_stream_buffer_position(true, Stream, Pos) :-
+    stream_property(Stream, position(Pos)).
+get_stream_buffer_position(false, Stream, Pos) :-
     stream_bufferids(Stream, _, BufferPosId, _),
     bb_get(BufferPosId, Pos).
 
-set_stream_buffer_position(Stream, Pos) :-
+set_stream_buffer_position(true, Stream, Pos) :-
+    set_stream_position(Stream, Pos).
+set_stream_buffer_position(false, Stream, Pos) :-
     stream_bufferids(Stream, _, BufferPosId, _),
     bb_put(BufferPosId, Pos).
 
-buffer_get_n_chars(Stream, N, Chars) :-
+buffer_get_n_chars(true, Stream, N, Chars) :-
+    get_n_chars(Stream, N, Chars).
+buffer_get_n_chars(false, Stream, N, Chars) :-
     stream_bufferids(Stream, BufferId, BufferPosId, BufferLenId),
     buffer_prepare_for_n(Stream, BufferId, BufferPosId, BufferLenId, N),
     bb_get(BufferId, Buffer),
