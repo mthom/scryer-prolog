@@ -60,7 +60,7 @@ impl<'a> HeapPStrIter<'a> {
         self.brent_st.hare
     }
 
-    pub fn compare_pstr_to_string<'b>(self, mut s: &'b str) -> Option<PStrCmpResult<'b>> {
+    pub fn compare_pstr_to_string(self, mut s: &str) -> Option<PStrCmpResult> {
         let mut curr_hare = self.brent_st.hare;
 
         while !s.is_empty() {

@@ -2806,62 +2806,142 @@ impl Machine {
                         self.machine_st.p += 1;
                     }
                     &Instruction::GetPartialString(_, ref string, reg) => {
-                        use crate::machine::partial_string::{HeapPStrIter, PStrCmpResult};
+                        self.machine_st.heap[0] = self.machine_st[reg];
 
-                        let deref_v = self.machine_st.deref(self.machine_st[reg]);
-                        let store_v = self.machine_st.store(deref_v);
+                        let mut h = 0;
+                        let mut string_cursor = string.as_str();
 
-                        read_heap_cell!(store_v,
-                            (HeapCellValueTag::Str |
-                             HeapCellValueTag::Lis |
-                             HeapCellValueTag::PStrLoc) => {
-                                self.machine_st.heap[0] = store_v;
-                                let heap_pstr_iter = HeapPStrIter::new(&self.machine_st.heap, 0);
+                        while let Some(c) = string_cursor.chars().next() {
+                            read_heap_cell!(self.machine_st.heap[h],
+                                (HeapCellValueTag::PStrLoc, pstr_loc) => {
+                                    let heap_slice = &self.machine_st.heap.as_slice()[pstr_loc ..];
 
-                                match heap_pstr_iter.compare_pstr_to_string(string) {
-                                    Some(PStrCmpResult::CompletePStrMatch { chars_matched, pstr_loc }) => {
-                                        self.machine_st.s_offset = chars_matched;
-                                        self.machine_st.s = HeapPtr::PStr(pstr_loc);
+                                    match compare_pstr_slices(heap_slice, string_cursor.as_bytes()) {
+                                        PStrSegmentCmpResult::Continue(v1, v2) => {
+                                            // for v2, the value of a TailIndex mustn't ever be read
+                                            // since string does not lie in the heap.
+                                            match (v1, v2) {
+                                                (PStrContinuable::TailIndex(tail_idx), PStrContinuable::TailIndex(_)) => {
+                                                    self.machine_st.s = HeapPtr::HeapCell(tail_idx + cell_index!(pstr_loc));
+                                                    self.machine_st.s_offset = 0;
+                                                    self.machine_st.mode = MachineMode::Read;
+
+                                                    break;
+                                                }
+                                                (PStrContinuable::TailIndex(tail_idx), PStrContinuable::PStrOffset(pos)) => {
+                                                    h = tail_idx + cell_index!(pstr_loc);
+                                                    string_cursor = &string_cursor[pos ..];
+                                                }
+                                                (PStrContinuable::PStrOffset(pos), PStrContinuable::TailIndex(_)) => {
+                                                    self.machine_st.s = HeapPtr::PStr(pstr_loc);
+                                                    self.machine_st.s_offset = pos;
+                                                    self.machine_st.mode = MachineMode::Read;
+
+                                                    break;
+                                                }
+                                                _ => unreachable!(),
+                                            }
+                                        }
+                                        _ => {
+                                            self.machine_st.fail = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                (HeapCellValueTag::Lis, l) => {
+                                    let cell = self.machine_st.store(self.machine_st.deref(self.machine_st.heap[l]));
+
+                                    if let Some(d) = cell.as_char() {
+                                        if c != d {
+                                            self.machine_st.fail = true;
+                                            break;
+                                        }
+                                    } else if let Some(r) = cell.as_var() {
+                                        self.machine_st.bind(r, char_as_cell!(c));
+                                    } else {
+                                        self.machine_st.fail = true;
+                                    }
+
+                                    if self.machine_st.fail {
+                                        break;
+                                    } else {
+                                        h = l+1;
+                                        string_cursor = &string_cursor[c.len_utf8() ..];
+
+                                        if string_cursor.is_empty() {
+                                            self.machine_st.s = HeapPtr::HeapCell(h);
+                                            self.machine_st.s_offset = 0;
+                                            self.machine_st.mode = MachineMode::Read;
+                                        }
+                                    }
+                                }
+                                (HeapCellValueTag::Str, s) => {
+                                    let cell = self.machine_st.store(self.machine_st.deref(self.machine_st.heap[s+1]));
+
+                                    if let Some(d) = cell.as_char() {
+                                        if c != d {
+                                            self.machine_st.fail = true;
+                                            break;
+                                        }
+                                    } else if let Some(r) = cell.as_var() {
+                                        self.machine_st.bind(r, char_as_cell!(c));
+                                    } else {
+                                        self.machine_st.fail = true;
+                                    }
+
+                                    if self.machine_st.fail {
+                                        break;
+                                    }
+
+                                    h = s+2;
+                                    string_cursor = &string_cursor[c.len_utf8() ..];
+
+                                    if string_cursor.is_empty() {
+                                        self.machine_st.s = HeapPtr::HeapCell(h);
+                                        self.machine_st.s_offset = 0;
                                         self.machine_st.mode = MachineMode::Read;
                                     }
-                                    Some(PStrCmpResult::PartialPStrMatch { string, var_loc }) => {
-                                        let cell = backtrack_on_resource_error!(
+                                }
+                                (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, v) => {
+                                    if h == v {
+                                        let target_cell = backtrack_on_resource_error!(
                                             self.machine_st,
-                                            self.machine_st.heap.allocate_pstr(string)
+                                            self.machine_st.heap.allocate_pstr(string_cursor)
+                                        );
+
+                                        self.machine_st.bind(
+                                            self.machine_st.heap[h].as_var().unwrap(),
+                                            target_cell,
                                         );
 
                                         self.machine_st.mode = MachineMode::Write;
-                                        unify!(self.machine_st, cell, heap_loc_as_cell!(var_loc));
-                                    }
-                                    Some(PStrCmpResult::ListMatch { list_loc }) => {
-                                        self.machine_st.s_offset = 0;
-                                        self.machine_st.s = HeapPtr::HeapCell(list_loc);
-                                        self.machine_st.mode = MachineMode::Read;
-                                    }
-                                    None => {
-                                        self.machine_st.fail = true;
+                                        break;
+                                    } else {
+                                        h = v;
                                     }
                                 }
-                            }
-                            (HeapCellValueTag::AttrVar |
-                             HeapCellValueTag::StackVar |
-                             HeapCellValueTag::Var) => {
-                                let target_cell = backtrack_on_resource_error!(
-                                    self.machine_st,
-                                    self.machine_st.heap.allocate_pstr(string)
-                                );
+                                (HeapCellValueTag::StackVar, s) => {
+                                    debug_assert_eq!(h, 0);
 
-                                self.machine_st.bind(
-                                    store_v.as_var().unwrap(),
-                                    target_cell,
-                                );
+                                    let target_cell = backtrack_on_resource_error!(
+                                        self.machine_st,
+                                        self.machine_st.heap.allocate_pstr(string_cursor)
+                                    );
 
-                                self.machine_st.mode = MachineMode::Write;
-                            }
-                            _ => {
-                                self.machine_st.fail = true;
-                            }
-                        );
+                                    self.machine_st.bind(
+                                        Ref::stack_cell(s),
+                                        target_cell,
+                                    );
+
+                                    self.machine_st.mode = MachineMode::Write;
+                                    break;
+                                }
+                                _ => {
+                                    self.machine_st.fail = true;
+                                    break;
+                                }
+                            );
+                        }
 
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
