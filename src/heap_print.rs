@@ -879,7 +879,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                                     } else {
                                         debug_assert!(cell.is_ref());
 
-                                        let h = cell.get_value() as usize;
+                                        let h = if cell.get_tag() == HeapCellValueTag::PStrLoc {
+                                            self.iter.focus().value()
+                                        } else {
+                                            cell.get_value()
+                                        } as usize;
+
                                         self.iter.push_stack(IterStackLoc::iterable_loc(
                                             h,
                                             HeapOrStackTag::Heap,
@@ -909,7 +914,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                                             orig_cell = cell;
                                             continue;
                                         }
-                                    }
+                                    };
                                 }
                             }
 
