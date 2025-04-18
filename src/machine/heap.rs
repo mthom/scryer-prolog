@@ -657,32 +657,7 @@ impl Heap {
         self.inner.ptr = ptr::null_mut();
         self.inner.byte_len = 0;
         self.inner.byte_cap = 0;
-
-        // self.pstr_vec.clear();
     }
-
-    // pub(crate) fn append(&mut self, heap_slice: HeapView) -> Result<(), usize> {
-    //     unsafe {
-    //         loop {
-    //             if self.free_space() >= heap_index!(heap_slice.slice_cell_len) {
-    //                 ptr::copy_nonoverlapping(
-    //                     heap_slice.slice,
-    //                     self.inner.ptr.add(self.inner.byte_len),
-    //                     heap_index!(heap_slice.slice_cell_len),
-    //                 );
-
-    //                 self.inner.byte_len += heap_index!(heap_slice.slice_cell_len);
-    //                 // self.pstr_vec.extend(heap_slice.pstr_slice.iter());
-
-    //                 break;
-    //             } else if !self.grow() {
-    //                 return Err(self.resource_error_offset());
-    //             }
-    //         }
-    //     }
-
-    //     Ok(())
-    // }
 
     pub(crate) fn store_resource_error(&mut self) {
         RESOURCE_ERROR_OFFSET_INIT.call_once(move || {
