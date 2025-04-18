@@ -619,20 +619,16 @@ impl Machine {
                     );
                 }
                 &Instruction::GetPartialString(Level::Shallow, ref string, RegType::Temp(t)) => {
-                    use crate::machine::partial_string::HeapPStrIter;
                     let cell = self.deref_register(t);
 
                     read_heap_cell!(cell,
-                        (HeapCellValueTag::PStrLoc) => {
-                            self.machine_st.heap[0] = cell;
-                            let iter = HeapPStrIter::new(&self.machine_st.heap, 0);
+                        (HeapCellValueTag::PStrLoc, pstr_loc) => {
+                            let heap_slice = &self.machine_st.heap.as_slice()[pstr_loc ..];
 
-                            if iter.compare_pstr_to_string(string).is_none() {
-                                return false;
+                            match compare_pstr_slices(heap_slice, string.as_bytes()) {
+                                PStrSegmentCmpResult::Continue(..) => offset += 1,
+                                _ => return false,
                             }
-
-                            offset += 1;
-
                         }
                         (HeapCellValueTag::Lis) => {
                             offset += 1;
