@@ -6,7 +6,6 @@ use crate::machine::system_calls::BrentAlgState;
 use crate::types::*;
 
 use std::ops::Deref;
-use std::str;
 
 #[derive(Clone, Copy)]
 pub struct HeapPStrIter<'a> {
@@ -15,21 +14,6 @@ pub struct HeapPStrIter<'a> {
     orig_focus: usize,
     brent_st: BrentAlgState,
     stepper: fn(&mut HeapPStrIter<'a>) -> Option<PStrIteratee>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum PStrCmpResult<'a> {
-    ListMatch {
-        list_loc: usize,
-    },
-    CompletePStrMatch {
-        chars_matched: usize,
-        pstr_loc: usize,
-    },
-    PartialPStrMatch {
-        string: &'a str,
-        var_loc: usize,
-    },
 }
 
 struct PStrIterStep {
@@ -58,85 +42,6 @@ impl<'a> HeapPStrIter<'a> {
     #[inline(always)]
     pub fn focus(&self) -> usize {
         self.brent_st.hare
-    }
-
-    pub fn compare_pstr_to_string(self, mut s: &str) -> Option<PStrCmpResult> {
-        let mut curr_hare = self.brent_st.hare;
-
-        while !s.is_empty() {
-            read_heap_cell!(self.heap[curr_hare],
-                (HeapCellValueTag::PStrLoc, h) => {
-                    let t = self.heap.slice_to_str(h, self.heap.byte_len() - h);
-
-                    let mut bytes_matched = 0;
-                    let mut chars_matched = 0;
-
-                    for (sc, tc) in s.chars().zip(t.chars()) {
-                        if sc != tc {
-                            if tc != '\u{0}' {
-                                return None;
-                            } else {
-                                break;
-                            }
-                        }
-
-                        bytes_matched += sc.len_utf8();
-                        chars_matched += 1;
-                    }
-
-                    s = &s[bytes_matched ..];
-
-                    if s.is_empty() {
-                        return Some(PStrCmpResult::CompletePStrMatch { chars_matched, pstr_loc: h });
-                    } else {
-                        let next_hare = Heap::pstr_tail_idx(h + bytes_matched);
-                        curr_hare = next_hare;
-                    }
-                }
-                (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
-                    if h == curr_hare {
-                        return Some(PStrCmpResult::PartialPStrMatch { string: s, var_loc: h });
-                    }
-
-                    curr_hare = h;
-                    continue;
-                }
-                _ => {
-                    match self.step(curr_hare).ok() {
-                        Some(PStrIterStep { iteratee, next_hare }) => {
-                            let value = if let PStrIteratee::Char { value, .. } = iteratee {
-                                value
-                            } else {
-                                unreachable!()
-                            };
-
-                            let c = s.chars().next().unwrap();
-
-                            if c == value {
-                                s = &s[c.len_utf8() ..];
-
-                                if s.is_empty() {
-                                    return Some(
-                                        PStrCmpResult::ListMatch {
-                                            list_loc: next_hare,
-                                        }
-                                    );
-                                }
-
-                                curr_hare = next_hare;
-                            } else {
-                                return None;
-                            }
-                        }
-                        None => {
-                            return None;
-                        }
-                    }
-                }
-            );
-        }
-
-        None
     }
 
     fn walk_hare_to_cycle_end(&mut self) {
