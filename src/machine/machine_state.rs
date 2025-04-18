@@ -731,10 +731,6 @@ impl MachineState {
             )
         );
 
-        for var in term_write_result.var_dict.values_mut() {
-            *var = heap_bound_deref(&self.heap, *var);
-        }
-
         let mut var_list = Vec::with_capacity(singleton_var_set.len());
 
         for (var_name, addr) in term_write_result.var_dict {
