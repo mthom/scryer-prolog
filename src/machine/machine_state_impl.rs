@@ -1332,7 +1332,7 @@ impl MachineState {
 
         let end_cell = heap_pstr_iter.heap[heap_pstr_iter.focus()];
 
-        if heap_pstr_iter.is_cyclic() || end_cell == empty_list_as_cell!() {
+        if heap_pstr_iter.is_cyclic() || end_cell != empty_list_as_cell!() {
             let err = self.type_error(ValidType::List, a1);
             return Err(self.error_form(err, stub_gen()));
         }
