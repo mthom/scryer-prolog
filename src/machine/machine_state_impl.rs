@@ -342,16 +342,16 @@ impl MachineState {
     }
 
     // return the read value and the succeeding HeapPtr
-    pub(crate) fn read_s(&mut self) -> HeapCellValue {
+    pub(crate) fn read_s(&mut self) -> (HeapCellValue, usize) {
         match self.s {
-            HeapPtr::HeapCell(h) => self.deref(self.heap[h + self.s_offset]),
+            HeapPtr::HeapCell(h) => (self.deref(self.heap[h + self.s_offset]), 1),
             HeapPtr::PStr(byte_index) => {
                 let mut char_iter = self.heap.char_iter(byte_index);
 
                 if self.s_offset == 0 {
                     // read the car of the list
                     let c = char_iter.next().unwrap();
-                    char_as_cell!(c)
+                    (char_as_cell!(c), c.len_utf8())
                 } else {
                     // read the (self.s_offset)^{th} cdr of the list
                     // self.s_offset is the number of bytes offset into the PStr
@@ -361,11 +361,11 @@ impl MachineState {
 
                     if self.heap.char_iter(new_h).next().is_some() {
                         self.s = HeapPtr::PStr(new_h);
-                        pstr_loc_as_cell!(new_h)
+                        (pstr_loc_as_cell!(new_h), 0)
                     } else {
                         let h = Heap::pstr_tail_idx(new_h);
                         self.s = HeapPtr::HeapCell(h);
-                        self.deref(heap_loc_as_cell!(h))
+                        (self.deref(heap_loc_as_cell!(h)), 0)
                     }
                 }
             }
