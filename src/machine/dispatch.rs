@@ -272,55 +272,6 @@ impl MachineState {
         )
     }
 
-    /*
-    #[inline(always)]
-    pub(crate) fn constant_to_literal(&self, addr: HeapCellValue) -> Literal {
-        read_heap_cell!(addr,
-            (HeapCellValueTag::Char, c) => {
-                Literal::Char(c)
-            }
-            (HeapCellValueTag::Fixnum, n) => {
-                Literal::Fixnum(n)
-            }
-            (HeapCellValueTag::F64, f) => {
-                Literal::Float(f.as_offset())
-            }
-            (HeapCellValueTag::Atom, (atom, arity)) => {
-                debug_assert_eq!(arity, 0);
-                Literal::Atom(atom)
-            }
-            (HeapCellValueTag::Str, s) => {
-                Literal::Atom(cell_as_atom_cell!(self.heap[s]).get_name())
-            }
-            (HeapCellValueTag::Cons, cons_ptr) => {
-                match_untyped_arena_ptr!(cons_ptr,
-                    (ArenaHeaderTag::Rational, r) => {
-                        Literal::Rational(r)
-                    }
-                    (ArenaHeaderTag::Integer, n) => {
-                        let result = (&*n).try_into();
-
-                        match result {
-                            Ok(fixnum) => if let Ok(n) = Fixnum::build_with_checked(fixnum) {
-                                Literal::Fixnum(n)
-                            } else {
-                                Literal::Integer(n)
-                            },
-                            Err(_) => Literal::Integer(n)
-                        }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                )
-            }
-            _ => {
-                unreachable!()
-            }
-        )
-    }
-    */
-
     #[inline(always)]
     pub(crate) fn select_switch_on_structure_index(
         &self,
@@ -3004,14 +2955,14 @@ impl Machine {
                     &Instruction::UnifyConstant(v) => {
                         match self.machine_st.mode {
                             MachineMode::Read => {
-                                let addr = self.machine_st.read_s();
+                                let (addr, s_offset_incr) = self.machine_st.read_s();
                                 unify!(&mut self.machine_st, addr, v);
 
                                 if self.machine_st.fail {
                                     self.machine_st.backtrack();
                                     continue;
                                 } else {
-                                    self.machine_st.s_offset += 1;
+                                    self.machine_st.s_offset += s_offset_incr;
                                 }
                             }
                             MachineMode::Write => {
@@ -3025,7 +2976,7 @@ impl Machine {
                         match self.machine_st.mode {
                             MachineMode::Read => {
                                 let reg_addr = self.machine_st[reg];
-                                let value = self.machine_st.read_s();
+                                let (value, s_offset_incr) = self.machine_st.read_s();
 
                                 unify_fn!(&mut self.machine_st, reg_addr, value);
 
@@ -3033,7 +2984,7 @@ impl Machine {
                                     self.machine_st.backtrack();
                                     continue;
                                 } else {
-                                    self.machine_st.s_offset += 1;
+                                    self.machine_st.s_offset += s_offset_incr;
                                 }
                             }
                             MachineMode::Write => {
@@ -3066,13 +3017,12 @@ impl Machine {
                     &Instruction::UnifyVariable(reg) => {
                         match self.machine_st.mode {
                             MachineMode::Read => {
-                                let value = self.machine_st.read_s();
+                                let (value, s_offset_incr) = self.machine_st.read_s();
                                 self.machine_st[reg] = value;
-                                self.machine_st.s_offset += 1;
+                                self.machine_st.s_offset += s_offset_incr;
                             }
                             MachineMode::Write => {
                                 let h = self.machine_st.heap.cell_len();
-
                                 push_cell!(self.machine_st, heap_loc_as_cell!(h));
                                 self.machine_st[reg] = heap_loc_as_cell!(h);
                             }
@@ -3084,7 +3034,7 @@ impl Machine {
                         match self.machine_st.mode {
                             MachineMode::Read => {
                                 let reg_addr = self.machine_st[reg];
-                                let value = self.machine_st.read_s();
+                                let (value, s_offset_incr) = self.machine_st.read_s();
 
                                 unify_fn!(&mut self.machine_st, reg_addr, value);
 
@@ -3092,7 +3042,7 @@ impl Machine {
                                     self.machine_st.backtrack();
                                     continue;
                                 } else {
-                                    self.machine_st.s_offset += 1;
+                                    self.machine_st.s_offset += s_offset_incr;
                                 }
                             }
                             MachineMode::Write => {
