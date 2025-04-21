@@ -1252,7 +1252,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             HeapCellValueTag::PStrLoc => {
                 self.iter.pop_stack();
             }
-            // HeapCellValueTag::CStr => {}
             _ => {
                 unreachable!();
             }
@@ -1572,10 +1571,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let c = self.iter.heap.char_at(pstr_loc);
 
-        if c != '\u{0}' || pstr_loc % std::mem::size_of::<HeapCellValue>() == 0 {
-            // if a null character in a pstr has location aligned
-            // to a cell boundary, the string is ['\\x0\\'].
-
+        if c != '\u{0}' {
             if !self.max_depth_exhausted(max_depth) {
                 self.state_stack
                     .push(TokenOrRedirect::CommaSeparatedCharList(
@@ -1724,7 +1720,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             (HeapCellValueTag::F64, f) => {
                 self.print_number(max_depth, NumberFocus::Unfocused(Number::Float(*f)), &op);
             }
-            (HeapCellValueTag::PStrLoc) => { // HeapCellValueTag::CStr | HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
+            (HeapCellValueTag::PStrLoc) => {
                 self.print_list_like(max_depth);
             }
             (HeapCellValueTag::Lis) => {
