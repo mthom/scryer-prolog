@@ -670,7 +670,7 @@ load_context(Module) :-
 
 predicate_property(Callable, Property) :-
     strip_module(Callable, Module, Goal),
-    (  ( var(Module) ; var(Goal) ) ->
+    (  ( false, /* disabled branch */ var(Module) ; var(Goal) ) ->
        instantiation_error(predicate_property/2)
     ;  functor(Goal, Name, Arity),
        (  atom(Name) ->
