@@ -26,7 +26,7 @@ text_handler(Request, Response) :-
 parameter_handler(User, Request, Response) :-
   http_body(Response, text(User)).
 
-top:-
+run:-
   http_listen(7890, [
     get(echo, text_handler),                 % GET /echo
     post(user/User, parameter_handler(User)) % POST /user/<User>
