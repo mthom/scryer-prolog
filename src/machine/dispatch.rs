@@ -3072,9 +3072,19 @@ impl Machine {
                     }
                     &Instruction::UnifyVoid(n) => {
                         match self.machine_st.mode {
-                            MachineMode::Read => {
-                                self.machine_st.s_offset += n;
-                            }
+                            MachineMode::Read => match &self.machine_st.s {
+                                HeapPtr::HeapCell(_) => self.machine_st.s_offset += n,
+                                &HeapPtr::PStr(pstr_loc) => {
+                                    debug_assert!(n <= 2);
+                                    let mut char_iter = self.machine_st.heap.char_iter(pstr_loc);
+
+                                    // this only matters in the case that n == 1, but the case
+                                    // analysis isn't worth doing since the effect is benign if n ==
+                                    // 2
+                                    self.machine_st.s_offset +=
+                                        char_iter.next().unwrap().len_utf8();
+                                }
+                            },
                             MachineMode::Write => {
                                 let h = self.machine_st.heap.cell_len();
 
