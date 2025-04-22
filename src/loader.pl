@@ -669,25 +669,14 @@ load_context(Module) :-
 :- non_counted_backtracking predicate_property/2.
 
 predicate_property(Callable, Property) :-
-    (  var(Callable) ->
+    strip_module(Callable, Module, Goal),
+    (  ( false, /* disabled branch */ var(Module) ; var(Goal) ) ->
        instantiation_error(predicate_property/2)
-    ;  functor(Callable, (:), 2),
-       arg(1, Callable, Module),
-       arg(2, Callable, Callable0),
-       atom(Module),
-       nonvar(Callable0) ->
-       functor(Callable0, Name, Arity),
+    ;  functor(Goal, Name, Arity),
        (  atom(Name) ->
           extract_predicate_property(Property, PropertyType),
           check_predicate_property(PropertyType, Module, Name, Arity, Property)
-       ;  type_error(callable, Callable0, predicate_property/2)
-       )
-    ;  functor(Callable, Name, Arity),
-       (  atom(Name) ->
-          extract_predicate_property(Property, PropertyType),
-          load_context(Module),
-          check_predicate_property(PropertyType, Module, Name, Arity, Property)
-       ;  type_error(callable, Callable, predicate_property/2)
+       ;  type_error(callable, Goal, predicate_property/2)
        )
     ).
 
