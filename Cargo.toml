@@ -10,7 +10,8 @@ license = "BSD-3-Clause"
 keywords = ["prolog", "prolog-interpreter", "prolog-system"]
 categories = ["command-line-utilities"]
 build = "build/main.rs"
-rust-version = "1.77"
+# Remember to check CI
+rust-version = "1.85"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
