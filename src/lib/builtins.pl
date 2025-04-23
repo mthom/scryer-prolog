@@ -1210,9 +1210,9 @@ assertz_(Module, Fact) :-
 retract(Clause0) :-
     loader:strip_module(Clause0, Module, Clause),
     (  Clause \= (_ :- _) ->
-       loader:strip_module(Clause, Module, Head),
+       loader:strip_subst_module(Clause, Module, InnerModule, Head),
        Body = true,
-       retract_module_clause(Head, Body, Module)
+       retract_module_clause(Head, Body, InnerModule)
     ;  Clause = (Head :- Body) ->
        retract_module_clause(Head, Body, Module)
     ).
