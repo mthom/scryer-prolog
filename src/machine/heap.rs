@@ -1092,7 +1092,7 @@ pub fn heap_bound_store(heap: &impl SizedHeap, value: HeapCellValue) -> HeapCell
 }
 
 #[allow(dead_code)]
-pub fn print_heap_terms(heap: &Heap, h: usize) {
+pub fn print_heap_terms(heap: &impl SizedHeap, h: usize) {
     for idx in 0..heap.cell_len() {
         let term = heap[idx];
         println!("{} : {:?}", h + idx, term);
