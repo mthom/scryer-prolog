@@ -61,10 +61,17 @@ macro_rules! build_functor {
      [$($res:expr),*],
      $res_len:expr,
      [$($subfunctor:expr),*]) => ({
+        let (inner_functor, cell_size) = indexing_code_ptr($e);
+        let referent = if cell_size == 1 {
+            heap_loc_as_cell!(1u64 + count!($($dt)*) + $res_len)
+        } else {
+            str_loc_as_cell!(1u64 + count!($($dt)*) + $res_len)
+        };
+
         build_functor!([$($dt($($value),*)),*],
-                       [$($res, )* FunctorElement::Cell(str_loc_as_cell!(1u64 + count!($($dt)*) + $res_len))],
-                       3 + $res_len,
-                       [$($subfunctor, )* FunctorElement::InnerFunctor(2, indexing_code_ptr($e))])
+                       [$($res, )* FunctorElement::Cell(referent)],
+                       1 + cell_size + $res_len,
+                       [$($subfunctor, )* FunctorElement::InnerFunctor(cell_size, inner_functor)])
     });
     ([fixnum($e:expr) $(, $dt:ident($($value:tt),*))*],
      [$($res:expr),*],
@@ -171,20 +178,14 @@ macro_rules! build_functor {
     });
 }
 
-pub(crate) fn indexing_code_ptr(code_ptr: IndexingCodePtr) -> Vec<FunctorElement> {
+pub(crate) fn indexing_code_ptr(code_ptr: IndexingCodePtr) -> (Vec<FunctorElement>, u64) {
     match code_ptr {
         IndexingCodePtr::DynamicExternal(o) => {
-            functor!(atom!("dynamic_external"), [fixnum(o)])
+            (functor!(atom!("dynamic_external"), [fixnum(o)]), 2)
         }
-        IndexingCodePtr::External(o) => {
-            functor!(atom!("external"), [fixnum(o)])
-        }
-        IndexingCodePtr::Internal(o) => {
-            functor!(atom!("internal"), [fixnum(o)])
-        }
-        IndexingCodePtr::Fail => {
-            vec![FunctorElement::Cell(atom_as_cell!(atom!("fail")))]
-        }
+        IndexingCodePtr::External(o) => (functor!(atom!("external"), [fixnum(o)]), 2),
+        IndexingCodePtr::Internal(o) => (functor!(atom!("internal"), [fixnum(o)]), 2),
+        IndexingCodePtr::Fail => (vec![FunctorElement::Cell(atom_as_cell!(atom!("fail")))], 1),
     }
 }
 
