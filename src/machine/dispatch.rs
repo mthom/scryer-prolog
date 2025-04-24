@@ -242,7 +242,6 @@ impl MachineState {
                 c
             }
             (HeapCellValueTag::Atom, (_name, arity)) => {
-                // if arity == 0 { c } else { s }
                 debug_assert!(arity == 0);
                 c
             }
