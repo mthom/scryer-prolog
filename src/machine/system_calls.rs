@@ -7321,20 +7321,19 @@ impl Machine {
         walk_code(&self.code, index_ptr, |instr| {
             let old_len = functors.len();
             instr.enqueue_functors(&mut self.machine_st.arena, &mut functors);
-            let new_len = functors.len();
 
-            for index in old_len..new_len {
-                let functor_len = functors[index].len();
+            for functor in &functors[old_len..] {
+                let functor_len = functor.len();
 
                 match functor_len {
                     0 => {}
                     1 => {
                         functor_list.push(heap_loc_as_cell!(h));
-                        h += cell_index!(Heap::compute_functor_byte_size(&functors[index]));
+                        h += cell_index!(Heap::compute_functor_byte_size(functor));
                     }
                     _ => {
                         functor_list.push(str_loc_as_cell!(h));
-                        h += cell_index!(Heap::compute_functor_byte_size(&functors[index]));
+                        h += cell_index!(Heap::compute_functor_byte_size(functor));
                     }
                 };
             }
