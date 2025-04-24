@@ -1719,20 +1719,27 @@ must_be_number(N, PI) :-
     ).
 
 
-chars_or_vars(Cs, _) :-
+chars_or_vars(Cs, PI) :-
+    (  '$is_partial_string'(Cs) ->
+       % use a fast test for the expected case
+       true
+    ;  chars_or_vars_(Cs, PI)
+    ).
+
+chars_or_vars_(Cs, _) :-
     (  var(Cs) ->
        !
     ;  Cs == [] ->
        !
     ).
-chars_or_vars([C|Cs], PI) :-
+chars_or_vars_([C|Cs], PI) :-
     (  nonvar(C) ->
        (  atom(C),
           atom_length(C, 1) ->
           chars_or_vars(Cs, PI)
        ;  throw(error(type_error(character, C), PI))
        )
-    ;  chars_or_vars(Cs, PI)
+    ;  chars_or_vars_(Cs, PI)
     ).
 
 
