@@ -22,6 +22,7 @@ but they're not part of the ISO Prolog standard at the moment.
 		    copy_term/3]).
 
 :- use_module(library(error), [can_be/2,
+                               must_be/2,
                                domain_error/3,
                                instantiation_error/1,
                                type_error/3]).
@@ -275,17 +276,15 @@ call_with_inference_limit(_, _, R, Bb, B) :-
     ;  nonvar(R)
     ).
 
-%% partial_string(String, L, L0)
+%% partial_string(String, Ls0, Ls)
 %
 % Explicitly construct a partial string "manually". It can be used as an optimized append/3.
 % It's not recommended to use this predicate in application code.
-partial_string(String, L, L0) :-
+partial_string(String, Ls0, Ls) :-
+    must_be(chars, String),
     (  String == [] ->
-       L = L0
-    ;  catch(atom_chars(Atom, String),
-             error(E, _),
-             throw(error(E, partial_string/3))),
-       '$create_partial_string'(Atom, L, L0)
+       Ls0 = Ls
+    ;  '$create_partial_string'(String, Ls0, Ls)
     ).
 
 %% partial_string(+String)
