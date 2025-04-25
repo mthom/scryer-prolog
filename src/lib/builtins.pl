@@ -1736,7 +1736,7 @@ chars_or_vars_([C|Cs], PI) :-
     (  nonvar(C) ->
        (  atom(C),
           atom_length(C, 1) ->
-          chars_or_vars(Cs, PI)
+          chars_or_vars_(Cs, PI)
        ;  throw(error(type_error(character, C), PI))
        )
     ;  chars_or_vars_(Cs, PI)
