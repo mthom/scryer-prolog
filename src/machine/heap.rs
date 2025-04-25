@@ -870,7 +870,7 @@ impl Heap {
 
         unsafe {
             loop {
-                if self.free_space() >= len {
+                if self.free_space() >= heap_index!(len) {
                     ptr::copy_nonoverlapping(
                         self.inner.ptr.add(heap_index!(range.start)),
                         self.inner.ptr.add(self.inner.byte_len),
