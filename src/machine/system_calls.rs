@@ -2479,30 +2479,32 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn create_partial_string(&mut self) {
-        let atom = cell_as_atom!(self.deref_register(1));
+        let a1 = self.deref_register(1);
 
-        if atom == atom!("") {
-            self.machine_st.fail = true;
-            return;
-        }
+        if let Some(str_like) = self.machine_st.value_to_str_like(a1) {
+            let str = match str_like {
+                AtomOrString::String(string) => string,
+                _ => {
+                    unreachable!()
+                }
+            };
 
-        let pstr_loc_cell = step_or_resource_error!(
-            self.machine_st,
-            self.machine_st.heap.allocate_pstr(&*atom.as_str())
-        );
+            let pstr_loc_cell =
+                step_or_resource_error!(self.machine_st, self.machine_st.heap.allocate_pstr(&str));
 
-        let tail_loc = self.machine_st.heap.cell_len();
+            let tail_loc = self.machine_st.heap.cell_len();
 
-        step_or_resource_error!(
-            self.machine_st,
-            self.machine_st.heap.push_cell(heap_loc_as_cell!(tail_loc))
-        );
+            step_or_resource_error!(
+                self.machine_st,
+                self.machine_st.heap.push_cell(heap_loc_as_cell!(tail_loc))
+            );
 
-        unify!(self.machine_st, self.machine_st.registers[2], pstr_loc_cell);
+            unify!(self.machine_st, self.machine_st.registers[2], pstr_loc_cell);
 
-        if !self.machine_st.fail {
-            let tail = self.machine_st.registers[3];
-            unify!(self.machine_st, tail, heap_loc_as_cell!(tail_loc));
+            if !self.machine_st.fail {
+                let tail = self.machine_st.registers[3];
+                unify!(self.machine_st, tail, heap_loc_as_cell!(tail_loc));
+            }
         }
     }
 
