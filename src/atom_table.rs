@@ -516,12 +516,12 @@ impl AtomTable {
                     }
                 };
 
-                let ptr_base = block_epoch.block.base as usize;
+                let ptr_base = block_epoch.block.base.addr();
 
                 write_to_ptr(string, len_ptr);
 
                 let atom = AtomCell::new()
-                    .with_name((STRINGS.len() + len_ptr as usize - ptr_base) as u64)
+                    .with_name((STRINGS.len() + len_ptr.addr() - ptr_base) as u64)
                     .with_arity(0)
                     .with_f(false)
                     .with_m(false)

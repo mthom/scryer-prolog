@@ -97,7 +97,7 @@ unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan {
         .unwrap_or(heap_slice.len());
     let zero_byte_addr = heap_slice.as_ptr().add(string_len);
 
-    let sentinel_len = pstr_sentinel_length(zero_byte_addr as usize);
+    let sentinel_len = pstr_sentinel_length(zero_byte_addr.addr());
     let tail_idx = cell_index!(
         (string_len + sentinel_len).next_multiple_of(ALIGN)
             + if sentinel_len <= 1 { heap_index!(1) } else { 0 }

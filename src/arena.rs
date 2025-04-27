@@ -611,12 +611,12 @@ mod tests {
         let mut wam = MockWAM::new();
         #[cfg(target_pointer_width = "32")]
         let const_value = HeapCellValue::from(ConsPtr::build_with(
-            0x0000_0431 as *const _,
+            std::ptr::without_provenance(0x0000_0431),
             ConsPtrMaskTag::Cons,
         ));
         #[cfg(target_pointer_width = "64")]
         let const_value = HeapCellValue::from(ConsPtr::build_with(
-            0x0000_5555_ff00_0431 as *const _,
+            std::ptr::without_provenance(0x0000_5555_ff00_0431),
             ConsPtrMaskTag::Cons,
         ));
 

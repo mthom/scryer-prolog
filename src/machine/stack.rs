@@ -59,9 +59,10 @@ impl Index<usize> for AndFrame {
 
         unsafe {
             let ptr = self as *const crate::machine::stack::AndFrame as *const u8;
-            let ptr = ptr as usize + prelude_offset + index_offset;
 
-            &*(ptr as *const HeapCellValue)
+            // This address falls outside the provenance for self, therefore we have to get it
+            // from exposed provenance.
+            &*std::ptr::with_exposed_provenance(ptr.addr() + prelude_offset + index_offset)
         }
     }
 }
@@ -72,10 +73,11 @@ impl IndexMut<usize> for AndFrame {
         let index_offset = (index - 1) * mem::size_of::<HeapCellValue>();
 
         unsafe {
-            let ptr = self as *mut crate::machine::stack::AndFrame as *const u8;
-            let ptr = ptr as usize + prelude_offset + index_offset;
+            let ptr = self as *mut crate::machine::stack::AndFrame as *mut u8;
 
-            &mut *(ptr as *mut HeapCellValue)
+            // This address falls outside the provenance for self, therefore we have to get it
+            // from exposed provenance.
+            &mut *std::ptr::with_exposed_provenance_mut(ptr.addr() + prelude_offset + index_offset)
         }
     }
 }
@@ -85,20 +87,14 @@ impl Index<usize> for Stack {
 
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
-        unsafe {
-            let ptr = self.buf.base as usize + index;
-            &*(ptr as *const HeapCellValue)
-        }
+        unsafe { &*self.buf.base.add(index).cast() }
     }
 }
 
 impl IndexMut<usize> for Stack {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        unsafe {
-            let ptr = self.buf.base as usize + index;
-            &mut *(ptr as *mut HeapCellValue)
-        }
+        unsafe { &mut *self.buf.base.add(index).cast_mut().cast() }
     }
 }
 
@@ -132,9 +128,10 @@ impl Index<usize> for OrFrame {
 
         unsafe {
             let ptr = self as *const crate::machine::stack::OrFrame as *const u8;
-            let ptr = ptr as usize + prelude_offset + index_offset;
 
-            &*(ptr as *const HeapCellValue)
+            // This address falls outside the provenance for self, therefore we have to get it
+            // from exposed provenance.
+            &*std::ptr::with_exposed_provenance(ptr.addr() + prelude_offset + index_offset)
         }
     }
 }
@@ -146,10 +143,11 @@ impl IndexMut<usize> for OrFrame {
         let index_offset = index * mem::size_of::<HeapCellValue>();
 
         unsafe {
-            let ptr = self as *mut crate::machine::stack::OrFrame as *const u8;
-            let ptr = ptr as usize + prelude_offset + index_offset;
+            let ptr = self as *mut crate::machine::stack::OrFrame as *mut u8;
 
-            &mut *(ptr as *mut HeapCellValue)
+            // This address falls outside the provenance for self, therefore we have to get it
+            // from exposed provenance.
+            &mut *std::ptr::with_exposed_provenance_mut(ptr.addr() + prelude_offset + index_offset)
         }
     }
 }
@@ -187,15 +185,19 @@ impl Stack {
         let frame_size = AndFrame::size_of(num_cells);
 
         unsafe {
-            let e = (*self.buf.ptr.get_mut()) as usize - self.buf.base as usize;
+            let e = (*self.buf.ptr.get_mut()).addr() - self.buf.base.addr();
             let new_ptr = self.alloc(frame_size);
             let mut offset = prelude_size::<AndFramePrelude>();
 
             for idx in 0..num_cells {
-                ptr::write(
-                    new_ptr.add(offset) as *mut HeapCellValue,
-                    stack_loc_as_cell!(AndFrame, e, idx + 1),
-                );
+                let cell_ptr = new_ptr.add(offset) as *mut HeapCellValue;
+                ptr::write(cell_ptr, stack_loc_as_cell!(AndFrame, e, idx + 1));
+
+                // Because in the Index and IndexMut inplementations we need to get this from
+                // exposed provenance, we need to expose the provenance here, even though we don't
+                // actually use the value for anything. This is a reminder that `expose_provenance`
+                // isn't just a cast from a pointer to an integer but has actual side effects.
+                cell_ptr.expose_provenance();
 
                 offset += mem::size_of::<HeapCellValue>();
             }
@@ -208,22 +210,26 @@ impl Stack {
     }
 
     pub(crate) fn top(&self) -> usize {
-        unsafe { (*self.buf.ptr.get()) as usize - self.buf.base as usize }
+        unsafe { (*self.buf.ptr.get()).addr() - self.buf.base.addr() }
     }
 
     pub(crate) fn allocate_or_frame(&mut self, num_cells: usize) -> usize {
         let frame_size = OrFrame::size_of(num_cells);
 
         unsafe {
-            let b = (*self.buf.ptr.get_mut()) as usize - self.buf.base as usize;
+            let b = (*self.buf.ptr.get_mut()).addr() - self.buf.base.addr();
             let new_ptr = self.alloc(frame_size);
             let mut offset = prelude_size::<OrFramePrelude>();
 
             for idx in 0..num_cells {
-                ptr::write(
-                    new_ptr.byte_add(offset) as *mut HeapCellValue,
-                    stack_loc_as_cell!(OrFrame, b, idx),
-                );
+                let cell_ptr = new_ptr.byte_add(offset) as *mut HeapCellValue;
+                ptr::write(cell_ptr, stack_loc_as_cell!(OrFrame, b, idx));
+
+                // Because in the Index and IndexMut inplementations we need to get this from
+                // exposed provenance, we need to expose the provenance here, even though we don't
+                // actually use the value for anything. This is a reminder that `expose_provenance`
+                // isn't just a cast from a pointer to an integer but has actual side effects.
+                cell_ptr.expose_provenance();
 
                 offset += mem::size_of::<HeapCellValue>();
             }
@@ -237,10 +243,7 @@ impl Stack {
 
     #[inline(always)]
     pub(crate) fn index_and_frame(&self, e: usize) -> &AndFrame {
-        unsafe {
-            let ptr = self.buf.base as usize + e;
-            &*(ptr as *const AndFrame)
-        }
+        unsafe { &*self.buf.base.add(e).cast() }
     }
 
     #[inline(always)]
@@ -254,26 +257,20 @@ impl Stack {
 
     #[inline(always)]
     pub(crate) fn index_or_frame(&self, b: usize) -> &OrFrame {
-        unsafe {
-            let ptr = self.buf.base as usize + b;
-            &*(ptr as *const OrFrame)
-        }
+        unsafe { &*self.buf.base.add(b).cast() }
     }
 
     #[inline(always)]
     pub(crate) fn index_or_frame_mut(&mut self, b: usize) -> &mut OrFrame {
-        unsafe {
-            let ptr = self.buf.base as usize + b;
-            &mut *(ptr as *mut OrFrame)
-        }
+        unsafe { &mut *self.buf.base.add(b).cast_mut().cast() }
     }
 
     #[inline(always)]
     pub(crate) fn truncate(&mut self, b: usize) {
-        let base = self.buf.base as usize + b;
+        let base = unsafe { self.buf.base.add(b) };
 
-        if base < (*self.buf.ptr.get_mut()) as usize {
-            *self.buf.ptr.get_mut() = base as *mut _;
+        if base < (*self.buf.ptr.get_mut()) {
+            *self.buf.ptr.get_mut() = base.cast_mut();
         }
     }
 }

@@ -141,9 +141,8 @@ where
 
         ptr::write(ptr as *mut T, value);
 
-        let value = <OffsetTableImpl<T> as OffsetTable>::Offset::from(
-            ptr as usize - block_epoch.base as usize,
-        );
+        let value =
+            <OffsetTableImpl<T> as OffsetTable>::Offset::from(ptr.addr() - block_epoch.base.addr());
 
         // AtomTable would have to update the index table at this point
         // explicit drop to ensure we don't accidentally drop it early
@@ -270,7 +269,7 @@ where
     #[inline(always)]
     pub fn as_offset(&self) -> <OffsetTableImpl<T> as OffsetTable>::Offset {
         <OffsetTableImpl<T> as OffsetTable>::Offset::from(
-            self.0.get() as usize - RcuRef::get_root(&self.0).base as usize,
+            self.0.get().addr() - RcuRef::get_root(&self.0).base.addr(),
         )
     }
 }

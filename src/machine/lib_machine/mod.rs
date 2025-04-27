@@ -297,7 +297,7 @@ impl Term {
                                     Term::atom(alias.as_str().to_string())
                                 } else {
                                     Term::compound("$stream", [
-                                        Term::integer(stream.as_ptr() as usize)
+                                        Term::integer(stream.as_ptr().addr())
                                     ])
                                 };
                                 term_stack.push(stream_term);
