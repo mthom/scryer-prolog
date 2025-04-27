@@ -131,6 +131,7 @@ macro_rules! build_functor {
                        [$($subfunctor),*])
     });
     ([string($s:expr) $(, $dt:ident($($value:tt),*))*], [$($res:expr),*], $res_len:expr, [$($subfunctor:expr),*]) => ({
+        #[allow(unused_parens)]
         let string = $s;
         let pstr_len = cell_index!(Heap::compute_pstr_size(&string)) as u64;
         let result_len = 1 + count!($($dt)*) + $res_len;
