@@ -93,7 +93,7 @@ impl ConsPtr {
     #[inline(always)]
     pub fn build_with(ptr: *const ArenaHeader, tag: ConsPtrMaskTag) -> Self {
         ConsPtr::new()
-            .with_ptr(ptr as *const u8 as u64)
+            .with_ptr(ptr.expose_provenance() as u64)
             .with_f(false)
             .with_m(false)
             .with_tag(tag)
@@ -102,7 +102,7 @@ impl ConsPtr {
     #[inline(always)]
     pub fn as_ptr(self) -> *mut u8 {
         let addr: u64 = self.ptr();
-        addr as usize as *mut _
+        std::ptr::with_exposed_provenance_mut(addr as usize)
     }
 
     #[inline(always)]
@@ -377,7 +377,7 @@ where
 {
     #[inline]
     fn from(arena_ptr: TypedArenaPtr<T>) -> HeapCellValue {
-        HeapCellValue::from(arena_ptr.header_ptr() as u64)
+        HeapCellValue::from(arena_ptr.header_ptr().expose_provenance() as u64)
     }
 }
 
@@ -402,7 +402,7 @@ impl From<ConsPtr> for HeapCellValue {
     #[inline(always)]
     fn from(cons_ptr: ConsPtr) -> HeapCellValue {
         HeapCellValue::from_bytes(
-            ConsPtr::from(cons_ptr.as_ptr() as u64)
+            ConsPtr::from(cons_ptr.as_ptr().expose_provenance() as u64)
                 .with_tag(ConsPtrMaskTag::Cons)
                 .with_m(false)
                 .into_bytes(),
@@ -723,14 +723,14 @@ const_assert!(mem::size_of::<UntypedArenaPtr>() == 8);
 impl From<*const ArenaHeader> for UntypedArenaPtr {
     #[inline]
     fn from(ptr: *const ArenaHeader) -> UntypedArenaPtr {
-        UntypedArenaPtr::build_with(ptr as usize)
+        UntypedArenaPtr::build_with(ptr.expose_provenance())
     }
 }
 
 impl From<*const IndexPtr> for UntypedArenaPtr {
     #[inline]
     fn from(ptr: *const IndexPtr) -> UntypedArenaPtr {
-        UntypedArenaPtr::build_with(ptr as usize)
+        UntypedArenaPtr::build_with(ptr.expose_provenance())
     }
 }
 
@@ -750,7 +750,7 @@ impl UntypedArenaPtr {
     #[inline]
     pub fn get_ptr(self) -> *const u8 {
         let addr: u64 = self.ptr();
-        addr as usize as *const u8
+        std::ptr::with_exposed_provenance(addr as usize)
     }
 
     #[inline]

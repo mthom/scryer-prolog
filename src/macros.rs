@@ -146,10 +146,11 @@ macro_rules! typed_arena_ptr_as_cell {
 macro_rules! raw_ptr_as_cell {
     ($ptr:expr) => {{
         // Cell is 64-bit, but raw ptr is 32-bit in 32-bit systems
-        // TODO use <*{const,mut} _>::addr instead of as when the strict_provenance feature is stable rust-lang/rust#95228
-        // we might need <*{const,mut} _>::expose_provenance for strict provenance, depending on how we recreate a pointer later
-        let ptr : *const _ = $ptr;
-        HeapCellValue::from_ptr_addr(ptr as usize)
+        let ptr: *const _ = $ptr;
+        // This needs to expose provenance because it needs to be turned back into a pointer
+        // in contexts where there is no available provenance locally. For example, in
+        // `ConsPtr::as_ptr`.
+        HeapCellValue::from_ptr_addr(ptr.expose_provenance())
     }};
 }
 
