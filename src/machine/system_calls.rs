@@ -5129,9 +5129,10 @@ impl Machine {
         let result_reg = self.deref_register(2);
         if let Some(code) = self.machine_st.value_to_str_like(code) {
             match js_sys::eval(&code.as_str()) {
-                Ok(result) => self.unify_js_value(result, result_reg),
-                Err(result) => self.unify_js_value(result, result_reg),
+                Ok(result) => self.unify_js_value(result, result_reg)?,
+                Err(result) => self.unify_js_value(result, result_reg)?,
             };
+
             return Ok(());
         }
         self.machine_st.fail = true;
@@ -5139,7 +5140,11 @@ impl Machine {
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn unify_js_value(&mut self, result: wasm_bindgen::JsValue, result_reg: HeapCellValue) {
+    fn unify_js_value(
+        &mut self,
+        result: wasm_bindgen::JsValue,
+        result_reg: HeapCellValue,
+    ) -> CallResult {
         match result.as_bool() {
             Some(result) => match result {
                 true => self.machine_st.unify_atom(atom!("true"), result_reg),
@@ -5152,8 +5157,10 @@ impl Machine {
                 }
                 None => match result.as_string() {
                     Some(result) => {
-                        let result = AtomTable::build_with(&self.machine_st.atom_tbl, &result);
-                        self.machine_st.unify_complete_string(result, result_reg);
+                        resource_error_call_result!(
+                            self.machine_st,
+                            self.machine_st.heap.allocate_cstr(result.as_str())
+                        );
                     }
                     None => {
                         if result.is_null() {
@@ -5178,6 +5185,8 @@ impl Machine {
                 },
             },
         }
+
+        Ok(())
     }
 
     #[inline(always)]
