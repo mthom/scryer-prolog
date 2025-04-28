@@ -507,7 +507,7 @@ impl Value {
     fn as_ptr(&mut self) -> Result<*mut c_void, FFIError> {
         match self {
             Value::CString(ref mut cstr) => Ok(&mut *cstr as *mut _ as *mut c_void),
-            Value::Int(n) => Ok(*n as *mut c_void),
+            Value::Int(n) => Ok(std::ptr::with_exposed_provenance_mut(*n as usize)),
             _ => Err(FFIError::ValueCast),
         }
     }

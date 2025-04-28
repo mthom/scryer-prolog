@@ -984,7 +984,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
     #[inline]
     fn print_raw_ptr(&mut self, ptr: *const ArenaHeader) {
-        append_str!(self, &format!("0x{:x}", ptr as *const u8 as usize));
+        append_str!(self, &format!("0x{:x}", ptr.addr()));
     }
 
     fn print_number(&mut self, max_depth: usize, n: NumberFocus, op: &Option<DirectedOp>) {
