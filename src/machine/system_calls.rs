@@ -5729,7 +5729,6 @@ impl Machine {
 
                 if addr.get_tag() == HeapCellValueTag::StackVar {
                     section.push_cell(heap_loc_as_cell!(h + 1 + idx));
-
                     self.machine_st.stack[stack_offset] = heap_loc_as_cell!(h + 1 + idx);
 
                     // have to inline the TrailRef::Ref(RefTag::StackCell) case of MachineState::trail
@@ -5748,7 +5747,7 @@ impl Machine {
             }
         });
 
-        let chunk = str_loc_as_cell!(self.machine_st.heap.cell_len());
+        let chunk = str_loc_as_cell!(h);
         unify!(self.machine_st, self.machine_st.registers[3], chunk);
     }
 
@@ -6335,13 +6334,13 @@ impl Machine {
             let e = and_frame.prelude.e;
             let e = Fixnum::build_with(i64::try_from(e).unwrap());
 
-            let mut writer = Heap::functor_writer(functor!(atom!("dir_entry"), [fixnum(cp)]));
-
-            let p_functor_cell = step_or_resource_error!(machine_st, writer(&mut machine_st.heap));
-
             machine_st.unify_fixnum(e, machine_st.registers[2]);
 
             if !machine_st.fail {
+                let mut writer = Heap::functor_writer(functor!(atom!("dir_entry"), [fixnum(cp)]));
+                let p_functor_cell =
+                    step_or_resource_error!(machine_st, writer(&mut machine_st.heap));
+
                 unify!(machine_st, p_functor_cell, machine_st.registers[3]);
             }
         };
@@ -6368,6 +6367,12 @@ impl Machine {
                 // active permanent variables can be read from
                 // it later.
                 let and_frame = self.machine_st.stack.index_and_frame(e);
+
+                if and_frame.prelude.cp == 0 {
+                    self.machine_st.fail = true;
+                    return;
+                }
+
                 let cp = and_frame.prelude.cp - 1;
                 let mut writer = Heap::functor_writer(functor!(atom!("dir_entry"), [fixnum(cp)]));
 
