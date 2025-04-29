@@ -186,26 +186,8 @@ impl IndexMut<RegType> for MachineState {
 
 pub type CallResult = Result<(), Vec<FunctorElement>>;
 
-/*
-#[inline(always)]
-pub fn pstr_loc_and_offset(heap: &[HeapCellValue], index: usize) -> (usize, Fixnum) {
-    read_heap_cell!(heap[index],
-        (HeapCellValueTag::PStr | HeapCellValueTag::CStr) => {
-            (index, Fixnum::build_with(0))
-        }
-        (HeapCellValueTag::PStrOffset, h) => {
-            (h, cell_as_fixnum!(heap[index+1]))
-        }
-        _ => {
-            unreachable!()
-        }
-    )
-}
-*/
-
 // size may be an upper bound.
 // true_size is calculated to compute the exact offset.
-
 fn push_var_eq_functors<'a>(
     heap: &mut Heap,
     size: usize,

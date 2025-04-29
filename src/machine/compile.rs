@@ -1261,10 +1261,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let code_len = self.wam_prelude.code.len();
         let mut code_ptr = code_len;
 
-        if key == (atom!("..."), 2) {
-            print!("");
-        }
-
         let mut clauses = vec![];
         let mut preprocessor = Preprocessor::new(settings);
 
