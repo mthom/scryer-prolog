@@ -967,11 +967,11 @@ impl Read for Stream {
             Stream::OutputFile(_)
             | Stream::StandardError(_)
             | Stream::StandardOutput(_)
-            | Stream::Null(_)
             | Stream::Callback(_) => Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::ReadFromOutputStream,
             )),
+            Stream::Null(_) => Ok(0),
         }
     }
 }
@@ -994,11 +994,11 @@ impl Write for Stream {
                 ErrorKind::PermissionDenied,
                 StreamError::WriteToInputStream,
             )),
+            Stream::Null(_) => Ok(buf.len()),
             Stream::StaticString(_)
             | Stream::InputChannel(_)
             | Stream::Readline(_)
-            | Stream::InputFile(..)
-            | Stream::Null(_) => Err(std::io::Error::new(
+            | Stream::InputFile(..) => Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::WriteToInputStream,
             )),
@@ -1022,11 +1022,11 @@ impl Write for Stream {
                 ErrorKind::PermissionDenied,
                 StreamError::FlushToInputStream,
             )),
+            Stream::Null(_) => Ok(()),
             Stream::StaticString(_)
             | Stream::InputChannel(_)
             | Stream::Readline(_)
-            | Stream::InputFile(_)
-            | Stream::Null(_) => Err(std::io::Error::new(
+            | Stream::InputFile(_) => Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::FlushToInputStream,
             )),
@@ -1112,6 +1112,20 @@ fn cursor_position<T>(
             AtEndOfStream::Past
         }
         Ordering::Less => AtEndOfStream::Not,
+    }
+}
+
+impl From<Stream> for HeapCellValue {
+    #[inline(always)]
+    fn from(stream: Stream) -> Self {
+        if stream.is_null_stream() {
+            let res = atom!("null_stream");
+            atom_as_cell!(res)
+        } else {
+            let res = stream.as_ptr();
+            debug_assert!(!res.is_null());
+            raw_ptr_as_cell!(res)
+        }
     }
 }
 
@@ -1267,6 +1281,7 @@ impl Stream {
                     }
                 }
             }
+            Stream::Null(_) => AtEndOfStream::At,
             #[cfg(feature = "http")]
             Stream::HttpRead(stream_layout) => {
                 if stream_layout
@@ -1522,7 +1537,8 @@ impl Stream {
             | Stream::InputChannel(_)
             | Stream::Readline(_)
             | Stream::StaticString(_)
-            | Stream::InputFile(..) => true,
+            | Stream::InputFile(..)
+            | Stream::Null(_) => true,
             _ => false,
         }
     }
@@ -1538,8 +1554,9 @@ impl Stream {
             | Stream::StandardOutput(_)
             | Stream::NamedTcp(..)
             | Stream::Byte(_)
+            | Stream::OutputFile(..)
             | Stream::Callback(_)
-            | Stream::OutputFile(..) => true,
+            | Stream::Null(_) => true,
             _ => false,
         }
     }
@@ -1795,7 +1812,7 @@ impl MachineState {
                             debug_assert_eq!(arity, 0);
 
                             return match indices.get_stream(name) {
-                                Some(stream) if !stream.is_null_stream() => Ok(stream),
+                                Some(stream) => Ok(stream),
                                 _ => {
                                     let stub = functor_stub(caller, arity);
                                     let addr = atom_as_cell!(name);
@@ -1813,7 +1830,7 @@ impl MachineState {
                             debug_assert_eq!(arity, 0);
 
                             return match indices.get_stream(name) {
-                                Some(stream) if !stream.is_null_stream() => Ok(stream),
+                                Some(stream) => Ok(stream),
                                 _ => {
                                     let stub = functor_stub(caller, arity);
                                     let addr = atom_as_cell!(name);
@@ -1827,11 +1844,10 @@ impl MachineState {
                         (HeapCellValueTag::Cons, ptr) => {
                             match_untyped_arena_ptr!(ptr,
                                 (ArenaHeaderTag::Stream, stream) => {
-                                    return if stream.is_null_stream() {
-                                        Err(self.open_permission_error(stream_as_cell!(stream), caller, arity))
-                                    } else {
-                                        Ok(stream)
-                                    };
+                                    if stream.is_null_stream() {
+                                        unreachable!("Null streams have no Cons representation");
+                                    }
+                                    return Ok(stream);
                                 }
                                 (ArenaHeaderTag::Dropped, _value) => {
                                     let stub = functor_stub(caller, arity);
@@ -1891,7 +1907,7 @@ impl MachineState {
             if let Some(alias) = stream.options().get_alias() {
                 atom_as_cell!(alias)
             } else {
-                stream_as_cell!(stream)
+                stream.into()
             },
         );
 
@@ -2097,14 +2113,26 @@ impl MachineState {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use crate::*;
     use std::{cell::RefCell, io::Read, io::Write, rc::Rc};
 
-    fn succeeded(answer: Vec<Result<LeafAnswer, Term>>) -> bool {
+    use crate::machine::config::*;
+    use crate::LeafAnswer;
+
+    use super::{Stream, StreamOptions};
+
+    fn succeeded<T>(answer: Vec<Result<LeafAnswer, T>>) -> bool {
         // Ideally this should be a method in QueryState or LeafAnswer.
         matches!(
             answer[0].as_ref(),
+            Ok(LeafAnswer::True) | Ok(LeafAnswer::LeafAnswer { .. })
+        )
+    }
+
+    fn is_successful<T>(answer: &Result<LeafAnswer, T>) -> bool {
+        matches!(
+            answer,
             Ok(LeafAnswer::True) | Ok(LeafAnswer::LeafAnswer { .. })
         )
     }
@@ -2250,6 +2278,19 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore)]
+    fn current_input_null_stream() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine.run_query("current_input(S).").collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(is_successful(&results[0]));
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
     fn close_memory_user_output_stream_twice() {
         let mut machine = MachineBuilder::new()
             .with_streams(StreamConfig::in_memory())
@@ -2261,6 +2302,23 @@ mod tests {
 
         assert_eq!(results.len(), 1);
         assert!(results[0].is_ok());
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn read_null_stream() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine.run_query("get_code(C).").collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(
+            is_successful(&results[0]),
+            "Expected read to succeed, got {:?}",
+            results[0]
+        );
     }
 
     #[test]
@@ -2287,6 +2345,21 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore)]
+    fn current_output_null_stream() {
+        // TODO: switch to a proper solution for configuring the machine with null streams
+        // once `StreamConfig` supports it.
+        let mut machine = MachineBuilder::new().build();
+        machine.user_output = Stream::Null(StreamOptions::default());
+        machine.configure_streams();
+
+        let results = machine.run_query("current_output(S).").collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(is_successful(&results[0]));
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
     fn close_realiased_user_output() {
         let mut machine = MachineBuilder::new()
             .with_streams(StreamConfig::in_memory())
@@ -2307,5 +2380,101 @@ mod tests {
 
         assert_eq!(results.len(), 1);
         assert!(results[0].is_ok());
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn write_null_stream() {
+        // TODO: switch to a proper solution for configuring the machine with null streams
+        // once `StreamConfig` supports it.
+        let mut machine = MachineBuilder::new().build();
+        machine.user_output = Stream::Null(StreamOptions::default());
+        machine.configure_streams();
+
+        let results = machine.run_query("write(hello).").collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(
+            is_successful(&results[0]),
+            "Expected write to succeed, got {:?}",
+            results[0]
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn put_code_null_stream() {
+        // TODO: switch to a proper solution for configuring the machine with null streams
+        // once `StreamConfig` supports it.
+        let mut machine = MachineBuilder::new().build();
+        machine.user_output = Stream::Null(StreamOptions::default());
+        machine.configure_streams();
+
+        let results = machine
+            .run_query("put_code(user_output, 65).")
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(
+            is_successful(&results[0]),
+            "Expected write to succeed, got {:?}",
+            results[0]
+        );
+    }
+
+    /// A variant of the [`write_null_stream`] that tries to write to a (null) input stream.
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn write_null_input_stream() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine
+            .run_query("current_input(Stream), write(Stream, hello).")
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(
+            is_successful(&results[0]),
+            "Expected write to succeed, got {:?}",
+            results[0]
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn at_end_of_stream_0_null_stream() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine.run_query("at_end_of_stream.").collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(
+            is_successful(&results[0]),
+            "Expected at_end_of_stream to succeed, got {:?}",
+            results[0]
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn at_end_of_stream_1_null_stream() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine
+            .run_query("current_input(Stream), at_end_of_stream(Stream).")
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(
+            is_successful(&results[0]),
+            "Expected at_end_of_stream to succeed, got {:?}",
+            results[0]
+        );
     }
 }
