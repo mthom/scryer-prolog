@@ -699,6 +699,13 @@ a :-
 
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
+%% listing(+PI)
+%
+%  Given a predicate indicator PI=Identifier/Arity, `listing(PI)` will
+%  succeed if there is a user-defined procedure with the given identifier
+%  and arity. All clauses will be written to output.
+
+
 listing(PI) :-
         nonvar(PI),
         (   PI = Name/Arity0 ->
