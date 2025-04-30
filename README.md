@@ -529,7 +529,7 @@ is unified with a term that contains that variable as a proper
 subterm. For efficiency, the *occurs&nbsp;check* is omitted by default
 in Scryer&nbsp;Prolog and many other Prolog systems.
 
-In Scryer Prolog, performing unifications which succeed only if the
+In Scryer Prolog, unifications which succeed only if the
 *occurs&nbsp;check* is omitted yield *cyclic&nbsp;terms*, also called
 *rational&nbsp;trees*. For example:
 
