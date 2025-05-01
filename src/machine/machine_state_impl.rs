@@ -933,7 +933,7 @@ impl MachineState {
                                     if char_iter.next().is_some() {
                                         unify_fn!(*self, pstr_loc_as_cell!(pstr_loc + c.len_utf8()), a3);
                                     } else {
-                                        let tail_idx = Heap::pstr_tail_idx(pstr_loc);
+                                        let tail_idx = Heap::pstr_tail_idx(pstr_loc + c.len_utf8());
                                         unify_fn!(*self, self.heap[tail_idx], a3);
                                     }
 
