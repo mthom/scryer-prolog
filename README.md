@@ -529,7 +529,7 @@ is unified with a term that contains that variable as a proper
 subterm. For efficiency, the *occurs&nbsp;check* is omitted by default
 in Scryer&nbsp;Prolog and many other Prolog systems.
 
-In Scryer Prolog, performing unifications which succeed only if the
+In Scryer Prolog, unifications which succeed only if the
 *occurs&nbsp;check* is omitted yield *cyclic&nbsp;terms*, also called
 *rational&nbsp;trees*. For example:
 
@@ -881,6 +881,23 @@ Successful existing applications of Scryer Prolog include:
 Scryer Prolog is also very well suited for teaching and learning
 Prolog, and for testing syntactic conformance and hence portability of
 existing Prolog&nbsp;programs.
+
+## Scryer Prolog Meetups
+
+Scryer Prolog Meetups are an excellent opportunity to present and get
+to know the latest developments in Scryer&nbsp;Prolog and its
+applications, to exchange ideas about current&nbsp;plans and
+future&nbsp;directions, and to discuss projects and visions
+in&nbsp;person.
+
+- [Scryer Prolog Meetup 2023](https://hsd-pbsa.de/veranstaltung/scryer-prolog-meetup-2023/)
+  in Düsseldorf, Germany. Its [announcement](https://github.com/mthom/scryer-prolog/discussions/1813)
+  and [discussion](https://github.com/mthom/scryer-prolog/discussions/2160).
+- [Scryer Prolog Meetup 2024](https://www.digitalaustria.gv.at/eng/insights/Digital-Austria-Events-EN/Scryer-Prolog-Meetup-2024.html)
+  in Vienna, Austria. Its [announcement and discussion](https://github.com/mthom/scryer-prolog/discussions/2377).
+- **Save the date:** The next Scryer Prolog Meetup will take place on
+  Nov.&nbsp;13th and 14th 2025 in Düsseldorf, Germany. More information
+  will follow soon.
 
 ## Support and discussions
 
