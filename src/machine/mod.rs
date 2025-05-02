@@ -298,7 +298,7 @@ impl Machine {
     }
 
     fn load_file(&mut self, path: &str, stream: Stream) {
-        self.machine_st.registers[1] = stream_as_cell!(stream);
+        self.machine_st.registers[1] = stream.into();
         self.machine_st.registers[2] =
             atom_as_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, path));
 
@@ -500,6 +500,12 @@ impl Machine {
             .set_stream(atom!("user_output"), self.user_output);
         self.indices
             .set_stream(atom!("user_error"), self.user_error);
+
+        let mut null_options = StreamOptions::default();
+        null_options.set_alias_to_atom_opt(Some(atom!("null_stream")));
+
+        self.indices
+            .set_stream(atom!("null_stream"), Stream::Null(null_options));
     }
 
     #[inline(always)]

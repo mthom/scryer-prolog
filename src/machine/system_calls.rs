@@ -1881,7 +1881,7 @@ impl Machine {
         let stream = self.user_input;
 
         if let Some(var) = addr.as_var() {
-            self.machine_st.bind(var, stream_as_cell!(stream));
+            self.machine_st.bind(var, stream.into());
             return Ok(());
         }
 
@@ -1916,7 +1916,7 @@ impl Machine {
         let stream = self.user_output;
 
         if let Some(var) = addr.as_var() {
-            self.machine_st.bind(var, stream_as_cell!(stream));
+            self.machine_st.bind(var, stream.into());
             return Ok(());
         }
 
@@ -3273,7 +3273,7 @@ impl Machine {
             match stream.write_all(&bytes) {
                 Ok(_) => {}
                 _ => {
-                    let addr = stream_as_cell!(stream);
+                    let addr = stream.into();
                     let err = self
                         .machine_st
                         .existence_error(ExistenceError::Stream(addr));
@@ -3323,7 +3323,7 @@ impl Machine {
                         _ => {
                             let err = self
                                 .machine_st
-                                .existence_error(ExistenceError::Stream(stream_as_cell!(stream)));
+                                .existence_error(ExistenceError::Stream(stream.into()));
 
                             return Err(self.machine_st.error_form(err, stub_gen()));
                         }
@@ -3336,9 +3336,9 @@ impl Machine {
                                 return Ok(());
                             }
                             _ => {
-                                let err = self.machine_st.existence_error(ExistenceError::Stream(
-                                    stream_as_cell!(stream),
-                                ));
+                                let err = self
+                                    .machine_st
+                                    .existence_error(ExistenceError::Stream(stream.into()));
 
                                 return Err(self.machine_st.error_form(err, stub_gen()));
                             }
@@ -3722,7 +3722,7 @@ impl Machine {
             .next();
 
         if let Some(first_stream) = first_stream {
-            let stream = stream_as_cell!(first_stream);
+            let stream = first_stream.into();
 
             let var = self.deref_register(1).as_var().unwrap();
 
@@ -3745,8 +3745,7 @@ impl Machine {
         if let Some(next_stream) = next_stream {
             let var = self.deref_register(2).as_var().unwrap();
 
-            let next_stream = stream_as_cell!(next_stream);
-            self.machine_st.bind(var, next_stream);
+            self.machine_st.bind(var, next_stream.into());
         } else {
             self.machine_st.fail = true;
         }
@@ -3763,7 +3762,7 @@ impl Machine {
 
         if !stream.is_output_stream() {
             let stub = functor_stub(atom!("flush_output"), 1);
-            let addr = stream_as_cell!(stream);
+            let addr = HeapCellValue::from(stream);
 
             let err =
                 self.machine_st
@@ -3859,14 +3858,14 @@ impl Machine {
 
         self.indices.remove_stream(stream);
 
-        stream.close().map_err(|_| {
+        stream.close().or_else(|_| {
             let stub = functor_stub(atom!("close"), 1);
-            let addr = stream_as_cell!(stream);
+            let addr = stream.into();
             let err = self
                 .machine_st
                 .existence_error(ExistenceError::Stream(addr));
 
-            self.machine_st.error_form(err, stub)
+            Err(self.machine_st.error_form(err, stub))
         })
     }
 
@@ -4434,10 +4433,9 @@ impl Machine {
                             .map_err(|stub_gen| stub_gen(&mut self.machine_st))
                             .unwrap();
 
-                        let stream = stream_as_cell!(stream);
-
                         let stream_addr = self.deref_register(2);
-                        self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
+                        self.machine_st
+                            .bind(stream_addr.as_var().unwrap(), stream.into());
                     }
                     Err(_) => {
                         self.machine_st.fail = true;
@@ -4634,39 +4632,39 @@ impl Machine {
                     let h = self.machine_st.heap.len();
                     let header_term = functor!(AtomTable::build_with(&self.machine_st.atom_tbl, header_name.as_str()), [cell(string_as_cstr_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, header_value.to_str().unwrap())))]);
 
-                                    self.machine_st.heap.extend(header_term.into_iter());
-                                    str_loc_as_cell!(h)
-                                }).collect();
+                    self.machine_st.heap.extend(header_term.into_iter());
+                    str_loc_as_cell!(h)
+                }).collect();
 
-                                let headers_list = iter_to_heap_list(&mut self.machine_st.heap, headers.into_iter());
+                    let headers_list = iter_to_heap_list(&mut self.machine_st.heap, headers.into_iter());
 
-                let query_str = request.request_data.query;
-                let query_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &query_str);
-                let query_cell = string_as_cstr_cell!(query_atom);
+                    let query_str = request.request_data.query;
+                    let query_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &query_str);
+                    let query_cell = string_as_cstr_cell!(query_atom);
 
-                let mut stream = Stream::from_http_stream(
-                    path_atom,
-                    request.request_data.body,
-                    &mut self.machine_st.arena
-                );
-                *stream.options_mut() = StreamOptions::default();
-                stream.options_mut().set_stream_type(StreamType::Binary);
+                    let mut stream = Stream::from_http_stream(
+                        path_atom,
+                        request.request_data.body,
+                        &mut self.machine_st.arena
+                    );
+                    *stream.options_mut() = StreamOptions::default();
+                    stream.options_mut().set_stream_type(StreamType::Binary);
 
-                self.indices.add_stream(stream, atom!("http_accept"), 7)
-                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+                    self.indices.add_stream(stream, atom!("http_accept"), 7)
+                        .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
-                let stream = stream_as_cell!(stream);
+                    let stream: HeapCellValue = stream.into();
 
-                                let handle: TypedArenaPtr<HttpResponse> = arena_alloc!(request.response, &mut self.machine_st.arena);
+                    let handle: TypedArenaPtr<HttpResponse> = arena_alloc!(request.response, &mut self.machine_st.arena);
 
-                                self.machine_st.bind(method.as_var().unwrap(), atom_as_cell!(method_atom));
-                                self.machine_st.bind(path.as_var().unwrap(), path_cell);
-                                unify!(self.machine_st, heap_loc_as_cell!(headers_list), self.machine_st.registers[4]);
-                                self.machine_st.bind(query.as_var().unwrap(), query_cell);
-                                self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
-                                self.machine_st.bind(handle_addr.as_var().unwrap(), typed_arena_ptr_as_cell!(handle));
-                break
-                            }
+                    self.machine_st.bind(method.as_var().unwrap(), atom_as_cell!(method_atom));
+                    self.machine_st.bind(path.as_var().unwrap(), path_cell);
+                    unify!(self.machine_st, heap_loc_as_cell!(headers_list), self.machine_st.registers[4]);
+                    self.machine_st.bind(query.as_var().unwrap(), query_cell);
+                    self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
+                    self.machine_st.bind(handle_addr.as_var().unwrap(), typed_arena_ptr_as_cell!(handle));
+                    break
+                }
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                     let interrupted = machine::INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
 
@@ -4758,31 +4756,29 @@ impl Machine {
 
         read_heap_cell!(culprit,
             (HeapCellValueTag::Cons, cons_ptr) => {
-            match_untyped_arena_ptr!(cons_ptr,
-                (ArenaHeaderTag::HttpResponse, http_response) => {
-                let mut stream = Stream::from_http_sender(
-                    http_response,
-                    status_code,
-                    headers,
-                    &mut self.machine_st.arena
+                match_untyped_arena_ptr!(cons_ptr,
+                    (ArenaHeaderTag::HttpResponse, http_response) => {
+                        let mut stream = Stream::from_http_sender(
+                            http_response,
+                            status_code,
+                            headers,
+                            &mut self.machine_st.arena
+                        );
+
+                        *stream.options_mut() = StreamOptions::default();
+                        stream.options_mut().set_stream_type(StreamType::Binary);
+
+                        self.indices.add_stream(stream, atom!("http_answer"), 4)
+                            .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+                        self.machine_st.bind(stream_addr.as_var().unwrap(), stream.into());
+                    }
+                    _ => {
+                        unreachable!();
+                    }
                 );
-                *stream.options_mut() = StreamOptions::default();
-                stream.options_mut().set_stream_type(StreamType::Binary);
-
-
-                self.indices.add_stream(stream, atom!("http_answer"), 4)
-                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
-
-                let stream = stream_as_cell!(stream);
-                self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
-                }
-                _ => {
-                unreachable!();
-                }
-            );
             }
             _ => {
-            unreachable!();
+                unreachable!();
             }
         );
 
@@ -5094,7 +5090,7 @@ impl Machine {
 
             let stream_var = self.deref_register(3);
             self.machine_st
-                .bind(stream_var.as_var().unwrap(), stream_as_cell!(stream));
+                .bind(stream_var.as_var().unwrap(), stream.into());
         } else {
             let err = self
                 .machine_st
@@ -6524,7 +6520,7 @@ impl Machine {
                     .add_stream(stream, atom!("socket_client_open"), 7)
                     .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
-                stream_as_cell!(stream)
+                HeapCellValue::from(stream)
             }
             Err(ErrorKind::PermissionDenied) => {
                 return Err(self.machine_st.open_permission_error(
@@ -6679,14 +6675,13 @@ impl Machine {
                                         stub_gen(&mut self.machine_st)
                                     })?;
 
-                                 let tcp_stream = stream_as_cell!(tcp_stream);
                                  let client = atom_as_cell!(client);
 
                                  let client_addr = self.deref_register(2);
                                  let stream_addr = self.deref_register(3);
 
                                  self.machine_st.bind(client_addr.as_var().unwrap(), client);
-                                 self.machine_st.bind(stream_addr.as_var().unwrap(), tcp_stream);
+                                 self.machine_st.bind(stream_addr.as_var().unwrap(), tcp_stream.into());
                              }
                              None => {
                                  self.machine_st.fail = true;
@@ -6737,10 +6732,11 @@ impl Machine {
                 .add_stream(stream, atom!("tls_client_negotiate"), 3)
                 .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
-            self.machine_st.heap.push(stream_as_cell!(stream));
+            // FIXME: why are we pushing a random, unreferenced cell on the heap?
+            self.machine_st.heap.push(stream.into());
             let stream_addr = self.deref_register(3);
             self.machine_st
-                .bind(stream_addr.as_var().unwrap(), stream_as_cell!(stream));
+                .bind(stream_addr.as_var().unwrap(), stream.into());
 
             Ok(())
         } else {
@@ -6796,7 +6792,7 @@ impl Machine {
 
             let stream_addr = self.deref_register(4);
             self.machine_st
-                .bind(stream_addr.as_var().unwrap(), stream_as_cell!(stream));
+                .bind(stream_addr.as_var().unwrap(), stream.into());
         } else {
             unreachable!();
         }
@@ -6845,7 +6841,7 @@ impl Machine {
             let err = self.machine_st.permission_error(
                 Permission::Reposition,
                 atom!("stream"),
-                stream_as_cell!(stream),
+                HeapCellValue::from(stream),
             );
 
             return Err(self.machine_st.error_form(err, stub));
@@ -8069,7 +8065,7 @@ impl Machine {
                 let lib_stream = Stream::from_static_string(library, &mut self.machine_st.arena);
                 unify!(
                     self.machine_st,
-                    stream_as_cell!(lib_stream),
+                    HeapCellValue::from(lib_stream),
                     self.machine_st.registers[2]
                 );
 
