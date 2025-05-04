@@ -426,7 +426,7 @@ impl<T: CopierTarget> CopyTermState<T> {
 
                 let index_cell = self.target[addr.saturating_sub(1)];
 
-                *self.value_at_scan() = if get_structure_index(index_cell).is_some() {
+                let str_cell = if get_structure_index(index_cell).is_some() {
                     // copy the index pointer trailing this
                     // inlined or expanded goal.
                     let mut writer = self.target.reserve(1).unwrap();
@@ -440,11 +440,12 @@ impl<T: CopierTarget> CopyTermState<T> {
                     str_loc_as_cell!(threshold)
                 };
 
+                *self.value_at_scan() = str_cell;
                 self.target.copy_slice_to_end(addr .. addr + 1 + arity)?;
 
                 let trail_item = mem::replace(
                     &mut self.target[addr],
-                    str_loc_as_cell!(threshold),
+                    str_cell,
                 );
 
                 self.trail.push((TrailRef::heap_cell(addr), trail_item));
