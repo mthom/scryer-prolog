@@ -21,7 +21,9 @@ impl Drop for Heap {
     fn drop(&mut self) {
         if !self.inner.ptr.is_null() {
             unsafe {
-                let layout = alloc::Layout::array::<u8>(self.inner.byte_cap).unwrap();
+                let layout =
+                    alloc::Layout::from_size_align(self.inner.byte_cap, size_of::<HeapCellValue>())
+                        .unwrap();
                 alloc::dealloc(self.inner.ptr, layout);
             }
         }
@@ -53,7 +55,8 @@ impl InnerHeap {
             2 * self.byte_cap
         };
 
-        let new_layout = alloc::Layout::array::<u8>(new_cap).unwrap();
+        let new_layout =
+            alloc::Layout::from_size_align(new_cap, size_of::<HeapCellValue>()).unwrap();
 
         assert!(
             new_layout.size() <= isize::MAX as usize,
@@ -63,7 +66,8 @@ impl InnerHeap {
         let new_ptr = if self.byte_cap == 0 {
             alloc::alloc(new_layout)
         } else {
-            let old_layout = alloc::Layout::array::<u8>(self.byte_cap).unwrap();
+            let old_layout =
+                alloc::Layout::from_size_align(self.byte_cap, size_of::<HeapCellValue>()).unwrap();
             alloc::realloc(self.ptr, old_layout, new_layout.size())
         };
 
@@ -585,7 +589,11 @@ impl Heap {
 
     pub(crate) fn with_cell_capacity(cap: usize) -> Result<Self, usize> {
         let ptr = unsafe {
-            let layout = alloc::Layout::array::<HeapCellValue>(cap).unwrap();
+            let layout = alloc::Layout::from_size_align(
+                cap * size_of::<HeapCellValue>(),
+                size_of::<HeapCellValue>(),
+            )
+            .unwrap();
             alloc::alloc(layout)
         };
 
@@ -672,7 +680,9 @@ impl Heap {
 
     pub(crate) fn clear(&mut self) {
         unsafe {
-            let layout = alloc::Layout::array::<u8>(self.inner.byte_cap).unwrap();
+            let layout =
+                alloc::Layout::from_size_align(self.inner.byte_cap, size_of::<HeapCellValue>())
+                    .unwrap();
             alloc::dealloc(self.inner.ptr, layout);
         }
 
