@@ -89,7 +89,7 @@ pub struct HeapStringScan<'a> {
     pub tail_idx: usize,
 }
 
-// return the string at ptr and the tail location relative to ptr.
+// The heap_slice should be inside the heap
 unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan {
     let string_len = heap_slice
         .iter()
@@ -98,6 +98,28 @@ unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan {
     let zero_byte_addr = heap_slice.as_ptr().add(string_len);
 
     let sentinel_len = pstr_sentinel_length(zero_byte_addr.addr());
+    let tail_idx = cell_index!(
+        (string_len + sentinel_len).next_multiple_of(ALIGN)
+            + if sentinel_len <= 1 { heap_index!(1) } else { 0 }
+    );
+
+    let str_slice = &heap_slice[..string_len];
+
+    HeapStringScan {
+        string: std::str::from_utf8_unchecked(str_slice),
+        tail_idx,
+    }
+}
+
+// Same as scan_slice_to_str but assumes that the slice is from the start of a string.
+// Can be used on strings out of the heap.
+unsafe fn scan_slice_to_str_from_start(heap_slice: &[u8]) -> HeapStringScan {
+    let string_len = heap_slice
+        .iter()
+        .position(|b| *b == 0u8)
+        .unwrap_or(heap_slice.len());
+
+    let sentinel_len = pstr_sentinel_length(string_len);
     let tail_idx = cell_index!(
         (string_len + sentinel_len).next_multiple_of(ALIGN)
             + if sentinel_len <= 1 { heap_index!(1) } else { 0 }
@@ -904,7 +926,8 @@ impl Heap {
                 continue;
             }
 
-            let HeapStringScan { string, tail_idx } = unsafe { scan_slice_to_str(src_bytes) };
+            let HeapStringScan { string, tail_idx } =
+                unsafe { scan_slice_to_str_from_start(src_bytes) };
 
             src_bytes = &src_bytes[string.len()..];
             byte_size += heap_index!(tail_idx);
