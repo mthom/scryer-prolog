@@ -21,7 +21,9 @@ impl Drop for Heap {
     fn drop(&mut self) {
         if !self.inner.ptr.is_null() {
             unsafe {
-                let layout = alloc::Layout::array::<u8>(self.inner.byte_cap).unwrap();
+                let layout =
+                    alloc::Layout::from_size_align(self.inner.byte_cap, size_of::<HeapCellValue>())
+                        .unwrap();
                 alloc::dealloc(self.inner.ptr, layout);
             }
         }
@@ -53,7 +55,8 @@ impl InnerHeap {
             2 * self.byte_cap
         };
 
-        let new_layout = alloc::Layout::array::<u8>(new_cap).unwrap();
+        let new_layout =
+            alloc::Layout::from_size_align(new_cap, size_of::<HeapCellValue>()).unwrap();
 
         assert!(
             new_layout.size() <= isize::MAX as usize,
@@ -63,7 +66,8 @@ impl InnerHeap {
         let new_ptr = if self.byte_cap == 0 {
             alloc::alloc(new_layout)
         } else {
-            let old_layout = alloc::Layout::array::<u8>(self.byte_cap).unwrap();
+            let old_layout =
+                alloc::Layout::from_size_align(self.byte_cap, size_of::<HeapCellValue>()).unwrap();
             alloc::realloc(self.ptr, old_layout, new_layout.size())
         };
 
@@ -89,7 +93,7 @@ pub struct HeapStringScan<'a> {
     pub tail_idx: usize,
 }
 
-// return the string at ptr and the tail location relative to ptr.
+// The heap_slice should be inside the heap
 unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan {
     let string_len = heap_slice
         .iter()
@@ -98,6 +102,28 @@ unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan {
     let zero_byte_addr = heap_slice.as_ptr().add(string_len);
 
     let sentinel_len = pstr_sentinel_length(zero_byte_addr.addr());
+    let tail_idx = cell_index!(
+        (string_len + sentinel_len).next_multiple_of(ALIGN)
+            + if sentinel_len <= 1 { heap_index!(1) } else { 0 }
+    );
+
+    let str_slice = &heap_slice[..string_len];
+
+    HeapStringScan {
+        string: std::str::from_utf8_unchecked(str_slice),
+        tail_idx,
+    }
+}
+
+// Same as scan_slice_to_str but assumes that the slice is from the start of a string.
+// Can be used on strings out of the heap.
+unsafe fn scan_slice_to_str_from_start(heap_slice: &[u8]) -> HeapStringScan {
+    let string_len = heap_slice
+        .iter()
+        .position(|b| *b == 0u8)
+        .unwrap_or(heap_slice.len());
+
+    let sentinel_len = pstr_sentinel_length(string_len);
     let tail_idx = cell_index!(
         (string_len + sentinel_len).next_multiple_of(ALIGN)
             + if sentinel_len <= 1 { heap_index!(1) } else { 0 }
@@ -563,7 +589,11 @@ impl Heap {
 
     pub(crate) fn with_cell_capacity(cap: usize) -> Result<Self, usize> {
         let ptr = unsafe {
-            let layout = alloc::Layout::array::<HeapCellValue>(cap).unwrap();
+            let layout = alloc::Layout::from_size_align(
+                cap * size_of::<HeapCellValue>(),
+                size_of::<HeapCellValue>(),
+            )
+            .unwrap();
             alloc::alloc(layout)
         };
 
@@ -650,7 +680,9 @@ impl Heap {
 
     pub(crate) fn clear(&mut self) {
         unsafe {
-            let layout = alloc::Layout::array::<u8>(self.inner.byte_cap).unwrap();
+            let layout =
+                alloc::Layout::from_size_align(self.inner.byte_cap, size_of::<HeapCellValue>())
+                    .unwrap();
             alloc::dealloc(self.inner.ptr, layout);
         }
 
@@ -904,7 +936,8 @@ impl Heap {
                 continue;
             }
 
-            let HeapStringScan { string, tail_idx } = unsafe { scan_slice_to_str(src_bytes) };
+            let HeapStringScan { string, tail_idx } =
+                unsafe { scan_slice_to_str_from_start(src_bytes) };
 
             src_bytes = &src_bytes[string.len()..];
             byte_size += heap_index!(tail_idx);
