@@ -1021,9 +1021,13 @@ impl Machine {
                                         match self.find_living_dynamic_else(p + next_i) {
                                             Some(_) => {
                                                 self.machine_st.registers
-                                                    [self.machine_st.num_of_args + 1] = fixnum_as_cell!(
-                                                    Fixnum::build_with(self.machine_st.cc as i64)
-                                                );
+                                                    [self.machine_st.num_of_args + 1] =
+                                                    fixnum_as_cell!(unsafe {
+                                                        /* FIXME this is not safe */
+                                                        Fixnum::build_with_unchecked(
+                                                            self.machine_st.cc as i64,
+                                                        )
+                                                    });
 
                                                 self.machine_st.num_of_args += 1;
                                                 self.try_me_else(next_i);
@@ -1042,10 +1046,11 @@ impl Machine {
                                             .prelude
                                             .num_cells;
 
-                                        self.machine_st.cc = cell_as_fixnum!(
+                                        self.machine_st.cc = unsafe {
                                             self.machine_st.stack
                                                 [stack_loc!(OrFrame, self.machine_st.b, n - 1)]
-                                        )
+                                            .to_fixnum_or_cut_point_unchecked()
+                                        }
                                         .get_num()
                                             as usize;
 
@@ -1095,7 +1100,12 @@ impl Machine {
                                             Some(_) => {
                                                 self.machine_st.registers
                                                     [self.machine_st.num_of_args + 1] = fixnum_as_cell!(
-                                                    Fixnum::build_with(self.machine_st.cc as i64)
+                                                    /* FIXME this is not safe */
+                                                    unsafe {
+                                                        Fixnum::build_with_unchecked(
+                                                            self.machine_st.cc as i64,
+                                                        )
+                                                    }
                                                 );
 
                                                 self.machine_st.num_of_args += 1;
@@ -1115,10 +1125,11 @@ impl Machine {
                                             .prelude
                                             .num_cells;
 
-                                        self.machine_st.cc = cell_as_fixnum!(
+                                        self.machine_st.cc = unsafe {
                                             self.machine_st.stack
                                                 [stack_loc!(OrFrame, self.machine_st.b, n - 1)]
-                                        )
+                                            .to_fixnum_or_cut_point_unchecked()
+                                        }
                                         .get_num()
                                             as usize;
 
@@ -1174,7 +1185,10 @@ impl Machine {
                     &Instruction::GetLevel(r) => {
                         let b0 = self.machine_st.b0;
 
-                        self.machine_st[r] = fixnum_as_cell!(Fixnum::as_cutpoint(b0 as i64));
+                        self.machine_st[r] = fixnum_as_cell!(
+                            /* FIXME this is not safe */
+                            unsafe { Fixnum::build_with_unchecked(b0 as i64) }.as_cutpoint()
+                        );
                         self.machine_st.p += 1;
                     }
                     &Instruction::GetPrevLevel(r) => {
@@ -1185,12 +1199,18 @@ impl Machine {
                             .prelude
                             .b;
 
-                        self.machine_st[r] = fixnum_as_cell!(Fixnum::as_cutpoint(prev_b as i64));
+                        self.machine_st[r] = fixnum_as_cell!(
+                            /* FIXME this is not safe */
+                            unsafe { Fixnum::build_with_unchecked(prev_b as i64) }.as_cutpoint()
+                        );
                         self.machine_st.p += 1;
                     }
                     &Instruction::GetCutPoint(r) => {
                         self.machine_st[r] =
-                            fixnum_as_cell!(Fixnum::as_cutpoint(self.machine_st.b as i64));
+                            fixnum_as_cell!(/* FIXME this is not safe */ unsafe {
+                                Fixnum::build_with_unchecked(self.machine_st.b as i64)
+                            }
+                            .as_cutpoint());
                         self.machine_st.p += 1;
                     }
                     &Instruction::Cut(r) => {
@@ -3150,10 +3170,14 @@ impl Machine {
                                                 match self.find_living_dynamic(oi, ii + 1) {
                                                     Some(_) => {
                                                         self.machine_st.registers
-                                                            [self.machine_st.num_of_args + 1] =
-                                                            fixnum_as_cell!(Fixnum::build_with(
-                                                                self.machine_st.cc as i64
-                                                            ));
+                                                            [self.machine_st.num_of_args + 1] = fixnum_as_cell!(
+                                                            /* FIXME this is not safe */
+                                                            unsafe {
+                                                                Fixnum::build_with_unchecked(
+                                                                    self.machine_st.cc as i64,
+                                                                )
+                                                            }
+                                                        );
 
                                                         self.machine_st.num_of_args += 1;
                                                         self.indexed_try(offset);
@@ -3175,10 +3199,11 @@ impl Machine {
                                                     .prelude
                                                     .num_cells;
 
-                                                self.machine_st.cc = cell_as_fixnum!(
+                                                self.machine_st.cc = unsafe {
                                                     self.machine_st.stack
                                                         [stack_loc!(OrFrame, b, n - 1)]
-                                                )
+                                                    .to_fixnum_or_cut_point_unchecked()
+                                                }
                                                 .get_num()
                                                     as usize;
 
@@ -5256,8 +5281,11 @@ impl Machine {
                                 .machine_st
                                 .store(self.machine_st.deref(self.machine_st.registers[5]));
 
-                            self.machine_st
-                                .unify_fixnum(Fixnum::build_with(n as i64), r);
+                            self.machine_st.unify_fixnum(
+                                /* FIXME this is not safe */
+                                unsafe { Fixnum::build_with_unchecked(n as i64) },
+                                r,
+                            );
                         }
 
                         self.machine_st.call_at_index(2, p);
@@ -5299,8 +5327,11 @@ impl Machine {
                                 .machine_st
                                 .store(self.machine_st.deref(self.machine_st.registers[5]));
 
-                            self.machine_st
-                                .unify_fixnum(Fixnum::build_with(n as i64), r);
+                            self.machine_st.unify_fixnum(
+                                /* FIXME this is not safe */
+                                unsafe { Fixnum::build_with_unchecked(n as i64) },
+                                r,
+                            );
                         }
 
                         self.machine_st.execute_at_index(2, p);

@@ -588,6 +588,16 @@ impl HeapCellValue {
         }
     }
 
+    // FIXME: someone that knows this better should check if this can be split into `to_fixnum_unchecked` and `to_cut_point_unchecked` assuming thats always unambigusly knowable
+    #[inline]
+    pub unsafe fn to_fixnum_or_cut_point_unchecked(self) -> Fixnum {
+        debug_assert!(matches!(
+            self.get_tag(),
+            HeapCellValueTag::Fixnum | HeapCellValueTag::CutPoint
+        ));
+        Fixnum::from_bytes(self.into_bytes())
+    }
+
     #[inline]
     pub fn from_ptr_addr(ptr_bytes: usize) -> Self {
         HeapCellValue::from_bytes((ptr_bytes as u64).to_ne_bytes())

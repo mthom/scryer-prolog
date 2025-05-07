@@ -1187,8 +1187,10 @@ impl Machine {
                 let (idx, arity) = if self.machine_st.effective_block() > prev_block {
                     (r_c_w_h, 0)
                 } else {
-                    self.machine_st.registers[1] =
-                        fixnum_as_cell!(Fixnum::build_with(b_cutoff as i64));
+                    self.machine_st.registers[1] = fixnum_as_cell!(
+                        /* FIXME this is not safe */
+                        unsafe { Fixnum::build_with_unchecked(b_cutoff as i64) }
+                    );
 
                     (r_c_wo_h, 1)
                 };

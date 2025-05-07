@@ -198,11 +198,10 @@ pub(crate) fn neg(n: Number, arena: &mut Arena) -> Number {
 pub(crate) fn abs(n: Number, arena: &mut Arena) -> Number {
     match n {
         Number::Fixnum(n) => {
-            if let Some(n) = n.get_num().checked_abs() {
-                fixnum!(Number, n, arena)
+            if let Some(n) = n.checked_abs() {
+                Number::Fixnum(n)
             } else {
-                let arena_int = Integer::from(n.get_num());
-                Number::arena_from(arena_int.abs(), arena)
+                Number::arena_from(Integer::from(Fixnum::MAX + 1), arena)
             }
         }
         Number::Integer(n) => {
@@ -1105,7 +1104,7 @@ pub(crate) fn round(num: Number, arena: &mut Arena) -> Result<Number, MachineStu
 
 pub(crate) fn bitwise_complement(n1: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
     match n1 {
-        Number::Fixnum(n) => Ok(Number::Fixnum(Fixnum::build_with(!n.get_num()))),
+        Number::Fixnum(n) => Ok(Number::Fixnum(!n)),
         Number::Integer(n1) => Ok(Number::arena_from(Integer::from(!&*n1), arena)),
         _ => {
             let stub_gen = || {
