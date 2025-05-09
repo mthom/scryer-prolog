@@ -699,6 +699,14 @@ a :-
 
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
+%% listing(+PI)
+%
+%  Given a predicate indicator PI=Identifier/Arity, `listing(PI)` succeeds
+%  if there is a user-defined procedure with the given identifier and
+%  arity. All clauses are written to output.
+%  If PI specifies a procedure that is *not* public, an error is produced.
+%  This includes any procedure which is builtin or static.
+
 listing(PI) :-
         nonvar(PI),
         (   PI = Name/Arity0 ->
