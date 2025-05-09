@@ -8216,9 +8216,21 @@ impl Machine {
             .value_to_str_like(self.machine_st.registers[1])
         {
             let document = scraper::Html::parse_document(&string.as_str());
-            let result = self.html_node_to_term(document.tree.root().first_child().unwrap())?;
 
-            unify!(self.machine_st, self.machine_st.registers[2], result);
+            let root_nodes = document
+                .tree
+                .root()
+                .children()
+                .map(|child| self.html_node_to_term(child))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let nodes = sized_iter_to_heap_list(
+                &mut self.machine_st.heap,
+                root_nodes.len(),
+                root_nodes.into_iter(),
+            )?;
+
+            unify!(self.machine_st, self.machine_st.registers[2], nodes);
         } else {
             self.machine_st.fail = true;
         }
@@ -8665,12 +8677,39 @@ impl Machine {
         &mut self,
         node: ego_tree::NodeRef<'_, scraper::Node>,
     ) -> Result<HeapCellValue, usize> {
-        match node.value().as_element() {
-            None => self
-                .machine_st
-                .heap
-                .allocate_cstr(&node.value().as_text().unwrap().text),
-            Some(element) => {
+        match node.value() {
+            scraper::Node::Document | scraper::Node::Fragment => {
+                unreachable!("we never iterate the root itself only its children")
+            }
+            scraper::Node::Doctype(doctype) => {
+                // what about public and system id?
+                let name = self.machine_st.heap.allocate_cstr(&doctype.name)?;
+
+                let result = str_loc_as_cell!(self.machine_st.heap.cell_len());
+                let mut writer = self.machine_st.heap.reserve(2)?;
+
+                writer.write_with(|section| {
+                    section.push_cell(atom_as_cell!(atom!("doctype"), 1));
+                    section.push_cell(name);
+                });
+
+                Ok(result)
+            }
+            scraper::Node::Comment(comment) => {
+                let comment = self.machine_st.heap.allocate_cstr(&comment)?;
+
+                let result = str_loc_as_cell!(self.machine_st.heap.cell_len());
+                let mut writer = self.machine_st.heap.reserve(2)?;
+
+                writer.write_with(|section| {
+                    section.push_cell(atom_as_cell!(atom!("comment"), 1));
+                    section.push_cell(comment);
+                });
+
+                Ok(result)
+            }
+            scraper::Node::Text(text) => self.machine_st.heap.allocate_cstr(&text.text),
+            scraper::Node::Element(element) => {
                 let mut avec = Vec::new();
 
                 for attr in element.attrs() {
@@ -8694,11 +8733,10 @@ impl Machine {
                     avec.into_iter(),
                 )?;
 
-                let mut cvec = Vec::new();
-
-                for child in node.children() {
-                    cvec.push(self.html_node_to_term(child)?);
-                }
+                let cvec = node
+                    .children()
+                    .map(|child| self.html_node_to_term(child))
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 let children = sized_iter_to_heap_list(
                     &mut self.machine_st.heap,
@@ -8715,6 +8753,27 @@ impl Machine {
                     section.push_cell(atom_as_cell!(tag));
                     section.push_cell(attrs);
                     section.push_cell(children);
+                });
+
+                Ok(result)
+            }
+            scraper::Node::ProcessingInstruction(processing_instruction) => {
+                let target = self
+                    .machine_st
+                    .heap
+                    .allocate_cstr(&processing_instruction.target)?;
+                let data = self
+                    .machine_st
+                    .heap
+                    .allocate_cstr(&processing_instruction.data)?;
+
+                let result = str_loc_as_cell!(self.machine_st.heap.cell_len());
+                let mut writer = self.machine_st.heap.reserve(3)?;
+
+                writer.write_with(|section| {
+                    section.push_cell(atom_as_cell!(atom!("processing_instruction"), 2));
+                    section.push_cell(target);
+                    section.push_cell(data);
                 });
 
                 Ok(result)
