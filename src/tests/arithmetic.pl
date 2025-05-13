@@ -258,14 +258,14 @@ test_and_or_xor(X, Y, AndExpected, OrExpected, XorExpected) :-
     Or2 is Y \/ X,
     Or == OrExpected,
     Or == Or2,
-    Xor is X xor Y,
-    Xor2 is Y xor X,
+    Xor is xor(X, Y),
+    Xor2 is xor(Y, X),
     Xor == XorExpected,
     Xor2 == Xor,
 
     call(is, And3, X /\ Y),
     call(is, Or3, X \/ Y),
-    call(is, Xor3, X xor Y),
+    call(is, Xor3, xor(X, Y)),
     And3 == And,
     Or3 == Or,
     Xor3 == Xor.
@@ -613,7 +613,7 @@ test("and_or_xor", (
     ]), arithmetic_tests:test_and_or_xor(X, Y, AndExpected, OrExpected, XorExpected)),
     \+ catch(_ is 1 /\ 2.0, _, false),
     \+ catch(_ is 1 \/ 2.0, _, false),
-    \+ catch(_ is 1 xor 2.0, _, false)
+    \+ catch(_ is xor(1, 2.0), _, false)
 )).
 
 test("mod_rem", (

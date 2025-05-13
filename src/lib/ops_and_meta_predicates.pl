@@ -26,7 +26,6 @@
 :- op(200, xfy, ^).
 :- op(500, yfx, /\).
 :- op(500, yfx, \/).
-:- op(500, yfx, xor).
 :- op(400, yfx, div).
 :- op(400, yfx, //).
 :- op(400, yfx, rdiv).
