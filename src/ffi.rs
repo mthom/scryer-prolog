@@ -53,11 +53,21 @@ pub struct ForeignFunctionTable {
     structs: HashMap<String, StructImpl>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct StructImpl {
     ffi_type: ffi_type,
     fields: Vec<*mut ffi_type>,
     atom_fields: Vec<Atom>,
+}
+
+impl std::fmt::Debug for StructImpl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StructImpl")
+            .field("ffi_type", &&"<???>")
+            .field("fields", &self.fields)
+            .field("atom_fields", &self.atom_fields)
+            .finish()
+    }
 }
 
 struct PointerArgs {

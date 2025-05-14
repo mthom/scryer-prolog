@@ -86,6 +86,10 @@ pub struct F64Table {
     update: Mutex<()>,
 }
 
+// TODO: Actually prove this, as it's probably unsound right now
+unsafe impl Send for F64Table {}
+unsafe impl Sync for F64Table {}
+
 #[inline(always)]
 pub fn lookup_float(
     offset: F64Offset,
