@@ -33,7 +33,7 @@ predicates of the Prolog system under the ISO standard. Basic operators, metapro
 internal settings and basic I/O are all here.
 */
 
-%% (:)(+M, +T)
+%% :(+M, +T)
 %
 % Module qualification. True if T succeeds when called in the context of module M.
 % This calling context determines how predicates resolve to user-defined procedures.
