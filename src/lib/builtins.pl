@@ -8,7 +8,7 @@
                      close/1, close/2, current_input/1,
                      current_output/1, current_op/3,
                      current_predicate/1, current_prolog_flag/2,
-                     fail/0, false/0, findall/3, findall/4,
+                     fail/0, false/0, findall/3,
                      flush_output/0, flush_output/1, get_byte/1,
                      get_byte/2, get_char/1, get_char/2, get_code/1,
                      get_code/2, halt/0, halt/1, nl/0, nl/1,
@@ -926,23 +926,6 @@ findall(Template, Goal, Solutions) :-
     '$truncate_if_no_lh_growth_diff'(LhOffset, Solutions1),
     '$get_lh_from_offset_diff'(LhOffset, Solutions0, Solutions1).
 
-
-:- meta_predicate findall(?, 0, ?, ?).
-
-:- non_counted_backtracking findall/4.
-
-%% findall(Template, Goal, Solutions0, Solutions1)
-%
-% Similar to `findall/3` but returns the solutions as the difference list Solutions0-Solutions1.
-findall(Template, Goal, Solutions0, Solutions1) :-
-    error:can_be(list, Solutions0),
-    error:can_be(list, Solutions1),
-    '$lh_length'(LhLength),
-    catch(builtins:'$iterate_find_all_diff'(Template, Goal, Solutions0,
-                                            Solutions1, LhLength),
-          Error,
-          builtins:findall_cleanup(LhLength, Error)
-         ).
 
 :- non_counted_backtracking set_difference/3.
 

@@ -11,6 +11,7 @@ but they're not part of the ISO Prolog standard at the moment.
                     call_with_inference_limit/3,
                     call_residue_vars/2,
                     forall/2,
+                    findall/4,
                     partial_string/1,
                     partial_string/3,
                     partial_string_tail/2,
@@ -380,6 +381,24 @@ countall(Goal, N) :-
                            bb_put(i_call_nth_counter, C1)
                        ;   true
                        )).
+
+%% findall(Template, Goal, Solutions0, Solutions1)
+%
+% Similar to `findall/3` but returns the solutions as the difference list Solutions0-Solutions1.
+
+:- meta_predicate findall(?, 0, ?, ?).
+
+:- non_counted_backtracking findall/4.
+
+findall(Template, Goal, Solutions0, Solutions1) :-
+    error:can_be(list, Solutions0),
+    error:can_be(list, Solutions1),
+    '$lh_length'(LhLength),
+    catch(builtins:'$iterate_find_all_diff'(Template, Goal, Solutions0,
+                                            Solutions1, LhLength),
+          Error,
+          builtins:findall_cleanup(LhLength, Error)
+         ).
 
 %% copy_term_nat(Source, Dest)
 %
