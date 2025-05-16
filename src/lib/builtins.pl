@@ -8,7 +8,7 @@
                      close/1, close/2, current_input/1,
                      current_output/1, current_op/3,
                      current_predicate/1, current_prolog_flag/2,
-                     error/2, fail/0, false/0, findall/3, findall/4,
+                     fail/0, false/0, findall/3, findall/4,
                      flush_output/0, flush_output/1, get_byte/1,
                      get_byte/2, get_char/1, get_char/2, get_code/1,
                      get_code/2, halt/0, halt/1, nl/0, nl/1,
@@ -2241,12 +2241,3 @@ nl :-
 % Writes a new line character to the stream Stream.
 nl(Stream) :-
     put_char(Stream, '\n').
-
-%% error(ErrorTerm, ImpDef).
-%
-% Throws an exception of the following structure: `error(ErrorTerm, ImpDef)`.
-error(Error_term, Imp_def) :-
-    (  var(Error_term) ->
-       throw(error(instantiation_error, error/2))
-    ;  throw(error(Error_term, Imp_def))
-    ).

@@ -8,7 +8,8 @@
                   instantiation_error/1,
                   domain_error/3,
                   type_error/3,
-                  call_with_error_context/2
+                  call_with_error_context/2,
+                  error/2
                   ]).
 
 
@@ -216,6 +217,15 @@ list_or_partial_list(Ls) :-
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Shorthands for throwing ISO errors.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+%% error(ErrorTerm, ImpDef).
+%
+% Throws an exception of the following structure: `error(ErrorTerm, ImpDef)`.
+error(Error_term, Imp_def) :-
+    (  var(Error_term) ->
+       throw(error(instantiation_error, error/2))
+    ;  throw(error(Error_term, Imp_def))
+    ).
 
 instantiation_error(Context) :-
     throw(error(instantiation_error, Context)).
