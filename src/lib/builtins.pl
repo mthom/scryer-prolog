@@ -3,7 +3,7 @@
                      at_end_of_stream/0, at_end_of_stream/1,
                      atom_chars/2, atom_codes/2, atom_concat/3,
                      atom_length/2, bagof/3, call/1, call/2, call/3,
-                     call/4, call/5, call/6, call/7, call/8, call/9,
+                     call/4, call/5, call/6, call/7, call/8,
                      callable/1, catch/3, char_code/2, clause/2,
                      close/1, close/2, current_input/1,
                      current_output/1, current_op/3,
@@ -53,7 +53,7 @@ true.
 false :- '$fail'.
 
 
-% These are stub versions of call/{1-9} defined for bootstrapping.
+% These are stub versions of call/{1-8} defined for bootstrapping.
 % Once Scryer is bootstrapped, each is replaced with a version that
 % uses expand_goal to pass the expanded goal along to '$call'.
 
@@ -105,12 +105,6 @@ call(_, _, _, _, _, _, _).
 % Execute Goal with ExtraArg1, ExtraArg2, ExtraArg3, ExtraArg4, ExtraArg5, ExtraArg6 and ExtraArg7
 % appended to the argument list.
 call(_, _, _, _, _, _, _, _).
-
-%% call(Goal, ExtraArg1, ExtraArg2, ExtraArg3, ExtraArg4, ExtraArg5, ExtraArg6, ExtraArg7, ExtraArg8).
-%
-% Execute Goal with ExtraArg1, ExtraArg2, ExtraArg3, ExtraArg4, ExtraArg5, ExtraArg6, ExtraArg7 and
-% ExtraArg8, appended to the argument list.
-call(_, _, _, _, _, _, _, _, _).
 
 
 :- meta_predicate catch(0, ?, 0).
