@@ -579,7 +579,7 @@ impl VariableClassifier {
                             mut terms,
                         ) if terms.len() == 3 => {
                             if let Some(last_arg) = terms.last() {
-                                if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
+                                if let Term::Literal(_, Literal::CodeIndexOffset(_)) = last_arg {
                                     terms.pop();
                                     state_stack.push(TraversalState::Term(Term::Clause(
                                         Cell::default(),

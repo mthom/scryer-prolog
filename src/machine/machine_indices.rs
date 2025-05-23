@@ -2,7 +2,6 @@
 
 use crate::parser::ast::*;
 
-use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::machine::loader::*;
@@ -19,7 +18,6 @@ use scryer_modular_bitfield::{bitfield, BitfieldSpecifier};
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::ops::Deref;
 
 use crate::types::*;
 
@@ -127,9 +125,18 @@ impl IndexPtr {
     pub(crate) fn is_dynamic_undefined(&self) -> bool {
         matches!(self.tag(), IndexPtrTag::DynamicUndefined)
     }
+
+    #[inline]
+    pub(crate) fn local(&self) -> Option<usize> {
+        match self.tag() {
+            IndexPtrTag::Index => Some(self.p() as usize),
+            IndexPtrTag::DynamicIndex => Some(self.p() as usize),
+            _ => None,
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, Ord, Hash, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy)] // , Ord, Hash, PartialOrd, Eq, PartialEq)]
 pub struct CodeIndex(CodeIndexOffset);
 
 #[cfg(target_pointer_width = "32")]
@@ -141,7 +148,7 @@ const_assert!(std::mem::align_of::<CodeIndex>() == 8);
 impl From<CodeIndex> for HeapCellValue {
     #[inline(always)]
     fn from(idx: CodeIndex) -> HeapCellValue {
-        HeapCellValue::from(idx.as_ptr())
+        HeapCellValue::from(idx.0)
     }
 }
 
@@ -152,48 +159,39 @@ impl From<CodeIndexOffset> for CodeIndex {
     }
 }
 
+impl Into<CodeIndexOffset> for CodeIndex {
+    #[inline(always)]
+    fn into(self) -> CodeIndexOffset {
+        self.0
+    }
+}
+
+impl Into<CodeIndexOffset> for &'_ CodeIndex {
+    #[inline(always)]
+    fn into(self) -> CodeIndexOffset {
+        self.0
+    }
+}
+
 impl CodeIndex {
     #[inline]
-    pub(crate) fn new(ptr: IndexPtr, arena: &mut Arena) -> Self {
-        unsafe { CodeIndex(arena.code_index_tbl.build_with(ptr)) }
+    pub(crate) fn new(ptr: IndexPtr, code_index_tbl: &mut CodeIndexTable) -> Self {
+        CodeIndex(code_index_tbl.build_with(ptr))
     }
 
     #[inline(always)]
-    pub(crate) fn default(arena: &mut Arena) -> Self {
-        CodeIndex::new(IndexPtr::undefined(), arena)
-    }
-
-    pub(crate) fn local(&self) -> Option<usize> {
-        match self.0.as_ptr().tag() {
-            IndexPtrTag::Index => Some(self.get().p() as usize),
-            IndexPtrTag::DynamicIndex => Some(self.get().p() as usize),
-            _ => None,
-        }
+    pub(crate) fn default(code_index_tbl: &mut CodeIndexTable) -> Self {
+        CodeIndex::new(IndexPtr::undefined(), code_index_tbl)
     }
 
     #[inline(always)]
-    pub(crate) fn get(&self) -> IndexPtr {
-        *self.as_ptr().deref()
+    pub(crate) fn set(&self, code_index_tbl: &mut CodeIndexTable, value: IndexPtr) {
+        code_index_tbl.lookup_mut(self.0).set(value);
     }
 
     #[inline(always)]
-    pub(crate) fn set(&mut self, value: IndexPtr) {
-        self.as_ptr().set(value);
-    }
-
-    #[inline(always)]
-    pub(crate) fn get_tag(self) -> IndexPtrTag {
-        self.get().tag()
-    }
-
-    #[inline(always)]
-    pub(crate) fn replace(&mut self, value: IndexPtr) -> IndexPtr {
-        self.as_ptr().replace(value)
-    }
-
-    #[inline(always)]
-    pub(crate) fn as_ptr(&self) -> CodeIndexPtr {
-        self.0.as_ptr()
+    pub(crate) fn replace(&self, code_index_tbl: &mut CodeIndexTable, value: IndexPtr) -> IndexPtr {
+        code_index_tbl.lookup_mut(self.0).replace(value)
     }
 }
 
