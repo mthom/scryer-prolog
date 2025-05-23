@@ -6,6 +6,7 @@ use crate::forms::*;
 use crate::indexing::*;
 use crate::instructions::*;
 use crate::iterators::*;
+use crate::offset_table::F64Table;
 use crate::parser::ast::*;
 use crate::targets::*;
 use crate::types::*;
@@ -269,9 +270,10 @@ impl CodeGenSettings {
 }
 
 #[derive(Debug)]
-pub(crate) struct CodeGenerator {
+pub(crate) struct CodeGenerator<'f64_tbl> {
     marker: DebrayAllocator,
     settings: CodeGenSettings,
+    f64_tbl: &'f64_tbl F64Table,
     pub(crate) skeleton: PredicateSkeleton,
 }
 
@@ -323,7 +325,7 @@ trait AddToFreeList<'a, Target: CompilationTarget<'a>> {
     fn add_subterm_to_free_list(&mut self, term: &Term);
 }
 
-impl<'a> AddToFreeList<'a, FactInstruction> for CodeGenerator {
+impl<'a> AddToFreeList<'a, FactInstruction> for CodeGenerator<'_> {
     fn add_term_to_free_list(&mut self, r: RegType) {
         self.marker.add_reg_to_free_list(r);
     }
@@ -331,7 +333,7 @@ impl<'a> AddToFreeList<'a, FactInstruction> for CodeGenerator {
     fn add_subterm_to_free_list(&mut self, _term: &Term) {}
 }
 
-impl<'a> AddToFreeList<'a, QueryInstruction> for CodeGenerator {
+impl<'a> AddToFreeList<'a, QueryInstruction> for CodeGenerator<'_> {
     #[inline(always)]
     fn add_term_to_free_list(&mut self, _r: RegType) {}
 
@@ -353,11 +355,12 @@ fn structure_cell(term: &Term) -> Option<&Cell<RegType>> {
     }
 }
 
-impl CodeGenerator {
-    pub(crate) fn new(settings: CodeGenSettings) -> Self {
+impl<'f64_tbl> CodeGenerator<'f64_tbl> {
+    pub(crate) fn new(f64_tbl: &'f64_tbl F64Table, settings: CodeGenSettings) -> Self {
         CodeGenerator {
             marker: DebrayAllocator::new(),
             settings,
+            f64_tbl,
             skeleton: PredicateSkeleton::new(),
         }
     }
@@ -427,7 +430,7 @@ impl CodeGenerator {
     where
         Target: crate::targets::CompilationTarget<'a>,
         Iter: Iterator<Item = TermRef<'a>>,
-        CodeGenerator: AddToFreeList<'a, Target>,
+        CodeGenerator<'f64_tbl>: AddToFreeList<'a, Target>,
     {
         let mut target = CodeDeque::new();
 
@@ -443,7 +446,7 @@ impl CodeGenerator {
                 }
                 TermRef::Clause(lvl, cell, name, terms) => {
                     let terms_range =
-                        if let Some(subterm @ Term::Literal(_, Literal::CodeIndex(_))) =
+                        if let Some(subterm @ Term::Literal(_, Literal::CodeIndexOffset(_))) =
                             terms.last()
                         {
                             self.subterm_to_instr::<Target>(subterm, context, &mut target);
@@ -666,7 +669,7 @@ impl CodeGenerator {
                 }
             },
             InlinedClauseType::IsFloat(..) => match terms[0] {
-                Term::Literal(_, Literal::Float(_)) => {
+                Term::Literal(_, Literal::F64Offset(_)) => {
                     instr!("$succeed")
                 }
                 Term::Var(ref vr, ref name) => {
@@ -687,7 +690,7 @@ impl CodeGenerator {
                 }
             },
             InlinedClauseType::IsNumber(..) => match terms[0] {
-                Term::Literal(_, Literal::Float(_))
+                Term::Literal(_, Literal::F64Offset(_))
                 | Term::Literal(_, Literal::Rational(_))
                 | Term::Literal(_, Literal::Integer(_))
                 | Term::Literal(_, Literal::Fixnum(_)) => {
@@ -791,7 +794,7 @@ impl CodeGenerator {
         term_loc: GenContext,
         arg: usize,
     ) -> Result<ArithCont, ArithmeticError> {
-        let mut evaluator = ArithmeticEvaluator::new(&mut self.marker, target_int);
+        let mut evaluator = ArithmeticEvaluator::new(&mut self.marker, self.f64_tbl, target_int);
         evaluator.compile_is(term, term_loc, arg)
     }
 
@@ -861,7 +864,7 @@ impl CodeGenerator {
             Term::Literal(
                 _,
                 c @ Literal::Integer(_)
-                | c @ Literal::Float(_)
+                | c @ Literal::F64Offset(_)
                 | c @ Literal::Rational(_)
                 | c @ Literal::Fixnum(_),
             ) => {

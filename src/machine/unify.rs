@@ -216,7 +216,9 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
             return;
         }
 
-        match Number::try_from(value) {
+        let machine_st = self.deref();
+
+        match Number::try_from((value, &machine_st.arena.f64_tbl)) {
             Ok(n2) => match n2 {
                 Number::Fixnum(n2) if n1.get_num() == n2.get_num() => {}
                 Number::Integer(n2) if (*n2).num_eq(&n1.get_num()) => {}
@@ -237,7 +239,9 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
             return;
         }
 
-        match Number::try_from(value) {
+        let machine_st = self.deref();
+
+        match Number::try_from((value, &machine_st.arena.f64_tbl)) {
             Ok(n2) => match n2 {
                 Number::Fixnum(n2) if (*n1).num_eq(&n2.get_num()) => {}
                 Number::Integer(n2) if (*n1).num_eq(&*n2) => {}
@@ -258,7 +262,9 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
             return;
         }
 
-        match Number::try_from(value) {
+        let machine_st = self.deref_mut();
+
+        match Number::try_from((value, &machine_st.arena.f64_tbl)) {
             Ok(n2) => match n2 {
                 Number::Fixnum(n2) if (*n1).num_eq(&Integer::from(n2.get_num())) => {}
                 Number::Integer(n2) if (*n1).num_eq(&*n2) => {}
@@ -273,14 +279,19 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
         }
     }
 
-    fn unify_f64(&mut self, f1: F64Ptr, value: HeapCellValue) {
+    fn unify_f64(&mut self, f1: F64Offset, value: HeapCellValue) {
         if let Some(r) = value.as_var() {
             Self::bind(self, r, HeapCellValue::from(f1));
             return;
         }
 
         read_heap_cell!(value,
-            (HeapCellValueTag::F64, f2) => {
+            (HeapCellValueTag::F64Offset, f2) => {
+                let machine_st = self.deref_mut();
+
+                let f1 = machine_st.arena.f64_tbl.lookup(f1);
+                let f2 = machine_st.arena.f64_tbl.lookup(f2.into());
+
                 self.fail = **f1 != **f2;
             }
             _ => {
@@ -414,17 +425,12 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                             tabu_list.insert((d1, d2));
                         }
                     }
-                    (HeapCellValueTag::F64, f1) => {
+                    (HeapCellValueTag::F64Offset, f1) => {
                         Self::unify_f64(self, f1, d2);
                     }
                     (HeapCellValueTag::Fixnum, n1) => {
                         Self::unify_fixnum(self, n1, d2);
                     }
-                    /*
-                    (HeapCellValueTag::Char, c1) => {
-                        Self::unify_char(self, c1, d2);
-                    }
-                    */
                     (HeapCellValueTag::Cons, ptr_1) => {
                         Self::unify_constant(self, ptr_1, d2);
                     }

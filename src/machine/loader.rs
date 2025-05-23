@@ -720,7 +720,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         self.wam_prelude.indices.modules.get_mut(&module_name)
                     {
                         if let Some(code_idx) = module.code_dir.get_mut(&key) {
-                            code_idx.set(old_code_idx)
+                            let code_index_tbl =
+                                &mut LS::machine_st(&mut self.payload).arena.code_index_tbl;
+                            code_idx.set(code_index_tbl, old_code_idx);
                         }
                     }
                 }
@@ -741,7 +743,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 }
                 RetractionRecord::ReplacedUserPredicate(key, old_code_idx) => {
                     if let Some(code_idx) = self.wam_prelude.indices.code_dir.get_mut(&key) {
-                        code_idx.set(old_code_idx)
+                        let code_index_tbl =
+                            &mut LS::machine_st(&mut self.payload).arena.code_index_tbl;
+                        code_idx.set(code_index_tbl, old_code_idx)
                     }
                 }
                 RetractionRecord::AddedIndex(index_key, clause_loc) => {
@@ -1217,14 +1221,18 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
          * but to multifile and discontiguous predicates as well.
          */
 
-        let code_index = self.get_or_insert_code_index(key, compilation_target);
+        let offset = self.get_or_insert_code_index(key, compilation_target);
+        let code_idx_ptr = LS::machine_st(&mut self.payload)
+            .arena
+            .code_index_tbl
+            .lookup_mut(offset.into());
 
-        if code_index.as_ptr().is_undefined() {
-            set_code_index(
-                &mut self.payload.retraction_info,
+        if code_idx_ptr.is_undefined() {
+            set_code_index::<LS>(
+                &mut self.payload,
                 &compilation_target,
                 key,
-                code_index,
+                offset,
                 IndexPtr::dynamic_undefined(),
             );
         }
@@ -1395,7 +1403,7 @@ impl MachineState {
                         Err(cons_term) => term_stack.push(cons_term),
                     }
                 }
-                (HeapCellValueTag::Cons | HeapCellValueTag::Fixnum | HeapCellValueTag::F64) => {
+                (HeapCellValueTag::Cons | HeapCellValueTag::Fixnum | HeapCellValueTag::F64Offset) => {
                     term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
                 }
                 (HeapCellValueTag::StackVar, h) => {
@@ -1410,7 +1418,7 @@ impl MachineState {
                     let value = iter.heap[h.saturating_sub(1)];
 
                     if let Some(idx) = get_structure_index(value) {
-                        term_stack.push(Term::Literal(Cell::default(), Literal::CodeIndex(idx)));
+                        term_stack.push(Term::Literal(Cell::default(), Literal::CodeIndexOffset(idx.into())));
                         arity += 1;
                     }
 
@@ -1588,7 +1596,7 @@ impl Machine {
         let predicate_name = cell_as_atom!(self.deref_register(2));
 
         let arity = self.deref_register(3);
-        let arity = match Number::try_from(arity) {
+        let arity = match Number::try_from((arity, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Integer(n)) if *n >= Integer::ZERO && *n <= Integer::from(MAX_ARITY) => {
                 let value: usize = (&*n).try_into().unwrap();
                 Ok(value)
@@ -1999,7 +2007,15 @@ impl Machine {
                     .wam_prelude
                     .indices
                     .get_predicate_code_index(name, arity, module_name)
-                    .map(|code_idx| code_idx.get_tag())
+                    .map(|offset| {
+                        loader
+                            .payload
+                            .machine_st
+                            .arena
+                            .code_index_tbl
+                            .lookup(offset.into())
+                            .tag()
+                    })
                     .unwrap_or(IndexPtrTag::DynamicUndefined);
 
                 if idx_tag == IndexPtrTag::Index {
@@ -2142,9 +2158,15 @@ impl Machine {
                 .indices
                 .remove_predicate_skeleton(&compilation_target, &key);
 
-            let mut code_index = loader.get_or_insert_code_index(key, compilation_target);
+            let offset = loader.get_or_insert_code_index(key, compilation_target);
+            let mut code_idx = loader
+                .payload
+                .machine_st
+                .arena
+                .code_index_tbl
+                .lookup_mut(offset.into());
 
-            code_index.set(IndexPtr::undefined());
+            code_idx.set(IndexPtr::undefined());
 
             loader.payload.compilation_target = clause_clause_compilation_target;
 
@@ -2174,7 +2196,7 @@ impl Machine {
             .machine_st
             .store(self.machine_st.deref(self.machine_st[temp_v!(3)]));
 
-        let target_pos = match Number::try_from(target_pos) {
+        let target_pos = match Number::try_from((target_pos, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
                 value

@@ -56,6 +56,7 @@ impl MockWAM {
         let mut printer = HCPrinter::new(
             &mut self.machine_st.heap,
             &mut self.machine_st.stack,
+            &mut self.machine_st.arena,
             &self.op_dir,
             PrinterOutputter::new(),
             term_write_result.heap_loc,

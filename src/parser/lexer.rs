@@ -1,6 +1,7 @@
 use crate::arena::*;
 use crate::atom_table::*;
 pub use crate::machine::machine_state::*;
+use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
@@ -29,7 +30,7 @@ struct LayoutInfo {
     more: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum Token {
     Literal(Literal),
     Var(String),
@@ -645,10 +646,9 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
         let n = parse_float_lossy(&token)?;
 
-        Ok(Token::Literal(Literal::from(float_alloc!(
-            n,
-            self.machine_st.arena
-        ))))
+        Ok(Token::Literal(Literal::F64Offset(
+            self.machine_st.arena.f64_tbl.build_with(OrderedFloat(n)),
+        )))
     }
 
     fn skip_underscore_in_number(&mut self) -> Result<char, ParserError> {
@@ -763,19 +763,18 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         }
 
                         let n = parse_float_lossy(&token)?;
-                        Ok(Token::Literal(Literal::from(float_alloc!(
-                            n,
-                            self.machine_st.arena
-                        ))))
+
+                        Ok(Token::Literal(Literal::F64Offset(
+                            self.machine_st.arena.f64_tbl.build_with(OrderedFloat(n)),
+                        )))
                     } else {
                         return self.vacate_with_float(token);
                     }
                 } else {
                     let n = parse_float_lossy(&token)?;
-                    Ok(Token::Literal(Literal::from(float_alloc!(
-                        n,
-                        self.machine_st.arena
-                    ))))
+                    Ok(Token::Literal(Literal::F64Offset(
+                        self.machine_st.arena.f64_tbl.build_with(OrderedFloat(n)),
+                    )))
                 }
             } else {
                 self.return_char('.');
