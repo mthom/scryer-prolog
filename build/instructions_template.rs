@@ -2698,7 +2698,7 @@ pub fn generate_instructions_rs() -> TokenStream {
 
         if ident == "Named" {
             clause_type_from_name_and_arity_arms.push(quote! {
-                (name, arity) => ClauseType::Named(arity, name, CodeIndex::default(arena))
+                (name, arity) => ClauseType::Named(arity, name, CodeIndex::default(&mut arena.code_index_tbl))
             });
 
             clause_type_to_instr_arms.push(quote! {

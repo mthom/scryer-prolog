@@ -3,11 +3,10 @@ use dashu::Rational;
 
 use crate::arena::*;
 use crate::atom_table::*;
+use crate::offset_table::OffsetTable;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::lexer::*;
-
-use ordered_float::OrderedFloat;
 
 use std::cell::Cell;
 use std::mem;
@@ -963,17 +962,21 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::Literal(Literal::Rational(n)) => {
                 self.negate_number(n, negate_rat_rc, |r, _| Literal::Rational(r))
             }
-	    Token::Literal(Literal::Float(n)) if n.as_ptr().is_infinite() => {
+	    Token::Literal(Literal::F64Offset(n)) if self.lexer.machine_st.arena.f64_tbl.lookup(n).is_infinite() => {
 		return Err(ParserError::InfiniteFloat(
 		    self.lexer.line_num,
 		    self.lexer.col_num,
 		));
 	    }
-            Token::Literal(Literal::Float(n)) => self.negate_number(
-                **n.as_ptr(),
-                |n, _| -n,
-                |n, arena| Literal::from(float_alloc!(n, arena)),
-            ),
+            Token::Literal(Literal::F64Offset(n)) => {
+                let n = *self.lexer.machine_st.arena.f64_tbl.lookup(n);
+
+                self.negate_number(
+                    n,
+                    |n, _| -n,
+                    |n, arena| Literal::F64Offset(arena.f64_tbl.build_with(n)),
+                )
+            }
             Token::Literal(Literal::Fixnum(n)) => {
                 self.negate_number(n, |n, _| -n, |n, _| Literal::Fixnum(n))
             }

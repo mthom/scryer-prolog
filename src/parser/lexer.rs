@@ -1,7 +1,7 @@
 use crate::arena::*;
 use crate::atom_table::*;
 pub use crate::machine::machine_state::*;
-use crate::offset_table::F64Ptr;
+use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
@@ -30,7 +30,7 @@ struct LayoutInfo {
     more: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum Token {
     Literal(Literal),
     Var(String),
@@ -58,7 +58,7 @@ impl Token {
 enum Number {
     BigInt(TypedArenaPtr<Integer>),
     Fixnum(Fixnum),
-    Float(F64Ptr),
+    Float(F64Offset),
 }
 
 impl Number {
@@ -67,7 +67,7 @@ impl Number {
         match self {
             Number::BigInt(ibig) => Literal::Integer(ibig),
             Number::Fixnum(fixnum) => Literal::Fixnum(fixnum),
-            Number::Float(f) => Literal::Float(f.as_offset()),
+            Number::Float(f) => Literal::F64Offset(f),
         }
     }
 }
@@ -944,8 +944,8 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 Ok(n) => Ok(Token::Literal(n.to_literal())),
                 Err(_) => {
                     let n = parse_float_lossy(&token_string)?;
-                    Ok(Token::Literal(Literal::Float(
-                        float_alloc!(n, self.machine_st.arena).as_offset(),
+                    Ok(Token::Literal(Literal::F64Offset(
+                        float_alloc!(n, self.machine_st.arena),
                     )))
                 }
             },

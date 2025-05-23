@@ -21,7 +21,6 @@ use std::ops::{Deref, DerefMut};
 use std::ptr;
 use std::ptr::addr_of_mut;
 use std::ptr::NonNull;
-use std::sync::Arc;
 
 macro_rules! arena_alloc {
     ($e:expr, $arena:expr) => {{
@@ -32,8 +31,7 @@ macro_rules! arena_alloc {
 
 macro_rules! float_alloc {
     ($e:expr, $arena:expr) => {{
-        let result = $e;
-        unsafe { $arena.f64_tbl.build_with(OrderedFloat(result)).as_ptr() }
+        $arena.f64_tbl.build_with(OrderedFloat($e))
     }};
 }
 
@@ -458,8 +456,8 @@ impl Drop for UntypedArenaSlab {
 #[derive(Debug)]
 pub struct Arena {
     base: Option<UntypedArenaSlab>,
-    pub f64_tbl: Arc<F64Table>,
-    pub code_index_tbl: Arc<CodeIndexTable>,
+    pub f64_tbl: F64Table,
+    pub code_index_tbl: CodeIndexTable,
 }
 
 unsafe impl Send for Arena {}
@@ -584,23 +582,27 @@ mod tests {
 
     #[test]
     fn float_ptr_cast() {
-        let wam = MockWAM::new();
+        let mut wam = MockWAM::new();
 
         let f = 0f64;
         let fp = float_alloc!(f, wam.machine_st.arena);
-        let mut cell = HeapCellValue::from(fp.clone());
+        let mut cell = HeapCellValue::from(fp);
 
-        assert_eq!(cell.get_tag(), HeapCellValueTag::F64);
+        assert_eq!(cell.get_tag(), HeapCellValueTag::F64Offset);
         assert!(!cell.get_mark_bit());
-        assert_eq!(fp.deref(), &OrderedFloat(f));
+        assert_eq!(
+            wam.machine_st.arena.f64_tbl.lookup(fp).deref(),
+            &OrderedFloat(f)
+        );
 
         cell.set_mark_bit(true);
 
         assert!(cell.get_mark_bit());
 
         read_heap_cell!(cell,
-            (HeapCellValueTag::F64, ptr) => {
-                assert_eq!(OrderedFloat(*ptr), OrderedFloat(f))
+            (HeapCellValueTag::F64Offset, offset) => {
+                let fp = wam.machine_st.arena.f64_tbl.lookup(offset.into());
+                assert_eq!(*fp, OrderedFloat(0f64))
             }
             _ => { unreachable!() }
         );
@@ -825,7 +827,7 @@ mod tests {
         let float_ptr = float_alloc!(float, wam.machine_st.arena);
         let cell = HeapCellValue::from(float_ptr);
 
-        assert_eq!(cell.get_tag(), HeapCellValueTag::F64);
+        assert_eq!(cell.get_tag(), HeapCellValueTag::F64Offset);
 
         // char
 
