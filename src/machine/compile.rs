@@ -700,31 +700,25 @@ fn remove_non_leading_clause(
     }
 }
 
-fn finalize_retract(
+fn finalize_retract<'a, LS: LoadState<'a>>(
+    payload: &mut <LS as LoadState<'a>>::LoaderFieldType,
     key: PredicateKey,
     compilation_target: CompilationTarget,
     skeleton: &mut PredicateSkeleton,
     code_index: CodeIndex,
     target_pos: usize,
     index_ptr_opt: Option<IndexPtr>,
-    retraction_info: &mut RetractionInfo,
 ) -> usize {
     let clause_clause_loc = delete_from_skeleton(
         compilation_target,
         key,
         skeleton,
         target_pos,
-        retraction_info,
+        &mut payload.retraction_info,
     );
 
     if let Some(index_ptr) = index_ptr_opt {
-        set_code_index(
-            retraction_info,
-            &compilation_target,
-            key,
-            code_index,
-            index_ptr,
-        );
+        set_code_index::<LS>(payload, &compilation_target, key, code_index, index_ptr);
     }
 
     clause_clause_loc
@@ -1239,7 +1233,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let mut preprocessor = Preprocessor::new(settings);
         let clause = preprocessor.try_term_to_tl(self, term)?;
 
-        let mut cg = CodeGenerator::new(settings);
+        let f64_tbl = &LS::machine_st(&mut self.payload).arena.f64_tbl;
+
+        let mut cg = CodeGenerator::new(f64_tbl, settings);
         let clause_code = cg.compile_predicate(vec![clause])?;
 
         Ok(StandaloneCompileResult {
@@ -1254,7 +1250,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         mut predicates: PredicateQueue,
         settings: CodeGenSettings,
     ) -> Result<CodeIndex, SessionError> {
-        let code_index = self.get_or_insert_code_index(key, predicates.compilation_target);
+        let code_idx = self.get_or_insert_code_index(key, predicates.compilation_target);
 
         LS::err_on_builtin_overwrite(self, key)?;
 
@@ -1268,7 +1264,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             clauses.push(preprocessor.try_term_to_tl(self, term)?);
         }
 
-        let mut cg = CodeGenerator::new(settings);
+        let f64_tbl = &LS::machine_st(&mut self.payload).arena.f64_tbl;
+
+        let mut cg = CodeGenerator::new(f64_tbl, settings);
         let mut code = cg.compile_predicate(clauses)?;
 
         if settings.is_extensible {
@@ -1327,9 +1325,14 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             );
         }
 
+        let index_ptr = LS::machine_st(&mut self.payload)
+            .arena
+            .code_index_tbl
+            .lookup(code_idx.into());
+
         print_overwrite_warning(
             &predicates.compilation_target,
-            code_index.get(),
+            *index_ptr,
             key,
             settings.is_dynamic(),
         );
@@ -1340,16 +1343,16 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             IndexPtr::index(code_ptr)
         };
 
-        set_code_index(
-            &mut self.payload.retraction_info,
+        set_code_index::<LS>(
+            &mut self.payload,
             &predicates.compilation_target,
             key,
-            code_index,
+            code_idx,
             index_ptr,
         );
 
         self.wam_prelude.code.extend(code);
-        Ok(code_index)
+        Ok(code_idx)
     }
 
     fn extend_local_predicate_skeleton(
@@ -1551,19 +1554,19 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
                 self.push_back_to_local_predicate_skeleton(&compilation_target, &key, code_len);
 
-                let code_index = self.get_or_insert_code_index(key, compilation_target);
+                let code_idx = self.get_or_insert_code_index(key, compilation_target);
 
                 if let Some(new_code_ptr) = result {
-                    set_code_index(
-                        &mut self.payload.retraction_info,
+                    set_code_index::<LS>(
+                        &mut self.payload,
                         &compilation_target,
                         key,
-                        code_index,
+                        code_idx,
                         new_code_ptr,
                     );
                 }
 
-                Ok(code_index)
+                Ok(code_idx)
             }
             AppendOrPrepend::Prepend => {
                 let clause_index_info = standalone_skeleton.clauses.pop_back().unwrap();
@@ -1593,17 +1596,17 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
                 self.push_front_to_local_predicate_skeleton(&compilation_target, &key, code_len);
 
-                let code_index = self.get_or_insert_code_index(key, compilation_target);
+                let code_idx = self.get_or_insert_code_index(key, compilation_target);
 
-                set_code_index(
-                    &mut self.payload.retraction_info,
+                set_code_index::<LS>(
+                    &mut self.payload,
                     &compilation_target,
                     key,
-                    code_index,
+                    code_idx,
                     new_code_ptr,
                 );
 
-                Ok(code_index)
+                Ok(code_idx)
             }
         }
     }
@@ -1651,7 +1654,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
     pub(super) fn retract_clause(&mut self, key: PredicateKey, target_pos: usize) -> usize {
         let payload_compilation_target = self.payload.compilation_target;
-        let code_index = self.get_or_insert_code_index(key, payload_compilation_target);
+        let code_idx_offset = self.get_or_insert_code_index(key, payload_compilation_target);
 
         let skeleton = self
             .wam_prelude
@@ -1729,14 +1732,14 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             None
                         };
 
-                        return finalize_retract(
+                        return finalize_retract::<LS>(
+                            &mut self.payload,
                             key,
                             payload_compilation_target,
                             skeleton,
-                            code_index,
+                            code_idx_offset,
                             target_pos,
                             index_ptr_opt,
-                            &mut self.payload.retraction_info,
                         );
                     }
                     None => {
@@ -1758,14 +1761,14 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             )
                         };
 
-                        return finalize_retract(
+                        return finalize_retract::<LS>(
+                            &mut self.payload,
                             key,
                             payload_compilation_target,
                             skeleton,
-                            code_index,
+                            code_idx_offset,
                             target_pos,
                             index_ptr_opt,
-                            &mut self.payload.retraction_info,
                         );
                     }
                 }
@@ -1988,14 +1991,14 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             }
         };
 
-        finalize_retract(
+        finalize_retract::<LS>(
+            &mut self.payload,
             key,
             payload_compilation_target,
             skeleton,
-            code_index,
+            code_idx_offset,
             target_pos,
             index_ptr_opt,
-            &mut self.payload.retraction_info,
         )
     }
 }
@@ -2222,18 +2225,23 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             };
 
             let predicates = self.payload.predicates.take();
-            let code_index = self.compile(key, predicates, settings)?;
+            let offset = self.compile(key, predicates, settings)?;
 
             if let Some(filename) = self.listing_src_file_name() {
                 if let Some(ref mut module) = self.wam_prelude.indices.modules.get_mut(&filename) {
-                    let index_ptr = code_index.get();
-                    let code_index = *module.code_dir.entry(key).or_insert(code_index);
+                    let code_idx = LS::machine_st(&mut self.payload)
+                        .arena
+                        .code_index_tbl
+                        .lookup_mut(offset.into());
 
-                    set_code_index(
-                        &mut self.payload.retraction_info,
+                    let index_ptr = *code_idx;
+                    let offset = *module.code_dir.entry(key).or_insert(offset);
+
+                    set_code_index::<LS>(
+                        &mut self.payload,
                         &CompilationTarget::Module(filename),
                         key,
-                        code_index,
+                        offset,
                         index_ptr,
                     );
                 }

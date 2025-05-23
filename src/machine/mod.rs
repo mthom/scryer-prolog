@@ -234,8 +234,8 @@ pub(crate) fn import_builtin_impls(code_dir: &CodeDir, builtins: &mut Module) {
 #[inline]
 pub(crate) fn get_structure_index(value: HeapCellValue) -> Option<CodeIndex> {
     read_heap_cell!(value,
-        (HeapCellValueTag::CodeIndex, ip) => {
-            return Some(ip);
+        (HeapCellValueTag::CodeIndexOffset, offset) => {
+            return Some(CodeIndex::from(offset));
         }
         _ => {
         }
@@ -268,7 +268,7 @@ impl Machine {
     }
 
     /// Runs the predicate `key` in `module_name` until completion.
-    /// Siltently ignores failure, thrown errors and choice points.
+    /// Silently ignores failure, thrown errors and choice points.
     ///
     /// Consider using [`Machine::run_query`] if you wish to handle
     /// predicates that may fail, leave a choice point or throw.
@@ -278,8 +278,10 @@ impl Machine {
         key: PredicateKey,
     ) -> std::process::ExitCode {
         if let Some(module) = self.indices.modules.get(&module_name) {
-            if let Some(code_index) = module.code_dir.get(&key) {
-                let p = code_index.local().unwrap();
+            if let Some(code_idx) = module.code_dir.get(&key) {
+                let index_ptr = self.machine_st.arena.code_index_tbl.lookup(code_idx.into());
+                let p = index_ptr.local().unwrap();
+
                 // Leave a halting choice point to backtrack to in case the predicate fails or throws.
                 self.allocate_stub_choice_point();
 
@@ -350,8 +352,9 @@ impl Machine {
         self.load_file(path_buf.to_str().unwrap(), stream);
 
         if let Some(module) = self.indices.modules.get(&atom!("$atts")) {
-            if let Some(code_index) = module.code_dir.get(&(atom!("driver"), 2)) {
-                self.machine_st.attr_var_init.verify_attrs_loc = code_index.local().unwrap();
+            if let Some(code_idx) = module.code_dir.get(&(atom!("driver"), 2)) {
+                let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(code_idx.into());
+                self.machine_st.attr_var_init.verify_attrs_loc = index_ptr.local().unwrap();
             }
         }
     }
@@ -365,13 +368,16 @@ impl Machine {
             for arity in 1..66 {
                 let key = (atom!("call"), arity);
 
-                match loader.code_dir.get(&key) {
+                match loader.code_dir.get(&key).cloned() {
                     Some(src_code_index) => {
-                        let target_code_index = target_code_dir
-                            .entry(key)
-                            .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), arena));
+                        let code_index_tbl = &mut arena.code_index_tbl;
 
-                        target_code_index.set(src_code_index.get());
+                        let target_code_index = target_code_dir.entry(key).or_insert_with(|| {
+                            CodeIndex::new(IndexPtr::undefined(), code_index_tbl)
+                        });
+
+                        let src_code_ptr = *code_index_tbl.lookup(src_code_index.into());
+                        target_code_index.set(code_index_tbl, src_code_ptr);
                     }
                     None => {
                         unreachable!();
@@ -480,7 +486,7 @@ impl Machine {
                 key,
                 CodeIndex::new(
                     IndexPtr::index(p + impls_offset),
-                    &mut self.machine_st.arena,
+                    &mut self.machine_st.arena.code_index_tbl,
                 ),
             );
         }
@@ -561,37 +567,8 @@ impl Machine {
 
                     if cell.is_var() {
                         offset += 1;
-                    /*
-                    } else if lit.get_tag() == HeapCellValueTag::CStr {
-                        read_heap_cell!(cell,
-                            (HeapCellValueTag::CStr) => {
-                                if cell == lit {
-                                    offset += 1;
-                                } else {
-                                    return false;
-                                }
-                            }
-                            (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc) => {
-                                offset += 1;
-                            }
-                            (HeapCellValueTag::Str, s) => {
-                                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
-                                    .get_name_and_arity();
-
-                                if name == atom!(".") && arity == 2 {
-                                    offset += 1;
-                                } else {
-                                    return false;
-                                }
-                            }
-                            _ => {
-                                return false;
-                            }
-                        );
-                    */
                     } else {
                         unify!(self.machine_st, cell, lit);
-                        // self.machine_st.write_literal_to_var(cell, lit);
 
                         if self.machine_st.fail {
                             self.machine_st.fail = false;
@@ -1094,13 +1071,15 @@ impl Machine {
 
         if module_name == atom!("user") {
             if let Some(idx) = self.indices.code_dir.get(&(name, arity)).cloned() {
-                self.try_call(name, arity, idx.get())
+                let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                self.try_call(name, arity, index_ptr)
             } else {
                 Err(self.machine_st.throw_undefined_error(name, arity))
             }
         } else if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
-                self.try_call(name, arity, idx.get())
+                let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                self.try_call(name, arity, index_ptr)
             } else {
                 self.undefined_procedure(name, arity)
             }
@@ -1124,13 +1103,15 @@ impl Machine {
 
         if module_name == atom!("user") {
             if let Some(idx) = self.indices.code_dir.get(&(name, arity)).cloned() {
-                self.try_execute(name, arity, idx.get())
+                let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                self.try_execute(name, arity, index_ptr)
             } else {
                 self.undefined_procedure(name, arity)
             }
         } else if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
-                self.try_execute(name, arity, idx.get())
+                let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                self.try_execute(name, arity, index_ptr)
             } else {
                 self.undefined_procedure(name, arity)
             }
@@ -1172,12 +1153,24 @@ impl Machine {
             let r_c_w_h = self
                 .indices
                 .get_predicate_code_index(r_c_w_h_atom, 0, iso_ext)
-                .and_then(|item| item.local())
+                .and_then(|code_idx| {
+                    self.machine_st
+                        .arena
+                        .code_index_tbl
+                        .lookup(code_idx.into())
+                        .local()
+                })
                 .unwrap();
             let r_c_wo_h = self
                 .indices
                 .get_predicate_code_index(r_c_wo_h_atom, 1, iso_ext)
-                .and_then(|item| item.local())
+                .and_then(|code_idx| {
+                    self.machine_st
+                        .arena
+                        .code_index_tbl
+                        .lookup(code_idx.into())
+                        .local()
+                })
                 .unwrap();
             (r_c_w_h, r_c_wo_h)
         });

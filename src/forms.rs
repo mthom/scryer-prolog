@@ -6,6 +6,7 @@ use crate::machine::disjuncts::VarData;
 use crate::machine::loader::PredicateQueue;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
+use crate::offset_table::OffsetTable;
 use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
 use crate::parser::parser::CompositeOpDesc;
@@ -742,7 +743,7 @@ impl ArenaFrom<Number> for HeapCellValue {
         match value {
             Number::Fixnum(n) => fixnum_as_cell!(n),
             Number::Integer(n) => typed_arena_ptr_as_cell!(n),
-            Number::Float(OrderedFloat(n)) => HeapCellValue::from(float_alloc!(n, arena)),
+            Number::Float(n) => HeapCellValue::from(arena.f64_tbl.build_with(n)),
             Number::Rational(n) => typed_arena_ptr_as_cell!(n),
         }
     }

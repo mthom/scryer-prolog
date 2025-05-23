@@ -424,7 +424,7 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
 
                 let term = match term {
                     Term::Clause(cell, name, mut terms) => {
-                        if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
+                        if let Some(Term::Literal(_, Literal::CodeIndexOffset(_))) = terms.last() {
                             arg_terms
                                 .push(process_term(module_name, Term::Clause(cell, name, terms)));
 
@@ -433,7 +433,10 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
 
                         let idx = loader.get_or_insert_qualified_code_index(module_name, key);
 
-                        terms.push(Term::Literal(Cell::default(), Literal::CodeIndex(idx)));
+                        terms.push(Term::Literal(
+                            Cell::default(),
+                            Literal::CodeIndexOffset(idx.into()),
+                        ));
                         process_term(module_name, Term::Clause(cell, name, terms))
                     }
                     Term::Literal(cell, Literal::Atom(name)) => {
@@ -444,7 +447,10 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
                             Term::Clause(
                                 cell,
                                 name,
-                                vec![Term::Literal(Cell::default(), Literal::CodeIndex(idx))],
+                                vec![Term::Literal(
+                                    Cell::default(),
+                                    Literal::CodeIndexOffset(idx.into()),
+                                )],
                             ),
                         )
                     }
@@ -469,7 +475,7 @@ pub(super) fn clause_to_query_term<'a, LS: LoadState<'a>>(
     mut terms: Vec<Term>,
     call_policy: CallPolicy,
 ) -> QueryTerm {
-    if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
+    if let Some(Term::Literal(_, Literal::CodeIndexOffset(_))) = terms.last() {
         // supplementary code vector indices are unnecessary for
         // root-level clauses.
         terms.pop();
@@ -504,7 +510,7 @@ pub(super) fn qualified_clause_to_query_term<'a, LS: LoadState<'a>>(
     mut terms: Vec<Term>,
     call_policy: CallPolicy,
 ) -> QueryTerm {
-    if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
+    if let Some(Term::Literal(_, Literal::CodeIndexOffset(_))) = terms.last() {
         // supplementary code vector indices are unnecessary for
         // root-level clauses.
         terms.pop();
