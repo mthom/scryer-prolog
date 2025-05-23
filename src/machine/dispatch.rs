@@ -232,13 +232,11 @@ impl MachineState {
             }
             (HeapCellValueTag::PStrLoc |
              HeapCellValueTag::Lis) => {
-             // HeapCellValueTag::CStr) => {
                 l
             }
             (HeapCellValueTag::Fixnum |
              HeapCellValueTag::CutPoint |
-             // HeapCellValueTag::Char |
-             HeapCellValueTag::F64) => {
+             HeapCellValueTag::F64Offset) => {
                 c
             }
             (HeapCellValueTag::Atom, (_name, arity)) => {
@@ -548,19 +546,33 @@ impl Machine {
                         let p = self.machine_st.p;
 
                         // Find the boundaries of the current predicate
-                        self.indices.code_dir.sort_by(|_, a, _, b| a.cmp(b));
+                        self.indices.code_dir.sort_by(|_, a, _, b| {
+                            let a = *self.machine_st.arena.code_index_tbl.lookup((*a).into());
+                            let b = *self.machine_st.arena.code_index_tbl.lookup((*b).into());
+
+                            a.cmp(&b)
+                        });
 
                         let predicate_idx = self
                             .indices
                             .code_dir
-                            .binary_search_by_key(&p, |_, x| x.get().p() as usize)
+                            .binary_search_by_key(&p, |_, x| -> usize {
+                                self.machine_st.arena.code_index_tbl.lookup((*x).into()).p()
+                                    as usize
+                            })
                             .unwrap_or_else(|x| x - 1);
 
                         let current_pred_start = self
                             .indices
                             .code_dir
                             .get_index(predicate_idx)
-                            .map(|x| x.1.as_ptr().p() as usize)
+                            .map(|idx| {
+                                self.machine_st
+                                    .arena
+                                    .code_index_tbl
+                                    .lookup((*idx.1).into())
+                                    .p() as usize
+                            })
                             .unwrap();
 
                         debug_assert!(current_pred_start <= p);
@@ -569,7 +581,13 @@ impl Machine {
                             .indices
                             .code_dir
                             .get_index(predicate_idx + 1)
-                            .map(|x| x.1.as_ptr().p() as usize)
+                            .map(|idx| {
+                                self.machine_st
+                                    .arena
+                                    .code_index_tbl
+                                    .lookup((*idx.1).into())
+                                    .p() as usize
+                            })
                             .unwrap_or(self.code.len());
 
                         debug_assert!(current_pred_end >= p);
@@ -2343,7 +2361,7 @@ impl Machine {
                             .store(self.machine_st.deref(self.machine_st[r]));
 
                         read_heap_cell!(d,
-                            (HeapCellValueTag::Fixnum | HeapCellValueTag::F64 |
+                            (HeapCellValueTag::Fixnum | HeapCellValueTag::F64Offset |
                              HeapCellValueTag::Cons) => {
                                 self.machine_st.p += 1;
                             }
@@ -2375,7 +2393,7 @@ impl Machine {
                             .store(self.machine_st.deref(self.machine_st[r]));
 
                         read_heap_cell!(d,
-                            (HeapCellValueTag::Fixnum | HeapCellValueTag::F64 |
+                            (HeapCellValueTag::Fixnum | HeapCellValueTag::F64Offset |
                              HeapCellValueTag::Cons) => {
                                 self.machine_st.p = self.machine_st.cp;
                             }
@@ -2472,7 +2490,7 @@ impl Machine {
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
 
-                        match Number::try_from(d) {
+                        match Number::try_from((d, &self.machine_st.arena.f64_tbl)) {
                             Ok(Number::Fixnum(_) | Number::Integer(_)) => {
                                 self.machine_st.p += 1;
                             }
@@ -2493,7 +2511,7 @@ impl Machine {
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
 
-                        match Number::try_from(d) {
+                        match Number::try_from((d, &self.machine_st.arena.f64_tbl)) {
                             Ok(Number::Fixnum(_) | Number::Integer(_)) => {
                                 self.machine_st.p = self.machine_st.cp;
                             }
@@ -2514,7 +2532,7 @@ impl Machine {
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
 
-                        match Number::try_from(d) {
+                        match Number::try_from((d, &self.machine_st.arena.f64_tbl)) {
                             Ok(_) => {
                                 self.machine_st.p += 1;
                             }
@@ -2528,7 +2546,7 @@ impl Machine {
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
 
-                        match Number::try_from(d) {
+                        match Number::try_from((d, &self.machine_st.arena.f64_tbl)) {
                             Ok(_) => {
                                 self.machine_st.p = self.machine_st.cp;
                             }
@@ -2590,7 +2608,7 @@ impl Machine {
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
 
-                        match Number::try_from(d) {
+                        match Number::try_from((d, &self.machine_st.arena.f64_tbl)) {
                             Ok(Number::Float(_)) => {
                                 self.machine_st.p += 1;
                             }
@@ -2604,7 +2622,7 @@ impl Machine {
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
 
-                        match Number::try_from(d) {
+                        match Number::try_from((d, &self.machine_st.arena.f64_tbl)) {
                             Ok(Number::Float(_)) => {
                                 self.machine_st.p = self.machine_st.cp;
                             }
@@ -2677,21 +2695,10 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallNamed(arity, name, ref idx) => {
-                        let idx = idx.get();
+                    &Instruction::CallNamed(arity, name, idx) => {
+                        let idx = self.machine_st.arena.code_index_tbl.lookup(idx.into());
 
-                        try_or_throw!(self.machine_st, self.try_call(name, arity, idx));
-
-                        if self.machine_st.fail {
-                            self.machine_st.backtrack();
-                        } else {
-                            increment_call_count!(self.machine_st);
-                        }
-                    }
-                    &Instruction::ExecuteNamed(arity, name, ref idx) => {
-                        let idx = idx.get();
-
-                        try_or_throw!(self.machine_st, self.try_execute(name, arity, idx));
+                        try_or_throw!(self.machine_st, self.try_call(name, arity, *idx));
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
@@ -2699,19 +2706,30 @@ impl Machine {
                             increment_call_count!(self.machine_st);
                         }
                     }
-                    &Instruction::DefaultCallNamed(arity, name, ref idx) => {
-                        let idx = idx.get();
+                    &Instruction::ExecuteNamed(arity, name, idx) => {
+                        let idx = self.machine_st.arena.code_index_tbl.lookup(idx.into());
 
-                        try_or_throw!(self.machine_st, self.try_call(name, arity, idx));
+                        try_or_throw!(self.machine_st, self.try_execute(name, arity, *idx));
+
+                        if self.machine_st.fail {
+                            self.machine_st.backtrack();
+                        } else {
+                            increment_call_count!(self.machine_st);
+                        }
+                    }
+                    &Instruction::DefaultCallNamed(arity, name, idx) => {
+                        let idx = self.machine_st.arena.code_index_tbl.lookup(idx.into());
+
+                        try_or_throw!(self.machine_st, self.try_call(name, arity, *idx));
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::DefaultExecuteNamed(arity, name, ref idx) => {
-                        let idx = idx.get();
+                    &Instruction::DefaultExecuteNamed(arity, name, idx) => {
+                        let idx = self.machine_st.arena.code_index_tbl.lookup(idx.into());
 
-                        try_or_throw!(self.machine_st, self.try_execute(name, arity, idx));
+                        try_or_throw!(self.machine_st, self.try_execute(name, arity, *idx));
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
@@ -5251,7 +5269,7 @@ impl Machine {
                         let l = self.machine_st.registers[3];
                         let l = self.machine_st.store(self.machine_st.deref(l));
 
-                        let l = match Number::try_from(l) {
+                        let l = match Number::try_from((l, &self.machine_st.arena.f64_tbl)) {
                             Ok(Number::Fixnum(l)) => l.get_num() as usize,
                             _ => unreachable!(),
                         };
@@ -5259,7 +5277,7 @@ impl Machine {
                         let p = self.machine_st.registers[4];
                         let p = self.machine_st.store(self.machine_st.deref(p));
 
-                        let p = match Number::try_from(p) {
+                        let p = match Number::try_from((p, &self.machine_st.arena.f64_tbl)) {
                             Ok(Number::Fixnum(p)) => p.get_num() as usize,
                             _ => unreachable!(),
                         };
@@ -5297,7 +5315,7 @@ impl Machine {
                         let l = self.machine_st.registers[3];
                         let l = self.machine_st.store(self.machine_st.deref(l));
 
-                        let l = match Number::try_from(l) {
+                        let l = match Number::try_from((l, &self.machine_st.arena.f64_tbl)) {
                             Ok(Number::Fixnum(l)) => l.get_num() as usize,
                             _ => unreachable!(),
                         };
@@ -5305,7 +5323,7 @@ impl Machine {
                         let p = self.machine_st.registers[4];
                         let p = self.machine_st.store(self.machine_st.deref(p));
 
-                        let p = match Number::try_from(p) {
+                        let p = match Number::try_from((p, &self.machine_st.arena.f64_tbl)) {
                             Ok(Number::Fixnum(p)) => p.get_num() as usize,
                             _ => unreachable!(),
                         };

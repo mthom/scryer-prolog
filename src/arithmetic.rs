@@ -138,6 +138,7 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
 #[derive(Debug)]
 pub(crate) struct ArithmeticEvaluator<'a> {
     marker: &'a mut DebrayAllocator,
+    f64_tbl: &'a F64Table,
     interm: Vec<ArithmeticTerm>,
     interm_c: usize,
 }
@@ -156,11 +157,18 @@ impl<'a> ArithmeticTermIter<'a> for &'a Term {
     }
 }
 
-fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), ArithmeticError> {
+fn push_literal(
+    f64_tbl: &F64Table,
+    interm: &mut Vec<ArithmeticTerm>,
+    c: &Literal,
+) -> Result<(), ArithmeticError> {
     match c {
         Literal::Fixnum(n) => interm.push(ArithmeticTerm::Number(Number::Fixnum(*n))),
         Literal::Integer(n) => interm.push(ArithmeticTerm::Number(Number::Integer(*n))),
-        Literal::Float(n) => interm.push(ArithmeticTerm::Number(Number::Float(*n.as_ptr()))),
+        &Literal::F64Offset(offset) => {
+            let n = *f64_tbl.lookup(offset);
+            interm.push(ArithmeticTerm::Number(Number::Float(n)));
+        }
         Literal::Rational(n) => interm.push(ArithmeticTerm::Number(Number::Rational(*n))),
         Literal::Atom(name) if name == &atom!("e") => interm.push(ArithmeticTerm::Number(
             Number::Float(OrderedFloat(std::f64::consts::E)),
@@ -178,9 +186,14 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), Ari
 }
 
 impl<'a> ArithmeticEvaluator<'a> {
-    pub(crate) fn new(marker: &'a mut DebrayAllocator, target_int: usize) -> Self {
+    pub(crate) fn new(
+        marker: &'a mut DebrayAllocator,
+        f64_tbl: &'a F64Table,
+        target_int: usize,
+    ) -> Self {
         ArithmeticEvaluator {
             marker,
+            f64_tbl,
             interm: Vec::new(),
             interm_c: target_int,
         }
@@ -318,7 +331,7 @@ impl<'a> ArithmeticEvaluator<'a> {
 
         for term_ref in src.iter()? {
             match term_ref? {
-                ArithTermRef::Literal(c) => push_literal(&mut self.interm, &c)?,
+                ArithTermRef::Literal(c) => push_literal(self.f64_tbl, &mut self.interm, &c)?,
                 ArithTermRef::Var(lvl, cell, name) => {
                     let var_num = name.to_var_num().unwrap();
 
@@ -652,11 +665,11 @@ impl Ord for Number {
     }
 }
 
-impl TryFrom<HeapCellValue> for Number {
+impl TryFrom<(HeapCellValue, &'_ F64Table)> for Number {
     type Error = ();
 
     #[inline]
-    fn try_from(value: HeapCellValue) -> Result<Number, Self::Error> {
+    fn try_from((value, f64_tbl): (HeapCellValue, &F64Table)) -> Result<Number, Self::Error> {
         read_heap_cell!(value,
            (HeapCellValueTag::Cons, c) => {
                match_untyped_arena_ptr!(c,
@@ -671,8 +684,9 @@ impl TryFrom<HeapCellValue> for Number {
                   }
                )
            }
-           (HeapCellValueTag::F64, n) => {
-               Ok(Number::Float(*n))
+           (HeapCellValueTag::F64Offset, offset) => {
+               let n = *f64_tbl.lookup(offset.into());
+               Ok(Number::Float(n))
            }
            (HeapCellValueTag::Fixnum | HeapCellValueTag::CutPoint, n) => {
                Ok(Number::Fixnum(n))

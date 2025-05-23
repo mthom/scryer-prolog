@@ -1,6 +1,6 @@
 use crate::atom_table::*;
-use crate::forms::*;
 use crate::functor_macro::*;
+use crate::machine::{ArenaHeaderTag, Fixnum, Integer};
 use crate::types::*;
 
 use std::alloc;
@@ -1158,14 +1158,24 @@ pub fn sized_iter_to_heap_list<SrcT: Into<HeapCellValue>>(
 
 pub(crate) fn to_local_code_ptr(heap: &Heap, addr: HeapCellValue) -> Option<usize> {
     let extract_integer = |s: usize| -> Option<usize> {
-        match Number::try_from(heap[s]) {
-            Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
-            Ok(Number::Integer(n)) => {
-                let value: usize = (&*n).try_into().unwrap();
-                Some(value)
+        read_heap_cell!(heap[s],
+            (HeapCellValueTag::Cons, c) => {
+                match_untyped_arena_ptr!(c,
+                   (ArenaHeaderTag::Integer, n) => {
+                       (&*n).try_into().ok()
+                   }
+                   _ => {
+                       None
+                   }
+                )
             }
-            _ => None,
-        }
+            (HeapCellValueTag::Fixnum, n) => {
+                usize::try_from(n.get_num()).ok()
+            }
+            _ => {
+                None
+            }
+        )
     };
 
     read_heap_cell!(addr,

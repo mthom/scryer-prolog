@@ -2,7 +2,6 @@
 
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::machine::machine_indices::CodeIndex;
 use crate::offset_table::*;
 use crate::parser::char_reader::*;
 use crate::types::HeapCellValueTag;
@@ -693,17 +692,18 @@ impl Not for Fixnum {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone)]
 pub enum Literal {
     Atom(Atom),
-    CodeIndex(CodeIndex),
+    CodeIndexOffset(CodeIndexOffset),
     Fixnum(Fixnum),
     Integer(TypedArenaPtr<Integer>),
     Rational(TypedArenaPtr<Rational>),
-    Float(F64Offset),
+    F64Offset(F64Offset),
 }
 
-impl From<F64Ptr> for Literal {
+/*
+impl From<F64Ptr<'_>> for Literal {
     #[inline(always)]
     fn from(ptr: F64Ptr) -> Literal {
         Literal::Float(ptr.as_offset())
@@ -716,14 +716,15 @@ impl fmt::Display for Literal {
             Literal::Atom(ref atom) => {
                 write!(f, "{}", atom.flat_index())
             }
-            Literal::CodeIndex(i) => write!(f, "{:?}", *i.as_ptr()),
+            Literal::CodeIndexOffset(i) => write!(f, "{}", *i),
             Literal::Fixnum(n) => write!(f, "{}", n.get_num()),
             Literal::Integer(ref n) => write!(f, "{}", n),
             Literal::Rational(ref n) => write!(f, "{}", n),
-            Literal::Float(ref n) => write!(f, "{}", *n),
+            Literal::FloatOffset(ref n) => write!(f, "{}", *n),
         }
     }
 }
+*/
 
 impl Literal {
     pub fn as_atom(&self, atom_tbl: &Arc<AtomTable>) -> Option<Atom> {
@@ -869,7 +870,7 @@ impl Term {
 
 pub(crate) fn unfold_by_str_once(term: &mut Term, s: Atom) -> Option<(Term, Term)> {
     if let Term::Clause(_, ref name, ref mut subterms) = term {
-        if let Some(Term::Literal(_, Literal::CodeIndex(_))) = subterms.last() {
+        if let Some(Term::Literal(_, Literal::CodeIndexOffset(_))) = subterms.last() {
             subterms.pop();
         }
 

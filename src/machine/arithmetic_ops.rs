@@ -1124,7 +1124,7 @@ impl MachineState {
             &ArithmeticTerm::Reg(r) => {
                 let value = self.store(self.deref(self[r]));
 
-                match Number::try_from(value) {
+                match Number::try_from((value, &self.arena.f64_tbl)) {
                     Ok(n) => Ok(n),
                     Err(_) => {
                         self.heap[0] = value;
@@ -1388,7 +1388,8 @@ impl MachineState {
                 (HeapCellValueTag::Fixnum, n) => {
                     self.interms.push(Number::Fixnum(n));
                 }
-                (HeapCellValueTag::F64, fl) => {
+                (HeapCellValueTag::F64Offset, offset) => {
+                    let fl = self.arena.f64_tbl.lookup(offset);
                     self.interms.push(Number::Float(*fl));
                 }
                 (HeapCellValueTag::Cons, ptr) => {
