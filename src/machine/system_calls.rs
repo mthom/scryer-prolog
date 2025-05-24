@@ -1889,7 +1889,7 @@ impl Machine {
             (HeapCellValueTag::Cons, cons_ptr) => {
                 match_untyped_arena_ptr!(cons_ptr,
                     (ArenaHeaderTag::Stream, other_stream) => {
-                        self.machine_st.fail = !stream.eq(&other_stream);
+                        self.machine_st.fail = stream != other_stream;
                     }
                     _ => {
                         let stub = functor_stub(atom!("current_input"), 1);
