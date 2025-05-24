@@ -16,7 +16,7 @@ use crate::heap_print::*;
 #[cfg(feature = "http")]
 use crate::http::{HttpListener, HttpRequest, HttpRequestData, HttpResponse};
 use crate::instructions::*;
-use crate::{machine, MachineBuilder, StreamConfig};
+use crate::{machine};
 use crate::machine::code_walker::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
@@ -1913,9 +1913,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn memory_stream(&mut self) -> CallResult {
         let addr = self.deref_register(1);
-        let stream = MachineBuilder::new()
-            .with_streams(StreamConfig::in_memory())
-            .build().user_input;
+        let stream = Stream::from_owned_string("".to_string(), &mut self.machine_st.arena);
 
         if let Some(var) = addr.as_var() {
             self.machine_st.bind(var, stream.into());
