@@ -56,6 +56,3 @@ test("can convert string to char stream with options",
       get_n_chars(Stream, N, Chars),
       Phrase=Chars
      )).
-
-?- test_framework:main(charsio_tests).
-
