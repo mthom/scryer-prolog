@@ -416,19 +416,19 @@ put_chars(Stream, Chars) :-
         must_be(chars, Chars),
         maplist(put_char(Stream), Chars).
 
-%% char_stream(-Stream)
+%% chars_to_stream(-Stream)
 % Stream is a character stream.
 
-char_stream(Stream) :-
+char_to_stream(Stream) :-
         '$memory_stream'(Stream).
 
-%% char_stream(+Chars, -Stream) :-
+%% chars_to_stream(+Chars, -Stream) :-
 % Convert a list of characters into a character stream.
 
-char_stream(Chars, Stream) :-
-        char_stream(Chars, Stream, []).
+chars_to_stream(Chars, Stream) :-
+        chars_to_stream(Chars, Stream, []).
 
-%% char_stream(+Chars, -Stream, +Options) :-
+%% chars_to_stream(+Chars, -Stream, +Options) :-
 % Creates a character stream from a list of characters.
 %
 % Chars is the list of characters to write to the stream.
@@ -438,11 +438,11 @@ char_stream(Chars, Stream) :-
 % Example:
 %
 % ```
-% ?- char_stream("hello", Stream, []).
+% ?- chars_to_stream("hello", Stream, []).
 %    Stream = stream('$memory_stream'(2048)).
 % ```
 
-char_stream(Chars, Stream, _) :-
+chars_to_stream(Chars, Stream, _) :-
         must_be(chars, Chars),
         '$memory_stream'(Stream),
         put_chars(Stream, Chars).
