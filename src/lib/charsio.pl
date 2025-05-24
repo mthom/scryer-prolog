@@ -416,10 +416,10 @@ put_chars(Stream, Chars) :-
         must_be(chars, Chars),
         maplist(put_char(Stream), Chars).
 
-%% chars_to_stream(-Stream)
+%% char_stream(-Stream)
 % Stream is a character stream.
 
-chars_to_stream(Stream) :-
+char_stream(Stream) :-
         '$memory_stream'(Stream).
 
 %% chars_to_stream(+Chars, -Stream) :-
