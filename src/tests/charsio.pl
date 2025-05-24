@@ -8,7 +8,7 @@
 
 
 test("can create string char stream",
-        (   chars_to_stream(Stream),
+        (   char_stream(Stream),
             put_char(Stream, a),
             get_char(Stream, C),
             C=a
@@ -17,7 +17,7 @@ test("can create string char stream",
 
 test("can spell simple word with char stream",
      (
-      chars_to_stream(Stream),
+      char_stream(Stream),
       put_char(Stream, c),
       put_char(Stream, a),
       put_char(Stream, t),
@@ -27,7 +27,7 @@ test("can spell simple word with char stream",
 
 test("can read from and write to char stream",
      (
-      chars_to_stream(Stream),
+      char_stream(Stream),
       put_char(Stream, c),
       put_char(Stream, a),
       get_char(Stream, _C),

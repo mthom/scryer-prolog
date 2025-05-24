@@ -15,7 +15,7 @@ read and write chars.
                     read_term_from_chars/3,
                     write_term_to_chars/3,
                     chars_base64/3,
-                    chars_to_stream/1,
+                    char_stream/1,
                     chars_to_stream/2,
                     chars_to_stream/3,
                     put_chars/2]).
