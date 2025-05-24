@@ -1911,6 +1911,41 @@ impl Machine {
     }
 
     #[inline(always)]
+    pub(crate) fn memory_stream(&mut self) -> CallResult {
+        let addr = self.deref_register(1);
+        let stream = StreamConfig::in_memory();
+
+        if let Some(var) = addr.as_var() {
+            self.machine_st.bind(var, stream.into());
+            return Ok(());
+        }
+
+        read_heap_cell!(addr,
+            (HeapCellValueTag::Cons, cons_ptr) => {
+                match_untyped_arena_ptr!(cons_ptr,
+                    (ArenaHeaderTag::Stream, other_stream) => {
+                        self.machine_st.fail = stream != other_stream;
+                    }
+                    _ => {
+                        let stub = functor_stub(atom!("memory_stream"), 1);
+                        let err = self.machine_st.domain_error(DomainErrorType::Stream, addr);
+
+                        return Err(self.machine_st.error_form(err, stub));
+                    }
+                );
+            }
+            _ => {
+                let stub = functor_stub(atom!("memory_stream"), 1);
+                let err = self.machine_st.domain_error(DomainErrorType::Stream, addr);
+
+                return Err(self.machine_st.error_form(err, stub));
+            }
+        );
+
+        Ok(())
+    }
+
+    #[inline(always)]
     pub(crate) fn current_output(&mut self) -> CallResult {
         let addr = self.deref_register(1);
         let stream = self.user_output;
