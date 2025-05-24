@@ -419,7 +419,7 @@ put_chars(Stream, Chars) :-
 %% chars_to_stream(-Stream)
 % Stream is a character stream.
 
-char_to_stream(Stream) :-
+chars_to_stream(Stream) :-
         '$memory_stream'(Stream).
 
 %% chars_to_stream(+Chars, -Stream) :-
