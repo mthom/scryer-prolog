@@ -14,7 +14,7 @@ use crate::heap_print::*;
 #[cfg(feature = "http")]
 use crate::http::{HttpListener, HttpRequest, HttpRequestData, HttpResponse};
 use crate::instructions::*;
-use crate::machine;
+use crate::{machine};
 use crate::machine::code_walker::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
@@ -1940,6 +1940,41 @@ impl Machine {
             }
             _ => {
                 let stub = functor_stub(atom!("current_input"), 1);
+                let err = self.machine_st.domain_error(DomainErrorType::Stream, addr);
+
+                return Err(self.machine_st.error_form(err, stub));
+            }
+        );
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn memory_stream(&mut self) -> CallResult {
+        let addr = self.deref_register(1);
+        let stream = Stream::from_owned_string("".to_string(), &mut self.machine_st.arena);
+
+        if let Some(var) = addr.as_var() {
+            self.machine_st.bind(var, stream.into());
+            return Ok(());
+        }
+
+        read_heap_cell!(addr,
+            (HeapCellValueTag::Cons, cons_ptr) => {
+                match_untyped_arena_ptr!(cons_ptr,
+                    (ArenaHeaderTag::Stream, other_stream) => {
+                        self.machine_st.fail = stream != other_stream;
+                    }
+                    _ => {
+                        let stub = functor_stub(atom!("memory_stream"), 1);
+                        let err = self.machine_st.domain_error(DomainErrorType::Stream, addr);
+
+                        return Err(self.machine_st.error_form(err, stub));
+                    }
+                );
+            }
+            _ => {
+                let stub = functor_stub(atom!("memory_stream"), 1);
                 let err = self.machine_st.domain_error(DomainErrorType::Stream, addr);
 
                 return Err(self.machine_st.error_form(err, stub));
