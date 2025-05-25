@@ -5122,7 +5122,16 @@ run_propagator(pmod(X,Y,Z), MState) -->
                       domain_remove_greater_than(YD, YMax, YD1) },
                     fd_put(Y, YD1, YPs)
                     % queue_goal(Y #< Z)
-                ;   true
+                ;   Z =:= 0,
+                    (   X =:= 0 ->
+                        kill(MState) % trivial
+                    ;   % only 4 solutions {-abs(X),-1,1,abs(X)}
+                        { YL is -abs(X), YU is abs(X),
+                          fd_get(Y, YD0, YPs),
+                          domain_remove_smaller_than(YD0, YL, YD1),
+                          domain_remove_greater_than(YD1, YU, YD) },
+                        fd_put(Y, YD, YPs)
+                    )
                 )
             )
         ;   run_propagator(pmodz(X,Y,Z), MState),
