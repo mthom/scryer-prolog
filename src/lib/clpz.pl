@@ -5110,7 +5110,23 @@ run_propagator(pmod(X,Y,Z), MState) -->
                   YU < X, X =< 0 } -> kill(MState), Z =:= X
             ;   { fd_get(Y, _, n(YL), _, _),
                   YL > X, X >= 0 } -> kill(MState), Z =:= X
-            ;   (   Z > 0 ->
+            ;   (   Z > 0, X < 0 ->
+                    { fd_get(Y, YD, YPs),
+                      YMin is Z+1,
+                      YMax is Z-X,
+                      domain_remove_smaller_than(YD, YMin, YD1),
+                      domain_remove_greater_than(YD1, YMax, YD2) },
+                    fd_put(Y, YD2, YPs)
+                    % queue_goal((Y #> Z, Y #=< Z-X))
+                ;   Z < 0, X > 0 ->
+                    { fd_get(Y, YD, YPs),
+                      YMax is Z-1,
+                      YMin is Z-X,
+                      domain_remove_greater_than(YD, YMax, YD1),
+                      domain_remove_smaller_than(YD1, YMin, YD2) },
+                    fd_put(Y, YD2, YPs)
+                    % queue_goal((Y #< Z, Y #>= Z-X))
+                ;   Z > 0 ->
                     { fd_get(Y, YD, YPs),
                       YMin is Z + 1,
                       domain_remove_smaller_than(YD, YMin, YD1) },
