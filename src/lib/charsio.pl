@@ -15,10 +15,9 @@ read and write chars.
                     read_term_from_chars/3,
                     write_term_to_chars/3,
                     chars_base64/3,
-                    char_stream/1,
+                    chars_stream/1,
                     chars_to_stream/2,
-                    chars_to_stream/3,
-                    put_chars/2]).
+                    chars_to_stream/3]).
 
 :- use_module(library(dcgs)).
 :- use_module(library(iso_ext)).
@@ -398,28 +397,10 @@ chars_base64(Cs, Bs, Options) :-
             )
         ).
 
-%% put_chars(+Stream, +Chars). %
-%
-% Writes a list of characters to a stream.
-%
-% `Stream` is the output stream, and `Chars` is the list of characters to write.
-%
-% Example:
-%
-% ```
-% ?- put_chars(current_output, "hello").
-% hello
-% true.
-% ```
-
-put_chars(Stream, Chars) :-
-        must_be(chars, Chars),
-        maplist(put_char(Stream), Chars).
-
-%% char_stream(-Stream)
+%% chars_stream(-Stream)
 % Stream is a character stream.
 
-char_stream(Stream) :-
+chars_stream(Stream) :-
         '$memory_stream'(Stream).
 
 %% chars_to_stream(+Chars, -Stream) :-
@@ -445,4 +426,4 @@ chars_to_stream(Chars, Stream) :-
 chars_to_stream(Chars, Stream, _) :-
         must_be(chars, Chars),
         '$memory_stream'(Stream),
-        put_chars(Stream, Chars).
+        maplist(put_char(Stream), Chars).
