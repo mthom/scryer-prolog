@@ -5088,11 +5088,21 @@ run_propagator(pmod(X,Y,Z), MState) -->
         ;   nonvar(Z), nonvar(X) ->
             (   Z > 0 ->
                 (   X < 0 -> true
-                ;   X >= Z
+                ;   X >= Z,
+                    % due to X = Z+Y*_ and Y > Z
+                    (   X-Z > 0 ->
+                        X-Z > Z
+                    ;   true
+                    )
                 )
             ;   Z < 0 ->
                 (   X > 0 -> true
-                ;   X =< Z
+                ;   X =< Z,
+                    % due to X = Z+Y*_ and Y < Z
+                    (   X-Z < 0 ->
+                        X-Z < Z
+                    ;   true
+                    )
                 )
             ;   Z =:= 0 % Multiple solutions so do nothing special.
             ),
