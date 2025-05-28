@@ -1,4 +1,6 @@
 :- module(charsio_tests, []).
+:- use_module(library(os)).
+:- use_module(library(iso_ext)).
 :- use_module(library(debug)).
 :- use_module(library(lists)).
 :- use_module(library(charsio)).
@@ -56,3 +58,26 @@ test("can convert string to char stream with options",
       get_n_chars(Stream, N, Chars),
       Phrase=Chars
      )).
+
+
+test("can read/write bytes",
+     (
+      A=97,
+      B=98,
+      C=99,
+      chars_to_stream([A,B,C], Stream, [type(binary)]),
+      get_byte(Stream, A),
+      get_byte(Stream, B),
+      get_byte(Stream, C),
+      put_byte(Stream, A),
+      put_byte(Stream, B),
+      put_byte(Stream, C),
+      get_byte(Stream, A),
+      get_byte(Stream, B),
+      get_byte(Stream, C)
+      )).
+
+
+
+% ?- test_framework:main(charsio_tests). 
+
