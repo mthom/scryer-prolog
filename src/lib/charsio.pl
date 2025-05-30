@@ -25,6 +25,7 @@ read and write chars.
 :- use_module(library(lists)).
 :- use_module(library(between)).
 :- use_module(library(iso_ext), [partial_string/1,partial_string/3]).
+:- use_module(library(charsio/memory_stream_utils)).
 
 fabricate_var_name(VarType, VarName, N) :-
     char_code('A', AC),
@@ -424,7 +425,7 @@ chars_to_stream(Chars, Stream) :-
 % ```
 
 chars_to_stream(Chars, Stream, StreamOpts) :-
-        parse_stream_options(StreamOpts, [Alias, EOFAction, Reposition, Type]),
+        parse_stream_options_list(StreamOpts, [Alias, EOFAction, Reposition, Type]),
         validate_chars(Chars, Type),
         '$memory_stream'(Stream),
         '$set_stream_options'(Stream, Alias ,EOFAction, Reposition, Type),
@@ -433,88 +434,3 @@ chars_to_stream(Chars, Stream, StreamOpts) :-
         ;   maplist(put_char(Stream), Chars)
         ).
 
-%% ugly ripoff of parser from library(builtins).
-
-:- meta_predicate parse_options_list(?, 2, ?, ?, ?).
-
-parse_options_list(Options, Selector, DefaultPairs, OptionValues, Stub) :-
-    '$skip_max_list'(_, _, Options, Tail),
-    (  Tail == [] ->
-       true
-    ;  var(Tail) ->
-       throw(error(instantiation_error, Stub))       % 8.11.5.3c)
-    ;  Tail \== [] ->
-       throw(error(type_error(list, Options), Stub)) % 8.11.5.3e)
-    ),
-    (  lists:maplist('$call'(nonvar), Options), % need '$call' because
-                                                % maplist isn't
-                                                % declared as a
-                                                % meta-predicate yet
-       catch(lists:maplist(Selector, Options, OptionPairs0),
-             error(E, _),
-             builtins:throw(error(E, Stub))) ->
-       lists:append(DefaultPairs, OptionPairs0, OptionPairs1),
-       keysort(OptionPairs1, OptionPairs),
-       select_rightmost_options(OptionPairs, OptionValues)
-    ;
-       throw(error(instantiation_error, Stub))       % 8.11.5.3c)
-    ).
-
-parse_stream_options_(type(Type), type-Type) :-
-    (  var(Type) ->
-       throw(error(instantiation_error, open/4)) % 8.1.3 7)
-    ;
-       lists:member(Type, [text, binary]), !
-    ;
-       throw(error(domain_error(stream_option, type(Type)), _))
-    ).
-parse_stream_options_(reposition(Bool), reposition-Bool) :-
-    (  nonvar(Bool), lists:member(Bool, [true, false]), !
-    ;
-       throw(error(domain_error(stream_option, reposition(Bool)), _))
-    ).
-
-parse_stream_options_(alias(A), alias-A) :-
-
-    (  var(A) ->
-       throw(error(instantiation_error, open/4)) % 8.1.3 7)
-    ;
-       atom(A), A \== [] -> true
-    ;
-       throw(error(domain_error(stream_option, alias(A)), _))
-    ).
-parse_stream_options_(eof_action(Action), eof_action-Action) :-
-    (  nonvar(Action), lists:member(Action, [eof_code, error, reset]), !
-    ;
-       throw(error(domain_error(stream_option, eof_action(Action)), _))
-    ).
-parse_stream_options_(E, _) :-
-        throw(error(domain_error(stream_option, E), _)). % 8.11.5.3i) %
-
-parse_stream_options(Options, OptionValues) :-
-    DefaultOptions = [alias-[], eof_action-eof_code, reposition-false, type-text],
-    parse_options_list(Options, parse_stream_options_, DefaultOptions, OptionValues, chars_to_stream/3).
-
-
-select_rightmost_options([Option-Value | OptionPairs], OptionValues) :-
-    (  pairs:same_key(Option, OptionPairs, OtherValues, _),
-       OtherValues == []  ->
-       OptionValues = [Value | OptionValues0],
-       select_rightmost_options(OptionPairs, OptionValues0)
-    ;
-       select_rightmost_options(OptionPairs, OptionValues)
-    ).
-
-select_rightmost_options([], []).
-
-
-valid_byte_(Byte) :-
-        must_be(integer, Byte),
-        Byte >= 0,
-        Byte < 256.
-
-validate_chars_(Chars, binary) :-
-        maplist(valid_byte, Chars).
-
-validate_chars_(Chars, text) :-
-        must_be(chars, Chars).
