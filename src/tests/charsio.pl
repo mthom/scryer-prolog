@@ -1,7 +1,4 @@
 :- module(charsio_tests, []).
-:- use_module(library(os)).
-:- use_module(library(iso_ext)).
-:- use_module(library(debug)).
 :- use_module(library(lists)).
 :- use_module(library(charsio)).
 

@@ -308,7 +308,7 @@ continuation(Code, Chars, Nb) --> [Byte],
 
 % invalid continuation byte
 % each remaining continuation byte (if any) will raise 0xFFFD too
-continuation(_, ['\xFFFD\'|T], _) --> [_], decode_utf8(T).
+continuation(_, ['\xFFFD\'|T], _) --> [_], decode_utf8(T). %'
 
 %% get_line_to_chars(+Stream, -Chars, +InitialChars).
 %
@@ -425,6 +425,7 @@ chars_to_stream(Chars, Stream) :-
 
 chars_to_stream(Chars, Stream, StreamOpts) :-
         parse_stream_options(StreamOpts, [Alias, EOFAction, Reposition, Type]),
+        validate_chars(Chars, Type),
         '$memory_stream'(Stream),
         '$set_stream_options'(Stream, Alias ,EOFAction, Reposition, Type),
         (   Type=binary
@@ -505,3 +506,15 @@ select_rightmost_options([Option-Value | OptionPairs], OptionValues) :-
     ).
 
 select_rightmost_options([], []).
+
+
+valid_byte_(Byte) :-
+        must_be(integer, Byte),
+        Byte >= 0,
+        Byte < 256.
+
+validate_chars_(Chars, binary) :-
+        maplist(valid_byte, Chars).
+
+validate_chars_(Chars, text) :-
+        must_be(chars, Chars).
