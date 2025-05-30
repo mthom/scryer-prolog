@@ -245,6 +245,8 @@ enum SystemClauseType {
     CurrentHostname,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$current_input")))]
     CurrentInput,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$memory_stream")))]
+    MemoryStream,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$current_output")))]
     CurrentOutput,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$directory_files")))]
@@ -1708,6 +1710,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallCreatePartialString |
                     &Instruction::CallCurrentHostname |
                     &Instruction::CallCurrentInput |
+                    &Instruction::CallMemoryStream |
                     &Instruction::CallCurrentOutput |
                     &Instruction::CallDirectoryFiles |
                     &Instruction::CallFileSize |
@@ -1946,6 +1949,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteCreatePartialString |
                     &Instruction::ExecuteCurrentHostname |
                     &Instruction::ExecuteCurrentInput |
+                    &Instruction::ExecuteMemoryStream |
                     &Instruction::ExecuteCurrentOutput |
                     &Instruction::ExecuteDirectoryFiles |
                     &Instruction::ExecuteFileSize |
