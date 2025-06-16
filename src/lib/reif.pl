@@ -1,5 +1,12 @@
 /** Predicates from [*Indexing dif/2*](https://arxiv.org/abs/1607.01590).
 
+The core trick that, unlike the traditional conditional `A -> B ; C`,
+the branching condition is *not* provided as a complete goal.
+
+Rather, the branching condition is a "reified goal",
+i.e. a term which is completed with an additional argument `T`,
+representing its satisfaction (`T = true`) and refutation (`T = false`).
+
 Example:
 
 ```
@@ -19,16 +26,14 @@ Example:
 
 :- meta_predicate(if_(1, 0, 0)).
 
-%% if_(Cond, IfTrue, IfFalse).
-% Monotonic if-then-else construct for use with reified conditions.
-% Rather than branching on whether a predicate simply succeeds as in `Cond -> IfTrue; IfFalse`, the condition is given as a *reified predicate*.
-% i.e. a relation with an additional argument which takes the value `true` or `false`.
+%% if_(Cond_1, IfTrue, IfFalse).
+% Monotonic if-then-else construct.
 %
-% Unlike `Cond -> _ ; _`:
-%
-%  * The condition may be false in multiple ways.
-%  * The condition may be true in multiple ways.
-%  * Failure of the condition results in *no* solutions
+% Unlike `Cond_0 -> IfTrue; IfFalse`, this is nondeterministic in the condition.
+% `Cond` is expected to be a reified goal.
+% e.g. `if_((A=1), _, _)`
+% where the `=` above is NOT the `(=)/2` predicate, but rather the `(=)/3` predicate
+% defined in this module.
 
 if_(If_1, Then_0, Else_0) :-
     call(If_1, T),
@@ -43,6 +48,8 @@ if_(If_1, Then_0, Else_0) :-
 %
 % `=(X,Y,true)` succeeds if X, Y *could* unify
 % `=(X,Y,false)` succeeds if X, Y *could* fail to unify
+% Partially call as a branching condition in `if_/3`:
+%   `if_(A=B, IfTrue, IfFalse)`
 
 =(X, Y, T) :-
     (  X == Y -> T = true
@@ -56,6 +63,8 @@ if_(If_1, Then_0, Else_0) :-
 %
 % `dif(X,Y,true)` succeeds if X, Y *could* fail to unify
 % `dif(X,Y,false)` succeeds if X, Y *could* unify
+% Partially call as a branching condition in `if_/3`:
+%   `if_(dif(A,B), IfTrue, IfFalse)`
 
 dif(X, Y, T) :-
   =(X, Y, NT),
