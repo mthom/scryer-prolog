@@ -22,7 +22,7 @@ Example:
 %% if_(Cond, IfTrue, IfFalse).
 % Monotonic if-then-else construct for use with reified conditions.
 % Rather than branching on whether a predicate simply succeeds as in `Cond -> IfTrue; IfFalse`, the condition is given as a *reified predicate*.
-% i.e. a relation that emits the atom `true` or `false` as an output argument.
+% i.e. a relation with an additional argument which takes the value `true` or `false`.
 %
 % Unlike `Cond -> _ ; _`:
 %
