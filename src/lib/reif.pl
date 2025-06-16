@@ -19,6 +19,17 @@ Example:
 
 :- meta_predicate(if_(1, 0, 0)).
 
+%% if_(Cond, IfTrue, IfFalse).
+% Monotonic if-then-else construct for use with reified conditions.
+% Rather than branching on whether a predicate simply succeeds as in `Cond -> IfTrue; IfFalse`, the condition is given as a *reified predicate*.
+% i.e. a relation that emits the atom `true` or `false` as an output argument.
+%
+% Unlike `Cond -> _ ; _`:
+%
+%  * The condition may be false in multiple ways.
+%  * The condition may be true in multiple ways.
+%  * Failure of the condition results in *no* solutions
+
 if_(If_1, Then_0, Else_0) :-
     call(If_1, T),
     (  T == true  -> call(Then_0)
@@ -27,12 +38,24 @@ if_(If_1, Then_0, Else_0) :-
     ;  throw(error(instantiation_error, _))
     ).
 
+%% =(X, Y, T).
+% Reified equality predicate.
+%
+% `=(X,Y,true)` succeeds if X, Y *could* unify
+% `=(X,Y,false)` succeeds if X, Y *could* fail to unify
+
 =(X, Y, T) :-
     (  X == Y -> T = true
     ;  X \= Y -> T = false
     ;  T = true, X = Y
     ;  T = false, dif(X, Y)
     ).
+
+%% dif(X, Y, T).
+% Reified disequality predicate.
+%
+% `dif(X,Y,true)` succeeds if X, Y *could* fail to unify
+% `dif(X,Y,false)` succeeds if X, Y *could* unify
 
 dif(X, Y, T) :-
   =(X, Y, NT),
