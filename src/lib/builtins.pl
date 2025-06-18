@@ -35,11 +35,12 @@ internal settings and basic I/O are all here.
 
 %% :(+M, +T)
 %
-% Module qualification. True if T succeeds when called in the context of module M.
+% Explicit module qualification operator. True if T succeeds when called in the context of module M.
 % This calling context determines how predicates resolve to user-defined procedures.
 % The context is flat. That is, in the goal `M2:M1:T`, predicate lookups are performed only in M1 and not M2.
 % 
-% The calling context is visible to metaprocedures (declared with the meta_predicate directive).
+% Consider carefully before using explicit module qualification.
+% Prefer meta-predicate declarations when possible.
 
 % unify.
 
