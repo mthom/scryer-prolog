@@ -253,7 +253,7 @@ impl Machine {
     ) -> std::process::ExitCode {
         if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(code_idx) = module.code_dir.get(&key) {
-                let index_ptr = self.machine_st.arena.code_index_tbl.lookup(code_idx.into());
+                let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(code_idx.into());
                 let p = index_ptr.local().unwrap();
 
                 // Leave a halting choice point to backtrack to in case the predicate fails or throws.

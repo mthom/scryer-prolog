@@ -1228,6 +1228,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             .lookup_mut(offset.into());
 
         if code_idx_ptr.is_undefined() {
+            drop(code_idx_ptr);
+
             set_code_index::<LS>(
                 &mut self.payload,
                 &compilation_target,
@@ -2159,6 +2161,7 @@ impl Machine {
                 .remove_predicate_skeleton(&compilation_target, &key);
 
             let offset = loader.get_or_insert_code_index(key, compilation_target);
+
             let mut code_idx = loader
                 .payload
                 .machine_st
@@ -2167,6 +2170,8 @@ impl Machine {
                 .lookup_mut(offset.into());
 
             code_idx.set(IndexPtr::undefined());
+
+            drop(code_idx);
 
             loader.payload.compilation_target = clause_clause_compilation_target;
 

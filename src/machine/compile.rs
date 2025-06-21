@@ -1337,6 +1337,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             settings.is_dynamic(),
         );
 
+        drop(index_ptr);
+
         let index_ptr = if settings.is_dynamic() {
             IndexPtr::dynamic_index(code_ptr)
         } else {
@@ -2229,12 +2231,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
             if let Some(filename) = self.listing_src_file_name() {
                 if let Some(ref mut module) = self.wam_prelude.indices.modules.get_mut(&filename) {
-                    let code_idx = LS::machine_st(&mut self.payload)
+                    let index_ptr = *LS::machine_st(&mut self.payload)
                         .arena
                         .code_index_tbl
                         .lookup_mut(offset.into());
 
-                    let index_ptr = *code_idx;
                     let offset = *module.code_dir.entry(key).or_insert(offset);
 
                     set_code_index::<LS>(

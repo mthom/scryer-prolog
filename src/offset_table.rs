@@ -1,7 +1,7 @@
 use std::cell::UnsafeCell;
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 use std::{fmt, mem, ptr};
 
 use arcu::atomic::Arcu;
@@ -48,10 +48,59 @@ impl RawBlockTraits for IndexPtr {
 #[derive(Debug)]
 pub struct OffsetTableImpl<T: RawBlockTraits>(InnerOffsetTableImpl<T>);
 
+impl<T: RawBlockTraits> From<Arc<ConcurrentOffsetTable<T>>> for OffsetTableImpl<T> {
+    #[inline]
+    fn from(value: Arc<ConcurrentOffsetTable<T>>) -> Self {
+        OffsetTableImpl(InnerOffsetTableImpl::Concurrent(value))
+    }
+}
+
 impl<T: RawBlockTraits> OffsetTableImpl<T> {
     #[inline(always)]
     pub fn new() -> Self {
         Self(InnerOffsetTableImpl::Serial(SerialOffsetTable::new()))
+    }
+
+    #[must_use = "the returned concurrent table must be absorbed into the owned OffsetTable"]
+    pub fn single_to_concurrent(&mut self) -> Arc<ConcurrentOffsetTable<T>> {
+        match &mut self.0 {
+            InnerOffsetTableImpl::Serial(serial_tbl) => {
+                let empty_serial_tbl = SerialOffsetTable {
+                    block: RawBlock::empty_block(),
+                };
+
+                let serial_tbl = mem::replace(serial_tbl, empty_serial_tbl);
+                let block = Arcu::new(serial_tbl.block, GlobalEpochCounterPool);
+
+                let growth_lock = RwLock::new(());
+                let concurrent_tbl = Arc::new(ConcurrentOffsetTable { block, growth_lock });
+
+                self.0 = InnerOffsetTableImpl::Concurrent(concurrent_tbl.clone());
+
+                concurrent_tbl
+            }
+            InnerOffsetTableImpl::Concurrent(concurrent_tbl) => concurrent_tbl.clone(),
+        }
+    }
+
+    #[must_use = "the transition to a single-threaded offset table may fail if the concurrent table is held from multiple places"]
+    pub fn concurrent_to_single(&mut self) -> Result<(), ()> {
+        match &mut self.0 {
+            InnerOffsetTableImpl::Serial(_serial_tbl) => Ok(()),
+            InnerOffsetTableImpl::Concurrent(concurrent_tbl) => {
+                let lock_guard = concurrent_tbl.growth_lock.write().unwrap();
+                let raw_block = concurrent_tbl.block.replace(RawBlock::empty_block());
+
+                match Arc::try_unwrap(raw_block) {
+                    Ok(block) => {
+                        drop(lock_guard);
+                        self.0 = InnerOffsetTableImpl::Serial(SerialOffsetTable { block });
+                        Ok(())
+                    }
+                    Err(_) => Err(()),
+                }
+            }
+        }
     }
 }
 
@@ -59,6 +108,17 @@ impl<T: RawBlockTraits> Default for OffsetTableImpl<T> {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[derive(Debug)]
+struct SerialOffsetTable<T: RawBlockTraits> {
+    block: RawBlock<T>,
+}
+
+#[derive(Debug)]
+pub struct ConcurrentOffsetTable<T: RawBlockTraits> {
+    block: Arcu<RawBlock<T>, GlobalEpochCounterPool>,
+    growth_lock: RwLock<()>,
 }
 
 #[derive(Debug)]
@@ -80,9 +140,13 @@ impl<T: RawBlockTraits> InnerOffsetTableImpl<T> {
     #[inline(always)]
     fn lookup<'a>(&'a self, offset: usize) -> TablePtr<'a, T> {
         match self {
-            Self::Concurrent(concurrent_tbl) => {
-                TablePtr(InnerTablePtr::Concurrent(concurrent_tbl.lookup(offset)))
-            }
+            Self::Concurrent(concurrent_tbl) => TablePtr({
+                let (rcu_ref, guard_lock) = concurrent_tbl.lookup(offset);
+                InnerTablePtr::Concurrent {
+                    rcu_ref,
+                    guard_lock,
+                }
+            }),
             Self::Serial(serial_tbl) => unsafe {
                 TablePtr(InnerTablePtr::Serial(serial_tbl.lookup(offset)))
             },
@@ -92,12 +156,18 @@ impl<T: RawBlockTraits> InnerOffsetTableImpl<T> {
     #[inline(always)]
     fn lookup_mut<'a>(&'a mut self, offset: usize) -> TablePtrMut<'a, T> {
         match self {
-            Self::Concurrent(concurrent_tbl) => TablePtrMut(InnerTablePtrMut::Concurrent(
-                concurrent_tbl.lookup_mut(offset),
-            )),
-            Self::Serial(serial_tbl) => unsafe {
-                TablePtrMut(InnerTablePtrMut::Serial(serial_tbl.lookup_mut(offset)))
-            },
+            InnerOffsetTableImpl::Concurrent(concurrent_tbl) => TablePtrMut({
+                let (rcu_ref, guard_lock) = concurrent_tbl.lookup_mut(offset);
+                InnerTablePtrMut::Concurrent {
+                    rcu_ref,
+                    guard_lock,
+                }
+            }),
+            InnerOffsetTableImpl::Serial(serial_tbl) => {
+                TablePtrMut(InnerTablePtrMut::Serial(unsafe {
+                    serial_tbl.lookup_mut(offset)
+                }))
+            }
         }
     }
 }
@@ -142,11 +212,6 @@ impl OffsetTable<IndexPtr> for OffsetTableImpl<IndexPtr> {
     }
 }
 
-#[derive(Debug)]
-struct SerialOffsetTable<T: RawBlockTraits> {
-    block: RawBlock<T>,
-}
-
 impl<T: RawBlockTraits> SerialOffsetTable<T> {
     #[inline]
     fn new() -> Self {
@@ -184,16 +249,10 @@ impl<T: RawBlockTraits> SerialOffsetTable<T> {
     }
 }
 
-#[derive(Debug)]
-pub struct ConcurrentOffsetTable<T: RawBlockTraits> {
-    block: Arcu<RawBlock<T>, GlobalEpochCounterPool>,
-    update: Mutex<()>,
-}
-
 impl<T: RawBlockTraits> ConcurrentOffsetTable<T> {
     #[allow(clippy::missing_safety_doc)]
     unsafe fn build_with(&self, value: T) -> usize {
-        let update_guard = self.update.lock();
+        let update_guard = self.growth_lock.write().unwrap();
 
         // we don't have an index table for lookups as AtomTable does so
         // just get the epoch after we take the upgrade lock
@@ -224,16 +283,25 @@ impl<T: RawBlockTraits> ConcurrentOffsetTable<T> {
     }
 
     #[inline]
-    fn lookup(&self, offset: usize) -> RcuRef<RawBlock<T>, T> {
-        RcuRef::try_map(self.block.read(), |raw_block| unsafe {
+    fn lookup<'a>(&'a self, offset: usize) -> (RcuRef<RawBlock<T>, T>, RwLockReadGuard<'a, ()>) {
+        let growth_lock_guard = self.growth_lock.read().unwrap();
+
+        let rcu_ref = RcuRef::try_map(self.block.read(), |raw_block| unsafe {
             raw_block.base.add(offset).cast::<T>().as_ref()
         })
-        .expect("The offset should result in a non-null pointer")
+        .expect("The offset should result in a non-null pointer");
+
+        (rcu_ref, growth_lock_guard)
     }
 
     #[inline]
-    fn lookup_mut(&self, offset: usize) -> RcuRef<RawBlock<T>, UnsafeCell<T>> {
-        RcuRef::try_map(self.block.read(), |raw_block| unsafe {
+    fn lookup_mut<'a>(
+        &'a self,
+        offset: usize,
+    ) -> (RcuRef<RawBlock<T>, UnsafeCell<T>>, RwLockReadGuard<'a, ()>) {
+        let growth_lock_guard = self.growth_lock.read().unwrap();
+
+        let rcu_ref = RcuRef::try_map(self.block.read(), |raw_block| unsafe {
             raw_block
                 .base
                 .add(offset)
@@ -241,7 +309,9 @@ impl<T: RawBlockTraits> ConcurrentOffsetTable<T> {
                 .cast::<UnsafeCell<T>>()
                 .as_ref()
         })
-        .expect("The offset should result in a non-null pointer")
+        .expect("The offset should result in a non-null pointer");
+
+        (rcu_ref, growth_lock_guard)
     }
 }
 
@@ -293,7 +363,11 @@ pub struct TablePtr<'a, T: RawBlockTraits>(InnerTablePtr<'a, T>);
 
 #[derive(Debug)]
 enum InnerTablePtr<'a, T: RawBlockTraits> {
-    Concurrent(RcuRef<RawBlock<T>, T>),
+    Concurrent {
+        rcu_ref: RcuRef<RawBlock<T>, T>,
+        #[allow(dead_code)]
+        guard_lock: RwLockReadGuard<'a, ()>,
+    },
     Serial(&'a T),
 }
 
@@ -336,7 +410,7 @@ impl<T: RawBlockTraits> Deref for TablePtr<'_, T> {
     #[inline]
     fn deref(&self) -> &Self::Target {
         match &self.0 {
-            InnerTablePtr::Concurrent(rcu_ref) => rcu_ref,
+            InnerTablePtr::Concurrent { rcu_ref, .. } => rcu_ref,
             InnerTablePtr::Serial(ref_mut) => ref_mut,
         }
     }
@@ -366,7 +440,11 @@ pub struct TablePtrMut<'a, T: RawBlockTraits>(InnerTablePtrMut<'a, T>);
 
 #[derive(Debug)]
 enum InnerTablePtrMut<'a, T: RawBlockTraits> {
-    Concurrent(RcuRef<RawBlock<T>, UnsafeCell<T>>),
+    Concurrent {
+        rcu_ref: RcuRef<RawBlock<T>, UnsafeCell<T>>,
+        #[allow(dead_code)]
+        guard_lock: RwLockReadGuard<'a, ()>,
+    },
     Serial(&'a mut T),
 }
 
@@ -409,7 +487,9 @@ impl<T: RawBlockTraits> Deref for TablePtrMut<'_, T> {
     #[inline]
     fn deref(&self) -> &Self::Target {
         match &self.0 {
-            InnerTablePtrMut::Concurrent(rcu_ref) => unsafe { rcu_ref.get().as_ref().unwrap() },
+            InnerTablePtrMut::Concurrent { rcu_ref, .. } => unsafe {
+                rcu_ref.get().as_ref().unwrap()
+            },
             InnerTablePtrMut::Serial(ref_mut) => ref_mut,
         }
     }
@@ -419,7 +499,7 @@ impl<T: RawBlockTraits> DerefMut for TablePtrMut<'_, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         match &mut self.0 {
-            InnerTablePtrMut::Concurrent(rcu_ref) => unsafe {
+            InnerTablePtrMut::Concurrent { rcu_ref, .. } => unsafe {
                 &mut *rcu_ref.get().as_mut().unwrap()
             },
             InnerTablePtrMut::Serial(ref_mut) => ref_mut,
@@ -431,7 +511,7 @@ impl TablePtrMut<'_, IndexPtr> {
     #[inline]
     pub fn set(&mut self, val: IndexPtr) {
         match &mut self.0 {
-            InnerTablePtrMut::Concurrent(rcu_ref) => unsafe {
+            InnerTablePtrMut::Concurrent { rcu_ref, .. } => unsafe {
                 *rcu_ref.get() = val;
             },
             InnerTablePtrMut::Serial(ref_mut) => {
@@ -443,7 +523,7 @@ impl TablePtrMut<'_, IndexPtr> {
     #[inline]
     pub fn replace(&mut self, val: IndexPtr) -> IndexPtr {
         match &mut self.0 {
-            InnerTablePtrMut::Concurrent(rcu_ref) => unsafe { rcu_ref.get().replace(val) },
+            InnerTablePtrMut::Concurrent { rcu_ref, .. } => unsafe { rcu_ref.get().replace(val) },
             InnerTablePtrMut::Serial(ref_mut) => mem::replace(*ref_mut, val),
         }
     }
