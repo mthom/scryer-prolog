@@ -2696,9 +2696,9 @@ impl Machine {
                         }
                     }
                     &Instruction::CallNamed(arity, name, idx) => {
-                        let idx = self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                        let idx = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
 
-                        try_or_throw!(self.machine_st, self.try_call(name, arity, *idx));
+                        try_or_throw!(self.machine_st, self.try_call(name, arity, idx));
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
@@ -2707,9 +2707,9 @@ impl Machine {
                         }
                     }
                     &Instruction::ExecuteNamed(arity, name, idx) => {
-                        let idx = self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                        let idx = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
 
-                        try_or_throw!(self.machine_st, self.try_execute(name, arity, *idx));
+                        try_or_throw!(self.machine_st, self.try_execute(name, arity, idx));
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
@@ -2718,18 +2718,18 @@ impl Machine {
                         }
                     }
                     &Instruction::DefaultCallNamed(arity, name, idx) => {
-                        let idx = self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                        let idx = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
 
-                        try_or_throw!(self.machine_st, self.try_call(name, arity, *idx));
+                        try_or_throw!(self.machine_st, self.try_call(name, arity, idx));
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         }
                     }
                     &Instruction::DefaultExecuteNamed(arity, name, idx) => {
-                        let idx = self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                        let idx = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
 
-                        try_or_throw!(self.machine_st, self.try_execute(name, arity, *idx));
+                        try_or_throw!(self.machine_st, self.try_execute(name, arity, idx));
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
