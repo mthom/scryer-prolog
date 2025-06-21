@@ -48,6 +48,7 @@ pub(super) fn set_code_index<'a, LS: LoadState<'a>>(
         }
     };
 
+    drop(code_idx_ptr);
     payload.retraction_info.push_record(record);
 }
 
@@ -507,6 +508,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             let code_ptr = code_index_tbl.lookup((*code_index).into());
 
             if !code_ptr.is_undefined() && !code_ptr.is_dynamic_undefined() {
+                drop(code_ptr);
                 let old_index_ptr = code_index.replace(code_index_tbl, IndexPtr::undefined());
 
                 self.payload.retraction_info.push_record(
@@ -559,6 +561,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                                 let target_code_ptr = code_index_tbl.lookup(target_code_idx.into());
 
                                 if module_code_ptr == target_code_ptr {
+                                    drop(module_code_ptr);
+                                    drop(target_code_ptr);
+
                                     let old_index_ptr = target_code_idx
                                         .replace(code_index_tbl, IndexPtr::undefined());
                                     payload
