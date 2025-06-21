@@ -25,6 +25,7 @@ use crate::machine::partial_string::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::machine::{get_structure_index, Machine, VERIFY_ATTR_INTERRUPT_LOC};
+use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
@@ -821,7 +822,7 @@ impl MachineState {
         let mut max_old = -1i64;
 
         if !max_steps.is_var() {
-            let max_steps = Number::try_from(max_steps);
+            let max_steps = Number::try_from((max_steps, &self.arena.f64_tbl));
 
             let max_steps_n = match max_steps {
                 Ok(Number::Fixnum(n)) => Some(n.get_num()),
@@ -1146,7 +1147,7 @@ impl MachineState {
         for addr in addrs {
             let addr = self.store(self.deref(addr));
 
-            match Number::try_from(addr) {
+            match Number::try_from((addr, &self.arena.f64_tbl)) {
                 Ok(Number::Fixnum(n)) => {
                     if let Ok(n) = u32::try_from(n.get_num()) {
                         if let Some(c) = std::char::from_u32(n) {
@@ -1255,7 +1256,13 @@ impl Machine {
         let mut bp = self
             .indices
             .get_predicate_code_index(atom!("$clause"), 2, module_name)
-            .and_then(|idx| idx.local())
+            .and_then(|idx| {
+                self.machine_st
+                    .arena
+                    .code_index_tbl
+                    .lookup(idx.into())
+                    .local()
+            })
             .unwrap();
 
         macro_rules! extract_ptr {
@@ -1445,7 +1452,7 @@ impl Machine {
                 self.machine_st.error_form(err, stub)
             })?;
 
-        let index_cell = if index_cell_opt.is_some() {
+        let index_cell_opt = if index_cell_opt.is_some() {
             index_cell_opt
         } else {
             let is_internal_call = name == atom!("$call") && goal_arity > 0;
@@ -1483,11 +1490,13 @@ impl Machine {
             }
         };
 
-        if let Some(code_index) = index_cell {
-            if !code_index.as_ptr().is_undefined() {
+        if let Some(code_idx) = index_cell_opt {
+            let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(code_idx.into());
+
+            if !index_ptr.is_undefined() {
                 load_registers(&mut self.machine_st, goal, goal_arity);
                 self.machine_st.neck_cut();
-                return call_at_index(self, name, arity, code_index.get());
+                return call_at_index(self, name, arity, index_ptr);
             }
         }
 
@@ -1667,7 +1676,7 @@ impl Machine {
 
                     let idx = CodeIndex::new(
                         IndexPtr::index(helper_clause_loc),
-                        &mut self.machine_st.arena,
+                        &mut self.machine_st.arena.code_index_tbl,
                     );
 
                     writer.write_with(|section| {
@@ -1708,7 +1717,7 @@ impl Machine {
 
             let idx_cell = self.machine_st.heap[s.saturating_sub(1)];
 
-            if HeapCellValueTag::CodeIndex == idx_cell.get_tag() {
+            if HeapCellValueTag::CodeIndexOffset == idx_cell.get_tag() {
                 return true;
             }
         }
@@ -1860,7 +1869,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn bind_from_register(&mut self) {
         let reg = self.deref_register(2);
-        let n = match Number::try_from(reg) {
+        let n = match Number::try_from((reg, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
@@ -2622,7 +2631,7 @@ impl Machine {
 
         let addr = match addr {
             addr if addr.is_var() => addr,
-            addr => match Number::try_from(addr) {
+            addr => match Number::try_from((addr, &self.machine_st.arena.f64_tbl)) {
                 Ok(Number::Integer(n)) => {
                     let result: Result<u8, _> = (&*n).try_into();
                     if let Ok(value) = result {
@@ -2811,7 +2820,7 @@ impl Machine {
                 a2
             }
             _ => {
-                match Number::try_from(a2) {
+                match Number::try_from((a2, &self.machine_st.arena.f64_tbl)) {
                     Ok(Number::Integer(n)) => {
                         let n: u32 = (&*n).try_into().unwrap();
 
@@ -2878,7 +2887,7 @@ impl Machine {
         let n = self.deref_register(1);
         let chs = self.deref_register(2);
 
-        let string = match Number::try_from(n) {
+        let string = match Number::try_from((n, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Float(OrderedFloat(n))) => fmt_float(n),
             Ok(Number::Fixnum(n)) => n.get_num().to_string(),
             Ok(Number::Integer(n)) => n.to_string(),
@@ -2906,7 +2915,7 @@ impl Machine {
         let n = self.deref_register(1);
         let chs = self.machine_st.registers[2];
 
-        let string = match Number::try_from(n) {
+        let string = match Number::try_from((n, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Float(OrderedFloat(n))) => {
                 format!("{0:<20?}", n)
             }
@@ -2993,13 +3002,8 @@ impl Machine {
                 debug_assert_eq!(arity, 0);
                 name.as_char().unwrap()
             }
-            /*
-            (HeapCellValueTag::Char, c) => {
-                c
-            }
-            */
             _ => {
-                match Number::try_from(a2) {
+                match Number::try_from((a2, &self.machine_st.arena.f64_tbl)) {
                     Ok(Number::Integer(n)) => {
                         let n: u32 = (&*n).try_into().unwrap();
                         let n = std::char::from_u32(n);
@@ -3237,7 +3241,7 @@ impl Machine {
             let err = self.machine_st.instantiation_error();
             Err(self.machine_st.error_form(err, stub_gen()))
         } else {
-            match Number::try_from(addr) {
+            match Number::try_from((addr, &self.machine_st.arena.f64_tbl)) {
                 Ok(Number::Integer(n)) => {
                     let n: u32 = (&*n).try_into().unwrap();
                     let n = char::try_from(n);
@@ -3384,7 +3388,7 @@ impl Machine {
             let err = self.machine_st.instantiation_error();
             return Err(self.machine_st.error_form(err, stub_gen()));
         } else {
-            match Number::try_from(addr) {
+            match Number::try_from((addr, &self.machine_st.arena.f64_tbl)) {
                 Ok(Number::Integer(n)) => {
                     let n: u8 = (&*n).try_into().unwrap();
 
@@ -3463,7 +3467,7 @@ impl Machine {
         let addr = if addr.is_var() {
             addr
         } else {
-            match Number::try_from(addr) {
+            match Number::try_from((addr, &self.machine_st.arena.f64_tbl)) {
                 Ok(Number::Integer(ref n)) if (**n).num_eq(&1_i64) => {
                     fixnum_as_cell!(Fixnum::build_with(-1))
                 }
@@ -3617,7 +3621,7 @@ impl Machine {
             3,
         )?;
 
-        let num = match Number::try_from(self.deref_register(2)) {
+        let num = match Number::try_from((self.deref_register(2), &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
             Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
                 Ok(u) => u,
@@ -3718,7 +3722,7 @@ impl Machine {
         let addr = if addr.is_var() {
             addr
         } else {
-            match Number::try_from(addr) {
+            match Number::try_from((addr, &self.machine_st.arena.f64_tbl)) {
                 Ok(Number::Integer(n)) => {
                     let n: u32 = (&*n).try_into().unwrap();
                     let n = std::char::from_u32(n);
@@ -4054,7 +4058,7 @@ impl Machine {
         } else {
             arity_match = |arity_1, arity_2| arity_1 == arity_2;
 
-            let arity = match Number::try_from(arity) {
+            let arity = match Number::try_from((arity, &self.machine_st.arena.f64_tbl)) {
                 Ok(Number::Fixnum(n)) => Some(n.get_num() as usize),
                 Ok(Number::Integer(n)) => {
                     let value: usize = (&*n).try_into().unwrap();
@@ -4313,7 +4317,10 @@ impl Machine {
     pub(crate) fn random_integer(&mut self) {
         let a1 = self.deref_register(1);
         let a2 = self.deref_register(2);
-        let value = match (Number::try_from(a1), Number::try_from(a2)) {
+        let value = match (
+            Number::try_from((a1, &self.machine_st.arena.f64_tbl)),
+            Number::try_from((a2, &self.machine_st.arena.f64_tbl)),
+        ) {
             (Ok(Number::Fixnum(lower)), Ok(Number::Fixnum(upper))) => {
                 let (lower, upper) = (lower.get_num(), upper.get_num());
                 if lower >= upper {
@@ -4404,7 +4411,7 @@ impl Machine {
         let stub_gen = || functor_stub(atom!("length"), 2);
         let len = self.deref_register(2);
 
-        let n = match Number::try_from(len) {
+        let n = match Number::try_from((len, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Fixnum(n)) => n.get_num() as usize,
             Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
                 Ok(n) => n,
@@ -4595,23 +4602,24 @@ impl Machine {
         let tls_cert = self.deref_register(4);
         let content_length_limit = self.deref_register(5);
         const CONTENT_LENGTH_LIMIT_DEFAULT: u64 = 32768;
-        let content_length_limit = match Number::try_from(content_length_limit) {
-            Ok(Number::Fixnum(n)) => {
-                if n.get_num() >= 0 {
-                    n.get_num() as u64
-                } else {
-                    CONTENT_LENGTH_LIMIT_DEFAULT
+        let content_length_limit =
+            match Number::try_from((content_length_limit, &self.machine_st.arena.f64_tbl)) {
+                Ok(Number::Fixnum(n)) => {
+                    if n.get_num() >= 0 {
+                        n.get_num() as u64
+                    } else {
+                        CONTENT_LENGTH_LIMIT_DEFAULT
+                    }
                 }
-            }
-            Ok(Number::Integer(n)) => {
-                let n: Result<u64, _> = (&*n).try_into();
-                match n {
-                    Ok(u) => u,
-                    Err(_) => CONTENT_LENGTH_LIMIT_DEFAULT,
+                Ok(Number::Integer(n)) => {
+                    let n: Result<u64, _> = (&*n).try_into();
+                    match n {
+                        Ok(u) => u,
+                        Err(_) => CONTENT_LENGTH_LIMIT_DEFAULT,
+                    }
                 }
-            }
-            _ => CONTENT_LENGTH_LIMIT_DEFAULT,
-        };
+                _ => CONTENT_LENGTH_LIMIT_DEFAULT,
+            };
 
         let ssl_server: Option<(String, String)> = {
             match self.machine_st.value_to_str_like(tls_key) {
@@ -4878,7 +4886,8 @@ impl Machine {
     pub(crate) fn http_answer(&mut self) -> CallResult {
         let culprit = self.deref_register(1);
         let status_code = self.deref_register(2);
-        let status_code: u16 = match Number::try_from(status_code) {
+        let status_code: u16 = match Number::try_from((status_code, &self.machine_st.arena.f64_tbl))
+        {
             Ok(Number::Fixnum(n)) => n.get_num() as u16,
             Ok(Number::Integer(n)) => {
                 let n: Result<u16, _> = (&*n).try_into();
@@ -5008,7 +5017,7 @@ impl Machine {
         if let Some(function_name) = self.machine_st.value_to_str_like(function_name) {
             let stub_gen = || functor_stub(atom!("foreign_call"), 3);
             fn map_arg(machine_st: &mut MachineState, source: HeapCellValue) -> crate::ffi::Value {
-                match Number::try_from(source) {
+                match Number::try_from((source, &machine_st.arena.f64_tbl)) {
                     Ok(Number::Fixnum(n)) => Value::Int(n.get_num()),
                     Ok(Number::Float(n)) => Value::Float(n.into_inner()),
                     _ => {
@@ -5311,7 +5320,7 @@ impl Machine {
         let priority = self.deref_register(1);
         let specifier = cell_as_atom_cell!(self.deref_register(2)).get_name();
 
-        let priority = match Number::try_from(priority) {
+        let priority = match Number::try_from((priority, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Integer(n)) => {
                 let n: u16 = (&*n).try_into().unwrap();
                 n
@@ -5479,7 +5488,7 @@ impl Machine {
     pub(crate) fn get_attr_var_queue_beyond(&mut self) {
         let addr = self.deref_register(1);
 
-        let b = match Number::try_from(addr) {
+        let b = match Number::try_from((addr, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
                 Some(value)
@@ -5906,7 +5915,7 @@ impl Machine {
     pub(crate) fn halt(&mut self) -> std::process::ExitCode {
         let code = self.deref_register(1);
 
-        let code = match Number::try_from(code) {
+        let code = match Number::try_from((code, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Fixnum(n)) => u8::try_from(n.get_num()).unwrap(),
             Ok(Number::Integer(n)) => {
                 let n: u8 = (&*n).try_into().unwrap();
@@ -5943,7 +5952,7 @@ impl Machine {
         let a1 = self.deref_register(1);
         let a2 = self.deref_register(2);
 
-        let n = match Number::try_from(a2) {
+        let n = match Number::try_from((a2, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Fixnum(bp)) => Integer::from(bp.get_num() as usize),
             Ok(Number::Integer(n)) => (*n).clone(),
             _ => {
@@ -5988,7 +5997,7 @@ impl Machine {
         let name = cell_as_atom!(self.deref_register(2));
         let a3 = self.deref_register(3);
 
-        let arity = match Number::try_from(a3) {
+        let arity = match Number::try_from((a3, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Fixnum(n)) => n.get_num() as usize,
             Ok(Number::Integer(n)) => {
                 let result = (&*n).try_into();
@@ -6006,7 +6015,14 @@ impl Machine {
 
         self.indices
             .get_predicate_code_index(name, arity, module_name)
-            .map(|index| index.local().is_some())
+            .map(|idx| {
+                self.machine_st
+                    .arena
+                    .code_index_tbl
+                    .lookup(idx.into())
+                    .local()
+                    .is_some()
+            })
             .unwrap_or(false)
     }
 
@@ -6028,7 +6044,10 @@ impl Machine {
                         arity,
                         module_name,
                     )
-                        .map(|index| index.get())
+                        .map(|idx| *self.machine_st
+                             .arena
+                             .code_index_tbl
+                             .lookup(idx.into()))
                         .unwrap_or(IndexPtr::dynamic_undefined());
 
                     !matches!(index.tag(), IndexPtrTag::DynamicUndefined | IndexPtrTag::Undefined)
@@ -6045,7 +6064,10 @@ impl Machine {
                         0,
                         module_name,
                     )
-                        .map(|index| index.get())
+                        .map(|idx| *self.machine_st
+                             .arena
+                             .code_index_tbl
+                             .lookup(idx.into()))
                         .unwrap_or(IndexPtr::dynamic_undefined());
 
                     !matches!(index.tag(), IndexPtrTag::DynamicUndefined)
@@ -6681,7 +6703,7 @@ impl Machine {
     pub(crate) fn set_seed(&mut self) {
         let seed = self.deref_register(1);
 
-        match Number::try_from(seed) {
+        match Number::try_from((seed, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Fixnum(n)) => {
                 let n: u64 = Integer::from(n).try_into().unwrap();
                 let rng: StdRng = SeedableRng::seed_from_u64(n);
@@ -6709,7 +6731,7 @@ impl Machine {
     pub(crate) fn sleep(&mut self) {
         let time = self.deref_register(1);
 
-        let time = match Number::try_from(time) {
+        let time = match Number::try_from((time, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Float(n)) => n.into_inner(),
             Ok(Number::Fixnum(n)) => n.get_num() as f64,
             Ok(Number::Integer(n)) => n.to_f64().value(),
@@ -6744,7 +6766,7 @@ impl Machine {
                 name
             }
             _ => {
-                AtomTable::build_with(&self.machine_st.atom_tbl, &match Number::try_from(port) {
+                AtomTable::build_with(&self.machine_st.atom_tbl, &match Number::try_from((port, &self.machine_st.arena.f64_tbl)) {
                     Ok(Number::Fixnum(n)) => n.get_num().to_string(),
                     Ok(Number::Integer(n)) => n.to_string(),
                     _ => {
@@ -6843,7 +6865,7 @@ impl Machine {
         let port = if port.is_var() {
             String::from("0")
         } else {
-            match Number::try_from(port) {
+            match Number::try_from((port, &self.machine_st.arena.f64_tbl)) {
                 Ok(Number::Fixnum(n)) => n.get_num().to_string(),
                 Ok(Number::Integer(n)) => n.to_string(),
                 _ => {
@@ -7121,7 +7143,7 @@ impl Machine {
 
         let position = self.deref_register(2);
 
-        let position = match Number::try_from(position) {
+        let position = match Number::try_from((position, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Fixnum(n)) => n.get_num() as u64,
             Ok(Number::Integer(n)) => {
                 let n: Result<u64, _> = (&*n).try_into();
@@ -7440,7 +7462,7 @@ impl Machine {
         let name = cell_as_atom!(self.deref_register(2));
         let arity = self.deref_register(3);
 
-        let arity = match Number::try_from(arity) {
+        let arity = match Number::try_from((arity, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Fixnum(n)) => n.get_num() as usize,
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
@@ -7468,22 +7490,23 @@ impl Machine {
             },
         };
 
-        let first_idx = match first_idx {
-            Some(idx) if idx.local().is_some() => {
-                if let Some(idx) = idx.local() {
-                    idx
-                } else {
-                    unreachable!()
-                }
-            }
-            _ => {
-                let stub = functor_stub(name, arity);
-                let err = self
-                    .machine_st
-                    .existence_error(ExistenceError::Procedure(name, arity));
+        let first_idx = first_idx.and_then(|first_idx| {
+            self.machine_st
+                .arena
+                .code_index_tbl
+                .lookup(first_idx.into())
+                .local()
+        });
 
-                return Err(self.machine_st.error_form(err, stub));
-            }
+        let first_idx = if let Some(idx) = first_idx {
+            idx
+        } else {
+            let stub = functor_stub(name, arity);
+            let err = self
+                .machine_st
+                .existence_error(ExistenceError::Procedure(name, arity));
+
+            return Err(self.machine_st.error_form(err, stub));
         };
 
         let listing =
@@ -7498,7 +7521,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn inlined_instructions(&mut self) {
         let index_ptr = self.deref_register(1);
-        let index_ptr = match Number::try_from(index_ptr) {
+        let index_ptr = match Number::try_from((index_ptr, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Fixnum(n)) => n.get_num() as usize,
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
@@ -7857,7 +7880,7 @@ impl Machine {
 
         let length = self.deref_register(6);
 
-        let length = match Number::try_from(length) {
+        let length = match Number::try_from((length, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
             Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
                 Ok(u) => u,
@@ -7923,7 +7946,7 @@ impl Machine {
 
         let iterations = self.deref_register(3);
 
-        let iterations = match Number::try_from(iterations) {
+        let iterations = match Number::try_from((iterations, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Fixnum(n)) => u64::try_from(n.get_num()).unwrap(),
             Ok(Number::Integer(n)) => {
                 let n: Result<u64, _> = (&*n).try_into();
@@ -8569,7 +8592,10 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn pop_count(&mut self) {
         let number = self.deref_register(1);
-        let pop_count = integer_as_cell!(match Number::try_from(number) {
+        let pop_count = integer_as_cell!(match Number::try_from((
+            number,
+            &self.machine_st.arena.f64_tbl
+        )) {
             Ok(Number::Fixnum(n)) => {
                 Number::Fixnum(Fixnum::build_with(n.get_num().count_ones()))
             }

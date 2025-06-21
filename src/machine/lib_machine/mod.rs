@@ -277,14 +277,15 @@ impl Term {
                         },
                     }
                 }
-                (HeapCellValueTag::F64, f) => {
-                    term_stack.push(Term::Float((*f).into()));
+                (HeapCellValueTag::F64Offset, offset) => {
+                    let f = *machine.machine_st.arena.f64_tbl.lookup(offset);
+                    term_stack.push(Term::Float(f.into()));
                 }
                 (HeapCellValueTag::Fixnum, n) => {
                     term_stack.push(Term::Integer(n.into()));
                 }
                 (HeapCellValueTag::Cons, ptr) => {
-                    if let Ok(n) = Number::try_from(addr) {
+                    if let Ok(n) = Number::try_from((addr, &machine.machine_st.arena.f64_tbl)) {
                         match n {
                             Number::Integer(i) => term_stack.push(Term::Integer((*i).clone())),
                             Number::Rational(r) => term_stack.push(Term::Rational((*r).clone())),
@@ -312,31 +313,6 @@ impl Term {
                     }
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
-                    //let h = iter.focus().value() as usize;
-                    //let mut arity = arity;
-
-                    // Not sure why/if this is needed.
-                    // Might find out with better testing later.
-                    /*
-                    if iter.heap.len() > h + arity + 1 {
-                        let value = iter.heap[h + arity + 1];
-
-                        if let Some(idx) = get_structure_index(value) {
-                            // in the second condition, arity == 0,
-                            // meaning idx cannot pertain to this atom
-                            // if it is the direct subterm of a larger
-                            // structure.
-                            if arity > 0 || !iter.direct_subterm_of_str(h) {
-                                term_stack.push(
-                                    Term::Literal(Cell::default(), Literal::CodeIndex(idx))
-                                );
-
-                                arity += 1;
-                            }
-                        }
-                    }
-                    */
-
                     if arity == 0 {
                         let atom_name = name.as_str().to_string();
                         if atom_name == "[]" {
@@ -621,9 +597,15 @@ impl Machine {
             .indices
             .code_dir
             .get(&(atom!("call"), 1))
-            .expect("couldn't get code index")
-            .local()
-            .unwrap();
+            .cloned()
+            .map(|offset| {
+                self.machine_st
+                    .arena
+                    .code_index_tbl
+                    .lookup(offset.into())
+                    .p() as usize
+            })
+            .expect("couldn't get code index");
 
         self.machine_st.execute_at_index(1, call_index_p);
 

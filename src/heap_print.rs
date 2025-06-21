@@ -8,7 +8,6 @@ use crate::parser::dashu::{ibig, Integer, Rational};
 use crate::forms::*;
 use crate::heap_iter::*;
 use crate::machine::heap::*;
-use crate::machine::machine_indices::*;
 use crate::machine::partial_string::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
@@ -389,17 +388,20 @@ fn is_numbered_var(name: Atom, arity: usize) -> bool {
 #[inline]
 fn negated_op_needs_bracketing(
     iter: &StackfulPreOrderHeapIter<ListElider>,
+    f64_tbl: &F64Table,
     op_dir: &OpDir,
     op: &Option<DirectedOp>,
 ) -> bool {
     if let Some(ref op) = op {
         op.is_negative_sign()
-            && iter.leftmost_leaf_has_property(op_dir, |addr| match Number::try_from(addr) {
-                Ok(Number::Fixnum(n)) => n.get_num() > 0,
-                Ok(Number::Float(OrderedFloat(f))) => f > 0f64,
-                Ok(Number::Integer(n)) => n.is_positive(),
-                Ok(Number::Rational(n)) => n.is_positive(),
-                _ => false,
+            && iter.leftmost_leaf_has_property(op_dir, |addr| {
+                match Number::try_from((addr, f64_tbl)) {
+                    Ok(Number::Fixnum(n)) => n.get_num() > 0,
+                    Ok(Number::Float(OrderedFloat(f))) => f > 0f64,
+                    Ok(Number::Integer(n)) => n.is_positive(),
+                    Ok(Number::Rational(n)) => n.is_positive(),
+                    _ => false,
+                }
             })
     } else {
         false
@@ -473,6 +475,7 @@ pub fn fmt_float(mut fl: f64) -> String {
 pub struct HCPrinter<'a, Outputter> {
     outputter: Outputter,
     iter: StackfulPreOrderHeapIter<'a, ListElider>,
+    arena: &'a Arena,
     op_dir: &'a OpDir,
     state_stack: Vec<TokenOrRedirect>,
     toplevel_spec: Option<DirectedOp>,
@@ -530,19 +533,39 @@ pub(crate) fn numbervar(offset: &Integer, addr: HeapCellValue) -> Option<String>
         }
     }
 
-    match Number::try_from(addr) {
-        Ok(Number::Fixnum(n)) if n.get_num() >= 0 => {
-            Some(numbervar(offset + Integer::from(n.get_num())))
+    read_heap_cell!(addr,
+        (HeapCellValueTag::Cons, c) => {
+            match_untyped_arena_ptr!(c,
+               (ArenaHeaderTag::Integer, n) => {
+                   if !n.is_negative() {
+                       Some(numbervar(Integer::from(offset + &*n)))
+                   } else {
+                       None
+                   }
+               }
+               _ => {
+                   None
+               }
+            )
         }
-        Ok(Number::Integer(n)) if !n.is_negative() => Some(numbervar(Integer::from(offset + &*n))),
-        _ => None,
-    }
+        (HeapCellValueTag::Fixnum, n) => {
+            if n.get_num() >= 0 {
+                Some(numbervar(offset + Integer::from(n.get_num())))
+            } else {
+                None
+            }
+        }
+        _ => {
+            None
+        }
+    )
 }
 
 impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     pub fn new(
         heap: &'a mut Heap,
         stack: &'a mut Stack,
+        arena: &'a Arena,
         op_dir: &'a OpDir,
         output: Outputter,
         term_loc: usize,
@@ -550,6 +573,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         HCPrinter {
             outputter: output,
             iter: stackful_preorder_iter(heap, stack, term_loc),
+            arena,
             op_dir,
             state_stack: vec![],
             toplevel_spec: None,
@@ -1280,11 +1304,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let at_cdr = self.outputter.ends_with("|");
 
-        if self.double_quotes && !self.ignore_ops && !is_cyclic {
-            if end_cell.is_string_terminator(self.iter.heap) {
-                self.remove_list_children(focus.value() as usize);
-                return self.print_proper_string(focus.value() as usize, max_depth);
-            }
+        if self.double_quotes
+            && !self.ignore_ops
+            && !is_cyclic
+            && end_cell.is_string_terminator(self.iter.heap)
+        {
+            self.remove_list_children(focus.value() as usize);
+            return self.print_proper_string(focus.value() as usize, max_depth);
         }
 
         if self.ignore_ops {
@@ -1426,7 +1452,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 || if let Some(ref op) = op {
                     if self.numbervars && arity == 1 && name == atom!("$VAR") {
                         !self.iter.immediate_leaf_has_property(|addr| {
-                            match Number::try_from(addr) {
+                            match Number::try_from((addr, &self.arena.f64_tbl)) {
                                 Ok(Number::Integer(n)) => (*n).sign() == Sign::Positive,
                                 Ok(Number::Fixnum(n)) => n.get_num() >= 0,
                                 Ok(Number::Float(f)) => f >= OrderedFloat(0f64),
@@ -1511,28 +1537,29 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn print_index_ptr(&mut self, idx: CodeIndex, max_depth: usize) {
+    fn print_index_ptr(&mut self, idx: CodeIndexOffset, max_depth: usize) {
         if self.format_struct(max_depth, 1, atom!("$index_ptr")) {
             let atom = self.state_stack.pop().unwrap();
 
             self.state_stack.pop();
             self.state_stack.pop();
 
-            let idx_ptr = idx.as_ptr();
+            let idx_ptr = self.arena.code_index_tbl.lookup(idx);
 
             let offset = if idx_ptr.is_undefined() || idx_ptr.is_dynamic_undefined() {
                 TokenOrRedirect::Atom(atom!("undefined"))
             } else {
                 let idx_ptr_p = idx_ptr.p() as i64;
 
-                TokenOrRedirect::NumberFocus(
-                    max_depth,
-                    NumberFocus::Unfocused(Number::Fixnum(
-                        /* FIXME this is not safe */
-                        unsafe { Fixnum::build_with_unchecked(idx_ptr_p) },
-                    )),
-                    None,
-                )
+                if let Ok(n) = Fixnum::build_with_checked(idx_ptr_p) {
+                    TokenOrRedirect::NumberFocus(
+                        max_depth,
+                        NumberFocus::Unfocused(Number::Fixnum(n)),
+                        None,
+                    )
+                } else {
+                    TokenOrRedirect::Atom(atom!("out_of_bounds_idx_ptr"))
+                }
             };
 
             self.state_stack.push(offset);
@@ -1612,7 +1639,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         is_functor_redirect: bool,
         mut max_depth: usize,
     ) {
-        let negated_operand = negated_op_needs_bracketing(&self.iter, self.op_dir, &op);
+        let negated_operand =
+            negated_op_needs_bracketing(&self.iter, &self.arena.f64_tbl, self.op_dir, &op);
 
         let addr = match self.check_for_seen(&mut max_depth) {
             Some(addr) => addr,
@@ -1714,14 +1742,15 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     });
                 }
             }
-            (HeapCellValueTag::CodeIndex, idx) => {
+            (HeapCellValueTag::CodeIndexOffset, idx) => {
                 self.print_index_ptr(idx, self.max_depth);
             }
             (HeapCellValueTag::Fixnum | HeapCellValueTag::CutPoint, n) => {
                 self.print_number(max_depth, NumberFocus::Unfocused(Number::Fixnum(n)), &op);
             }
-            (HeapCellValueTag::F64, f) => {
-                self.print_number(max_depth, NumberFocus::Unfocused(Number::Float(*f)), &op);
+            (HeapCellValueTag::F64Offset, offset) => {
+                let f = *self.arena.f64_tbl.lookup(offset.into());
+                self.print_number(max_depth, NumberFocus::Unfocused(Number::Float(f)), &op);
             }
             (HeapCellValueTag::PStrLoc) => {
                 self.print_list_like(max_depth);
@@ -1885,6 +1914,7 @@ mod tests {
             let printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
+                &wam.machine_st.arena,
                 &wam.op_dir,
                 PrinterOutputter::new(),
                 3,
@@ -1917,6 +1947,7 @@ mod tests {
             let printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
+                &wam.machine_st.arena,
                 &wam.op_dir,
                 PrinterOutputter::new(),
                 5,
@@ -1944,6 +1975,7 @@ mod tests {
             let printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
+                &wam.machine_st.arena,
                 &wam.op_dir,
                 PrinterOutputter::new(),
                 0,
@@ -1956,6 +1988,7 @@ mod tests {
             let mut printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
+                &wam.machine_st.arena,
                 &wam.op_dir,
                 PrinterOutputter::new(),
                 0,
@@ -1999,6 +2032,7 @@ mod tests {
             let printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
+                &wam.machine_st.arena,
                 &wam.op_dir,
                 PrinterOutputter::new(),
                 0,
@@ -2017,6 +2051,7 @@ mod tests {
             let printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
+                &wam.machine_st.arena,
                 &wam.op_dir,
                 PrinterOutputter::new(),
                 0,
@@ -2033,6 +2068,7 @@ mod tests {
             let mut printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
+                &wam.machine_st.arena,
                 &wam.op_dir,
                 PrinterOutputter::new(),
                 0,
@@ -2069,6 +2105,7 @@ mod tests {
             let mut printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
+                &wam.machine_st.arena,
                 &wam.op_dir,
                 PrinterOutputter::new(),
                 0,
@@ -2094,6 +2131,7 @@ mod tests {
             let printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
+                &wam.machine_st.arena,
                 &wam.op_dir,
                 PrinterOutputter::new(),
                 2,
@@ -2123,6 +2161,7 @@ mod tests {
             let mut printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
+                &wam.machine_st.arena,
                 &wam.op_dir,
                 PrinterOutputter::new(),
                 2,
