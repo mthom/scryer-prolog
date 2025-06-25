@@ -1544,7 +1544,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             self.state_stack.pop();
             self.state_stack.pop();
 
-            let idx_ptr = self.arena.code_index_tbl.lookup(idx);
+            let idx_ptr = self.arena.code_index_tbl.get_entry(idx);
 
             let offset = if idx_ptr.is_undefined() || idx_ptr.is_dynamic_undefined() {
                 TokenOrRedirect::Atom(atom!("undefined"))
@@ -1749,7 +1749,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.print_number(max_depth, NumberFocus::Unfocused(Number::Fixnum(n)), &op);
             }
             (HeapCellValueTag::F64Offset, offset) => {
-                let f = *self.arena.f64_tbl.lookup(offset.into());
+                let f = self.arena.f64_tbl.get_entry(offset);
                 self.print_number(max_depth, NumberFocus::Unfocused(Number::Float(f)), &op);
             }
             (HeapCellValueTag::PStrLoc) => {

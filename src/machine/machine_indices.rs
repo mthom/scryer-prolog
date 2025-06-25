@@ -186,12 +186,12 @@ impl CodeIndex {
 
     #[inline(always)]
     pub(crate) fn set(&self, code_index_tbl: &mut CodeIndexTable, value: IndexPtr) {
-        code_index_tbl.lookup_mut(self.0).set(value);
+        code_index_tbl.with_entry_mut(self.0, |idx| *idx = value);
     }
 
     #[inline(always)]
     pub(crate) fn replace(&self, code_index_tbl: &mut CodeIndexTable, value: IndexPtr) -> IndexPtr {
-        code_index_tbl.lookup_mut(self.0).replace(value)
+        code_index_tbl.with_entry_mut(self.0, |idx| std::mem::replace(idx, value))
     }
 }
 
