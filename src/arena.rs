@@ -570,8 +570,6 @@ const_assert!(mem::size_of::<OrderedFloat<f64>>() == 8);
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
-
     use crate::arena::*;
     use crate::atom_table::*;
     use crate::machine::mock_wam::*;
@@ -590,10 +588,7 @@ mod tests {
 
         assert_eq!(cell.get_tag(), HeapCellValueTag::F64Offset);
         assert!(!cell.get_mark_bit());
-        assert_eq!(
-            wam.machine_st.arena.f64_tbl.lookup(fp).deref(),
-            &OrderedFloat(f)
-        );
+        assert_eq!(wam.machine_st.arena.f64_tbl.get_entry(fp), OrderedFloat(f));
 
         cell.set_mark_bit(true);
 
@@ -601,8 +596,8 @@ mod tests {
 
         read_heap_cell!(cell,
             (HeapCellValueTag::F64Offset, offset) => {
-                let fp = wam.machine_st.arena.f64_tbl.lookup(offset.into());
-                assert_eq!(*fp, OrderedFloat(0f64))
+                let fp = wam.machine_st.arena.f64_tbl.get_entry(offset);
+                assert_eq!(fp, OrderedFloat(0f64))
             }
             _ => { unreachable!() }
         );

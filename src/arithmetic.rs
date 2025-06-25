@@ -166,7 +166,7 @@ fn push_literal(
         Literal::Fixnum(n) => interm.push(ArithmeticTerm::Number(Number::Fixnum(*n))),
         Literal::Integer(n) => interm.push(ArithmeticTerm::Number(Number::Integer(*n))),
         &Literal::F64Offset(offset) => {
-            let n = *f64_tbl.lookup(offset);
+            let n = f64_tbl.get_entry(offset);
             interm.push(ArithmeticTerm::Number(Number::Float(n)));
         }
         Literal::Rational(n) => interm.push(ArithmeticTerm::Number(Number::Rational(*n))),
@@ -685,7 +685,7 @@ impl TryFrom<(HeapCellValue, &'_ F64Table)> for Number {
                )
            }
            (HeapCellValueTag::F64Offset, offset) => {
-               let n = *f64_tbl.lookup(offset.into());
+               let n = f64_tbl.get_entry(offset);
                Ok(Number::Float(n))
            }
            (HeapCellValueTag::Fixnum | HeapCellValueTag::CutPoint, n) => {

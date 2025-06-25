@@ -289,10 +289,10 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
             (HeapCellValueTag::F64Offset, f2) => {
                 let machine_st = self.deref_mut();
 
-                let f1 = *machine_st.arena.f64_tbl.lookup(f1);
-                let f2 = *machine_st.arena.f64_tbl.lookup(f2.into());
+                let f1 = machine_st.arena.f64_tbl.get_entry(f1);
+                let f2 = machine_st.arena.f64_tbl.get_entry(f2.into());
 
-                self.fail = *f1 != *f2;
+                self.fail = f1 != f2;
             }
             _ => {
                 self.fail = true;

@@ -22,33 +22,30 @@ pub(super) fn set_code_index<'a, LS: LoadState<'a>>(
     code_idx: CodeIndex,
     code_ptr: IndexPtr,
 ) {
-    let mut code_idx_ptr = LS::machine_st(payload)
-        .arena
-        .code_index_tbl
-        .lookup_mut(code_idx.into());
-
-    let record = match compilation_target {
-        CompilationTarget::User => {
-            if IndexPtrTag::Undefined == code_idx_ptr.tag() {
-                code_idx_ptr.set(code_ptr);
-                RetractionRecord::AddedUserPredicate(key)
-            } else {
-                let replaced = code_idx_ptr.replace(code_ptr);
-                RetractionRecord::ReplacedUserPredicate(key, replaced)
+    let record = LS::machine_st(payload).arena.code_index_tbl.with_entry_mut(
+        code_idx.into(),
+        |code_idx_ptr| match compilation_target {
+            CompilationTarget::User => {
+                if IndexPtrTag::Undefined == code_idx_ptr.tag() {
+                    *code_idx_ptr = code_ptr;
+                    RetractionRecord::AddedUserPredicate(key)
+                } else {
+                    let replaced = mem::replace(code_idx_ptr, code_ptr);
+                    RetractionRecord::ReplacedUserPredicate(key, replaced)
+                }
             }
-        }
-        CompilationTarget::Module(ref module_name) => {
-            if IndexPtrTag::Undefined == code_idx_ptr.tag() {
-                code_idx_ptr.set(code_ptr);
-                RetractionRecord::AddedModulePredicate(*module_name, key)
-            } else {
-                let replaced = code_idx_ptr.replace(code_ptr);
-                RetractionRecord::ReplacedModulePredicate(*module_name, key, replaced)
+            CompilationTarget::Module(ref module_name) => {
+                if IndexPtrTag::Undefined == code_idx_ptr.tag() {
+                    *code_idx_ptr = code_ptr;
+                    RetractionRecord::AddedModulePredicate(*module_name, key)
+                } else {
+                    let replaced = mem::replace(code_idx_ptr, code_ptr);
+                    RetractionRecord::ReplacedModulePredicate(*module_name, key, replaced)
+                }
             }
-        }
-    };
+        },
+    );
 
-    drop(code_idx_ptr);
     payload.retraction_info.push_record(record);
 }
 
@@ -145,7 +142,7 @@ pub(super) fn import_module_exports<'a, LS: LoadState<'a>>(
                         .entry(key)
                         .or_insert_with(|| CodeIndex::default(code_idx_tbl));
 
-                    let src_code_index_ptr = *code_idx_tbl.lookup(src_code_index.into());
+                    let src_code_index_ptr = code_idx_tbl.get_entry(src_code_index.into());
 
                     set_code_index::<LS>(
                         payload,
@@ -158,7 +155,7 @@ pub(super) fn import_module_exports<'a, LS: LoadState<'a>>(
                     if LS::machine_st(payload)
                         .arena
                         .code_index_tbl
-                        .lookup(src_code_index.into())
+                        .get_entry(src_code_index.into())
                         .is_dynamic_undefined()
                     {
                         code_dir.insert(key, src_code_index);
@@ -205,7 +202,7 @@ fn import_module_exports_into_module<'a, LS: LoadState<'a>>(
                 if let Some(src_code_index) = imported_module.code_dir.get(&key).cloned() {
                     let code_index_tbl = &mut LS::machine_st(payload).arena.code_index_tbl;
 
-                    let src_code_ptr = *code_index_tbl.lookup(src_code_index.into());
+                    let src_code_ptr = code_index_tbl.get_entry(src_code_index.into());
                     let target_code_index = *code_dir
                         .entry(key)
                         .or_insert_with(|| CodeIndex::default(code_index_tbl));
@@ -259,7 +256,7 @@ fn import_qualified_module_exports<'a, LS: LoadState<'a>>(
                 if let Some(src_code_index) = imported_module.code_dir.get(&key).cloned() {
                     let code_index_tbl = &mut LS::machine_st(payload).arena.code_index_tbl;
 
-                    let src_code_ptr = *code_index_tbl.lookup(src_code_index.into());
+                    let src_code_ptr = code_index_tbl.get_entry(src_code_index.into());
                     let target_code_index =
                         *wam_prelude.indices.code_dir.entry(key).or_insert_with(|| {
                             CodeIndex::new(IndexPtr::undefined(), code_index_tbl)
@@ -320,7 +317,7 @@ fn import_qualified_module_exports_into_module<'a, LS: LoadState<'a>>(
                 if let Some(src_code_index) = imported_module.code_dir.get(&key).cloned() {
                     let code_index_tbl = &mut LS::machine_st(payload).arena.code_index_tbl;
 
-                    let src_code_ptr = *code_index_tbl.lookup(src_code_index.into());
+                    let src_code_ptr = code_index_tbl.get_entry(src_code_index.into());
                     let target_code_index = *code_dir
                         .entry(key)
                         .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), code_index_tbl));
@@ -505,10 +502,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             }
 
             let code_index_tbl = &mut LS::machine_st(&mut self.payload).arena.code_index_tbl;
-            let code_ptr = code_index_tbl.lookup((*code_index).into());
+            let code_ptr = code_index_tbl.get_entry((*code_index).into());
 
             if !code_ptr.is_undefined() && !code_ptr.is_dynamic_undefined() {
-                drop(code_ptr);
                 let old_index_ptr = code_index.replace(code_index_tbl, IndexPtr::undefined());
 
                 self.payload.retraction_info.push_record(
@@ -557,13 +553,12 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             (Some(module_code_idx), Some(target_code_idx)) => {
                                 let code_index_tbl =
                                     &mut LS::machine_st(payload).arena.code_index_tbl;
-                                let module_code_ptr = code_index_tbl.lookup(module_code_idx.into());
-                                let target_code_ptr = code_index_tbl.lookup(target_code_idx.into());
+                                let module_code_ptr =
+                                    code_index_tbl.get_entry(module_code_idx.into());
+                                let target_code_ptr =
+                                    code_index_tbl.get_entry(target_code_idx.into());
 
                                 if module_code_ptr == target_code_ptr {
-                                    drop(module_code_ptr);
-                                    drop(target_code_ptr);
-
                                     let old_index_ptr = target_code_idx
                                         .replace(code_index_tbl, IndexPtr::undefined());
                                     payload

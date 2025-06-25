@@ -1225,11 +1225,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let code_idx_ptr = LS::machine_st(&mut self.payload)
             .arena
             .code_index_tbl
-            .lookup_mut(offset.into());
+            .get_entry(offset.into());
 
         if code_idx_ptr.is_undefined() {
-            drop(code_idx_ptr);
-
             set_code_index::<LS>(
                 &mut self.payload,
                 &compilation_target,
@@ -2015,8 +2013,7 @@ impl Machine {
                             .machine_st
                             .arena
                             .code_index_tbl
-                            .lookup(offset.into())
-                            .tag()
+                            .with_entry(offset.into(), |idx| idx.tag())
                     })
                     .unwrap_or(IndexPtrTag::DynamicUndefined);
 
@@ -2162,16 +2159,14 @@ impl Machine {
 
             let offset = loader.get_or_insert_code_index(key, compilation_target);
 
-            let mut code_idx = loader
+            loader
                 .payload
                 .machine_st
                 .arena
                 .code_index_tbl
-                .lookup_mut(offset.into());
-
-            code_idx.set(IndexPtr::undefined());
-
-            drop(code_idx);
+                .with_entry_mut(offset.into(), |code_idx| {
+                    *code_idx = IndexPtr::undefined();
+                });
 
             loader.payload.compilation_target = clause_clause_compilation_target;
 

@@ -253,7 +253,11 @@ impl Machine {
     ) -> std::process::ExitCode {
         if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(code_idx) = module.code_dir.get(&key) {
-                let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(code_idx.into());
+                let index_ptr = self
+                    .machine_st
+                    .arena
+                    .code_index_tbl
+                    .get_entry(code_idx.into());
                 let p = index_ptr.local().unwrap();
 
                 // Leave a halting choice point to backtrack to in case the predicate fails or throws.
@@ -327,7 +331,11 @@ impl Machine {
 
         if let Some(module) = self.indices.modules.get(&atom!("$atts")) {
             if let Some(code_idx) = module.code_dir.get(&(atom!("driver"), 2)) {
-                let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(code_idx.into());
+                let index_ptr = self
+                    .machine_st
+                    .arena
+                    .code_index_tbl
+                    .get_entry(code_idx.into());
                 self.machine_st.attr_var_init.verify_attrs_loc = index_ptr.local().unwrap();
             }
         }
@@ -350,7 +358,7 @@ impl Machine {
                             CodeIndex::new(IndexPtr::undefined(), code_index_tbl)
                         });
 
-                        let src_code_ptr = *code_index_tbl.lookup(src_code_index.into());
+                        let src_code_ptr = code_index_tbl.get_entry(src_code_index.into());
                         target_code_index.set(code_index_tbl, src_code_ptr);
                     }
                     None => {
@@ -1045,14 +1053,14 @@ impl Machine {
 
         if module_name == atom!("user") {
             if let Some(idx) = self.indices.code_dir.get(&(name, arity)).cloned() {
-                let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                let index_ptr = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
                 self.try_call(name, arity, index_ptr)
             } else {
                 Err(self.machine_st.throw_undefined_error(name, arity))
             }
         } else if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
-                let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                let index_ptr = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
                 self.try_call(name, arity, index_ptr)
             } else {
                 self.undefined_procedure(name, arity)
@@ -1076,15 +1084,23 @@ impl Machine {
         let (name, arity) = key;
 
         if module_name == atom!("user") {
-            if let Some(idx) = self.indices.code_dir.get(&(name, arity)).cloned() {
-                let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
+            if let Some(offset) = self.indices.code_dir.get(&(name, arity)).cloned() {
+                let index_ptr = self
+                    .machine_st
+                    .arena
+                    .code_index_tbl
+                    .get_entry(offset.into());
                 self.try_execute(name, arity, index_ptr)
             } else {
                 self.undefined_procedure(name, arity)
             }
         } else if let Some(module) = self.indices.modules.get(&module_name) {
-            if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
-                let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
+            if let Some(offset) = module.code_dir.get(&(name, arity)).cloned() {
+                let index_ptr = self
+                    .machine_st
+                    .arena
+                    .code_index_tbl
+                    .get_entry(offset.into());
                 self.try_execute(name, arity, index_ptr)
             } else {
                 self.undefined_procedure(name, arity)
@@ -1131,7 +1147,7 @@ impl Machine {
                     self.machine_st
                         .arena
                         .code_index_tbl
-                        .lookup(code_idx.into())
+                        .get_entry(code_idx.into())
                         .local()
                 })
                 .unwrap();
@@ -1142,7 +1158,7 @@ impl Machine {
                     self.machine_st
                         .arena
                         .code_index_tbl
-                        .lookup(code_idx.into())
+                        .get_entry(code_idx.into())
                         .local()
                 })
                 .unwrap();

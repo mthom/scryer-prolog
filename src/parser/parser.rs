@@ -963,7 +963,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 self.negate_number(n, negate_rat_rc, |r, _| Literal::Rational(r))
             }
             Token::Literal(Literal::F64Offset(n)) => {
-                let n = *self.lexer.machine_st.arena.f64_tbl.lookup(n);
+                let n = self.lexer.machine_st.arena.f64_tbl.get_entry(n);
 
                 self.negate_number(
                     n,
