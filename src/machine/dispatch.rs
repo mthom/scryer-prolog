@@ -547,8 +547,8 @@ impl Machine {
 
                         // Find the boundaries of the current predicate
                         self.indices.code_dir.sort_by(|_, a, _, b| {
-                            let a = *self.machine_st.arena.code_index_tbl.lookup((*a).into());
-                            let b = *self.machine_st.arena.code_index_tbl.lookup((*b).into());
+                            let a = self.machine_st.arena.code_index_tbl.get_entry((*a).into());
+                            let b = self.machine_st.arena.code_index_tbl.get_entry((*b).into());
 
                             a.cmp(&b)
                         });
@@ -557,8 +557,11 @@ impl Machine {
                             .indices
                             .code_dir
                             .binary_search_by_key(&p, |_, x| -> usize {
-                                self.machine_st.arena.code_index_tbl.lookup((*x).into()).p()
-                                    as usize
+                                self.machine_st
+                                    .arena
+                                    .code_index_tbl
+                                    .get_entry((*x).into())
+                                    .p() as usize
                             })
                             .unwrap_or_else(|x| x - 1);
 
@@ -570,7 +573,7 @@ impl Machine {
                                 self.machine_st
                                     .arena
                                     .code_index_tbl
-                                    .lookup((*idx.1).into())
+                                    .get_entry((*idx.1).into())
                                     .p() as usize
                             })
                             .unwrap();
@@ -585,7 +588,7 @@ impl Machine {
                                 self.machine_st
                                     .arena
                                     .code_index_tbl
-                                    .lookup((*idx.1).into())
+                                    .get_entry((*idx.1).into())
                                     .p() as usize
                             })
                             .unwrap_or(self.code.len());
@@ -2696,7 +2699,7 @@ impl Machine {
                         }
                     }
                     &Instruction::CallNamed(arity, name, idx) => {
-                        let idx = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                        let idx = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
 
                         try_or_throw!(self.machine_st, self.try_call(name, arity, idx));
 
@@ -2707,7 +2710,7 @@ impl Machine {
                         }
                     }
                     &Instruction::ExecuteNamed(arity, name, idx) => {
-                        let idx = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                        let idx = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
 
                         try_or_throw!(self.machine_st, self.try_execute(name, arity, idx));
 
@@ -2718,7 +2721,7 @@ impl Machine {
                         }
                     }
                     &Instruction::DefaultCallNamed(arity, name, idx) => {
-                        let idx = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                        let idx = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
 
                         try_or_throw!(self.machine_st, self.try_call(name, arity, idx));
 
@@ -2727,7 +2730,7 @@ impl Machine {
                         }
                     }
                     &Instruction::DefaultExecuteNamed(arity, name, idx) => {
-                        let idx = *self.machine_st.arena.code_index_tbl.lookup(idx.into());
+                        let idx = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
 
                         try_or_throw!(self.machine_st, self.try_execute(name, arity, idx));
 

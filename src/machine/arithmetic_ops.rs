@@ -1389,8 +1389,8 @@ impl MachineState {
                     self.interms.push(Number::Fixnum(n));
                 }
                 (HeapCellValueTag::F64Offset, offset) => {
-                    let fl = self.arena.f64_tbl.lookup(offset);
-                    self.interms.push(Number::Float(*fl));
+                    let fl = self.arena.f64_tbl.get_entry(offset);
+                    self.interms.push(Number::Float(fl));
                 }
                 (HeapCellValueTag::Cons, ptr) => {
                     match_untyped_arena_ptr!(ptr,

@@ -412,8 +412,8 @@ impl MachineState {
                     let v1 = cell_as_f64_offset!(v1);
                     let v2 = cell_as_f64_offset!(v2);
 
-                    let v1 = self.arena.f64_tbl.lookup(v1);
-                    let v2 = self.arena.f64_tbl.lookup(v2);
+                    let v1 = self.arena.f64_tbl.get_entry(v1);
+                    let v2 = self.arena.f64_tbl.get_entry(v2);
 
                     if v1 != v2 {
                         self.pdl.clear();

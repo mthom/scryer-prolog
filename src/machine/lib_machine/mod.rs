@@ -278,7 +278,7 @@ impl Term {
                     }
                 }
                 (HeapCellValueTag::F64Offset, offset) => {
-                    let f = *machine.machine_st.arena.f64_tbl.lookup(offset);
+                    let f = machine.machine_st.arena.f64_tbl.get_entry(offset);
                     term_stack.push(Term::Float(f.into()));
                 }
                 (HeapCellValueTag::Fixnum, n) => {
@@ -602,7 +602,7 @@ impl Machine {
                 self.machine_st
                     .arena
                     .code_index_tbl
-                    .lookup(offset.into())
+                    .get_entry(offset.into())
                     .p() as usize
             })
             .expect("couldn't get code index");

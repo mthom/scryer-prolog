@@ -1328,16 +1328,14 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let index_ptr = LS::machine_st(&mut self.payload)
             .arena
             .code_index_tbl
-            .lookup(code_idx.into());
+            .get_entry(code_idx.into());
 
         print_overwrite_warning(
             &predicates.compilation_target,
-            *index_ptr,
+            index_ptr,
             key,
             settings.is_dynamic(),
         );
-
-        drop(index_ptr);
 
         let index_ptr = if settings.is_dynamic() {
             IndexPtr::dynamic_index(code_ptr)
@@ -2231,10 +2229,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
             if let Some(filename) = self.listing_src_file_name() {
                 if let Some(ref mut module) = self.wam_prelude.indices.modules.get_mut(&filename) {
-                    let index_ptr = *LS::machine_st(&mut self.payload)
+                    let index_ptr = LS::machine_st(&mut self.payload)
                         .arena
                         .code_index_tbl
-                        .lookup_mut(offset.into());
+                        .get_entry(offset.into());
 
                     let offset = *module.code_dir.entry(key).or_insert(offset);
 

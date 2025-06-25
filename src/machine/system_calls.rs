@@ -1246,7 +1246,7 @@ impl Machine {
                 self.machine_st
                     .arena
                     .code_index_tbl
-                    .lookup(idx.into())
+                    .get_entry(idx.into())
                     .local()
             })
             .unwrap();
@@ -1477,7 +1477,11 @@ impl Machine {
         };
 
         if let Some(code_idx) = index_cell_opt {
-            let index_ptr = *self.machine_st.arena.code_index_tbl.lookup(code_idx.into());
+            let index_ptr = self
+                .machine_st
+                .arena
+                .code_index_tbl
+                .get_entry(code_idx.into());
 
             if !index_ptr.is_undefined() {
                 load_registers(&mut self.machine_st, goal, goal_arity);
@@ -6005,7 +6009,7 @@ impl Machine {
                 self.machine_st
                     .arena
                     .code_index_tbl
-                    .lookup(idx.into())
+                    .get_entry(idx.into())
                     .local()
                     .is_some()
             })
@@ -6030,10 +6034,10 @@ impl Machine {
                         arity,
                         module_name,
                     )
-                        .map(|idx| *self.machine_st
+                        .map(|idx| self.machine_st
                              .arena
                              .code_index_tbl
-                             .lookup(idx.into()))
+                             .get_entry(idx.into()))
                         .unwrap_or(IndexPtr::dynamic_undefined());
 
                     !matches!(index.tag(), IndexPtrTag::DynamicUndefined | IndexPtrTag::Undefined)
@@ -6050,10 +6054,10 @@ impl Machine {
                         0,
                         module_name,
                     )
-                        .map(|idx| *self.machine_st
+                        .map(|idx| self.machine_st
                              .arena
                              .code_index_tbl
-                             .lookup(idx.into()))
+                             .get_entry(idx.into()))
                         .unwrap_or(IndexPtr::dynamic_undefined());
 
                     !matches!(index.tag(), IndexPtrTag::DynamicUndefined)
@@ -7480,7 +7484,7 @@ impl Machine {
             self.machine_st
                 .arena
                 .code_index_tbl
-                .lookup(first_idx.into())
+                .get_entry(first_idx.into())
                 .local()
         });
 
