@@ -952,6 +952,7 @@ impl MachineState {
                 let mut printer = HCPrinter::new(
                     &mut self.heap,
                     &mut self.stack,
+                    &self.arena,
                     op_dir,
                     PrinterOutputter::new(),
                     0,
@@ -962,7 +963,7 @@ impl MachineState {
                 printer.quoted = quoted;
                 printer.double_quotes = double_quotes;
 
-                match Number::try_from(max_depth) {
+                match Number::try_from((max_depth, &self.arena.f64_tbl)) {
                     Ok(Number::Fixnum(n)) => {
                         if let Ok(n) = usize::try_from(n.get_num()) {
                             printer.max_depth = n;

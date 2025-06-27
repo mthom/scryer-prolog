@@ -53,17 +53,17 @@ macro_rules! cell_as_atom_cell {
     };
 }
 
-macro_rules! cell_as_f64_ptr {
+macro_rules! cell_as_f64_offset {
     ($cell:expr) => {{
         let offset = $cell.get_value() as usize;
-        F64Ptr::from_offset(F64Offset::from(offset))
+        F64Offset::from(offset)
     }};
 }
 
-macro_rules! cell_as_code_index {
+macro_rules! cell_as_code_index_offset {
     ($cell:expr) => {{
         let offset = $cell.get_value() as usize;
-        CodeIndex::from(CodeIndexOffset::from(offset))
+        CodeIndexOffset::from(offset)
     }};
 }
 
@@ -266,38 +266,18 @@ macro_rules! read_heap_cell_pat_body {
         #[allow(unused_braces)]
         $code
     }};
-    ($cell:ident, F64, $n:ident, $code:expr) => {{
-        let $n = cell_as_f64_ptr!($cell);
+    ($cell:ident, F64Offset, $n:ident, $code:expr) => {{
+        let $n = cell_as_f64_offset!($cell);
         #[allow(unused_braces)]
         $code
     }};
-    ($cell:ident, CodeIndex, $n:ident, $code:expr) => {{
-        let $n = cell_as_code_index!($cell);
+    ($cell:ident, CodeIndexOffset, $n:ident, $code:expr) => {{
+        let $n = cell_as_code_index_offset!($cell);
         #[allow(unused_braces)]
         $code
     }};
     ($cell:ident, Atom, ($name:ident, $arity:ident), $code:expr) => {{
         let ($name, $arity) = cell_as_atom_cell!($cell).get_name_and_arity();
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($cell:ident, PStr, $atom:ident, $code:expr) => {{
-        let $atom = cell_as_atom!($cell);
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($cell:ident, CStr, $atom:ident, $code:expr) => {{
-        let $atom = cell_as_atom!($cell);
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($cell:ident, CStr | PStr, $atom:ident, $code:expr) => {{
-        let $atom = cell_as_atom!($cell);
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($cell:ident, PStr | CStr, $atom:ident, $code:expr) => {{
-        let $atom = cell_as_atom!($cell);
         #[allow(unused_braces)]
         $code
     }};
@@ -318,11 +298,6 @@ macro_rules! read_heap_cell_pat_body {
     }};
     ($cell:ident, CutPoint | Fixnum, $value:ident, $code:expr) => {{
         let $value = Fixnum::from_bytes($cell.into_bytes());
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($cell:ident, Char, $value:ident, $code:expr) => {{
-        let $value = unsafe { char::from_u32_unchecked($cell.get_value() as u32) };
         #[allow(unused_braces)]
         $code
     }};

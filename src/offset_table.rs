@@ -1,15 +1,12 @@
 use std::cell::UnsafeCell;
-use std::hash::{Hash, Hasher};
-use std::ops::{Deref, DerefMut};
-use std::sync::RwLock;
-use std::sync::Weak;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{fmt, mem, ptr};
 
 use arcu::atomic::Arcu;
 use arcu::epoch_counters::GlobalEpochCounterPool;
 use arcu::rcu_ref::RcuRef;
 use arcu::Rcu;
+use parking_lot::RwLock;
 
 use crate::machine::machine_indices::IndexPtr;
 use crate::raw_block::RawBlock;
@@ -23,19 +20,7 @@ const F64_TABLE_ALIGN: usize = 8;
 const CODE_INDEX_TABLE_INIT_SIZE: usize = 1 << 16;
 const CODE_INDEX_TABLE_ALIGN: usize = 8;
 
-#[derive(Debug)]
-pub struct OffsetTableImpl<T>
-where
-    OffsetTableImpl<T>: RawBlockTraits,
-{
-    block: Arcu<RawBlock<OffsetTableImpl<T>>, GlobalEpochCounterPool>,
-    update: Mutex<()>,
-}
-
-pub type F64Table = OffsetTableImpl<OrderedFloat<f64>>;
-pub type CodeIndexTable = OffsetTableImpl<IndexPtr>;
-
-impl RawBlockTraits for F64Table {
+impl RawBlockTraits for OrderedFloat<f64> {
     #[inline]
     fn init_size() -> usize {
         F64_TABLE_INIT_SIZE
@@ -47,7 +32,7 @@ impl RawBlockTraits for F64Table {
     }
 }
 
-impl RawBlockTraits for CodeIndexTable {
+impl RawBlockTraits for IndexPtr {
     #[inline]
     fn init_size() -> usize {
         CODE_INDEX_TABLE_INIT_SIZE
@@ -59,79 +44,253 @@ impl RawBlockTraits for CodeIndexTable {
     }
 }
 
-pub trait OffsetTable: RawBlockTraits {
-    type Offset: Copy + From<usize> + Into<usize>;
-    type Stored;
+#[derive(Debug)]
+pub struct OffsetTableImpl<T: RawBlockTraits>(InnerOffsetTableImpl<T>);
 
-    fn global_table() -> &'static RwLock<Weak<Self>>;
-}
-
-impl OffsetTable for F64Table {
-    type Offset = F64Offset;
-    type Stored = OrderedFloat<f64>;
-
-    #[inline(always)]
-    fn global_table() -> &'static RwLock<Weak<Self>> {
-        static GLOBAL_ATOM_TABLE: RwLock<Weak<F64Table>> = RwLock::new(Weak::new());
-        &GLOBAL_ATOM_TABLE
-    }
-}
-
-impl OffsetTable for CodeIndexTable {
-    type Offset = CodeIndexOffset;
-    type Stored = IndexPtr;
-
-    #[inline(always)]
-    fn global_table() -> &'static RwLock<Weak<CodeIndexTable>> {
-        static GLOBAL_CODE_INDEX_TABLE: RwLock<Weak<CodeIndexTable>> = RwLock::new(Weak::new());
-        &GLOBAL_CODE_INDEX_TABLE
-    }
-}
-
-impl<T: 'static> OffsetTableImpl<T>
-where
-    OffsetTableImpl<T>: OffsetTable<Stored = T>,
-{
+impl<T: RawBlockTraits> From<Arc<ConcurrentOffsetTable<T>>> for OffsetTableImpl<T> {
     #[inline]
-    pub fn new() -> Arc<Self> {
-        let upgraded = Self::global_table().read().unwrap().upgrade();
-        // don't inline upgraded, otherwise temporary will be dropped too late in case of None
-        if let Some(atom_table) = upgraded {
-            atom_table
-        } else {
-            let mut guard = Self::global_table().write().unwrap();
-            // try to upgrade again in case we lost the race on the write lock
-            if let Some(atom_table) = guard.upgrade() {
-                atom_table
-            } else {
-                let table = Arc::new(Self {
-                    block: Arcu::new(RawBlock::new(), GlobalEpochCounterPool),
-                    update: Mutex::new(()),
+    fn from(value: Arc<ConcurrentOffsetTable<T>>) -> Self {
+        OffsetTableImpl(InnerOffsetTableImpl::Concurrent(value))
+    }
+}
+
+impl<T: fmt::Debug + RawBlockTraits> OffsetTableImpl<T> {
+    #[inline(always)]
+    pub fn new() -> Self {
+        Self(InnerOffsetTableImpl::Serial(SerialOffsetTable::new()))
+    }
+
+    #[must_use = "the returned concurrent table must be absorbed into the owned OffsetTable"]
+    pub fn single_to_concurrent(&mut self) -> Arc<ConcurrentOffsetTable<T>> {
+        match &mut self.0 {
+            InnerOffsetTableImpl::Serial(serial_tbl) => {
+                let empty_serial_tbl = SerialOffsetTable {
+                    block: RawBlock::empty_block(),
+                };
+
+                let serial_tbl = mem::replace(serial_tbl, empty_serial_tbl);
+                let num_tbl_entries = serial_tbl.block.size() / size_of::<T>();
+                let block = Arcu::new(serial_tbl.block, GlobalEpochCounterPool);
+
+                let offset_locks: Vec<RwLock<()>> =
+                    (0..num_tbl_entries).map(|_| RwLock::new(())).collect();
+
+                let concurrent_tbl = Arc::new(ConcurrentOffsetTable {
+                    block,
+                    growth_lock: RwLock::new(()),
+                    offset_locks: RwLock::new(offset_locks),
                 });
-                *guard = Arc::downgrade(&table);
-                table
+
+                self.0 = InnerOffsetTableImpl::Concurrent(concurrent_tbl.clone());
+
+                concurrent_tbl
+            }
+            InnerOffsetTableImpl::Concurrent(concurrent_tbl) => concurrent_tbl.clone(),
+        }
+    }
+
+    #[must_use = "the transition to a single-threaded offset table may fail if the concurrent table is held from multiple places"]
+    pub fn concurrent_to_single(&mut self) -> Result<(), ()> {
+        match &mut self.0 {
+            InnerOffsetTableImpl::Serial(_serial_tbl) => Ok(()),
+            InnerOffsetTableImpl::Concurrent(concurrent_tbl) => {
+                let table_arc = std::mem::replace(
+                    concurrent_tbl,
+                    Arc::new(ConcurrentOffsetTable {
+                        block: Arcu::new(RawBlock::empty_block(), GlobalEpochCounterPool),
+                        growth_lock: RwLock::new(()),
+                        offset_locks: RwLock::new(vec![]),
+                    }),
+                );
+
+                match Arc::try_unwrap(table_arc) {
+                    Ok(table) => {
+                        // this was the only instance of the concurrent table, as such
+                        // at this point no build_with/with_entry{_mut} call can be in-progress/made
+
+                        // this shouldn't be able to fail
+                        let raw_block =
+                            Arc::try_unwrap(table.block.replace(RawBlock::empty_block())).unwrap();
+                        self.0 =
+                            InnerOffsetTableImpl::Serial(SerialOffsetTable { block: raw_block });
+                        Ok(())
+                    }
+                    Err(table_arc) => {
+                        // restore the concurrent_tbl
+                        *concurrent_tbl = table_arc;
+                        Err(())
+                    }
+                }
             }
         }
     }
 
+    #[inline]
+    pub fn get_entry(&self, offset: <Self as OffsetTable<T>>::Offset) -> T
+    where
+        Self: OffsetTable<T>,
+        T: Copy,
+    {
+        self.with_entry(offset, |value| *value)
+    }
+}
+
+impl<T: fmt::Debug + RawBlockTraits> Default for OffsetTableImpl<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug)]
+struct SerialOffsetTable<T: RawBlockTraits> {
+    block: RawBlock<T>,
+}
+
+#[derive(Debug)]
+pub struct ConcurrentOffsetTable<T: RawBlockTraits> {
+    block: Arcu<RawBlock<T>, GlobalEpochCounterPool>,
+    growth_lock: RwLock<()>,
+    offset_locks: RwLock<Vec<RwLock<()>>>,
+}
+
+#[derive(Debug)]
+enum InnerOffsetTableImpl<T: RawBlockTraits> {
+    Serial(SerialOffsetTable<T>),
+    #[allow(dead_code)]
+    Concurrent(Arc<ConcurrentOffsetTable<T>>),
+}
+
+impl<T: RawBlockTraits> InnerOffsetTableImpl<T> {
+    #[inline(always)]
+    fn build_with(&mut self, value: T) -> usize {
+        match self {
+            Self::Concurrent(concurrent_tbl) => concurrent_tbl.build_with(value),
+            Self::Serial(serial_tbl) => unsafe { serial_tbl.build_with(value) },
+        }
+    }
+
+    #[inline(always)]
+    fn with_entry<R, F: FnOnce(&T) -> R>(&self, offset: usize, f: F) -> R {
+        match self {
+            Self::Concurrent(concurrent_tbl) => concurrent_tbl.with_entry(offset, f),
+            Self::Serial(serial_tbl) => f(unsafe { serial_tbl.lookup(offset) }),
+        }
+    }
+
+    #[inline(always)]
+    fn with_entry_mut<R, F: FnOnce(&mut T) -> R>(&mut self, offset: usize, f: F) -> R {
+        match self {
+            Self::Concurrent(concurrent_tbl) => concurrent_tbl.with_entry_mut(offset, f),
+            Self::Serial(serial_tbl) => f(unsafe { serial_tbl.lookup_mut(offset) }),
+        }
+    }
+}
+
+pub trait OffsetTable<T: RawBlockTraits> {
+    type Offset: Copy + Into<usize>;
+
+    fn build_with(&mut self, value: T) -> Self::Offset;
+
+    fn with_entry<R, F: FnOnce(&T) -> R>(&self, offset: Self::Offset, f: F) -> R;
+    fn with_entry_mut<R, F: FnOnce(&mut T) -> R>(&mut self, offset: Self::Offset, f: F) -> R;
+}
+
+impl OffsetTable<OrderedFloat<f64>> for OffsetTableImpl<OrderedFloat<f64>> {
+    type Offset = F64Offset;
+
+    fn build_with(&mut self, value: OrderedFloat<f64>) -> F64Offset {
+        F64Offset(self.0.build_with(value))
+    }
+
+    #[inline]
+    fn with_entry<R, F: FnOnce(&OrderedFloat<f64>) -> R>(&self, offset: F64Offset, f: F) -> R {
+        self.0.with_entry(offset.into(), f)
+    }
+
+    #[inline]
+    fn with_entry_mut<R, F: FnOnce(&mut OrderedFloat<f64>) -> R>(
+        &mut self,
+        offset: F64Offset,
+        f: F,
+    ) -> R {
+        self.0.with_entry_mut(offset.into(), f)
+    }
+}
+
+impl OffsetTable<IndexPtr> for OffsetTableImpl<IndexPtr> {
+    type Offset = CodeIndexOffset;
+
+    fn build_with(&mut self, value: IndexPtr) -> CodeIndexOffset {
+        CodeIndexOffset(self.0.build_with(value))
+    }
+
+    #[inline]
+    fn with_entry<R, F: FnOnce(&IndexPtr) -> R>(&self, offset: CodeIndexOffset, f: F) -> R {
+        self.0.with_entry(offset.into(), f)
+    }
+
+    #[inline]
+    fn with_entry_mut<R, F: FnOnce(&mut IndexPtr) -> R>(
+        &mut self,
+        offset: CodeIndexOffset,
+        f: F,
+    ) -> R {
+        self.0.with_entry_mut(offset.into(), f)
+    }
+}
+
+impl<T: RawBlockTraits> SerialOffsetTable<T> {
+    #[inline]
+    fn new() -> Self {
+        Self {
+            block: RawBlock::new(),
+        }
+    }
+
+    unsafe fn build_with(&mut self, value: T) -> usize {
+        let mut ptr;
+
+        loop {
+            ptr = self.block.alloc(size_of::<T>());
+
+            if ptr.is_null() {
+                let new_block = self.block.grow_new().unwrap();
+                self.block = new_block;
+            } else {
+                break;
+            }
+        }
+
+        ptr::write(ptr as *mut T, value);
+        ptr.addr() - self.block.base.addr()
+    }
+
+    #[inline]
+    unsafe fn lookup(&self, offset: usize) -> &T {
+        &*self.block.base.add(offset).cast::<T>()
+    }
+
+    #[inline]
+    unsafe fn lookup_mut(&mut self, offset: usize) -> &mut T {
+        &mut *self.block.base.add(offset).cast::<T>().cast_mut()
+    }
+}
+
+impl<T: RawBlockTraits> ConcurrentOffsetTable<T> {
     #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn build_with(
-        &self,
-        value: <OffsetTableImpl<T> as OffsetTable>::Stored,
-    ) -> <OffsetTableImpl<T> as OffsetTable>::Offset {
-        let update_guard = self.update.lock();
+    fn build_with(&self, value: T) -> usize {
+        let growth_lock = self.growth_lock.write();
 
         // we don't have an index table for lookups as AtomTable does so
         // just get the epoch after we take the upgrade lock
         let mut block_epoch = self.block.read();
-
         let mut ptr;
 
         loop {
-            ptr = block_epoch.alloc(mem::size_of::<T>());
+            ptr = unsafe { block_epoch.alloc(mem::size_of::<T>()) };
 
             if ptr.is_null() {
-                let new_block = block_epoch.grow_new().unwrap();
+                let new_block = unsafe { block_epoch.grow_new().unwrap() };
                 self.block.replace(new_block);
                 block_epoch = self.block.read();
             } else {
@@ -139,140 +298,69 @@ where
             }
         }
 
-        ptr::write(ptr as *mut T, value);
+        let new_tbl_sz = block_epoch.size() / size_of::<T>();
+        let mut offset_locks = self.offset_locks.write();
 
-        let value =
-            <OffsetTableImpl<T> as OffsetTable>::Offset::from(ptr.addr() - block_epoch.base.addr());
+        offset_locks.resize_with(new_tbl_sz, || RwLock::new(()));
+
+        unsafe {
+            ptr::write(ptr as *mut T, value);
+        }
+
+        let value = ptr.addr() - block_epoch.base.addr();
 
         // AtomTable would have to update the index table at this point
         // explicit drop to ensure we don't accidentally drop it early
-        drop(update_guard);
+        drop(offset_locks);
+        drop(growth_lock);
 
         value
     }
 
-    pub fn lookup(offset: <Self as OffsetTable>::Offset) -> RcuRef<RawBlock<Self>, UnsafeCell<T>> {
-        let table = Self::global_table()
-            .read()
-            .unwrap()
-            .upgrade()
-            .expect("We should only be looking up entries when there is a table");
+    fn with_entry<R, F: FnOnce(&T) -> R>(&self, offset: usize, f: F) -> R {
+        let outer_offset_lock = self.offset_locks.read();
+        let inner_offset_lock = outer_offset_lock[offset / size_of::<T>()].read();
 
-        RcuRef::try_map(table.block.read(), |raw_block| unsafe {
+        let rcu_ref = RcuRef::try_map(self.block.read(), |raw_block| unsafe {
+            raw_block.base.add(offset).cast::<T>().as_ref()
+        })
+        .expect("offset valid");
+
+        let result = f(&*rcu_ref);
+
+        drop(inner_offset_lock);
+        drop(outer_offset_lock);
+
+        result
+    }
+
+    fn with_entry_mut<R, F: FnOnce(&mut T) -> R>(&self, offset: usize, f: F) -> R {
+        let growth_lock = self.growth_lock.read();
+        let outer_offset_lock = self.offset_locks.read();
+        let inner_offset_lock = outer_offset_lock[offset / size_of::<T>()].write();
+
+        let rcu_ref = RcuRef::try_map(self.block.read(), |raw_block| unsafe {
             raw_block
                 .base
-                .add(offset.into())
+                .add(offset)
                 .cast_mut()
                 .cast::<UnsafeCell<T>>()
                 .as_ref()
         })
-        .expect("The offset should result in a non-null pointer")
+        .expect("offset valid");
+
+        let result = f(unsafe { &mut *rcu_ref.get().as_mut().unwrap() });
+
+        drop(inner_offset_lock);
+        drop(outer_offset_lock);
+        drop(growth_lock);
+
+        result
     }
 }
 
-#[derive(Debug)]
-pub struct TablePtr<T>(RcuRef<RawBlock<OffsetTableImpl<T>>, UnsafeCell<T>>)
-where
-    OffsetTableImpl<T>: RawBlockTraits;
-
-pub type CodeIndexPtr = TablePtr<IndexPtr>;
-pub type F64Ptr = TablePtr<OrderedFloat<f64>>;
-
-impl<T> Clone for TablePtr<T>
-where
-    OffsetTableImpl<T>: RawBlockTraits,
-{
-    fn clone(&self) -> Self {
-        Self(RcuRef::clone(&self.0))
-    }
-}
-
-impl<T: PartialEq> PartialEq for TablePtr<T>
-where
-    OffsetTableImpl<T>: RawBlockTraits,
-{
-    fn eq(&self, other: &TablePtr<T>) -> bool {
-        RcuRef::ptr_eq(&self.0, &other.0) || self.deref() == other.deref()
-    }
-}
-
-impl<T: Eq> Eq for TablePtr<T> where OffsetTableImpl<T>: RawBlockTraits {}
-
-impl<T: PartialOrd + Ord> PartialOrd for TablePtr<T>
-where
-    OffsetTableImpl<T>: RawBlockTraits,
-{
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<T: Ord> Ord for TablePtr<T>
-where
-    OffsetTableImpl<T>: RawBlockTraits,
-{
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (**self).cmp(&**other)
-    }
-}
-
-impl<T: Hash> Hash for TablePtr<T>
-where
-    OffsetTableImpl<T>: RawBlockTraits,
-{
-    #[inline(always)]
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        (self as &T).hash(hasher)
-    }
-}
-
-impl<T: fmt::Display> fmt::Display for TablePtr<T>
-where
-    OffsetTableImpl<T>: RawBlockTraits,
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self as &T)
-    }
-}
-
-impl<T> Deref for TablePtr<T>
-where
-    OffsetTableImpl<T>: RawBlockTraits,
-{
-    type Target = T;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.0.get().as_ref().unwrap() }
-    }
-}
-
-impl<T> DerefMut for TablePtr<T>
-where
-    OffsetTableImpl<T>: RawBlockTraits,
-{
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.0.get().as_mut().unwrap() }
-    }
-}
-
-impl<T: 'static> TablePtr<T>
-where
-    OffsetTableImpl<T>: OffsetTable<Stored = T>,
-{
-    #[inline(always)]
-    pub fn from_offset(offset: <OffsetTableImpl<T> as OffsetTable>::Offset) -> Self {
-        Self(OffsetTableImpl::<T>::lookup(offset))
-    }
-
-    #[inline(always)]
-    pub fn as_offset(&self) -> <OffsetTableImpl<T> as OffsetTable>::Offset {
-        <OffsetTableImpl<T> as OffsetTable>::Offset::from(
-            self.0.get().addr() - RcuRef::get_root(&self.0).base.addr(),
-        )
-    }
-}
+pub type F64Table = OffsetTableImpl<OrderedFloat<f64>>;
+pub type CodeIndexTable = OffsetTableImpl<IndexPtr>;
 
 #[derive(Clone, Copy, Debug)]
 pub struct F64Offset(usize);
@@ -284,10 +372,9 @@ impl From<usize> for F64Offset {
     }
 }
 
-impl Into<usize> for F64Offset {
-    #[inline(always)]
-    fn into(self: Self) -> usize {
-        self.0
+impl From<F64Offset> for usize {
+    fn from(val: F64Offset) -> Self {
+        val.0
     }
 }
 
@@ -301,57 +388,17 @@ impl From<usize> for CodeIndexOffset {
     }
 }
 
-impl Into<usize> for CodeIndexOffset {
+impl From<CodeIndexOffset> for usize {
     #[inline(always)]
-    fn into(self: Self) -> usize {
-        self.0
+    fn from(val: CodeIndexOffset) -> Self {
+        val.0
     }
 }
 
 impl CodeIndexOffset {
     #[inline(always)]
-    pub fn from_ptr(ptr: CodeIndexPtr) -> Self {
-        ptr.as_offset()
-    }
-
-    #[inline(always)]
-    pub fn as_ptr(self) -> CodeIndexPtr {
-        CodeIndexPtr::from_offset(self)
-    }
-
-    #[inline(always)]
     pub fn to_u64(self) -> u64 {
         self.0 as u64
-    }
-}
-
-impl PartialEq for CodeIndexOffset {
-    #[inline(always)]
-    fn eq(&self, other: &CodeIndexOffset) -> bool {
-        self.as_ptr() == other.as_ptr()
-    }
-}
-
-impl Eq for CodeIndexOffset {}
-
-impl PartialOrd for CodeIndexOffset {
-    #[inline(always)]
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for CodeIndexOffset {
-    #[inline(always)]
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.as_ptr().cmp(&other.as_ptr())
-    }
-}
-
-impl Hash for CodeIndexOffset {
-    #[inline(always)]
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        self.as_ptr().hash(hasher)
     }
 }
 
@@ -361,62 +408,10 @@ impl fmt::Display for CodeIndexOffset {
     }
 }
 
-impl CodeIndexPtr {
-    #[inline]
-    pub fn set(&self, val: IndexPtr) {
-        unsafe { *self.0.get() = val };
-    }
-
-    #[inline]
-    pub fn replace(&self, val: IndexPtr) -> IndexPtr {
-        unsafe { self.0.get().replace(val) }
-    }
-}
-
 impl F64Offset {
-    #[inline(always)]
-    pub fn from_ptr(ptr: F64Ptr) -> Self {
-        ptr.as_offset()
-    }
-
-    #[inline(always)]
-    pub fn as_ptr(self) -> F64Ptr {
-        F64Ptr::from_offset(self)
-    }
-
     #[inline(always)]
     pub fn to_u64(self) -> u64 {
         self.0 as u64
-    }
-}
-
-impl PartialEq for F64Offset {
-    #[inline(always)]
-    fn eq(&self, other: &F64Offset) -> bool {
-        self.as_ptr() == other.as_ptr()
-    }
-}
-
-impl Eq for F64Offset {}
-
-impl PartialOrd for F64Offset {
-    #[inline(always)]
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for F64Offset {
-    #[inline(always)]
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.as_ptr().cmp(&other.as_ptr())
-    }
-}
-
-impl Hash for F64Offset {
-    #[inline(always)]
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        self.as_ptr().hash(hasher)
     }
 }
 

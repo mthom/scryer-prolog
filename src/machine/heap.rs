@@ -1,6 +1,6 @@
 use crate::atom_table::*;
-use crate::forms::*;
 use crate::functor_macro::*;
+use crate::machine::{ArenaHeaderTag, Fixnum, Integer};
 use crate::types::*;
 
 use std::alloc;
@@ -717,7 +717,7 @@ impl Heap {
     pub(crate) fn slice_to_str(&self, slice_loc: usize, slice_len: usize) -> &str {
         unsafe {
             let slice = std::slice::from_raw_parts(self.inner.ptr.add(slice_loc), slice_len);
-            std::str::from_utf8_unchecked(&slice)
+            std::str::from_utf8_unchecked(slice)
         }
     }
 
@@ -824,7 +824,7 @@ impl Heap {
         let s = unsafe {
             let char_ptr = self.inner.ptr.add(byte_idx);
             let slice = std::slice::from_raw_parts(char_ptr, size_of::<char>());
-            std::str::from_utf8_unchecked(&slice)
+            std::str::from_utf8_unchecked(slice)
         };
 
         s.chars().next().unwrap()
@@ -1158,14 +1158,24 @@ pub fn sized_iter_to_heap_list<SrcT: Into<HeapCellValue>>(
 
 pub(crate) fn to_local_code_ptr(heap: &Heap, addr: HeapCellValue) -> Option<usize> {
     let extract_integer = |s: usize| -> Option<usize> {
-        match Number::try_from(heap[s]) {
-            Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
-            Ok(Number::Integer(n)) => {
-                let value: usize = (&*n).try_into().unwrap();
-                Some(value)
+        read_heap_cell!(heap[s],
+            (HeapCellValueTag::Cons, c) => {
+                match_untyped_arena_ptr!(c,
+                   (ArenaHeaderTag::Integer, n) => {
+                       (&*n).try_into().ok()
+                   }
+                   _ => {
+                       None
+                   }
+                )
             }
-            _ => None,
-        }
+            (HeapCellValueTag::Fixnum, n) => {
+                usize::try_from(n.get_num()).ok()
+            }
+            _ => {
+                None
+            }
+        )
     };
 
     read_heap_cell!(addr,
