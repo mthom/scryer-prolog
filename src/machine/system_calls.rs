@@ -1002,8 +1002,17 @@ impl MachineState {
                             let err = self.syntax_error(err);
                             return Err(self.error_form(err, stub_gen()));
                         }
-                        Ok(Term::Literal(_, cell)) => {
-                            unify!(self, nx, HeapCellValue::from(cell));
+                        Ok(Term::Literal(_, Literal::Rational(n))) => {
+                            self.unify_rational(n, nx);
+                        }
+                        Ok(Term::Literal(_, Literal::F64Offset(n))) => {
+                            self.unify_f64(n, nx);
+                        }
+                        Ok(Term::Literal(_, Literal::Integer(n))) => {
+                            self.unify_big_int(n, nx);
+                        }
+                        Ok(Term::Literal(_, Literal::Fixnum(n))) => {
+                            self.unify_fixnum(n, nx);
                         }
                         _ => {
                             let err = ParserError::ParseBigInt(0, 0);
