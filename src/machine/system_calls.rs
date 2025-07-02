@@ -911,13 +911,13 @@ impl MachineState {
         use crate::parser::lexer::*;
 
         let nx = self.store(self.deref(self.registers[2]));
-        let add_dot = !string.ends_with('.');
+        let add_dot = !string.ends_with('.') || string.ends_with("'.");
         let cursor = std::io::Cursor::new(string);
 
         let iter = std::io::Read::chain(cursor, {
             let mut dot_buf: [u8; '.'.len_utf8()] = [0u8];
 
-            if add_dot {
+            if add_dot && !string.ends_with('\'') {
                 '.'.encode_utf8(&mut dot_buf);
             }
 
