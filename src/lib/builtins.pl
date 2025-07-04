@@ -934,6 +934,15 @@ findall(Template, Goal, Solutions) :-
 %% findall(Template, Goal, Solutions0, Solutions1)
 %
 % Similar to `findall/3` but returns the solutions as the difference list Solutions0-Solutions1.
+% Example:
+%
+% ```
+% f(1,2).
+% f(1,3).
+% f(1,4).
+%?- findall(X-Y, f(X, Y), Solutions0,Solutions1).
+%   Solutions0 = [1-2,1-3,1-4|Solutions1].
+% ```
 findall(Template, Goal, Solutions0, Solutions1) :-
     error:can_be(list, Solutions0),
     error:can_be(list, Solutions1),
