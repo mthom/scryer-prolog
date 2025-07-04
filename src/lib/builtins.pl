@@ -940,7 +940,7 @@ findall(Template, Goal, Solutions) :-
 % f(1,2).
 % f(1,3).
 % f(1,4).
-%?- findall(X-Y, f(X, Y), Solutions0,Solutions1).
+% ?- findall(X-Y, f(X, Y), Solutions0,Solutions1).
 %   Solutions0 = [1-2,1-3,1-4|Solutions1].
 % ```
 findall(Template, Goal, Solutions0, Solutions1) :-
