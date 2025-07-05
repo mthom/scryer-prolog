@@ -579,10 +579,13 @@ mod private {
         }
     }
 
+    impl<T: FitsInFixnumSeal> MightNotFitInFixnumSeal for T {}
     impl MightNotFitInFixnumSeal for i64 {}
+    impl MightNotFitInFixnumSeal for u64 {}
     impl MightNotFitInFixnumSeal for &Integer {}
     impl MightNotFitInFixnumSeal for Integer {}
     impl MightNotFitInFixnumSeal for usize {}
+    impl MightNotFitInFixnumSeal for isize {}
 }
 
 #[allow(private_bounds)]
