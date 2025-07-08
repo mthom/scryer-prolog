@@ -432,6 +432,7 @@ pub enum ParserError {
     BackQuotedString(usize, usize),
     IO(IOError),
     IncompleteReduction(usize, usize),
+    InfiniteFloat(usize, usize),
     InvalidSingleQuotedCharacter(char),
     LexicalError(lexical::Error),
     MissingQuote(usize, usize),
@@ -447,6 +448,7 @@ impl ParserError {
         match self {
             &ParserError::BackQuotedString(line_num, col_num)
             | &ParserError::IncompleteReduction(line_num, col_num)
+            | &ParserError::InfiniteFloat(line_num, col_num)
             | &ParserError::MissingQuote(line_num, col_num)
             | &ParserError::NonPrologChar(line_num, col_num)
             | &ParserError::ParseBigInt(line_num, col_num)
@@ -463,6 +465,9 @@ impl ParserError {
             ParserError::InvalidSingleQuotedCharacter(..) => {
                 atom!("invalid_single_quoted_character")
             }
+	    ParserError::InfiniteFloat(..) => {
+		atom!("infinite_float")
+	    }
             ParserError::IO(e) if e.kind() == ErrorKind::UnexpectedEof => {
                 atom!("unexpected_end_of_file")
             }
