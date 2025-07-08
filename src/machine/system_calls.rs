@@ -911,27 +911,16 @@ impl MachineState {
         use crate::parser::lexer::*;
 
         let nx = self.store(self.deref(self.registers[2]));
-        let add_dot = !string.ends_with('.');
-        let cursor = std::io::Cursor::new(string);
-
-        let iter = std::io::Read::chain(cursor, {
-            let mut dot_buf: [u8; '.'.len_utf8()] = [0u8];
-
-            if add_dot {
-                '.'.encode_utf8(&mut dot_buf);
-            }
-
-            std::io::Cursor::new(dot_buf)
-        });
+        let iter = std::io::Cursor::new(string);
 
         let mut lexer = Lexer::new(CharReader::new(iter), self);
         let mut tokens = vec![];
 
-        match lexer.next_token() {
+        match lexer.next_number_token() {
             Ok(token @ Token::Literal(Literal::Atom(atom!("-")) | Literal::Char('-'))) => {
                 tokens.push(token);
 
-                if let Ok(token) = lexer.next_token() {
+                if let Ok(token) = lexer.next_number_token() {
                     tokens.push(token);
                 }
             }
@@ -978,9 +967,6 @@ impl MachineState {
                     }
 
                     break;
-                }
-                Ok('.') => {
-                    lexer.skip_char('.');
                 }
                 Ok(c) => {
                     let (line_num, col_num) = (lexer.line_num, lexer.col_num);
