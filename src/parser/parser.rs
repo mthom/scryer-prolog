@@ -977,16 +977,16 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 self.negate_number(n, negate_rat_rc, |r, _| Literal::Rational(r))
             }
             Token::Literal(Literal::Float(n)) if F64Ptr::from_offset(n).is_infinite() => {
-		return Err(ParserError::InfiniteFloat(
-		    self.lexer.line_num,
-		    self.lexer.col_num,
-		));
-	    }
-	    Token::Literal(Literal::Float(n)) => self.negate_number(
+                return Err(ParserError::InfiniteFloat(
+                    self.lexer.line_num,
+                    self.lexer.col_num,
+                ));
+            }
+            Token::Literal(Literal::Float(n)) => self.negate_number(
                 **n.as_ptr(),
                 |n, _| -n,
                 |n, arena| Literal::from(float_alloc!(n, arena)),
-	    ),
+            ),
             Token::Literal(c) => {
                 let atomized = atomize_constant(&self.lexer.machine_st.atom_tbl, c);
 

@@ -465,9 +465,9 @@ impl ParserError {
             ParserError::InvalidSingleQuotedCharacter(..) => {
                 atom!("invalid_single_quoted_character")
             }
-	    ParserError::InfiniteFloat(..) => {
-		atom!("infinite_float")
-	    }
+            ParserError::InfiniteFloat(..) => {
+                atom!("infinite_float")
+            }
             ParserError::IO(e) if e.kind() == ErrorKind::UnexpectedEof => {
                 atom!("unexpected_end_of_file")
             }
