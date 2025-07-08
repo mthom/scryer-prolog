@@ -968,9 +968,6 @@ impl MachineState {
 
                     break;
                 }
-                Ok('.') => {
-                    lexer.skip_char('.');
-                }
                 Ok(c) => {
                     let (line_num, col_num) = (lexer.line_num, lexer.col_num);
 
