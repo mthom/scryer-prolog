@@ -665,10 +665,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
         let n = parse_float_lossy(&token)?;
 
-        Ok(Number::Float(float_alloc!(
-            n,
-            self.machine_st.arena
-        )))
+        Ok(Number::Float(float_alloc!(n, self.machine_st.arena)))
     }
 
     fn skip_underscore_in_number(&mut self) -> Result<char, ParserError> {
@@ -944,9 +941,10 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 Ok(n) => Ok(Token::Literal(n.to_literal())),
                 Err(_) => {
                     let n = parse_float_lossy(&token_string)?;
-                    Ok(Token::Literal(Literal::F64Offset(
-                        float_alloc!(n, self.machine_st.arena),
-                    )))
+                    Ok(Token::Literal(Literal::F64Offset(float_alloc!(
+                        n,
+                        self.machine_st.arena
+                    ))))
                 }
             },
             Ok(NumberToken::Number(n)) => return Ok(Token::Literal(n.to_literal())),
