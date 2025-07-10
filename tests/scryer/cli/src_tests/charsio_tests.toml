@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/charsio.pl", "-f", "-g", "use_module(library(charsio_tests)), charsio_tests:main_quiet(charsio_tests)"]
