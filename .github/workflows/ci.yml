@@ -30,6 +30,7 @@ jobs:
         run: cargo fmt --check
       - name: Check clippy
         run: cargo clippy --no-deps --all-targets
+        if: ${{ !cancelled() }}
 
   build-test:
     runs-on: ${{ matrix.os }}
