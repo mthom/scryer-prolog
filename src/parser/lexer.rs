@@ -508,7 +508,13 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 if hexadecimal_digit_char!(c) {
                     self.skip_char(c);
                     token.push(c);
-                    c = try_nt!(token, self.lookahead_char());
+                    c = match self.lookahead_char() {
+                        Ok(c) => c,
+                        Err(e) if e.is_unexpected_eof() => {
+                            break;
+                        }
+                        Err(e) => return Err(e),
+                    };
                 } else {
                     break;
                 }
@@ -533,7 +539,13 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 if octal_digit_char!(c) {
                     self.skip_char(c);
                     token.push(c);
-                    c = try_nt!(token, self.lookahead_char());
+                    c = match self.lookahead_char() {
+                        Ok(c) => c,
+                        Err(e) if e.is_unexpected_eof() => {
+                            break;
+                        }
+                        Err(e) => return Err(e),
+                    };
                 } else {
                     break;
                 }
@@ -558,7 +570,13 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 if binary_digit_char!(c) {
                     self.skip_char(c);
                     token.push(c);
-                    c = try_nt!(token, self.lookahead_char());
+                    c = match self.lookahead_char() {
+                        Ok(c) => c,
+                        Err(e) if e.is_unexpected_eof() => {
+                            break;
+                        }
+                        Err(e) => return Err(e),
+                    };
                 } else {
                     break;
                 }
@@ -662,9 +680,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
     fn vacate_with_float(&mut self, mut token: String) -> Result<Number, ParserError> {
         self.return_char(token.pop().unwrap());
-
         let n = parse_float_lossy(&token)?;
-
         Ok(Number::Float(float_alloc!(n, self.machine_st.arena)))
     }
 
@@ -686,12 +702,8 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         }
     }
 
-    fn parse_integer_by_radix(
-        &mut self,
-        token: &String,
-        radix: u32,
-    ) -> Result<Number, ParserError> {
-        i64::from_str_radix(&token, radix)
+    fn parse_integer_by_radix(&mut self, token: &str, radix: u32) -> Result<Number, ParserError> {
+        i64::from_str_radix(token, radix)
             .map(|n| {
                 Fixnum::build_with_checked(n)
                     .map(Number::Fixnum)
@@ -708,7 +720,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
     }
 
     #[inline]
-    fn parse_integer(&mut self, token: &String) -> Result<Number, ParserError> {
+    fn parse_integer(&mut self, token: &str) -> Result<Number, ParserError> {
         self.parse_integer_by_radix(token, 10)
     }
 
