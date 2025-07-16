@@ -5002,48 +5002,57 @@ impl Machine {
     #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn foreign_call(&mut self) -> CallResult {
+        fn stub_gen() -> Vec<FunctorElement> {
+            functor_stub(atom!("foreign_call"), 3)
+        }
+
+        fn map_arg(
+            machine_st: &mut MachineState,
+            source: HeapCellValue,
+        ) -> Result<crate::ffi::Value, FfiError> {
+            if let Ok(number) = Number::try_from((source, &machine_st.arena.f64_tbl)) {
+                Ok(Value::Number(number))
+            } else if let Some(string) = machine_st.value_to_str_like(source) {
+                Ok(Value::CString(CString::new(&*string.as_str()).unwrap()))
+            } else if let Ok(args) = machine_st.try_from_list(source, stub_gen) {
+                // structs are lists represented as lists
+                // the head is a string with the struct type name
+                // the tail are the struct field values
+
+                let mut iter = args.into_iter();
+                if let Some(struct_name) = machine_st.value_to_str_like(iter.next().unwrap()) {
+                    Ok(Value::Struct(
+                        struct_name.as_str().to_string(),
+                        iter.map(|x| map_arg(machine_st, x))
+                            .collect::<Result<_, _>>()?,
+                    ))
+                } else {
+                    // empty list is an invalid struct repr
+                    Err(FfiError::InvalidStruct)
+                }
+            } else {
+                Err(FfiError::InvalidArgument)
+            }
+        }
+
         let function_name = self.deref_register(1);
         let args_reg = self.deref_register(2);
         let return_value = self.deref_register(3);
         if let Some(function_name) = self.machine_st.value_to_str_like(function_name) {
-            let stub_gen = || functor_stub(atom!("foreign_call"), 3);
-            fn map_arg(machine_st: &mut MachineState, source: HeapCellValue) -> crate::ffi::Value {
-                match Number::try_from((source, &machine_st.arena.f64_tbl)) {
-                    Ok(number) => Value::Number(number),
-                    _ => {
-                        let stub_gen = || functor_stub(atom!("foreign_call"), 3);
-                        if let Some(string) = machine_st.value_to_str_like(source) {
-                            Value::CString(CString::new(&*string.as_str()).unwrap())
-                        } else {
-                            match machine_st.try_from_list(source, stub_gen) {
-                                Ok(args) => {
-                                    let mut iter = args.into_iter();
-                                    if let Some(struct_name) =
-                                        machine_st.value_to_str_like(iter.next().unwrap())
-                                    {
-                                        Value::Struct(
-                                            struct_name.as_str().to_string(),
-                                            iter.map(|x| map_arg(machine_st, x)).collect(),
-                                        )
-                                    } else {
-                                        unreachable!()
-                                    }
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             match self.machine_st.try_from_list(args_reg, stub_gen) {
                 Ok(args) => {
-                    let args: Vec<_> = args
+                    let args = match args
                         .into_iter()
                         .map(|x| map_arg(&mut self.machine_st, x))
-                        .collect();
+                        .collect::<Result<Vec<_>, _>>()
+                    {
+                        Ok(args) => args,
+                        Err(err) => {
+                            let err = self.machine_st.ffi_error(err);
+                            return Err(self.machine_st.error_form(err, stub_gen()));
+                        }
+                    };
+
                     match self.foreign_function_table.exec(
                         &function_name.as_str(),
                         args,
@@ -5087,10 +5096,8 @@ impl Machine {
                             return Ok(());
                         }
                         Err(e) => {
-                            let stub = functor_stub(atom!("current_input"), 1);
                             let err = self.machine_st.ffi_error(e);
-
-                            return Err(self.machine_st.error_form(err, stub));
+                            return Err(self.machine_st.error_form(err, stub_gen()));
                         }
                     }
                 }

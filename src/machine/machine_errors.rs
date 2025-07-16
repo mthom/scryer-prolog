@@ -594,9 +594,11 @@ impl MachineState {
     pub(super) fn ffi_error(&self, err: FfiError) -> MachineError {
         let error_atom = match err {
             FfiError::ValueCast => atom!("value_cast"),
-            FfiError::ValueDontFit => atom!("value_dont_fit"),
+            FfiError::ValueOutOfRange => atom!("value_out_of_range"),
             FfiError::InvalidFfiType => atom!("invalid_ffi_type"),
-            FfiError::InvalidStructName => atom!("invalid_struct_name"),
+            FfiError::InvalidArgumentType => atom!("invalid_argument_type"),
+            FfiError::InvalidArgument => atom!("invalid_argument"),
+            FfiError::InvalidStruct => atom!("invalid_struct"),
             FfiError::FunctionNotFound => atom!("function_not_found"),
             FfiError::StructNotFound => atom!("struct_not_found"),
             FfiError::ArgCountMismatch => atom!("mismatched_argument_count"),
