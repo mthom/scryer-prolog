@@ -19,6 +19,7 @@ fn build_dynamic_library(name: &str, src: &str) -> PathBuf {
 
     let mut child = std::process::Command::new("rustc")
         .stdin(Stdio::piped())
+        .args(["--edition", "2024"])
         .arg(format!("--target={CURRENT_PLATFORM}"))
         .arg("--crate-type=dylib")
         .arg(format!("--crate-name={name}"))
@@ -46,7 +47,7 @@ fn ffi_f64_nan() {
     let dynlib_path = build_dynamic_library(
         "ffi_f64_nan",
         r##"
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_f64_nan() -> f64 {
                     f64::NAN
                 }
@@ -66,12 +67,12 @@ fn ffi_f64_minus_zero() {
     let dynlib_path = build_dynamic_library(
         "ffi_f64_minus_zero",
         r##"
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_f64_minus_zero() -> f64 {
                     -0.0
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn signum(f: f64) -> f64 {
                     f.signum()
                 }
@@ -92,63 +93,63 @@ fn ffi_return_values() {
     let dynlib_path = build_dynamic_library(
         "ffi_return_values",
         r##"
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_true() -> bool {
                     true
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_false() -> bool {
                     false
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_i8() -> i8 {
                     -42
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_u8() -> u8 {
                     73
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_i16() -> i16 {
                     -0xBEE
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_u16() -> u16 {
                     0xC0DE
                 }
 
                 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_i32() -> i32 {
                     -0xBEEFBEE
                 }
                 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_u32() -> u32 {
                     0xC0DEB000
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_i64() -> i64 {
                     -0xBEEFBEE5C0DEB00
                 }
                 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_u64() -> u64 {
                     0xFEDCBA9876543210
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_f32() -> f32 {
                     std::f32::consts::PI
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_f64() -> f64 {
                     std::f64::consts::TAU
                 }
@@ -182,7 +183,7 @@ fn ffi_invalid_type() {
     let dynlib_path = build_dynamic_library(
         "ffi_invalid_type",
         r##"
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn ffi_invalid_type() -> () {
                 }
             "##,
@@ -212,7 +213,7 @@ fn ffi_struct() {
                     f: f64,
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn construct(a: u8, b: u16, c: u32, d: u64, a2: u8, e: f32, f: f64) -> PaddingGalore {
                     PaddingGalore {
                         a,
@@ -225,7 +226,7 @@ fn ffi_struct() {
                     }
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 extern "C" fn modify(data: PaddingGalore) -> PaddingGalore {
                     PaddingGalore {
                         a: data.a2,
@@ -244,5 +245,32 @@ fn ffi_struct() {
         "tests-pl/ffi_struct.pl",
         format!("LIB={dynlib_path:?}."),
         "[P,G]-[pg,8,12,46,40,127,1.3680000305175781,-4.587]\n[P,G,2]-[pg,127,65523,4294967249,18446744073709551575,8,-1.3680000305175781,4.587]\n",
+    );
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "ffi")]
+fn ffi_cstr() {
+    let dynlib_path = build_dynamic_library(
+        "ffi_cstr",
+        r##"
+                use std::ffi::CStr;
+
+                #[unsafe(no_mangle)]
+                extern "C" fn ffi_cstr_len(c_str: *const core::ffi::c_char) -> u64 {
+                    unsafe { CStr::from_ptr(c_str) }.count_bytes() as u64
+                }
+
+                #[unsafe(no_mangle)]
+                extern "C" fn ffi_example_cstr() -> *const core::ffi::c_char {
+                    c"Rust Lang".as_ptr()
+                }
+            "##,
+    );
+
+    load_module_test_with_input(
+        "tests-pl/ffi_cstr.pl",
+        format!("LIB={dynlib_path:?}."),
+        r#"13-[R,u,s,t, ,L,a,n,g]"#,
     );
 }
