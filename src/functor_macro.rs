@@ -202,12 +202,17 @@ pub(crate) fn variadic_functor(
 
     let key_value_pairs: Vec<_> = iter.collect();
     let num_items = key_value_pairs.len();
+    let mut functor_offset = 0;
 
-    for (idx, _) in key_value_pairs.iter().enumerate() {
+    for (idx, kv_func) in key_value_pairs.iter().enumerate() {
+        let functor_size = cell_index!(Heap::compute_functor_byte_size(kv_func));
+
         arg_vec.push(FunctorElement::Cell(str_loc_as_cell!(
-            2 + num_items * 2 + idx
+            2 + num_items * 2 + functor_offset
         )));
-        arg_vec.push(FunctorElement::Cell(list_loc_as_cell!(5 + idx)));
+        arg_vec.push(FunctorElement::Cell(list_loc_as_cell!(4 + 2 * idx)));
+
+        functor_offset += functor_size;
     }
 
     arg_vec.pop();
@@ -225,6 +230,7 @@ pub(crate) fn variadic_functor(
 #[allow(unused_parens)]
 mod tests {
     use super::*;
+    use indexmap::indexmap;
     use std::string::String;
     use FunctorElement::*;
 
@@ -683,6 +689,41 @@ mod tests {
             "and another"
         );
         assert_eq!(heap[20], empty_list_as_cell!());
+
+        let constants = indexmap![
+            atom_as_cell!(atom!("a")) => IndexingCodePtr::External(2),
+            atom_as_cell!(atom!("d")) => IndexingCodePtr::External(7),
+        ];
+
+        let functor = variadic_functor(
+            atom!("switch_on_constants"),
+            1,
+            constants.iter().map(|(c, ptr)| {
+                functor!(atom!(":"), [cell((c.clone())), indexing_code_ptr((*ptr))])
+            }),
+        );
+
+        heap.truncate(0);
+
+        let mut functor_writer = Heap::functor_writer(functor);
+        functor_writer(&mut heap).unwrap();
+
+        assert_eq!(heap[0], atom_as_cell!(atom!("switch_on_constants"), 1));
+        assert_eq!(heap[1], list_loc_as_cell!(2));
+        assert_eq!(heap[2], str_loc_as_cell!(6));
+        assert_eq!(heap[3], list_loc_as_cell!(4));
+        assert_eq!(heap[4], str_loc_as_cell!(11));
+        assert_eq!(heap[5], empty_list_as_cell!());
+        assert_eq!(heap[6], atom_as_cell!(atom!(":"), 2));
+        assert_eq!(heap[7], atom_as_cell!(atom!("a")));
+        assert_eq!(heap[8], str_loc_as_cell!(9));
+        assert_eq!(heap[9], atom_as_cell!(atom!("external"), 1));
+        assert_eq!(heap[10], fixnum_as_cell!(Fixnum::build_with(2)));
+        assert_eq!(heap[11], atom_as_cell!(atom!(":"), 2));
+        assert_eq!(heap[12], atom_as_cell!(atom!("d")));
+        assert_eq!(heap[13], str_loc_as_cell!(14));
+        assert_eq!(heap[14], atom_as_cell!(atom!("external"), 1));
+        assert_eq!(heap[15], fixnum_as_cell!(Fixnum::build_with(7)));
     }
 
     #[test]
