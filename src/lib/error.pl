@@ -82,9 +82,6 @@ must_be_(octet_chars, Cs) :-
         ;   true
         ).
 must_be_(list, Term)    :- check_(error:ilist, list, Term).
-must_be_(list(Elem), Term) :- 
-        must_be_(list, Term),
-        check_all(Elem, Term).
 must_be_(type, Term)    :- check_(error:type, type, Term).
 must_be_(boolean, Term) :- check_(error:boolean, boolean, Term).
 must_be_(pair, Term)    :- check_(error:pair, pair, Term).
@@ -99,12 +96,10 @@ must_be_(term, Term)    :-
 % We cannot use maplist(must_be(character), Cs), because library(lists)
 % uses library(error), so importing it would create a cyclic dependency.
 
-check_all(_, []).
-check_all(Type, [Head| Tail]) :-
-        must_be(Type, Head),
-        check_all(Type, Tail).
-
-all_characters(Cs) :- check_all(character, Cs).
+all_characters([]).
+all_characters([C|Cs]) :-
+        must_be(character, C),
+        all_characters(Cs).
 
 check_(Pred, Type, Term) :-
         (   var(Term) -> instantiation_error(must_be/2)
@@ -146,7 +141,6 @@ type(octet_character).
 type(octet_chars).
 type(chars).
 type(list).
-type(list(Type)) :- type(Type).
 type(var).
 type(boolean).
 type(term).
