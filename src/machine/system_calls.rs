@@ -8441,8 +8441,8 @@ impl Machine {
             _ => panic!("Invalid value for clear_env"),
         };
 
-        let env_names = self.machine_st.try_from_list(env_args[1], stub_gen)?;
-        let env_values = self.machine_st.try_from_list(env_args[2], stub_gen)?;
+        let env_names = self.machine_st.try_from_list(env_args[0], stub_gen)?;
+        let env_values = self.machine_st.try_from_list(env_args[1], stub_gen)?;
 
         let envs = env_names
             .into_iter()
