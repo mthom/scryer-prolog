@@ -2,53 +2,83 @@
 
 :- use_module(library(error)).
 :- use_module(library(iso_ext)).
-:- use_module(library(lists), [append/3, member/2]).
+:- use_module(library(lists), [append/3, member/2, maplist/2, maplist/3, select/3]).
 
 process_create(Exe, Args, Options) :- 
     must_be(chars, Exe),
-    must_be(list(chars), Args),
+    must_be(list, Args),
+    maplist(must_be(chars), Args),
     must_be(list, Options),
-    check_option(Sin, find_stdio(Sin, stdin, Options), valid_stdio, [std], Stdin),
-    check_option(Sout, find_stdio(Sout, stdout, Options), valid_stdio, [std], Stdout),
-    check_option(Serr, find_stdio(Serr, stderr, Options), valid_stdio, [std], Stderr),
-    check_option(Envs, find_env(Envs, Options), valid_env, [environment, []], EnvVars),
-    check_option(P, member(process(P), Options), valid_pid, _, Pid),
-    check_option(C, member(cwd(C), Options), valid_cwd, _, Cwd),
-    '$process_create'(Exe, Args, Stdin, Stdout, Stderr, EnvVars, Cwd, Pid).
+    must_be_known_options([stdin, stdout, stderr, env, environment, pid, cwd], [], Options),
+    check_options(
+        [
+            ([stdin], valid_stdio, stdin(std), stdin(Stdin)),
+            ([stdout], valid_stdio, stdout(std), stdout(Stdout)),
+            ([stderr], valid_stdio, stderr(std), stderr(Stderr)),
+            ([env, environment], valid_env, environment([]), Env),
+            ([pid], valid_pid, pid(_), pid(Pid)),
+            ([cwd], valid_cwd, cwd(_), cwd(Cwd))
+        ],
+        Options
+    ),
+    Stdin =.. Stdin1,
+    Stdout =.. Stdout1,
+    Stderr =.. Stderr1,
+    simplify_env(Env, Env1),
+    '$process_create'(Exe, Args, Stdin1, Stdout1, Stderr1, Env1, Cwd, Pid).
 
+must_be_known_options(_, _,  []).
+must_be_known_options(Valid, Found, [X|XS]) :-
+    X =.. [Option|_],
+    (
+        member(Option, Found) -> throw(error(duplicate_option, process_create/3, Option)) ;
+        member(Option, Valid) -> true ;
+        throw(error(invalid_option, process_create/3, Option))
+    ),
+    must_be_known_options(Valid, [Option | Found], XS).
 
-check_option(Template, Goal, Pred, Default, Choice) :- 
-    findall(Template, Goal, Solutions),
-    check_option_(Solutions, Pred, Default, Choice).
-    
-check_option_([]        , Pred  , Default   , Default   ) :- call(Pred, Default).
-check_option_([Choice]  , Pred  , _         , Choice    ) :- call(Pred, Choice).
-check_option_([X1,X2|Xs], _     , _         , _         ) :- throw(error(duplicate_option, process_create/3, [X1, X2 | Xs])).
+check_options([], _).
+check_options([X | XS], Options) :- 
+    (Kinds, Pred, Default, Choice) = X,
+    findall(P, find_option(Kinds, P, Options), Solutions),
+    (
+        Solutions = [] -> Choice = Default;
+        Solutions = [Provided] -> call(Pred, Provided), Choice = Provided ;
+        throw(error(duplicate_option, process_create/3, Solutions))
+    ),
+    check_options(XS, Options).
 
-find_stdio([std], Kind, Options ) :- Elem =.. [Kind, std], member(Elem, Options).
-find_stdio([null], Kind, Options ) :- Elem =.. [Kind, null], member(Elem, Options).
-find_stdio([pipe, Stream], Kind, Options) :- Elem =.. [Kind, pipe(Stream)], member(Elem, Options).
-find_stdio([file, Path], Kind, Options ) :- Elem =.. [Kind, file(Path)], member(Elem, Options).
+find_option([Kind|_], Found, Options) :- Found =.. [Kind,_], member(Found, Options).
+find_option([_|Kinds], Found, Options) :- find_option(Kinds, Found, Options).
 
-valid_stdio([std]).
-valid_stdio([null]).
-valid_stdio([pipe, Stream]) :- must_be(var, Stream).
-valid_stdio([file, Path]) :- must_be(chars, Path).
+valid_stdio(IO) :- IO =.. [_, Arg], 
+    (
+        valid_stdio_(Arg) -> true ;
+        throw(error(invalid_stdio, process_create/3, Arg))
+    ).
 
-find_env([env, ME], Options) :- member(env(E), Options), maplist(assign_to_list, E, ME).
-find_env([environment, ME], Options) :- member(environment(E), Options), maplist(assign_to_list, E, ME).
+valid_stdio_(std).
+valid_stdio_(null).
+valid_stdio_(pipe(Stream)) :- must_be(var, Stream).
+valid_stdio_(file(Path)) :- must_be(chars, Path).
 
-assign_to_list(N=V, [N,V]).
-
-valid_cwd(Cwd) :- var(Cwd) -> true ; must_be(chars).
-
-valid_env([env, E]) :- valid_env_(E).
-valid_env([environment, E]) :- valid_env_(E).
+valid_env(env(E)) :- valid_env_(E).
+valid_env(environment(E)) :- valid_env_(E).
 
 valid_env_([]).
-valid_env_([N=V|Es]) :- 
-    must_be(chars, N),
+valid_env_([E| ES]) :- 
+    (
+        E =.. [=, N, V] -> true ;
+        throw(error(invalid_env_entry, process_create/3, E))
+    ),
+    must_be(chars, N), 
     must_be(chars, V),
-    valid_env_(Es).
+    valid_env_(ES).
 
-valid_pid(Pid) :- must_be(var, Pid).
+valid_pid(pid(Pid)) :- must_be(var, Pid).
+valid_cwd(cwd(Cwd)) :- must_be(chars, Cwd).
+
+simplify_env(E, [Kind, Envs1]) :- E =.. [Kind, Envs], simplify_env_(Envs, Envs1).
+
+simplify_env_([],[]).
+simplify_env_([N=V|E],[[N, V]|E1]) :- simplify_env_(E, E1).
