@@ -8399,13 +8399,19 @@ impl Machine {
             functor_stub(atom!("process_create"), 3)
         }
 
+        // String
         let exe_r = self.deref_register(1);
+        // [String,...]
         let args_r = self.deref_register(2);
+        // [std] | [null] | [pipe, Var] | [file, String]
         let stdin_r = self.deref_register(3);
         let stdout_r = self.deref_register(4);
         let stderr_r = self.deref_register(5);
+        // [env | environment, [[String, String],...]]
         let env_r = self.deref_register(6);
+        // Var | String
         let cwd_r = self.deref_register(7);
+        // Var
         let pid_r = self.deref_register(8);
 
         let exe = self.machine_st.value_to_str_like(exe_r).unwrap();
@@ -8484,11 +8490,16 @@ impl Machine {
 
         match command.spawn() {
             Ok(child) => {
-                self.machine_st
-                    .unify_fixnum(Fixnum::build_with(child.id()), pid_r);
+                let pid = child.id();
+                self.machine_st.bind(
+                    pid_r.as_var().unwrap(),
+                    fixnum_as_cell!(Fixnum::build_with(pid)),
+                );
                 Ok(())
             }
-            Err(_) => {
+            Err(err) => {
+                // TODO give better error indication
+                dbg!(err);
                 self.machine_st.fail = true;
                 Ok(())
             }
