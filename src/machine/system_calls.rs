@@ -56,6 +56,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use std::net::{TcpListener, TcpStream};
 use std::num::NonZeroU32;
 use std::process;
+use std::process::Stdio;
 #[cfg(feature = "http")]
 use std::str::FromStr;
 #[cfg(feature = "http")]
@@ -8391,6 +8392,173 @@ impl Machine {
                 }
             },
         };
+    }
+
+    pub(crate) fn process_create(&mut self) -> CallResult {
+        fn stub_gen() -> Vec<FunctorElement> {
+            functor_stub(atom!("process_create"), 3)
+        }
+
+        let exe_r = self.deref_register(1);
+        let args_r = self.deref_register(2);
+        let stdin_r = self.deref_register(3);
+        let stdout_r = self.deref_register(4);
+        let stderr_r = self.deref_register(5);
+        let env_r = self.deref_register(6);
+        let cwd_r = self.deref_register(7);
+        let pid_r = self.deref_register(8);
+
+        let exe = self.machine_st.value_to_str_like(exe_r).unwrap();
+
+        let args = self
+            .machine_st
+            .try_from_list(args_r, stub_gen)
+            .unwrap()
+            .into_iter()
+            .map(|arg| {
+                self.machine_st
+                    .value_to_str_like(arg)
+                    .unwrap()
+                    .as_str()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+
+        let stdin_args = self.machine_st.try_from_list(stdin_r, stub_gen)?;
+        let stdin = self.handle_input_stream(stdin_args)?;
+
+        let stdout_args = self.machine_st.try_from_list(stdout_r, stub_gen)?;
+        let stdout = self.handle_output_stream(stdout_args)?;
+
+        let stderr_args = self.machine_st.try_from_list(stderr_r, stub_gen)?;
+        let stderr = self.handle_output_stream(stderr_args)?;
+
+        let env_args = self.machine_st.try_from_list(env_r, stub_gen)?;
+
+        let clear_env = match env_args[0].to_atom() {
+            Some(atom!("env")) => true,
+            Some(atom!("environment")) => false,
+            _ => panic!("Invalid value for clear_env"),
+        };
+
+        let env_names = self.machine_st.try_from_list(env_args[1], stub_gen)?;
+        let env_values = self.machine_st.try_from_list(env_args[2], stub_gen)?;
+
+        let envs = env_names
+            .into_iter()
+            .zip(env_values)
+            .map(|(name, value)| {
+                let name = self
+                    .machine_st
+                    .value_to_str_like(name)
+                    .unwrap()
+                    .as_str()
+                    .to_string();
+                let value = self
+                    .machine_st
+                    .value_to_str_like(value)
+                    .unwrap()
+                    .as_str()
+                    .to_string();
+                (name, value)
+            })
+            .collect::<Vec<_>>();
+
+        let cwd = self.machine_st.value_to_str_like(cwd_r);
+
+        let mut command = std::process::Command::new(&*exe.as_str());
+        command.args(args);
+
+        if let Some(cwd) = cwd {
+            command.current_dir(&*cwd.as_str());
+        }
+
+        if clear_env {
+            command.env_clear();
+        }
+
+        command
+            .envs(envs)
+            .stdin(stdin)
+            .stdout(stdout)
+            .stderr(stderr);
+
+        match command.spawn() {
+            Ok(child) => {
+                self.machine_st
+                    .unify_fixnum(Fixnum::build_with(child.id()), pid_r);
+                Ok(())
+            }
+            Err(_) => {
+                self.machine_st.fail = true;
+                Ok(())
+            }
+        }
+    }
+
+    fn handle_output_stream(&mut self, args: Vec<HeapCellValue>) -> Result<Stdio, MachineStub> {
+        Ok(match args[0].to_atom() {
+            Some(atom!("std")) => Stdio::inherit(),
+            Some(atom!("null")) => Stdio::null(),
+            Some(atom!("pipe")) => {
+                // TODO handler Err
+                let (reader, writer) = std::io::pipe().unwrap();
+
+                let stream = Stream::from_pipe_reader(reader, &mut self.machine_st.arena);
+
+                self.indices
+                    .add_stream(stream, atom!("process_create"), 3)
+                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+
+                self.machine_st
+                    .bind(args[2].as_var().unwrap(), stream.into());
+
+                Stdio::from(writer)
+            }
+            Some(atom!("file")) => {
+                let path = self.machine_st.value_to_str_like(args[1]).unwrap();
+
+                // TODO handler Err
+                let file = std::fs::File::open(&*path.as_str()).unwrap();
+                Stdio::from(file)
+            }
+            _ => {
+                panic!("Invalid stdin tag")
+            }
+        })
+    }
+
+    fn handle_input_stream(&mut self, args: Vec<HeapCellValue>) -> Result<Stdio, MachineStub> {
+        Ok(match args[0].to_atom() {
+            Some(atom!("std")) => Stdio::inherit(),
+            Some(atom!("null")) => Stdio::null(),
+            Some(atom!("pipe")) => {
+                // TODO handler Err
+                let (reader, writer) = std::io::pipe().unwrap();
+
+                let stream = Stream::from_pipe_writer(writer, &mut self.machine_st.arena);
+
+                self.indices
+                    .add_stream(stream, atom!("process_create"), 3)
+                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))
+                    .unwrap();
+
+                self.machine_st
+                    .bind(args[2].as_var().unwrap(), stream.into());
+
+                Stdio::from(reader)
+            }
+            Some(atom!("file")) => {
+                let path = self.machine_st.value_to_str_like(args[1]).unwrap();
+
+                // TODO handler Err
+                let file = std::fs::File::open(&*path.as_str()).unwrap();
+                Stdio::from(file)
+            }
+            _ => {
+                panic!("Invalid stdin tag")
+            }
+        })
     }
 
     #[inline(always)]

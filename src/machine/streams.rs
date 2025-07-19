@@ -23,6 +23,8 @@ use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::io;
+use std::io::PipeReader;
+use std::io::PipeWriter;
 use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem::ManuallyDrop;
 use std::net::{Shutdown, TcpStream};
@@ -588,6 +590,8 @@ arena_allocated_impl_for_stream!(StandardOutputStream, StandardOutputStream);
 arena_allocated_impl_for_stream!(StandardErrorStream, StandardErrorStream);
 arena_allocated_impl_for_stream!(CharReader<CallbackStream>, CallbackStream);
 arena_allocated_impl_for_stream!(CharReader<InputChannelStream>, InputChannelStream);
+arena_allocated_impl_for_stream!(CharReader<PipeReader>, PipeReader);
+arena_allocated_impl_for_stream!(CharReader<PipeWriter>, PipeWriter);
 
 #[derive(Debug, Copy, Clone)]
 pub enum Stream {
@@ -608,6 +612,8 @@ pub enum Stream {
     StandardError(TypedArenaPtr<StandardErrorStream>),
     Callback(TypedArenaPtr<CallbackStream>),
     InputChannel(TypedArenaPtr<InputChannelStream>),
+    PipeReader(TypedArenaPtr<PipeReader>),
+    PipeWriter(TypedArenaPtr<PipeWriter>),
 }
 
 impl From<TypedArenaPtr<ReadlineStream>> for Stream {
@@ -726,6 +732,8 @@ impl Stream {
             Stream::StandardError(ptr) => ptr.header_ptr(),
             Stream::Callback(ptr) => ptr.header_ptr(),
             Stream::InputChannel(ptr) => ptr.header_ptr(),
+            Stream::PipeReader(ptr) => ptr.header_ptr(),
+            Stream::PipeWriter(ptr) => ptr.header_ptr(),
         }
     }
 
@@ -748,6 +756,8 @@ impl Stream {
             Stream::StandardError(ref ptr) => &ptr.options,
             Stream::Callback(ref ptr) => &ptr.options,
             Stream::InputChannel(ref ptr) => &ptr.options,
+            Stream::PipeReader(ref ptr) => &ptr.options,
+            Stream::PipeWriter(ref ptr) => &ptr.options,
         }
     }
 
@@ -770,6 +780,8 @@ impl Stream {
             Stream::StandardError(ref mut ptr) => &mut ptr.options,
             Stream::Callback(ref mut ptr) => &mut ptr.options,
             Stream::InputChannel(ref mut ptr) => &mut ptr.options,
+            Stream::PipeReader(ref mut ptr) => &mut ptr.options,
+            Stream::PipeWriter(ref mut ptr) => &mut ptr.options,
         }
     }
 
@@ -793,6 +805,8 @@ impl Stream {
             Stream::StandardError(ptr) => ptr.lines_read += incr_num_lines_read,
             Stream::Callback(ptr) => ptr.lines_read += incr_num_lines_read,
             Stream::InputChannel(ptr) => ptr.lines_read += incr_num_lines_read,
+            Stream::PipeReader(ptr) => ptr.lines_read += incr_num_lines_read,
+            Stream::PipeWriter(_) => {}
         }
     }
 
@@ -816,6 +830,8 @@ impl Stream {
             Stream::StandardError(ptr) => ptr.lines_read = value,
             Stream::Callback(ptr) => ptr.lines_read = value,
             Stream::InputChannel(ptr) => ptr.lines_read = value,
+            Stream::PipeReader(ptr) => ptr.lines_read = value,
+            Stream::PipeWriter(_) => {}
         }
     }
 
@@ -839,6 +855,8 @@ impl Stream {
             Stream::StandardError(ptr) => ptr.lines_read,
             Stream::Callback(ptr) => ptr.lines_read,
             Stream::InputChannel(ptr) => ptr.lines_read,
+            Stream::PipeReader(ptr) => ptr.lines_read,
+            Stream::PipeWriter(_) => 0,
         }
     }
 }
@@ -856,6 +874,8 @@ impl CharRead for Stream {
             Stream::StaticString(src) => (*src).peek_char(),
             Stream::Byte(cursor) => (*cursor).peek_char(),
             Stream::InputChannel(cursor) => (*cursor).peek_char(),
+            Stream::PipeReader(cursor) => (*cursor).peek_char(),
+
             #[cfg(feature = "http")]
             Stream::HttpWrite(_) => Some(Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
@@ -865,7 +885,8 @@ impl CharRead for Stream {
             | Stream::StandardError(_)
             | Stream::StandardOutput(_)
             | Stream::Null(_)
-            | Stream::Callback(_) => Some(Err(std::io::Error::new(
+            | Stream::Callback(_)
+            | Stream::PipeWriter(_) => Some(Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::ReadFromOutputStream,
             ))),
@@ -884,6 +905,7 @@ impl CharRead for Stream {
             Stream::StaticString(src) => (*src).read_char(),
             Stream::Byte(cursor) => (*cursor).read_char(),
             Stream::InputChannel(cursor) => (*cursor).read_char(),
+            Stream::PipeReader(cursor) => (*cursor).read_char(),
             #[cfg(feature = "http")]
             Stream::HttpWrite(_) => Some(Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
@@ -893,7 +915,8 @@ impl CharRead for Stream {
             | Stream::StandardError(_)
             | Stream::StandardOutput(_)
             | Stream::Null(_)
-            | Stream::Callback(_) => Some(Err(std::io::Error::new(
+            | Stream::Callback(_)
+            | Stream::PipeWriter(_) => Some(Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::ReadFromOutputStream,
             ))),
@@ -911,13 +934,15 @@ impl CharRead for Stream {
             Stream::Readline(rl_stream) => rl_stream.put_back_char(c),
             Stream::StaticString(src) => src.put_back_char(c),
             Stream::Byte(cursor) => cursor.put_back_char(c),
+            Stream::PipeReader(cursor) => cursor.put_back_char(c),
             #[cfg(feature = "http")]
             Stream::HttpWrite(_) => {}
             Stream::OutputFile(_)
             | Stream::StandardError(_)
             | Stream::StandardOutput(_)
             | Stream::Null(_)
-            | Stream::Callback(_) => {}
+            | Stream::Callback(_)
+            | Stream::PipeWriter(_) => {}
             Stream::InputChannel(_) => {}
         }
     }
@@ -934,13 +959,15 @@ impl CharRead for Stream {
             Stream::StaticString(ref mut src) => src.consume(nread),
             Stream::Byte(ref mut cursor) => cursor.consume(nread),
             Stream::InputChannel(ref mut cursor) => cursor.consume(nread),
+            Stream::PipeReader(ref mut cursor) => cursor.consume(nread),
             #[cfg(feature = "http")]
             Stream::HttpWrite(_) => {}
             Stream::OutputFile(_)
             | Stream::StandardError(_)
             | Stream::StandardOutput(_)
             | Stream::Null(_)
-            | Stream::Callback(_) => {}
+            | Stream::Callback(_)
+            | Stream::PipeWriter(_) => {}
         }
     }
 }
@@ -959,6 +986,7 @@ impl Read for Stream {
             Stream::StaticString(src) => (*src).read(buf),
             Stream::Byte(cursor) => (*cursor).read(buf),
             Stream::InputChannel(cursor) => (*cursor).read(buf),
+            Stream::PipeReader(cursor) => (*cursor).read(buf),
             #[cfg(feature = "http")]
             Stream::HttpWrite(_) => Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
@@ -967,7 +995,8 @@ impl Read for Stream {
             Stream::OutputFile(_)
             | Stream::StandardError(_)
             | Stream::StandardOutput(_)
-            | Stream::Callback(_) => Err(std::io::Error::new(
+            | Stream::Callback(_)
+            | Stream::PipeWriter(_) => Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::ReadFromOutputStream,
             )),
@@ -989,6 +1018,7 @@ impl Write for Stream {
             Stream::StandardError(stream) => stream.write(buf),
             #[cfg(feature = "http")]
             Stream::HttpWrite(ref mut stream) => stream.get_mut().write(buf),
+            Stream::PipeWriter(ref mut stream) => stream.get_mut().write(buf),
             #[cfg(feature = "http")]
             Stream::HttpRead(_) => Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
@@ -998,7 +1028,8 @@ impl Write for Stream {
             Stream::StaticString(_)
             | Stream::InputChannel(_)
             | Stream::Readline(_)
-            | Stream::InputFile(..) => Err(std::io::Error::new(
+            | Stream::InputFile(..)
+            | Stream::PipeReader(_) => Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::WriteToInputStream,
             )),
@@ -1015,6 +1046,7 @@ impl Write for Stream {
             Stream::Callback(ref mut callback_stream) => callback_stream.stream.get_mut().flush(),
             Stream::StandardError(stream) => stream.stream.flush(),
             Stream::StandardOutput(stream) => stream.stream.flush(),
+            Stream::PipeWriter(ref mut stream) => stream.stream.get_mut().flush(),
             #[cfg(feature = "http")]
             Stream::HttpWrite(ref mut stream) => stream.stream.get_mut().flush(),
             #[cfg(feature = "http")]
@@ -1026,7 +1058,8 @@ impl Write for Stream {
             Stream::StaticString(_)
             | Stream::InputChannel(_)
             | Stream::Readline(_)
-            | Stream::InputFile(_) => Err(std::io::Error::new(
+            | Stream::InputFile(_)
+            | Stream::PipeReader(_) => Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::FlushToInputStream,
             )),
@@ -1192,6 +1225,8 @@ impl Stream {
             Stream::StandardError(stream) => stream.past_end_of_stream,
             Stream::Callback(stream) => stream.past_end_of_stream,
             Stream::InputChannel(stream) => stream.past_end_of_stream,
+            Stream::PipeReader(stream) => stream.past_end_of_stream,
+            Stream::PipeWriter(stream) => stream.past_end_of_stream,
         }
     }
 
@@ -1220,6 +1255,8 @@ impl Stream {
             Stream::StandardError(stream) => stream.past_end_of_stream = value,
             Stream::Callback(stream) => stream.past_end_of_stream = value,
             Stream::InputChannel(stream) => stream.past_end_of_stream = value,
+            Stream::PipeReader(stream) => stream.past_end_of_stream = value,
+            Stream::PipeWriter(stream) => stream.past_end_of_stream = value,
         }
     }
 
@@ -1330,7 +1367,8 @@ impl Stream {
             | Stream::InputChannel(_)
             | Stream::Readline(_)
             | Stream::StaticString(_)
-            | Stream::InputFile(..) => atom!("read"),
+            | Stream::InputFile(..)
+            | Stream::PipeReader(_) => atom!("read"),
             Stream::NamedTcp(..) => atom!("read_append"),
             Stream::OutputFile(file) if file.is_append => atom!("append"),
             #[cfg(feature = "http")]
@@ -1338,7 +1376,8 @@ impl Stream {
             Stream::OutputFile(_)
             | Stream::StandardError(_)
             | Stream::StandardOutput(_)
-            | Stream::Callback(_) => {
+            | Stream::Callback(_)
+            | Stream::PipeWriter(_) => {
                 atom!("write")
             }
             Stream::Null(_) => atom!(""),
@@ -1368,6 +1407,20 @@ impl Stream {
                 inner: Cursor::new(Vec::new()),
                 callback,
             }))),
+            arena
+        ))
+    }
+
+    pub(crate) fn from_pipe_writer(writer: io::PipeWriter, arena: &mut Arena) -> Stream {
+        Stream::PipeWriter(arena_alloc!(
+            ManuallyDrop::new(StreamLayout::new(CharReader::new(writer))),
+            arena
+        ))
+    }
+
+    pub(crate) fn from_pipe_reader(reader: io::PipeReader, arena: &mut Arena) -> Stream {
+        Stream::PipeReader(arena_alloc!(
+            ManuallyDrop::new(StreamLayout::new(CharReader::new(reader))),
             arena
         ))
     }
@@ -1508,6 +1561,16 @@ impl Stream {
                 Ok(())
             }
             Stream::StaticString(mut stream) => {
+                stream.drop_payload();
+                Ok(())
+            }
+
+            Stream::PipeReader(mut stream) => {
+                stream.drop_payload();
+                Ok(())
+            }
+
+            Stream::PipeWriter(mut stream) => {
                 stream.drop_payload();
                 Ok(())
             }

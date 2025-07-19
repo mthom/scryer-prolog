@@ -11,7 +11,7 @@ keywords = ["prolog", "prolog-interpreter", "prolog-system"]
 categories = ["command-line-utilities"]
 build = "build/main.rs"
 # Remember to check CI
-rust-version = "1.85"
+rust-version = "1.87"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -14,6 +14,8 @@ use ordered_float::OrderedFloat;
 use std::fmt;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+use std::io::PipeReader;
+use std::io::PipeWriter;
 use std::mem;
 use std::mem::ManuallyDrop;
 use std::net::TcpListener;
@@ -71,7 +73,9 @@ pub enum ArenaHeaderTag {
     TcpListener = 0b1000000,
     HttpListener = 0b1000001,
     HttpResponse = 0b1000010,
+    PipeWriter = 0b1000011,
     Dropped = 0b1000100,
+    PipeReader = 0b1000101,
 }
 
 #[bitfield]
@@ -545,6 +549,12 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {
         }
         ArenaHeaderTag::StandardErrorStream => {
             drop_typed_slab_in_place!(StandardErrorStream, value);
+        }
+        ArenaHeaderTag::PipeReader => {
+            drop_typed_slab_in_place!(PipeReader, value);
+        }
+        ArenaHeaderTag::PipeWriter => {
+            drop_typed_slab_in_place!(PipeWriter, value);
         }
         ArenaHeaderTag::NullStream => {
             unreachable!("NullStream is never arena allocated!");
