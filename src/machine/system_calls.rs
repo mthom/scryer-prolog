@@ -8510,7 +8510,7 @@ impl Machine {
                     .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
                 self.machine_st
-                    .bind(args[2].as_var().unwrap(), stream.into());
+                    .bind(args[1].as_var().unwrap(), stream.into());
 
                 Stdio::from(writer)
             }
@@ -8539,11 +8539,10 @@ impl Machine {
 
                 self.indices
                     .add_stream(stream, atom!("process_create"), 3)
-                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))
-                    .unwrap();
+                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
                 self.machine_st
-                    .bind(args[2].as_var().unwrap(), stream.into());
+                    .bind(args[1].as_var().unwrap(), stream.into());
 
                 Stdio::from(reader)
             }
