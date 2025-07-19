@@ -8441,28 +8441,27 @@ impl Machine {
             _ => panic!("Invalid value for clear_env"),
         };
 
-        let env_names = self.machine_st.try_from_list(env_args[0], stub_gen)?;
-        let env_values = self.machine_st.try_from_list(env_args[1], stub_gen)?;
-
-        let envs = env_names
+        let envs = self
+            .machine_st
+            .try_from_list(env_args[1], stub_gen)?
             .into_iter()
-            .zip(env_values)
-            .map(|(name, value)| {
+            .map(|entry| {
+                let entry = self.machine_st.try_from_list(entry, stub_gen)?;
                 let name = self
                     .machine_st
-                    .value_to_str_like(name)
+                    .value_to_str_like(entry[0])
                     .unwrap()
                     .as_str()
                     .to_string();
                 let value = self
                     .machine_st
-                    .value_to_str_like(value)
+                    .value_to_str_like(entry[1])
                     .unwrap()
                     .as_str()
                     .to_string();
-                (name, value)
+                Ok((name, value))
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, MachineStub>>()?;
 
         let cwd = self.machine_st.value_to_str_like(cwd_r);
 

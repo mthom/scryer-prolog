@@ -6,7 +6,6 @@
 
 process_create(Exe, Args, Options) :- 
     must_be(chars, Exe),
-    must_be(list(chars), Args),
     must_be(list, Options),
     check_option(Sin, find_stdio(Sin, stdin, Options), valid_stdio, [std], Stdin),
     check_option(Sout, find_stdio(Sout, stdout, Options), valid_stdio, [std], Stdout),
@@ -35,10 +34,12 @@ valid_stdio([null]).
 valid_stdio([pipe, Stream]) :- must_be(var, Stream).
 valid_stdio([file, Path]) :- must_be(chars, Path).
 
-find_env([env, E], Options) :- member(env(E), Options).
-find_env([environment, E], Options) :- member(environment(E), Options).
+find_env([env, ME], Options) :- member(env(E), Options), maplist(assign_to_list, E, ME).
+find_env([environment, ME], Options) :- member(environment(E), Options), maplist(assign_to_list, E, ME).
 
-valid_cwd(Cwd) :- must_be(chars, Cwd).
+assign_to_list(N=V, [N,v]).
+
+valid_cwd(Cwd).
 
 valid_env([env, E]) :- valid_env_(E).
 valid_env([environment, E]) :- valid_env_(E).
