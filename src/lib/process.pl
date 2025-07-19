@@ -17,7 +17,7 @@ process_create(Exe, Args, Options) :-
             ([stderr], valid_stdio, stderr(std), stderr(Stderr)),
             ([env, environment], valid_env, environment([]), Env),
             ([pid], valid_pid, pid(_), pid(Pid)),
-            ([cwd], valid_cwd, cwd(_), cwd(Cwd))
+            ([cwd], valid_cwd, cwd("."), cwd(Cwd))
         ],
         Options
     ),

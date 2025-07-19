@@ -8409,7 +8409,7 @@ impl Machine {
         let stderr_r = self.deref_register(5);
         // [env | environment, [[String, String],...]]
         let env_r = self.deref_register(6);
-        // Var | String
+        // String ("." for keep current cwd)
         let cwd_r = self.deref_register(7);
         // Var
         let pid_r = self.deref_register(8);
@@ -8469,12 +8469,12 @@ impl Machine {
             })
             .collect::<Result<Vec<_>, MachineStub>>()?;
 
-        let cwd = self.machine_st.value_to_str_like(cwd_r);
+        let cwd = self.machine_st.value_to_str_like(cwd_r).unwrap();
 
         let mut command = std::process::Command::new(&*exe.as_str());
         command.args(args);
 
-        if let Some(cwd) = cwd {
+        if &*cwd.as_str() != "." {
             command.current_dir(&*cwd.as_str());
         }
 
