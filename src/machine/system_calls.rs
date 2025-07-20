@@ -8497,12 +8497,16 @@ impl Machine {
         match command.spawn() {
             Ok(child) => {
                 let pid = child.id();
+
+                self.machine_st.child_processes.insert(pid, child);
+
                 self.machine_st.bind(
                     pid_r
                         .as_var()
                         .expect("invalid values should have been rejected on the prolog side"),
                     fixnum_as_cell!(Fixnum::build_with(pid)),
                 );
+
                 Ok(())
             }
             Err(_) => {
