@@ -31,9 +31,9 @@ must_be_known_options(_, _,  []).
 must_be_known_options(Valid, Found, [X|XS]) :-
     X =.. [Option|_],
     (
-        member(Option, Found) -> throw(error(duplicate_option, process_create/3, Option)) ;
+        member(Option, Found) -> error(evaluation_error(duplicate_options), process_create/3);
         member(Option, Valid) -> true ;
-        throw(error(invalid_option, process_create/3, Option))
+        domain_error(process_create_option, Option, process_create/3)
     ),
     must_be_known_options(Valid, [Option | Found], XS).
 
@@ -44,7 +44,7 @@ check_options([X | XS], Options) :-
     (
         Solutions = [] -> Choice = Default;
         Solutions = [Provided] -> call(Pred, Provided), Choice = Provided ;
-        throw(error(duplicate_option, process_create/3, Solutions))
+        error(evaluation_error(confliction_options), process_create/3)
     ),
     check_options(XS, Options).
 
@@ -54,7 +54,7 @@ find_option([_|Kinds], Found, Options) :- find_option(Kinds, Found, Options).
 valid_stdio(IO) :- IO =.. [_, Arg], 
     (
         valid_stdio_(Arg) -> true ;
-        throw(error(invalid_stdio, process_create/3, Arg))
+        domain_error(process_create_option, Arg, process_create/3)
     ).
 
 valid_stdio_(std).
@@ -62,14 +62,19 @@ valid_stdio_(null).
 valid_stdio_(pipe(Stream)) :- must_be(var, Stream).
 valid_stdio_(file(Path)) :- must_be(chars, Path).
 
-valid_env(env(E)) :- valid_env_(E).
-valid_env(environment(E)) :- valid_env_(E).
+valid_env(env(E)) :- (
+        valid_env_(E) -> true ;
+        domain_error(process_create_option, env(E), process_create/3)
+    ).
+valid_env(environment(E)) :- (
+        valid_env_(E) -> true ;
+        domain_error(process_create_option, environment(E), process_create/3)
+    ).
 
 valid_env_([]).
 valid_env_([E| ES]) :- 
     (
         E =.. [=, N, V] -> true ;
-        throw(error(invalid_env_entry, process_create/3, E))
     ),
     must_be(chars, N), 
     must_be(chars, V),
