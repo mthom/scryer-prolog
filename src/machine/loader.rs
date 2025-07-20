@@ -2120,14 +2120,16 @@ impl Machine {
                 .indices
                 .remove_predicate_skeleton(&compilation_target, &key)
                 .map(|skeleton| {
-                    let mut clause_clause_skeleton = loader
-                        .wam_prelude
-                        .indices
-                        .remove_predicate_skeleton(
+                    let mut clause_clause_skeleton =
+                        match loader.wam_prelude.indices.remove_predicate_skeleton(
                             &clause_clause_compilation_target,
                             &(atom!("$clause"), 2),
-                        )
-                        .unwrap();
+                        ) {
+                            Some(skeleton) => skeleton,
+                            None => {
+                                return vec![];
+                            }
+                        };
 
                     let result = skeleton
                         .core
