@@ -15,14 +15,14 @@ process_create(Exe, Args, Options) :-
     must_be(list, Args),
     maplist(must_be(chars), Args),
     must_be(list, Options),
-    must_be_known_options([stdin, stdout, stderr, env, environment, pid, cwd], [], Options),
+    must_be_known_options([stdin, stdout, stderr, env, environment, process, cwd], [], Options),
     check_options(
         [
             ([stdin], valid_stdio, stdin(std), stdin(Stdin)),
             ([stdout], valid_stdio, stdout(std), stdout(Stdout)),
             ([stderr], valid_stdio, stderr(std), stderr(Stderr)),
             ([env, environment], valid_env, environment([]), Env),
-            ([process], valid_pid, process(_), process(Pid)),
+            ([process], valid_process, process(_), process(Pid)),
             ([cwd], valid_cwd, cwd("."), cwd(Cwd))
         ],
         Options
@@ -108,7 +108,8 @@ valid_env_([N=V|ES]) :-
     must_be(chars, V),
     valid_env_(ES).
 
-valid_pid(pid(Pid)) :- must_be(var, Pid).
+valid_process(process(Pid)) :- must_be(var, Pid).
+
 valid_cwd(cwd(Cwd)) :- must_be(chars, Cwd).
 
 simplify_env(E, [Kind, Envs1]) :- E =.. [Kind, Envs], simplify_env_(Envs, Envs1).
