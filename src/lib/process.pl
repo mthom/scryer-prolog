@@ -101,8 +101,7 @@ valid_env(environment(E)) :- (
     ).
 
 valid_env_([]).
-valid_env_([E| ES]) :- 
-    E =.. [=, N, V],
+valid_env_([N=V|ES]) :- 
     must_be(chars, N), 
     must_be(chars, V),
     valid_env_(ES).
