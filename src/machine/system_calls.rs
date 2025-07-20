@@ -8414,17 +8414,20 @@ impl Machine {
         // Var
         let pid_r = self.deref_register(8);
 
-        let exe = self.machine_st.value_to_str_like(exe_r).unwrap();
+        let exe = self
+            .machine_st
+            .value_to_str_like(exe_r)
+            .expect("invalid values should have been rejected on the prolog side");
 
         let args = self
             .machine_st
             .try_from_list(args_r, stub_gen)
-            .unwrap()
+            .expect("invalid values should have been rejected on the prolog side")
             .into_iter()
             .map(|arg| {
                 self.machine_st
                     .value_to_str_like(arg)
-                    .unwrap()
+                    .expect("invalid values should have been rejected on the prolog side")
                     .as_str()
                     .to_string()
             })
@@ -8456,20 +8459,23 @@ impl Machine {
                 let name = self
                     .machine_st
                     .value_to_str_like(entry[0])
-                    .unwrap()
+                    .expect("invalid values should have been rejected on the prolog side")
                     .as_str()
                     .to_string();
                 let value = self
                     .machine_st
                     .value_to_str_like(entry[1])
-                    .unwrap()
+                    .expect("invalid values should have been rejected on the prolog side")
                     .as_str()
                     .to_string();
                 Ok((name, value))
             })
             .collect::<Result<Vec<_>, MachineStub>>()?;
 
-        let cwd = self.machine_st.value_to_str_like(cwd_r).unwrap();
+        let cwd = self
+            .machine_st
+            .value_to_str_like(cwd_r)
+            .expect("invalid values should have been rejected on the prolog side");
 
         let mut command = std::process::Command::new(&*exe.as_str());
         command.args(args);
@@ -8492,16 +8498,20 @@ impl Machine {
             Ok(child) => {
                 let pid = child.id();
                 self.machine_st.bind(
-                    pid_r.as_var().unwrap(),
+                    pid_r
+                        .as_var()
+                        .expect("invalid values should have been rejected on the prolog side"),
                     fixnum_as_cell!(Fixnum::build_with(pid)),
                 );
                 Ok(())
             }
-            Err(err) => {
-                // TODO give better error indication
-                dbg!(err);
-                self.machine_st.fail = true;
-                Ok(())
+            Err(_) => {
+                let perm_error = self.machine_st.permission_error(
+                    Permission::Create,
+                    atom!("process"),
+                    stub_gen(),
+                );
+                Err(self.machine_st.error_form(perm_error, stub_gen()))
             }
         }
     }
@@ -8511,8 +8521,16 @@ impl Machine {
             Some(atom!("std")) => Stdio::inherit(),
             Some(atom!("null")) => Stdio::null(),
             Some(atom!("pipe")) => {
-                // TODO handler Err
-                let (reader, writer) = std::io::pipe().unwrap();
+                let (reader, writer) = match std::io::pipe() {
+                    Ok(pipe_pair) => pipe_pair,
+                    Err(_) => {
+                        return Err(self.machine_st.open_permission_error(
+                            atom!("anonymous_pipe"),
+                            atom!("process_create"),
+                            3,
+                        ));
+                    }
+                };
 
                 let stream = Stream::from_pipe_reader(reader, &mut self.machine_st.arena);
 
@@ -8528,12 +8546,20 @@ impl Machine {
             Some(atom!("file")) => {
                 let path = self.machine_st.value_to_str_like(args[1]).unwrap();
 
-                // TODO handler Err
-                let file = std::fs::File::open(&*path.as_str()).unwrap();
+                let file = match std::fs::File::open(&*path.as_str()) {
+                    Ok(file) => file,
+                    Err(_) => {
+                        return Err(self.machine_st.open_permission_error(
+                            args[1],
+                            atom!("process_create"),
+                            3,
+                        ));
+                    }
+                };
                 Stdio::from(file)
             }
             _ => {
-                panic!("Invalid stdin tag")
+                panic!("Invalid stdout tag")
             }
         })
     }
@@ -8543,8 +8569,16 @@ impl Machine {
             Some(atom!("std")) => Stdio::inherit(),
             Some(atom!("null")) => Stdio::null(),
             Some(atom!("pipe")) => {
-                // TODO handler Err
-                let (reader, writer) = std::io::pipe().unwrap();
+                let (reader, writer) = match std::io::pipe() {
+                    Ok(pipe_pair) => pipe_pair,
+                    Err(_) => {
+                        return Err(self.machine_st.open_permission_error(
+                            atom!("anonymous_pipe"),
+                            atom!("process_create"),
+                            3,
+                        ));
+                    }
+                };
 
                 let stream = Stream::from_pipe_writer(writer, &mut self.machine_st.arena);
 
@@ -8560,8 +8594,16 @@ impl Machine {
             Some(atom!("file")) => {
                 let path = self.machine_st.value_to_str_like(args[1]).unwrap();
 
-                // TODO handler Err
-                let file = std::fs::File::open(&*path.as_str()).unwrap();
+                let file = match std::fs::File::open(&*path.as_str()) {
+                    Ok(file) => file,
+                    Err(_) => {
+                        return Err(self.machine_st.open_permission_error(
+                            args[1],
+                            atom!("process_create"),
+                            3,
+                        ));
+                    }
+                };
                 Stdio::from(file)
             }
             _ => {
