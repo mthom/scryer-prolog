@@ -39,7 +39,7 @@ process_wait(Pid, Status, Options) :-
     must_be(integer, Pid),
     must_be_known_options([timeout], [], Options),check_options(
         [
-            ([timeout], valid_timeout, infinite, timeout(Timeout))
+            ([timeout], valid_timeout, timeout(infinite), timeout(Timeout))
         ],
         Options
     ),
