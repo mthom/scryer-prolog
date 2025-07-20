@@ -543,6 +543,8 @@ enum SystemClauseType {
     ProcessWait,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$process_kill")))]
     ProcessKill,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$process_release")))]
+    ProcessRelease,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$pid")))]
     Pid,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$chars_base64")))]
@@ -1834,6 +1836,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallProcessCreate |
                     &Instruction::CallProcessWait |
                     &Instruction::CallProcessKill |
+                    &Instruction::CallProcessRelease |
                     &Instruction::CallPid |
                     &Instruction::CallCharsBase64 |
                     &Instruction::CallDevourWhitespace |
@@ -2075,6 +2078,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteProcessCreate |
                     &Instruction::ExecuteProcessWait |
                     &Instruction::ExecuteProcessKill |
+                    &Instruction::ExecuteProcessRelease |
                     &Instruction::ExecutePid |
                     &Instruction::ExecuteCharsBase64 |
                     &Instruction::ExecuteDevourWhitespace |

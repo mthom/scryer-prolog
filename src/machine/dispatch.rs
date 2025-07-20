@@ -4811,6 +4811,14 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.process_kill());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallProcessRelease => {
+                        try_or_throw!(self.machine_st, self.process_release());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteProcessRelease => {
+                        try_or_throw!(self.machine_st, self.process_release());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallPid => {
                         self.pid();
                         step_or_fail!(self, self.machine_st.p += 1);

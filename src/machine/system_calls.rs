@@ -8498,13 +8498,14 @@ impl Machine {
             Ok(child) => {
                 let pid = child.id();
 
+                dbg!(pid);
+
                 self.machine_st.child_processes.insert(pid, child);
 
-                self.machine_st.bind(
-                    pid_r
-                        .as_var()
-                        .expect("invalid values should have been rejected on the prolog side"),
-                    fixnum_as_cell!(Fixnum::build_with(pid)),
+                unify!(
+                    self.machine_st,
+                    pid_r,
+                    fixnum_as_cell!(Fixnum::build_with(pid))
                 );
 
                 Ok(())
@@ -8637,7 +8638,7 @@ impl Machine {
                 .existence_error(ExistenceError::Process(pid_r));
             return Err(self.machine_st.error_form(err, stub_gen()));
         };
-        let Some(mut child) = self.machine_st.child_processes.remove(&pid) else {
+        let Some(child) = self.machine_st.child_processes.get_mut(&pid) else {
             let err = self
                 .machine_st
                 .existence_error(ExistenceError::Process(pid_r));
@@ -8679,7 +8680,6 @@ impl Machine {
                             self.machine_st.throw_resource_error(resource_err_loc);
                         }
                     }
-                    Ok(())
                 } else {
                     #[cfg(unix)]
                     {
@@ -8687,7 +8687,7 @@ impl Machine {
 
                         if let Some(signal) = ExitStatusExt::signal(&exit_status) {
                             let mut writer =
-                                Heap::functor_writer(functor!(atom!("signal"), [fixnum(signal)]));
+                                Heap::functor_writer(functor!(atom!("killed"), [fixnum(signal)]));
 
                             match writer(&mut self.machine_st.heap) {
                                 Ok(loc) => {
@@ -8696,19 +8696,17 @@ impl Machine {
                                 Err(resource_err_loc) => {
                                     self.machine_st.throw_resource_error(resource_err_loc);
                                 }
-                            };
-                            Ok(())
+                            }
                         } else {
                             unify!(self.machine_st, status_r, atom_as_cell!(atom!("unknown")));
-                            Ok(())
                         }
                     }
                     #[cfg(not(unix))]
                     {
                         unify!(self.machine_st, status_r, atom_as_cell!(atom!("unknown")));
-                        Ok(())
                     }
                 }
+                Ok(())
             }
             Err(_) => {
                 let perm_error = self.machine_st.permission_error(
@@ -8737,7 +8735,7 @@ impl Machine {
                 .existence_error(ExistenceError::Process(pid_r));
             return Err(self.machine_st.error_form(err, stub_gen()));
         };
-        let Some(mut child) = self.machine_st.child_processes.remove(&pid) else {
+        let Some(child) = self.machine_st.child_processes.get_mut(&pid) else {
             let err = self
                 .machine_st
                 .existence_error(ExistenceError::Process(pid_r));
@@ -8749,6 +8747,25 @@ impl Machine {
                     .permission_error(Permission::Modify, atom!("process"), stub_gen());
             return Err(self.machine_st.error_form(perm_error, stub_gen()));
         }
+        Ok(())
+    }
+
+    pub(crate) fn process_release(&mut self) -> CallResult {
+        fn stub_gen() -> Vec<FunctorElement> {
+            functor_stub(atom!("process_release"), 1)
+        }
+
+        let pid_r = self.deref_register(1);
+        let Some(pid) = pid_r
+            .to_fixnum()
+            .and_then(|elem| elem.get_num().try_into().ok())
+        else {
+            let err = self
+                .machine_st
+                .existence_error(ExistenceError::Process(pid_r));
+            return Err(self.machine_st.error_form(err, stub_gen()));
+        };
+        self.machine_st.child_processes.remove(&pid);
         Ok(())
     }
 

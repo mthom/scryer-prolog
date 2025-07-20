@@ -53,7 +53,9 @@ process_kill(Pid) :-
     must_be(integer, Pid),
     '$process_kill'(Pid).
 
-process_release(Pid) :- process_wait(Pid, _).
+process_release(Pid) :- 
+    process_wait(Pid, _),
+    '$process_release'(Pid).
 
 
 must_be_known_options(_, _,  []).
