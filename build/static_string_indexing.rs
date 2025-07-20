@@ -194,6 +194,7 @@ pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStrea
 
         macro_rules! atom {
             #((#static_str_keys) => { Atom { index: #indices } };)*
+            ($name:literal) => {compile_error!(concat!("unknown static atom ", $name))};
         }
 
         pub static STATIC_ATOMS_MAP: phf::Map<&'static str, Atom> = phf::phf_map! {
