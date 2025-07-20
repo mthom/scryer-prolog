@@ -62,7 +62,7 @@ must_be_known_options(_, _,  []).
 must_be_known_options(Valid, Found, [X|XS]) :-
     X =.. [Option|_],
     (
-        member(Option, Found) -> error(evaluation_error(duplicate_options), process_create/3);
+        member(Option, Found) -> domain_error(non_duplicate_process_create_options, process_create/3);
         member(Option, Valid) -> true ;
         domain_error(process_create_option, Option, process_create/3)
     ),
