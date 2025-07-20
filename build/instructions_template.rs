@@ -539,6 +539,10 @@ enum SystemClauseType {
     Shell,
     #[strum_discriminants(strum(props(Arity = "8", Name = "$process_create")))]
     ProcessCreate,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$process_wait")))]
+    ProcessWait,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$process_kill")))]
+    ProcessKill,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$pid")))]
     Pid,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$chars_base64")))]
@@ -1828,6 +1832,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallUnsetEnv |
                     &Instruction::CallShell |
                     &Instruction::CallProcessCreate |
+                    &Instruction::CallProcessWait |
+                    &Instruction::CallProcessKill |
                     &Instruction::CallPid |
                     &Instruction::CallCharsBase64 |
                     &Instruction::CallDevourWhitespace |
@@ -2067,6 +2073,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteUnsetEnv |
                     &Instruction::ExecuteShell |
                     &Instruction::ExecuteProcessCreate |
+                    &Instruction::ExecuteProcessWait |
+                    &Instruction::ExecuteProcessKill |
                     &Instruction::ExecutePid |
                     &Instruction::ExecuteCharsBase64 |
                     &Instruction::ExecuteDevourWhitespace |

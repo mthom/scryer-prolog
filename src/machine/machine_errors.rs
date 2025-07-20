@@ -410,6 +410,17 @@ impl MachineState {
                     location: None,
                 }
             }
+            ExistenceError::Process(culprit) => {
+                let stub = functor!(
+                    atom!("existence_error"),
+                    [atom_as_cell((atom!("process"))), cell(culprit)]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                }
+            }
         }
     }
 
@@ -1003,6 +1014,7 @@ pub enum ExistenceError {
     },
     SourceSink(HeapCellValue),
     Stream(HeapCellValue),
+    Process(HeapCellValue),
 }
 
 #[derive(Debug)]

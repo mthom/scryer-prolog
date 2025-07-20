@@ -1,4 +1,10 @@
-:- module(process, [process_create/3]).
+:- module(process, [
+    process_create/3, 
+    process_release/1, 
+    process_wait/2, 
+    process_wait/3, 
+    process_kill/1
+]).
 
 :- use_module(library(error)).
 :- use_module(library(iso_ext)).
@@ -26,6 +32,29 @@ process_create(Exe, Args, Options) :-
     Stderr =.. Stderr1,
     simplify_env(Env, Env1),
     '$process_create'(Exe, Args, Stdin1, Stdout1, Stderr1, Env1, Cwd, Pid).
+
+process_wait(Pid, Status) :- process_wait(Pid, Status, []).
+
+process_wait(Pid, Status, Options) :- 
+    must_be(integer, Pid),
+    must_be_known_options([timeout], [], Options),check_options(
+        [
+            ([timeout], valid_timeout, infinite, timeout(Timeout))
+        ],
+        Options
+    ),
+    '$process_wait'(Pid, Exit, Timeout),
+    Exit = Status.
+
+valid_timeout(timeout(infinite)).
+valid_timeout(timeout(0)).
+
+process_kill(Pid) :- 
+    must_be(integer, Pid),
+    '$process_kill'(Pid).
+
+process_release(Pid) :- process_wait(Pid, _).
+
 
 must_be_known_options(_, _,  []).
 must_be_known_options(Valid, Found, [X|XS]) :-
@@ -73,9 +102,7 @@ valid_env(environment(E)) :- (
 
 valid_env_([]).
 valid_env_([E| ES]) :- 
-    (
-        E =.. [=, N, V] -> true ;
-    ),
+    E =.. [=, N, V],
     must_be(chars, N), 
     must_be(chars, V),
     valid_env_(ES).

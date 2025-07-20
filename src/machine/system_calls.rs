@@ -8616,6 +8616,142 @@ impl Machine {
         })
     }
 
+    pub(crate) fn process_wait(&mut self) -> CallResult {
+        fn stub_gen() -> Vec<FunctorElement> {
+            functor_stub(atom!("process_wait"), 2)
+        }
+
+        // Pid
+        let pid_r = self.deref_register(1);
+        // Var | Status
+        let status_r = self.deref_register(2);
+        // timeout | 0
+        let timeout_r = self.deref_register(3);
+
+        let Some(pid) = pid_r
+            .to_fixnum()
+            .and_then(|elem| elem.get_num().try_into().ok())
+        else {
+            let err = self
+                .machine_st
+                .existence_error(ExistenceError::Process(pid_r));
+            return Err(self.machine_st.error_form(err, stub_gen()));
+        };
+        let Some(mut child) = self.machine_st.child_processes.remove(&pid) else {
+            let err = self
+                .machine_st
+                .existence_error(ExistenceError::Process(pid_r));
+            return Err(self.machine_st.error_form(err, stub_gen()));
+        };
+
+        let status = if let Some(atom) = timeout_r.to_atom() {
+            match atom {
+                atom!("infinite") => child.wait().map(Some),
+                _ => {
+                    panic!("Invalid Timeout value")
+                }
+            }
+        } else if let Some(timeout) = timeout_r.to_fixnum() {
+            if timeout.get_num() == 0 {
+                child.try_wait()
+            } else {
+                panic!("Invalid Timeout value")
+            }
+        } else {
+            panic!("Invalid Timeout value")
+        };
+
+        match status {
+            Ok(None) => {
+                unify!(self.machine_st, status_r, atom_as_cell!(atom!("timeout")));
+                Ok(())
+            }
+            Ok(Some(exit_status)) => {
+                if let Some(exit_code) = exit_status.code() {
+                    let mut writer =
+                        Heap::functor_writer(functor!(atom!("exit"), [fixnum(exit_code)]));
+
+                    match writer(&mut self.machine_st.heap) {
+                        Ok(loc) => {
+                            unify!(self.machine_st, status_r, loc);
+                        }
+                        Err(resource_err_loc) => {
+                            self.machine_st.throw_resource_error(resource_err_loc);
+                        }
+                    }
+                    Ok(())
+                } else {
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::process::ExitStatusExt;
+
+                        if let Some(signal) = ExitStatusExt::signal(&exit_status) {
+                            let mut writer =
+                                Heap::functor_writer(functor!(atom!("signal"), [fixnum(signal)]));
+
+                            match writer(&mut self.machine_st.heap) {
+                                Ok(loc) => {
+                                    unify!(self.machine_st, status_r, loc);
+                                }
+                                Err(resource_err_loc) => {
+                                    self.machine_st.throw_resource_error(resource_err_loc);
+                                }
+                            };
+                            Ok(())
+                        } else {
+                            unify!(self.machine_st, status_r, atom_as_cell!(atom!("unknown")));
+                            Ok(())
+                        }
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        unify!(self.machine_st, status_r, atom_as_cell!(atom!("unknown")));
+                        Ok(())
+                    }
+                }
+            }
+            Err(_) => {
+                let perm_error = self.machine_st.permission_error(
+                    Permission::Modify,
+                    atom!("process"),
+                    stub_gen(),
+                );
+                Err(self.machine_st.error_form(perm_error, stub_gen()))
+            }
+        }
+    }
+
+    pub(crate) fn process_kill(&mut self) -> CallResult {
+        fn stub_gen() -> Vec<FunctorElement> {
+            functor_stub(atom!("process_kill"), 1)
+        }
+
+        // Pid
+        let pid_r = self.deref_register(1);
+        let Some(pid) = pid_r
+            .to_fixnum()
+            .and_then(|elem| elem.get_num().try_into().ok())
+        else {
+            let err = self
+                .machine_st
+                .existence_error(ExistenceError::Process(pid_r));
+            return Err(self.machine_st.error_form(err, stub_gen()));
+        };
+        let Some(mut child) = self.machine_st.child_processes.remove(&pid) else {
+            let err = self
+                .machine_st
+                .existence_error(ExistenceError::Process(pid_r));
+            return Err(self.machine_st.error_form(err, stub_gen()));
+        };
+        if child.kill().is_err() {
+            let perm_error =
+                self.machine_st
+                    .permission_error(Permission::Modify, atom!("process"), stub_gen());
+            return Err(self.machine_st.error_form(perm_error, stub_gen()));
+        }
+        Ok(())
+    }
+
     #[inline(always)]
     pub(crate) fn chars_base64(&mut self) -> CallResult {
         let padding = cell_as_atom!(self.deref_register(3));
