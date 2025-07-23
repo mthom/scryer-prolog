@@ -3546,23 +3546,21 @@ impl Machine {
             self.machine_st.unify_atom(end_of_file, addr);
 
             return Ok(());
+        } else if addr == atom_as_cell!(atom!("end_of_file")) {
+            self.machine_st.fail = true;
+            return Ok(());
         }
 
         let stub_gen = || functor_stub(atom!("get_char"), 2);
-        let result = self.machine_st.open_parsing_stream(stream);
 
         let addr = if addr.is_var() {
             addr
         } else {
             read_heap_cell!(addr,
                 (HeapCellValueTag::Atom, (atom, _arity)) => {
-                    char_as_cell!(atom.as_char().unwrap())
-                }
-                /*
-                (HeapCellValueTag::Char) => {
+                    debug_assert!(atom.as_char().is_some());
                     addr
                 }
-                */
                 _ => {
                     let err = self.machine_st.type_error(ValidType::InCharacter, addr);
                     return Err(self.machine_st.error_form(err, stub_gen()));
@@ -3570,7 +3568,7 @@ impl Machine {
             )
         };
 
-        let mut iter = match result {
+        let mut iter = match self.machine_st.open_parsing_stream(stream) {
             Ok(iter) => iter,
             Err(e) => {
                 if e.is_unexpected_eof() {
