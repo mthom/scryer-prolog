@@ -139,10 +139,9 @@ process_release(Process) :-
 must_be_known_options(_, _,  []).
 must_be_known_options(Valid, Found, [X|XS]) :-
     X =.. [Option|_],
-    (
-        member(Option, Found) -> domain_error(non_duplicate_process_create_options, process_create/3);
-        member(Option, Valid) -> true ;
-        domain_error(process_create_option, Option, process_create/3)
+    ( member(Option, Found) -> domain_error(non_duplicate_process_create_options, process_create/3)
+    ; member(Option, Valid) -> true 
+    ; domain_error(process_create_option, Option, process_create/3)
     ),
     must_be_known_options(Valid, [Option | Found], XS).
 
@@ -150,20 +149,18 @@ check_options([], _).
 check_options([X | XS], Options) :- 
     (Kinds, Pred, Default, Choice) = X,
     tfilter(find_option(Kinds), Options, Solutions),
-    (
-        Solutions = [] -> Choice = Default;
-        Solutions = [Provided] -> call(Pred, Provided), Choice = Provided ;
-        error(domain_error(non_confliction_process_options, Solutions), process_create/3)
+    ( Solutions = [] -> Choice = Default
+    ; Solutions = [Provided] -> call(Pred, Provided), Choice = Provided 
+    ; error(domain_error(non_confliction_process_options, Solutions), process_create/3)
     ),
     check_options(XS, Options).
 
 find_option(Names, Found, T) :- (functor(Found, Name, 1), member(Name, Names)) -> T = true ; T = false.
 
 valid_stdio(IO) :- arg(1, IO, Arg), 
-    (
-        var(Arg) -> instantiation_error(process_create/3) ;
-        valid_stdio_(Arg) -> true ;
-        domain_error(process_create_option, Arg, process_create/3)
+    ( var(Arg) -> instantiation_error(process_create/3) 
+    ; valid_stdio_(Arg) -> true 
+    ; domain_error(process_create_option, Arg, process_create/3)
     ).
 
 valid_stdio_(std).
@@ -173,15 +170,13 @@ valid_stdio_(file(Path)) :- must_be(chars, Path).
 
 valid_env(env(E)) :- 
     must_be(list, E),
-    (
-        valid_env_(E) -> true ;
-        domain_error(process_create_option, env(E), process_create/3)
+    ( valid_env_(E) -> true 
+    ; domain_error(process_create_option, env(E), process_create/3)
     ).
 valid_env(environment(E)) :- 
     must_be(list, E),
-    (
-        valid_env_(E) -> true ;
-        domain_error(process_create_option, environment(E), process_create/3)
+    ( valid_env_(E) -> true 
+    ; domain_error(process_create_option, environment(E), process_create/3)
     ).
 
 valid_env_([]).
