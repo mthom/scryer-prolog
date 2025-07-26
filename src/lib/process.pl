@@ -149,7 +149,7 @@ must_be_known_options(Valid, Found, [X|XS]) :-
 check_options([], _).
 check_options([X | XS], Options) :- 
     (Kinds, Pred, Default, Choice) = X,
-    tfilter(process:find_option(Kinds), Options, Solutions),
+    tfilter(find_option(Kinds), Options, Solutions),
     (
         Solutions = [] -> Choice = Default;
         Solutions = [Provided] -> call(Pred, Provided), Choice = Provided ;
