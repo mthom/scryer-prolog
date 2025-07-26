@@ -601,6 +601,15 @@ impl MachineState {
         }
     }
 
+    pub(super) fn unreachable_error(&self) -> MachineError {
+        let stub = functor!(atom!("system_error"));
+
+        MachineError {
+            stub,
+            location: None,
+        }
+    }
+
     #[cfg(feature = "ffi")]
     pub(super) fn ffi_error(&self, err: FFIError) -> MachineError {
         let error_atom = match err {

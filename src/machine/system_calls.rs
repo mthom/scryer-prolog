@@ -8680,6 +8680,7 @@ impl Machine {
                             self.machine_st.throw_resource_error(resource_err_loc);
                         }
                     }
+                    Ok(())
                 } else {
                     #[cfg(unix)]
                     {
@@ -8697,16 +8698,18 @@ impl Machine {
                                     self.machine_st.throw_resource_error(resource_err_loc);
                                 }
                             }
+                            Ok(())
                         } else {
-                            unify!(self.machine_st, status_r, atom_as_cell!(atom!("unknown")));
+                            let err = self.machine_st.unreachable_error();
+                            Err(self.machine_st.error_form(err, stub_gen()))
                         }
                     }
                     #[cfg(not(unix))]
                     {
-                        unify!(self.machine_st, status_r, atom_as_cell!(atom!("unknown")));
+                        let err = self.machine_st.unreachable_error();
+                        Err(self.machine_st.error_form(err, stub_gen()))
                     }
                 }
-                Ok(())
             }
             Err(_) => {
                 let perm_error = self.machine_st.permission_error(
