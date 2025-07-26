@@ -9,7 +9,8 @@
 
 :- use_module(library(error)).
 :- use_module(library(iso_ext)).
-:- use_module(library(lists), [member/2, maplist/2, filter/3]).
+:- use_module(library(lists), [member/2, maplist/2]).
+:- use_module(library(reif), [tfilter/3]).
 
 
 %% process_create(+Exe, +Args:list, +Options).
@@ -148,7 +149,7 @@ must_be_known_options(Valid, Found, [X|XS]) :-
 check_options([], _).
 check_options([X | XS], Options) :- 
     (Kinds, Pred, Default, Choice) = X,
-    filter(process:find_option(Kinds), Options, Solutions),
+    tfilter(process:find_option(Kinds), Options, Solutions),
     (
         Solutions = [] -> Choice = Default;
         Solutions = [Provided] -> call(Pred, Provided), Choice = Provided ;
@@ -156,11 +157,11 @@ check_options([X | XS], Options) :-
     ),
     check_options(XS, Options).
 
-find_option([Kind|_], Found) :- Found =.. [Kind,_].
-find_option([_|Kinds], Found) :- find_option(Kinds, Found).
+find_option(Names, Found, T) :- (functor(Found, Name, 1), member(Name, Names)) -> T = true ; T = false.
 
-valid_stdio(IO) :- IO =.. [_, Arg], 
+valid_stdio(IO) :- arg(1, IO, Arg), 
     (
+        var(Arg) -> instantiation_error(process_create/3) ;
         valid_stdio_(Arg) -> true ;
         domain_error(process_create_option, Arg, process_create/3)
     ).
@@ -170,11 +171,15 @@ valid_stdio_(null).
 valid_stdio_(pipe(Stream)) :- must_be(var, Stream).
 valid_stdio_(file(Path)) :- must_be(chars, Path).
 
-valid_env(env(E)) :- (
+valid_env(env(E)) :- 
+    must_be(list, E),
+    (
         valid_env_(E) -> true ;
         domain_error(process_create_option, env(E), process_create/3)
     ).
-valid_env(environment(E)) :- (
+valid_env(environment(E)) :- 
+    must_be(list, E),
+    (
         valid_env_(E) -> true ;
         domain_error(process_create_option, environment(E), process_create/3)
     ).

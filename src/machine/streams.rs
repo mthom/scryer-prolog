@@ -694,6 +694,8 @@ impl Stream {
             ArenaHeaderTag::InputChannelStream => {
                 Stream::InputChannel(unsafe { ptr.as_typed_ptr() })
             }
+            ArenaHeaderTag::PipeReader => Stream::PipeReader(unsafe { ptr.as_typed_ptr() }),
+            ArenaHeaderTag::PipeWriter => Stream::PipeWriter(unsafe { ptr.as_typed_ptr() }),
             _ => unreachable!(),
         }
     }
@@ -1601,6 +1603,7 @@ impl Stream {
             | Stream::Readline(_)
             | Stream::StaticString(_)
             | Stream::InputFile(..)
+            | Stream::PipeReader(_)
             | Stream::Null(_) => true,
             _ => false,
         }
@@ -1619,6 +1622,7 @@ impl Stream {
             | Stream::Byte(_)
             | Stream::OutputFile(..)
             | Stream::Callback(_)
+            | Stream::PipeWriter(_)
             | Stream::Null(_) => true,
             _ => false,
         }

@@ -218,6 +218,18 @@ macro_rules! match_untyped_arena_ptr_pat_body {
         #[allow(unused_braces)]
         $code
     }};
+    ($ptr:ident, PipeReader, $listener:ident, $code:expr) => {{
+        #[allow(unused_mut)]
+        let mut $listener = unsafe { $ptr.as_typed_ptr::<PipeReader>() };
+        #[allow(unused_braces)]
+        $code
+    }};
+    ($ptr:ident, PipeWriter, $listener:ident, $code:expr) => {{
+        #[allow(unused_mut)]
+        let mut $listener = unsafe { $ptr.as_typed_ptr::<PipeWriter>() };
+        #[allow(unused_braces)]
+        $code
+    }};
     ($ptr:ident, ChildProcess, $listener:ident, $code:expr) => {{
         #[allow(unused_mut)]
         let mut $listener = unsafe { $ptr.as_typed_ptr::<std::process::Child>() };
@@ -246,6 +258,8 @@ macro_rules! match_untyped_arena_ptr_pat {
             | ArenaHeaderTag::InputChannelStream
             | ArenaHeaderTag::StandardOutputStream
             | ArenaHeaderTag::StandardErrorStream
+            | ArenaHeaderTag::PipeReader
+            | ArenaHeaderTag::PipeWriter
     };
     ($tag:ident) => {
         ArenaHeaderTag::$tag
