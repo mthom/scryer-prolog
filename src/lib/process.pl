@@ -51,12 +51,12 @@ process_create(Exe, Args, Options) :-
     must_be_known_options([stdin, stdout, stderr, env, environment, process, cwd], [], Options),
     check_options(
         [
-            ([stdin], valid_stdio, stdin(std), stdin(Stdin)),
-            ([stdout], valid_stdio, stdout(std), stdout(Stdout)),
-            ([stderr], valid_stdio, stderr(std), stderr(Stderr)),
-            ([env, environment], valid_env, environment([]), Env),
-            ([process], valid_uninit_process, process(_), process(Process)),
-            ([cwd], valid_cwd, cwd("."), cwd(Cwd))
+            option([stdin], valid_stdio, stdin(std), stdin(Stdin)),
+            option([stdout], valid_stdio, stdout(std), stdout(Stdout)),
+            option([stderr], valid_stdio, stderr(std), stderr(Stderr)),
+            option([env, environment], valid_env, environment([]), Env),
+            option([process], valid_uninit_process, process(_), process(Process)),
+            option([cwd], valid_cwd, cwd("."), cwd(Cwd))
         ],
         Options
     ),
@@ -102,7 +102,7 @@ process_wait(Process, Status, Options) :-
     valid_process(Process, process_wait/3),
     must_be_known_options([timeout], [], Options),check_options(
         [
-            ([timeout], valid_timeout, timeout(infinite), timeout(Timeout))
+            option([timeout], valid_timeout, timeout(infinite), timeout(Timeout))
         ],
         Options
     ),
@@ -147,7 +147,7 @@ must_be_known_options(Valid, Found, [X|XS]) :-
 
 check_options([], _).
 check_options([X | XS], Options) :- 
-    (Kinds, Pred, Default, Choice) = X,
+    option(Kinds, Pred, Default, Choice) = X,
     tfilter(find_option(Kinds), Options, Solutions),
     ( Solutions = [] -> Choice = Default
     ; Solutions = [Provided] -> call(Pred, Provided), Choice = Provided 
