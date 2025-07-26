@@ -152,7 +152,7 @@ check_options([X | XS], Options) :-
     (
         Solutions = [] -> Choice = Default;
         Solutions = [Provided] -> call(Pred, Provided), Choice = Provided ;
-        error(evaluation_error(confliction_options, Solutions), process_create/3)
+        error(domain_error(non_confliction_process_options, Solutions), process_create/3)
     ),
     check_options(XS, Options).
 
