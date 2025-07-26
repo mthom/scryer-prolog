@@ -1,5 +1,6 @@
 :- module(process, [
     process_create/3, 
+    process_id/2,
     process_release/1, 
     process_wait/2, 
     process_wait/3, 
@@ -8,7 +9,7 @@
 
 :- use_module(library(error)).
 :- use_module(library(iso_ext)).
-:- use_module(library(lists), [append/3, member/2, maplist/2, maplist/3, select/3]).
+:- use_module(library(lists), [member/2, maplist/2, filter/3]).
 
 
 %% process_create(+Exe, +Args:list, +Options).
@@ -20,7 +21,7 @@
 % Options is a list consisting of the following options:
 %
 %  * `cwd(+Path)`           Set the processes working directory to `Path`
-%  * `process(-Pid)`        `Pid` will be assigned the spawned processes process id
+%  * `process(-Process)`    `Process` will be assigned a process handle for the spawned process
 %  * `env(+List)`           Don't inherit environment variables and set the variables defined in `List`
 %  * `environment(+List)`   Inherit environment variables and set/override the variables defined in `List`
 %  * `stdin(Spec)`, `stdout(Spec)` or `stderr(Spec)` defines how to redirect the spawned processes io streams
@@ -53,7 +54,7 @@ process_create(Exe, Args, Options) :-
             ([stdout], valid_stdio, stdout(std), stdout(Stdout)),
             ([stderr], valid_stdio, stderr(std), stderr(Stderr)),
             ([env, environment], valid_env, environment([]), Env),
-            ([process], valid_process, process(_), process(Pid)),
+            ([process], valid_uninit_process, process(_), process(Process)),
             ([cwd], valid_cwd, cwd("."), cwd(Cwd))
         ],
         Options
@@ -62,21 +63,27 @@ process_create(Exe, Args, Options) :-
     Stdout =.. Stdout1,
     Stderr =.. Stderr1,
     simplify_env(Env, Env1),
-    '$process_create'(Exe, Args, Stdin1, Stdout1, Stderr1, Env1, Cwd, Pid).
+    '$process_create'(Exe, Args, Stdin1, Stdout1, Stderr1, Env1, Cwd, Process).
 
+%% process_id(+Process, -Pid).
+%
+process_id(Process, Pid) :-
+    valid_process(Process, process_id/2),
+    write(valid), nl,
+    must_be(var, Pid),
+    write(var), nl, 
+    '$process_id'(Process, Pid).
 
-%% process_wait(+Pid, Status).
+%% process_wait(+Process, Status).
 %
 % See `process_create/3` with `Options = []`
 %
-process_wait(Pid, Status) :- process_wait(Pid, Status, []).
+process_wait(Process, Status) :- process_wait(Process, Status, []).
 
 
-%% process_wait(+Pid, Status, Options).
+%% process_wait(+Process, Status, Options).
 %
-% Wait for the child process with `Pid` to exit.
-%
-% Only works for processes spawned with `process_create/3` that have not yet been release with `process_release/1`
+% Wait for the process behind the process handle `Process` to exit.
 %
 % When the process exits regulary `Status` will be unified with `exit(Exit)` where `Exit` is the processes exit code.
 % When the process exits was killed `Status` will be unified with `killed(Signal)` where `Signal` is the signal number that killed the process.
@@ -90,43 +97,42 @@ process_wait(Pid, Status) :- process_wait(Pid, Status, []).
 %
 % - timeout(infinite)
 %
-process_wait(Pid, Status, Options) :- 
-    must_be(integer, Pid),
+process_wait(Process, Status, Options) :- 
+    valid_process(Process, process_wait/3),
     must_be_known_options([timeout], [], Options),check_options(
         [
             ([timeout], valid_timeout, timeout(infinite), timeout(Timeout))
         ],
         Options
     ),
-    '$process_wait'(Pid, Exit, Timeout),
+    '$process_wait'(Process, Exit, Timeout),
     Exit = Status.
 
 valid_timeout(timeout(infinite)).
 valid_timeout(timeout(0)).
 
 
-%% process_kill(+Pid).
+%% process_kill(+Process).
 %
-% Kill the child process identified by `Pid`.
+% Kill the process using the process handle `Process`.
 % On Unix this sends SIGKILL.
 %
 % Only works for processes spawned with `process_create/3` that have not yet been release with `process_release/1`
 % 
-process_kill(Pid) :- 
-    must_be(integer, Pid),
-    '$process_kill'(Pid).
+process_kill(Process) :- 
+    valid_process(Process, process_kill/1),
+    '$process_kill'(Process).
 
-%% process_release(+Pid)
+%% process_release(+Process)
 %
-% release child process object of the process identified by `Pid`
+% wait for the process to exit (if not already) and release process handle `Process`
 %
-% It's an error if 
-% * the `Pid` is not associated with a child process created by `process_create/3`,
-% * the child project object has already been released 
+% It's an error if `Process` is not a valid process handle
 %
-process_release(Pid) :- 
-    process_wait(Pid, _),
-    '$process_release'(Pid).
+process_release(Process) :- 
+    valid_process(Process, process_release/1),
+    process_wait(Process, _),
+    '$process_release'(Process).
 
 
 must_be_known_options(_, _,  []).
@@ -142,16 +148,16 @@ must_be_known_options(Valid, Found, [X|XS]) :-
 check_options([], _).
 check_options([X | XS], Options) :- 
     (Kinds, Pred, Default, Choice) = X,
-    findall(P, find_option(Kinds, P, Options), Solutions),
+    filter(process:find_option(Kinds), Options, Solutions),
     (
         Solutions = [] -> Choice = Default;
         Solutions = [Provided] -> call(Pred, Provided), Choice = Provided ;
-        error(evaluation_error(confliction_options), process_create/3)
+        error(evaluation_error(confliction_options, Solutions), process_create/3)
     ),
     check_options(XS, Options).
 
-find_option([Kind|_], Found, Options) :- Found =.. [Kind,_], member(Found, Options).
-find_option([_|Kinds], Found, Options) :- find_option(Kinds, Found, Options).
+find_option([Kind|_], Found) :- Found =.. [Kind,_].
+find_option([_|Kinds], Found) :- find_option(Kinds, Found).
 
 valid_stdio(IO) :- IO =.. [_, Arg], 
     (
@@ -179,7 +185,9 @@ valid_env_([N=V|ES]) :-
     must_be(chars, V),
     valid_env_(ES).
 
-valid_process(process(Pid)) :- must_be(var, Pid).
+valid_uninit_process(process(Process)) :- must_be(var, Process).
+
+valid_process(Process, Context) :- var(Process) -> instantiation_error(Context) ; true.
 
 valid_cwd(cwd(Cwd)) :- must_be(chars, Cwd).
 

@@ -44,6 +44,7 @@ pub(crate) enum ValidType {
     //    PredicateIndicator,
     //    Variable
     TcpListener,
+    Process,
 }
 
 impl ValidType {
@@ -67,6 +68,7 @@ impl ValidType {
             //            ValidType::PredicateIndicator => atom!("predicate_indicator"),
             //            ValidType::Variable => atom!("variable")
             ValidType::TcpListener => atom!("tcp_listener"),
+            ValidType::Process => atom!("process"),
         }
     }
 }

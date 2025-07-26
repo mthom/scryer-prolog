@@ -20,11 +20,9 @@ use crate::parser::dashu::Integer;
 
 use indexmap::IndexMap;
 
-use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::ops::{Index, IndexMut, Range};
-use std::process::Child;
 use std::sync::Arc;
 
 pub(crate) type Registers = [HeapCellValue; MAX_ARITY + 1];
@@ -99,7 +97,6 @@ pub struct MachineState {
     pub(crate) unify_fn: fn(&mut MachineState),
     pub(crate) bind_fn: fn(&mut MachineState, Ref, HeapCellValue),
     pub(crate) run_cleaners_fn: fn(&mut Machine) -> bool,
-    pub(crate) child_processes: BTreeMap<u32, Child>,
 }
 
 impl fmt::Debug for MachineState {

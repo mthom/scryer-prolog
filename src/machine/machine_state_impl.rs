@@ -19,7 +19,6 @@ use crate::types::*;
 use indexmap::IndexSet;
 
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 impl MachineState {
@@ -68,7 +67,6 @@ impl MachineState {
             unify_fn: MachineState::unify,
             bind_fn: MachineState::bind,
             run_cleaners_fn: |_| false,
-            child_processes: BTreeMap::new(),
         }
     }
 

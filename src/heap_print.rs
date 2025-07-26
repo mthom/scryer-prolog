@@ -1789,6 +1789,23 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                    (ArenaHeaderTag::Dropped, _value) => {
                        self.print_impromptu_atom(atom!("$dropped_value"));
                    }
+                   (ArenaHeaderTag::ChildProcess, process) => {
+
+                        let process_atom = atom!("$process");
+
+                        if self.format_struct(max_depth, 1, process_atom) {
+                            let atom = TokenOrRedirect::NumberFocus(max_depth, NumberFocus::Unfocused(Number::Fixnum(Fixnum::build_with(process.id()))), op);
+
+                            let process_root = self.state_stack.pop().unwrap();
+
+                            self.state_stack.pop();
+                            self.state_stack.pop();
+
+                            self.state_stack.push(atom);
+                            self.state_stack.push(TokenOrRedirect::Open);
+                            self.state_stack.push(process_root);
+                        }
+                   }
                    _ => {
                    }
                );

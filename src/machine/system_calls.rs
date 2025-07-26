@@ -56,6 +56,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use std::net::{TcpListener, TcpStream};
 use std::num::NonZeroU32;
 use std::process;
+use std::process::Child;
 use std::process::Stdio;
 #[cfg(feature = "http")]
 use std::str::FromStr;
@@ -8496,16 +8497,13 @@ impl Machine {
 
         match command.spawn() {
             Ok(child) => {
-                let pid = child.id();
-
-                dbg!(pid);
-
-                self.machine_st.child_processes.insert(pid, child);
+                let child_process_alloc: TypedArenaPtr<Child> =
+                    arena_alloc!(child, &mut self.machine_st.arena);
 
                 unify!(
                     self.machine_st,
                     pid_r,
-                    fixnum_as_cell!(Fixnum::build_with(pid))
+                    typed_arena_ptr_as_cell!(child_process_alloc)
                 );
 
                 Ok(())
@@ -8617,44 +8615,84 @@ impl Machine {
         })
     }
 
+    pub(crate) fn process_id(&mut self) -> CallResult {
+        fn stub_gen() -> Vec<FunctorElement> {
+            functor_stub(atom!("process_id"), 2)
+        }
+
+        // Process
+        let process_r = self.deref_register(1);
+        // Pid
+        let pid_r = self.deref_register(2);
+
+        let Some(ptr) = process_r.to_untyped_arena_ptr() else {
+            let err = self.machine_st.type_error(ValidType::Process, process_r);
+            return Err(self.machine_st.error_form(err, stub_gen()));
+        };
+
+        let process = match_untyped_arena_ptr!(ptr,
+            (ArenaHeaderTag::ChildProcess, child_process) => {
+                child_process
+            }
+            (ArenaHeaderTag::Dropped, _dropped) => {
+                let err = self.machine_st.existence_error(ExistenceError::Process(process_r));
+                return Err(self.machine_st.error_form(err, stub_gen()));
+            }
+            _ => {
+                let err = self.machine_st.type_error(ValidType::Process, process_r);
+                return Err(self.machine_st.error_form(err, stub_gen()));
+            }
+        );
+
+        self.machine_st.bind(
+            pid_r.as_var().unwrap(),
+            fixnum_as_cell!(Fixnum::build_with(process.id())),
+        );
+
+        Ok(())
+    }
+
     pub(crate) fn process_wait(&mut self) -> CallResult {
         fn stub_gen() -> Vec<FunctorElement> {
             functor_stub(atom!("process_wait"), 2)
         }
 
-        // Pid
-        let pid_r = self.deref_register(1);
+        // Process
+        let process_r = self.deref_register(1);
         // Var | Status
         let status_r = self.deref_register(2);
         // timeout | 0
         let timeout_r = self.deref_register(3);
 
-        let Some(pid) = pid_r
-            .to_fixnum()
-            .and_then(|elem| elem.get_num().try_into().ok())
-        else {
-            let err = self
-                .machine_st
-                .existence_error(ExistenceError::Process(pid_r));
-            return Err(self.machine_st.error_form(err, stub_gen()));
-        };
-        let Some(child) = self.machine_st.child_processes.get_mut(&pid) else {
-            let err = self
-                .machine_st
-                .existence_error(ExistenceError::Process(pid_r));
+        let Some(ptr) = process_r.to_untyped_arena_ptr() else {
+            let err = self.machine_st.type_error(ValidType::Process, process_r);
             return Err(self.machine_st.error_form(err, stub_gen()));
         };
 
+        let mut process = match_untyped_arena_ptr!(ptr,
+            (ArenaHeaderTag::ChildProcess, child_process) => {
+                child_process
+            }
+            (ArenaHeaderTag::Dropped, _dropped) => {
+                let err = self.machine_st.existence_error(ExistenceError::Process(process_r));
+                return Err(self.machine_st.error_form(err, stub_gen()));
+            }
+            _ => {
+                let err = self.machine_st.type_error(ValidType::Process, process_r);
+                return Err(self.machine_st.error_form(err, stub_gen()));
+            }
+        );
+
         let status = if let Some(atom) = timeout_r.to_atom() {
             match atom {
-                atom!("infinite") => child.wait().map(Some),
+                atom!("infinite") => process.wait().map(Some),
                 _ => {
                     panic!("Invalid Timeout value")
                 }
             }
         } else if let Some(timeout) = timeout_r.to_fixnum() {
             if timeout.get_num() == 0 {
-                child.try_wait()
+                process.try_wait()
             } else {
                 panic!("Invalid Timeout value")
             }
@@ -8728,23 +8766,28 @@ impl Machine {
         }
 
         // Pid
-        let pid_r = self.deref_register(1);
-        let Some(pid) = pid_r
-            .to_fixnum()
-            .and_then(|elem| elem.get_num().try_into().ok())
-        else {
-            let err = self
-                .machine_st
-                .existence_error(ExistenceError::Process(pid_r));
+        let process_r = self.deref_register(1);
+
+        let Some(ptr) = process_r.to_untyped_arena_ptr() else {
+            let err = self.machine_st.type_error(ValidType::Process, process_r);
             return Err(self.machine_st.error_form(err, stub_gen()));
         };
-        let Some(child) = self.machine_st.child_processes.get_mut(&pid) else {
-            let err = self
-                .machine_st
-                .existence_error(ExistenceError::Process(pid_r));
-            return Err(self.machine_st.error_form(err, stub_gen()));
-        };
-        if child.kill().is_err() {
+
+        let mut process = match_untyped_arena_ptr!(ptr,
+            (ArenaHeaderTag::ChildProcess, child_process) => {
+                child_process
+            }
+            (ArenaHeaderTag::Dropped, _dropped) => {
+                let err = self.machine_st.existence_error(ExistenceError::Process(process_r));
+                return Err(self.machine_st.error_form(err, stub_gen()));
+            }
+            _ => {
+                let err = self.machine_st.type_error(ValidType::Process, process_r);
+                return Err(self.machine_st.error_form(err, stub_gen()));
+            }
+        );
+
+        if process.kill().is_err() {
             let perm_error =
                 self.machine_st
                     .permission_error(Permission::Modify, atom!("process"), stub_gen());
@@ -8758,18 +8801,23 @@ impl Machine {
             functor_stub(atom!("process_release"), 1)
         }
 
-        let pid_r = self.deref_register(1);
-        let Some(pid) = pid_r
-            .to_fixnum()
-            .and_then(|elem| elem.get_num().try_into().ok())
-        else {
-            let err = self
-                .machine_st
-                .existence_error(ExistenceError::Process(pid_r));
-            return Err(self.machine_st.error_form(err, stub_gen()));
-        };
-        self.machine_st.child_processes.remove(&pid);
-        Ok(())
+        let process = self.deref_register(1);
+
+        if let Some(ptr) = process.to_untyped_arena_ptr() {
+            match_untyped_arena_ptr!(ptr,
+                (ArenaHeaderTag::ChildProcess, child_process) => {
+                    child_process.drop_payload();
+
+                    return Ok(());
+                }
+                _ => {
+                }
+            );
+        }
+
+        let err = self.machine_st.type_error(ValidType::Process, process);
+
+        Err(self.machine_st.error_form(err, stub_gen()))
     }
 
     #[inline(always)]

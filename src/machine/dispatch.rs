@@ -4795,6 +4795,14 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.process_create());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallProcessId => {
+                        try_or_throw!(self.machine_st, self.process_id());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteProcessId => {
+                        try_or_throw!(self.machine_st, self.process_id());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallProcessWait => {
                         try_or_throw!(self.machine_st, self.process_wait());
                         step_or_fail!(self, self.machine_st.p += 1);

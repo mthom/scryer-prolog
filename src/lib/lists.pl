@@ -7,7 +7,7 @@ List manipulation predicates
 		          maplist/3, maplist/4, maplist/5, maplist/6,
 		          maplist/7, maplist/8, maplist/9, same_length/2, nth0/3, nth0/4, nth1/3, nth1/4,
 		          sum_list/2, transpose/2, list_to_set/2, list_max/2,
-                  list_min/2, permutation/2]).
+                  list_min/2, permutation/2, filter/3]).
 
 /*  Author:        Mark Thom, Jan Wielemaker, and Richard O'Keefe
     Copyright (c)  2018-2021, Mark Thom
@@ -538,3 +538,11 @@ perm([], []).
 perm(List, [First|Perm]) :-
     select(First, List, Rest),
     perm(Rest, Perm).
+
+
+%% filter(+Predicate, ?Xs1 ?Xs2).
+%
+% Succeeds if Xs2 is the list of elements X from Xs1 for which call(Pred, X) succeeds.
+%
+filter(_, [], []).
+filter(Pred, [X1|XS1], XS) :- call(Pred, X1) -> filter(Pred, XS1, XS2), XS = [X1|XS2] ; filter(Pred, XS1, XS).
