@@ -23,7 +23,8 @@ fn cli_tests() {
     cases
         .default_bin_name("scryer-prolog")
         .case("tests/scryer/cli/issues/*.toml")
-        .case("tests/scryer/cli/src_tests/*.toml");
+        .case("tests/scryer/cli/src_tests/*.toml")
+        .case("tests/scryer/cli/src_tests/*.md");
 
     #[cfg(windows)]
     {

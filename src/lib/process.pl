@@ -9,7 +9,7 @@
 
 :- use_module(library(error)).
 :- use_module(library(iso_ext)).
-:- use_module(library(lists), [member/2, maplist/2]).
+:- use_module(library(lists), [member/2, maplist/2, maplist/3, append/2]).
 :- use_module(library(reif), [tfilter/3, memberd_t/3]).
 
 
@@ -48,7 +48,6 @@ process_create(Exe, Args, Options) :-
     must_be(list, Args),
     maplist(must_be(chars), Args),
     must_be(list, Options),
-    must_be_known_options([stdin, stdout, stderr, env, environment, process, cwd], [], Options),
     check_options(
         [
             option([stdin], valid_stdio, stdin(std), stdin(Stdin)),
@@ -58,7 +57,9 @@ process_create(Exe, Args, Options) :-
             option([process], valid_uninit_process, process(_), process(Process)),
             option([cwd], valid_cwd, cwd("."), cwd(Cwd))
         ],
-        Options
+        Options,
+        process_create_option,
+        process_create/3
     ),
     Stdin =.. Stdin1,
     Stdout =.. Stdout1,
@@ -100,11 +101,13 @@ process_wait(Process, Status) :- process_wait(Process, Status, []).
 %
 process_wait(Process, Status, Options) :- 
     valid_process(Process, process_wait/3),
-    must_be_known_options([timeout], [], Options),check_options(
+    check_options(
         [
             option([timeout], valid_timeout, timeout(infinite), timeout(Timeout))
         ],
-        Options
+        Options,
+        process_wait_option,
+        process_wait/3
     ),
     '$process_wait'(Process, Exit, Timeout),
     Exit = Status.
@@ -136,24 +139,34 @@ process_release(Process) :-
     '$process_release'(Process).
 
 
-must_be_known_options(_, _,  []).
-must_be_known_options(Valid, Found, [X|XS]) :-
-    functor(X, Option, 1),
-    ( member(Option, Found) -> domain_error(non_duplicate_process_create_options, process_create/3)
-    ; member(Option, Valid) -> true 
-    ; domain_error(process_create_option, Option, process_create/3)
-    ),
-    must_be_known_options(Valid, [Option | Found], XS).
+must_be_known_options(Valid, Options, Domain, Context) :- must_be_known_options_(Valid, [], Options, Domain, Context).
 
-check_options([], _).
-check_options([X | XS], Options) :- 
+must_be_known_options_(_, _,  [], _, _).
+must_be_known_options_(Valid, Found, [X|XS], Domain, Context) :-
+    functor(X, Option, 1),
+    ( member(Option, Found) -> domain_error(non_duplicate_options, Option , Context)
+    ; member(Option, Valid) -> true 
+    ; domain_error(Domain, Option, Context)
+    ),
+    must_be_known_options_(Valid, [Option | Found], XS, Domain, Context).
+
+check_options(KnownOptions, Options, Domain, Context) :-
+    maplist(option_names, KnownOptions, Namess),
+    append(Namess, Names),
+    must_be_known_options(Names, Options, Domain, Context),
+    check_options_(KnownOptions, Options, Context).
+
+option_names(option(Names,_,_,_), Names).
+
+check_options_([], _, _).
+check_options_([X | XS], Options, Context) :- 
     option(Kinds, Pred, Default, Choice) = X,
     tfilter(find_option(Kinds), Options, Solutions),
     ( Solutions = [] -> Choice = Default
     ; Solutions = [Provided] -> call(Pred, Provided), Choice = Provided 
-    ; error(domain_error(non_confliction_process_options, Solutions), process_create/3)
+    ; domain_error(non_conflicting_options, Solutions, Context)
     ),
-    check_options(XS, Options).
+    check_options_(XS, Options, Context).
 
 find_option(Names, Found, T) :- 
     functor(Found, Name, 1), 
@@ -162,7 +175,7 @@ find_option(Names, Found, T) :-
 valid_stdio(IO) :- arg(1, IO, Arg), 
     ( var(Arg) -> instantiation_error(process_create/3) 
     ; valid_stdio_(Arg) -> true 
-    ; domain_error(process_create_option, Arg, process_create/3)
+    ; domain_error(stdio_spec, Arg, process_create/3)
     ).
 
 valid_stdio_(std).
