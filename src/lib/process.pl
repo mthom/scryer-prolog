@@ -10,7 +10,7 @@
 :- use_module(library(error)).
 :- use_module(library(iso_ext)).
 :- use_module(library(lists), [member/2, maplist/2]).
-:- use_module(library(reif), [tfilter/3]).
+:- use_module(library(reif), [tfilter/3, memberd_t/3]).
 
 
 %% process_create(+Exe, +Args:list, +Options).
@@ -138,7 +138,7 @@ process_release(Process) :-
 
 must_be_known_options(_, _,  []).
 must_be_known_options(Valid, Found, [X|XS]) :-
-    X =.. [Option|_],
+    functor(X, Option, 1),
     ( member(Option, Found) -> domain_error(non_duplicate_process_create_options, process_create/3)
     ; member(Option, Valid) -> true 
     ; domain_error(process_create_option, Option, process_create/3)
@@ -155,7 +155,9 @@ check_options([X | XS], Options) :-
     ),
     check_options(XS, Options).
 
-find_option(Names, Found, T) :- (functor(Found, Name, 1), member(Name, Names)) -> T = true ; T = false.
+find_option(Names, Found, T) :- 
+    functor(Found, Name, 1), 
+    memberd_t(Name, Names, T).
 
 valid_stdio(IO) :- arg(1, IO, Arg), 
     ( var(Arg) -> instantiation_error(process_create/3) 
