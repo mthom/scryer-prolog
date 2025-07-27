@@ -71,9 +71,7 @@ process_create(Exe, Args, Options) :-
 %
 process_id(Process, Pid) :-
     valid_process(Process, process_id/2),
-    write(valid), nl,
     must_be(var, Pid),
-    write(var), nl, 
     '$process_id'(Process, Pid).
 
 %% process_wait(+Process, Status).
@@ -143,7 +141,9 @@ must_be_known_options(Valid, Options, Domain, Context) :- must_be_known_options_
 
 must_be_known_options_(_, _,  [], _, _).
 must_be_known_options_(Valid, Found, [X|XS], Domain, Context) :-
-    functor(X, Option, 1),
+    ( functor(X, Option, 1) -> true
+    ; domain_error(Domain, Option , Context)
+    ) ,
     ( member(Option, Found) -> domain_error(non_duplicate_options, Option , Context)
     ; member(Option, Valid) -> true 
     ; domain_error(Domain, Option, Context)
