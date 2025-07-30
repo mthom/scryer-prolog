@@ -36,7 +36,7 @@ use_module(library(process)),process_create([],[],[stdin(invalid),process(P)]),p
 
 ```trycmd
 $ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_wait(50, _), halt'
-use_module(library(process)),process_wait(50,_[..]),halt causes: error(type_error(process,50),process_wait/2)
+use_module(library(process)),process_wait(50,_[..]),halt causes: error(type_error(process,50),process_wait/3)
 
 ```
 
@@ -54,6 +54,6 @@ use_module(library(process)),process_id(50,_[..]),halt causes: error(type_error(
 
 ```trycmd
 $ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_release(50), halt'
-use_module(library(process)),process_release(50),halt causes: error(type_error(process,50),process_wait/2)
+use_module(library(process)),process_release(50),halt causes: error(type_error(process,50),process_wait/3)
 
 ```

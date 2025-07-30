@@ -8654,7 +8654,7 @@ impl Machine {
 
     pub(crate) fn process_wait(&mut self) -> CallResult {
         fn stub_gen() -> Vec<FunctorElement> {
-            functor_stub(atom!("process_wait"), 2)
+            functor_stub(atom!("process_wait"), 3)
         }
 
         // Process
