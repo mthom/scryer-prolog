@@ -1,6 +1,6 @@
 ```trycmd
 $ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_create("", [], [invalid, process(P)]), process_kill(P), halt'
-use_module(library(process)),process_create([],[],[invalid,process(P)]),process_kill(P),halt causes: error(domain_error(process_create_option,_[..]),process_create/3)
+use_module(library(process)),process_create([],[],[invalid,process(P)]),process_kill(P),halt causes: error(domain_error(process_create_option,invalid),process_create/3)
 
 ```
 

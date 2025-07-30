@@ -142,7 +142,7 @@ must_be_known_options(Valid, Options, Domain, Context) :- must_be_known_options_
 must_be_known_options_(_, _,  [], _, _).
 must_be_known_options_(Valid, Found, [X|XS], Domain, Context) :-
     ( functor(X, Option, 1) -> true
-    ; domain_error(Domain, Option , Context)
+    ; domain_error(Domain, X , Context)
     ) ,
     ( member(Option, Found) -> domain_error(non_duplicate_options, Option , Context)
     ; member(Option, Valid) -> true 
