@@ -43,7 +43,9 @@
 % - `environment([])`
 % - `stdin(std)`, `stdout(std)`, `stderr(std)`
 %
-process_create(Exe, Args, Options) :- 
+process_create(Exe, Args, Options) :- call_with_error_context(process_create_(Exe, Args, Options), predicate-process_create/3).
+
+process_create_(Exe, Args, Options) :-
     must_be(chars, Exe),
     must_be(list, Args),
     maplist(must_be(chars), Args),
@@ -58,8 +60,7 @@ process_create(Exe, Args, Options) :-
             option([cwd], valid_cwd, cwd("."), cwd(Cwd))
         ],
         Options,
-        process_create_option,
-        process_create/3
+        process_create_option
     ),
     Stdin =.. Stdin1,
     Stdout =.. Stdout1,
@@ -69,8 +70,10 @@ process_create(Exe, Args, Options) :-
 
 %% process_id(+Process, -Pid).
 %
-process_id(Process, Pid) :-
-    valid_process(Process, process_id/2),
+process_id(Process, Pid) :- call_with_error_context(process_id_(Process, Pid), predicate-process_id/2).
+
+process_id_(Process, Pid) :-
+    valid_process(Process),
     must_be(var, Pid),
     '$process_id'(Process, Pid).
 
@@ -78,7 +81,7 @@ process_id(Process, Pid) :-
 %
 % See `process_create/3` with `Options = []`
 %
-process_wait(Process, Status) :- process_wait(Process, Status, []).
+process_wait(Process, Status) :- call_with_error_context(process_wait(Process, Status, []), predicate-process_wait/2).
 
 
 %% process_wait(+Process, Status, Options).
@@ -97,15 +100,16 @@ process_wait(Process, Status) :- process_wait(Process, Status, []).
 %
 % - timeout(infinite)
 %
-process_wait(Process, Status, Options) :- 
-    valid_process(Process, process_wait/3),
+process_wait(Process, Status, Options) :- call_with_error_context(process_wait_(Process, Status, Options), predicate-process_wait/3).
+
+process_wait_(Process, Status, Options) :- 
+    valid_process(Process),
     check_options(
         [
             option([timeout], valid_timeout, timeout(infinite), timeout(Timeout))
         ],
         Options,
-        process_wait_option,
-        process_wait/3
+        process_wait_option
     ),
     '$process_wait'(Process, Exit, Timeout),
     Exit = Status.
@@ -121,8 +125,10 @@ valid_timeout(timeout(0)).
 %
 % Only works for processes spawned with `process_create/3` that have not yet been release with `process_release/1`
 % 
-process_kill(Process) :- 
-    valid_process(Process, process_kill/1),
+process_kill(Process) :- call_with_error_context(process_kill_(Process), predicate-process_kill/1).
+
+process_kill_(Process) :- 
+    valid_process(Process),
     '$process_kill'(Process).
 
 %% process_release(+Process)
@@ -131,51 +137,57 @@ process_kill(Process) :-
 %
 % It's an error if `Process` is not a valid process handle
 %
-process_release(Process) :- 
-    valid_process(Process, process_release/1),
+process_release(Process) :- call_with_error_context(process_release_(Process), predicate-process_release/1).
+
+process_release_(Process) :- 
+    valid_process(Process),
     process_wait(Process, _),
     '$process_release'(Process).
 
 
-must_be_known_options(Valid, Options, Domain, Context) :- must_be_known_options_(Valid, [], Options, Domain, Context).
+must_be_known_options(Valid, Options, Domain) :- call_with_error_context(must_be_known_options_(Valid, [], Options, Domain),predicate-must_be_known_options/3).
 
-must_be_known_options_(_, _,  [], _, _).
-must_be_known_options_(Valid, Found, [X|XS], Domain, Context) :-
+must_be_known_options_(_, _,  [], _).
+must_be_known_options_(Valid, Found, [X|XS], Domain) :-
     ( functor(X, Option, 1) -> true
-    ; domain_error(Domain, X , Context)
+    ; domain_error(Domain, X, [])
     ) ,
-    ( member(Option, Found) -> domain_error(non_duplicate_options, Option , Context)
+    ( member(Option, Found) -> domain_error(non_duplicate_options, Option , [])
     ; member(Option, Valid) -> true 
-    ; domain_error(Domain, Option, Context)
+    ; domain_error(Domain, Option, [])
     ),
-    must_be_known_options_(Valid, [Option | Found], XS, Domain, Context).
+    must_be_known_options_(Valid, [Option | Found], XS, Domain).
 
-check_options(KnownOptions, Options, Domain, Context) :-
+check_options(KnownOptions, Options, Domain) :- call_with_error_context(check_options_(KnownOptions, Options, Domain), predicate-check_options/3).
+
+check_options_(KnownOptions, Options, Domain) :-
     maplist(option_names, KnownOptions, Namess),
     append(Namess, Names),
-    must_be_known_options(Names, Options, Domain, Context),
-    check_options_(KnownOptions, Options, Context).
+    must_be_known_options(Names, Options, Domain),
+    extract_options(KnownOptions, Options).
 
 option_names(option(Names,_,_,_), Names).
 
-check_options_([], _, _).
-check_options_([X | XS], Options, Context) :- 
+extract_options(KnownOptions, Options) :- call_with_error_context(extract_options_(KnownOptions, Options), predicate-extract_options/2).
+
+extract_options_([], _).
+extract_options_([X | XS], Options) :- 
     option(Kinds, Pred, Default, Choice) = X,
     tfilter(find_option(Kinds), Options, Solutions),
     ( Solutions = [] -> Choice = Default
-    ; Solutions = [Provided] -> call(Pred, Provided), Choice = Provided 
-    ; domain_error(non_conflicting_options, Solutions, Context)
+    ; Solutions = [Provided] -> functor(Pred, Name, Arity), ArityP1 is Arity+1, call_with_error_context(call(Pred, Provided),predicate-Name/ArityP1), Choice = Provided 
+    ; domain_error(non_conflicting_options, Solutions, [])
     ),
-    check_options_(XS, Options, Context).
+    extract_options_(XS, Options).
 
 find_option(Names, Found, T) :- 
     functor(Found, Name, 1), 
     memberd_t(Name, Names, T).
 
 valid_stdio(IO) :- arg(1, IO, Arg), 
-    ( var(Arg) -> instantiation_error(process_create/3) 
+    ( var(Arg) -> instantiation_error([]) 
     ; valid_stdio_(Arg) -> true 
-    ; domain_error(stdio_spec, Arg, process_create/3)
+    ; domain_error(stdio_spec, Arg, [])
     ).
 
 valid_stdio_(std).
@@ -186,12 +198,12 @@ valid_stdio_(file(Path)) :- must_be(chars, Path).
 valid_env(env(E)) :- 
     must_be(list, E),
     ( valid_env_(E) -> true 
-    ; domain_error(process_create_option, env(E), process_create/3)
+    ; domain_error(process_create_option, env(E), [])
     ).
 valid_env(environment(E)) :- 
     must_be(list, E),
     ( valid_env_(E) -> true 
-    ; domain_error(process_create_option, environment(E), process_create/3)
+    ; domain_error(process_create_option, environment(E), [])
     ).
 
 valid_env_([]).
@@ -202,7 +214,7 @@ valid_env_([N=V|ES]) :-
 
 valid_uninit_process(process(Process)) :- must_be(var, Process).
 
-valid_process(Process, Context) :- var(Process) -> instantiation_error(Context) ; true.
+valid_process(Process) :- var(Process) -> instantiation_error([]) ; true.
 
 valid_cwd(cwd(Cwd)) :- must_be(chars, Cwd).
 
