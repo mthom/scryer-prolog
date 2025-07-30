@@ -5,8 +5,8 @@ use_module(library(process)),process_create([],[],[invalid,process(P)]),process_
 ```
 
 ```trycmd
-$ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_create("", [], [invalid(_), process(P)]), process_kill(P), halt'
-use_module(library(process)),process_create([],[],[invalid(_[..]),process(P)]),process_kill(P),halt causes: error(domain_error(process_create_option,invalid),process_create/3)
+$ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_create("", [], [invalid(_Var), process(P)]), process_kill(P), halt'
+use_module(library(process)),process_create([],[],[invalid(_Var),process(P)]),process_kill(P),halt causes: error(domain_error(process_create_option,invalid),process_create/3)
 
 ```
 
@@ -23,8 +23,8 @@ use_module(library(process)),process_create([],[],[env([]),environment([]),proce
 ```
 
 ```trycmd
-$ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_wait(pid, _, [invalid(_), timeout(0)]), halt'
-use_module(library(process)),process_wait(pid,_[..],[invalid(_[..]),timeout(0)]),halt causes: error(domain_error(process_wait_option,invalid),process_wait/3)
+$ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_wait(pid, _Status, [invalid(_Var), timeout(0)]), halt'
+use_module(library(process)),process_wait(pid,_Status,[invalid(_Var),timeout(0)]),halt causes: error(domain_error(process_wait_option,invalid),process_wait/3)
 
 ```
 
@@ -35,8 +35,8 @@ use_module(library(process)),process_create([],[],[stdin(invalid),process(P)]),p
 ```
 
 ```trycmd
-$ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_wait(50, _), halt'
-use_module(library(process)),process_wait(50,_[..]),halt causes: error(type_error(process,50),process_wait/3)
+$ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_wait(50, _Status), halt'
+use_module(library(process)),process_wait(50,_Status),halt causes: error(type_error(process,50),process_wait/3)
 
 ```
 
@@ -47,8 +47,8 @@ use_module(library(process)),process_kill(50),halt causes: error(type_error(proc
 ```
 
 ```trycmd
-$ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_id(50,_), halt'
-use_module(library(process)),process_id(50,_[..]),halt causes: error(type_error(process,50),process_id/2)
+$ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_id(50,_Pid), halt'
+use_module(library(process)),process_id(50,_Pid),halt causes: error(type_error(process,50),process_id/2)
 
 ```
 
