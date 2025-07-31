@@ -2916,7 +2916,7 @@ impl Machine {
 
         let string = match Number::try_from((n, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Float(OrderedFloat(n))) => {
-                format!("{0:<20?}", n)
+                format!("{n:<20?}")
             }
             Ok(Number::Fixnum(n)) => n.get_num().to_string(),
             Ok(Number::Integer(n)) => n.to_string(),
@@ -3245,7 +3245,7 @@ impl Machine {
                     let n: u32 = (&*n).try_into().unwrap();
                     let n = char::try_from(n);
                     if let Ok(c) = n {
-                        write!(&mut stream, "{}", c).unwrap();
+                        write!(&mut stream, "{c}").unwrap();
                         return Ok(());
                     }
                 }
@@ -3253,7 +3253,7 @@ impl Machine {
                     let n = n.get_num();
 
                     if let Some(c) = u32::try_from(n).ok().and_then(char::from_u32) {
-                        write!(&mut stream, "{}", c).unwrap();
+                        write!(&mut stream, "{c}").unwrap();
                         return Ok(());
                     }
                 }
@@ -3295,13 +3295,13 @@ impl Machine {
             read_heap_cell!(addr,
                 (HeapCellValueTag::Atom, (name, _arity)) => {
                     if let Some(c) = name.as_char() {
-                        write!(&mut stream, "{}", c).unwrap();
+                        write!(&mut stream, "{c}").unwrap();
                         return Ok(());
                     }
                 }
                 /*
                 (HeapCellValueTag::Char, c) => {
-                    write!(&mut stream, "{}", c).unwrap();
+                    write!(&mut stream, "{c}").unwrap();
                     return Ok(());
                 }
                 */
@@ -8622,7 +8622,7 @@ impl Machine {
         ];
 
         for spec in SPECIFIERS {
-            fstr.push_str(&format!("'{}'=\"%{}\", ", spec, spec).to_string());
+            fstr.push_str(&format!("'{spec}'=\"%{spec}\", "));
         }
 
         fstr.push_str("finis].");

@@ -206,7 +206,7 @@ impl VarKey {
     #[inline]
     pub(crate) fn to_string(&self) -> String {
         match self {
-            VarKey::AnonVar(h) => format!("_{}", h),
+            VarKey::AnonVar(h) => format!("_{h}"),
             VarKey::VarPtr(var) => var.borrow().to_string(),
         }
     }

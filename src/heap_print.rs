@@ -831,13 +831,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         read_heap_cell!(cell,
             (HeapCellValueTag::Lis | HeapCellValueTag::Str, h) => {
-                Some(format!("{}", h))
+                Some(format!("{h}"))
             }
             (HeapCellValueTag::Var | HeapCellValueTag::AttrVar, h) => {
-                Some(format!("_{}", h))
+                Some(format!("_{h}"))
             }
             (HeapCellValueTag::StackVar, h) => {
-                Some(format!("_s_{}", h))
+                Some(format!("_s_{h}"))
             }
             _ => {
                 None
@@ -1002,7 +1002,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     #[inline]
     fn print_ip_addr(&mut self, ip: IpAddr) {
         push_char!(self, '\'');
-        append_str!(self, &format!("{}", ip));
+        append_str!(self, &format!("{ip}"));
         push_char!(self, '\'');
     }
 
@@ -1039,7 +1039,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     self.print_rational(max_depth, r, *op);
                 }
                 n => {
-                    let output_str = format!("{}", n);
+                    let output_str = format!("{n}");
 
                     push_space_if_amb!(self, &output_str, {
                         append_str!(self, &output_str);
@@ -1086,7 +1086,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         match self.op_dir.get(&(atom!("rdiv"), Fixity::In)) {
             Some(op_desc) => {
                 if r.is_int() {
-                    let output_str = format!("{}", r);
+                    let output_str = format!("{r}");
 
                     push_space_if_amb!(self, &output_str, {
                         append_str!(self, &output_str);

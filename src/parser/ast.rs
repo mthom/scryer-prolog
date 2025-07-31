@@ -268,8 +268,8 @@ impl RegType {
 impl fmt::Display for RegType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            RegType::Perm(val) => write!(f, "Y{}", val),
-            RegType::Temp(val) => write!(f, "X{}", val),
+            RegType::Perm(val) => write!(f, "Y{val}"),
+            RegType::Temp(val) => write!(f, "X{val}"),
         }
     }
 }
@@ -291,10 +291,10 @@ impl VarReg {
 impl fmt::Display for VarReg {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            VarReg::Norm(RegType::Perm(reg)) => write!(f, "Y{}", reg),
-            VarReg::Norm(RegType::Temp(reg)) => write!(f, "X{}", reg),
-            VarReg::ArgAndNorm(RegType::Perm(reg), arg) => write!(f, "Y{} A{}", reg, arg),
-            VarReg::ArgAndNorm(RegType::Temp(reg), arg) => write!(f, "X{} A{}", reg, arg),
+            VarReg::Norm(RegType::Perm(reg)) => write!(f, "Y{reg}"),
+            VarReg::Norm(RegType::Temp(reg)) => write!(f, "X{reg}"),
+            VarReg::ArgAndNorm(RegType::Perm(reg), arg) => write!(f, "Y{reg} A{arg}"),
+            VarReg::ArgAndNorm(RegType::Temp(reg), arg) => write!(f, "X{reg} A{arg}"),
         }
     }
 }
@@ -830,7 +830,7 @@ impl Var {
     #[inline(always)]
     pub fn to_string(&self) -> String {
         match self {
-            Var::InSitu(n) | Var::Generated(n) => format!("_{}", n),
+            Var::InSitu(n) | Var::Generated(n) => format!("_{n}"),
             Var::Named(value) => value.as_ref().clone(),
         }
     }

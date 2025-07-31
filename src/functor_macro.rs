@@ -739,12 +739,12 @@ mod tests {
             ]
         );
 
-        println!("{:?}", stub);
+        println!("{stub:?}");
 
         // now the error form
         let lineless_error_form = functor!(atom!("error"), [functor(stub), functor(culprit)]);
 
-        println!("{:?}", lineless_error_form);
+        println!("{lineless_error_form:?}");
 
         let mut heap = Heap::new();
         let mut functor_writer = Heap::functor_writer(lineless_error_form);

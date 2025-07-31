@@ -195,15 +195,11 @@ pub fn all_cells_marked_and_unforwarded(heap: &Heap, offset: usize) {
 
         assert!(
             cell.get_mark_bit(),
-            "cell {:?} at index {} is not marked",
-            cell,
-            curr_idx
+            "cell {cell:?} at index {curr_idx} is not marked"
         );
         assert!(
             !cell.get_forwarding_bit(),
-            "cell {:?} at index {} is forwarded",
-            cell,
-            curr_idx
+            "cell {cell:?} at index {curr_idx} is forwarded"
         );
     }
 }
@@ -227,9 +223,7 @@ pub fn all_cells_unmarked(iter: &impl SizedHeap) {
 
         assert!(
             !cell.get_mark_bit(),
-            "cell {:?} at index {} is still marked",
-            cell,
-            curr_idx
+            "cell {cell:?} at index {curr_idx} is still marked"
         );
     }
 }

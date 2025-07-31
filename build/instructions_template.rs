@@ -3262,14 +3262,14 @@ where
     let disc = match DiscriminantT::from_str(id.to_string().as_str()) {
         Ok(disc) => disc,
         Err(_) => {
-            panic!("can't generate discriminant {}", id);
+            panic!("can't generate discriminant {id}");
         }
     };
 
     match disc.get_str(key) {
         Some(prop) => prop,
         None => {
-            panic!("can't find property {} of discriminant {:?}", key, disc);
+            panic!("can't find property {key} of discriminant {disc:?}");
         }
     }
 }
@@ -3387,7 +3387,7 @@ impl InstructionData {
 
             (name, arity, CountableInference::HasDefault)
         } else {
-            panic!("type ID is: {}", id);
+            panic!("type ID is: {id}");
         };
 
         let v_ident = variant
