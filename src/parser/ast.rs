@@ -858,9 +858,9 @@ impl Term {
     }
 
     pub fn name(&self) -> Option<Atom> {
-        match self {
-            &Term::Literal(_, Literal::Atom(atom)) => Some(atom),
-            &Term::Clause(_, atom, ..) => Some(atom),
+        match *self {
+            Term::Literal(_, Literal::Atom(atom)) => Some(atom),
+            Term::Clause(_, atom, ..) => Some(atom),
             _ => None,
         }
     }

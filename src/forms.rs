@@ -372,11 +372,11 @@ pub enum ModuleSource {
 
 impl ModuleSource {
     pub(crate) fn as_functor_stub(&self) -> MachineStub {
-        match self {
-            &ModuleSource::Library(name) => {
+        match *self {
+            ModuleSource::Library(name) => {
                 functor!(atom!("library"), [atom_as_cell(name)])
             }
-            &ModuleSource::File(name) => {
+            ModuleSource::File(name) => {
                 functor!(name)
             }
         }

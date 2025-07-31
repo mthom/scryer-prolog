@@ -2327,7 +2327,7 @@ impl Machine {
 
                 let cell = step_or_resource_error!(
                     self.machine_st,
-                    self.machine_st.heap.allocate_cstr(&*name.as_str())
+                    self.machine_st.heap.allocate_cstr(&name.as_str())
                 );
 
                 unify!(self.machine_st, self.machine_st.registers[2], cell);
@@ -2386,7 +2386,7 @@ impl Machine {
                     self.machine_st,
                     sized_iter_to_heap_list(
                         &mut self.machine_st.heap,
-                        (&*name).chars().count(),
+                        name.chars().count(),
                         iter,
                     )
                 );
@@ -7637,7 +7637,7 @@ impl Machine {
 
         let buffer = git_version!(cargo_prefix = "cargo:", fallback = "unknown");
         let cstr_cell =
-            step_or_resource_error!(self.machine_st, self.machine_st.heap.allocate_cstr(&buffer));
+            step_or_resource_error!(self.machine_st, self.machine_st.heap.allocate_cstr(buffer));
 
         unify!(self.machine_st, cstr_cell, self.machine_st.registers[1]);
     }
@@ -8719,7 +8719,7 @@ impl Machine {
                 Ok(result)
             }
             scraper::Node::Comment(comment) => {
-                let comment = self.machine_st.heap.allocate_cstr(&comment)?;
+                let comment = self.machine_st.heap.allocate_cstr(comment)?;
 
                 let result = str_loc_as_cell!(self.machine_st.heap.cell_len());
                 let mut writer = self.machine_st.heap.reserve(2)?;

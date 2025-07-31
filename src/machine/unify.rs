@@ -290,7 +290,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                 let machine_st = self.deref_mut();
 
                 let f1 = machine_st.arena.f64_tbl.get_entry(f1);
-                let f2 = machine_st.arena.f64_tbl.get_entry(f2.into());
+                let f2 = machine_st.arena.f64_tbl.get_entry(f2);
 
                 self.fail = f1 != f2;
             }

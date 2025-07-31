@@ -1009,7 +1009,7 @@ impl<'a> PStrSegmentIter<'a> {
         let string_buf = unsafe {
             let char_ptr = heap.inner.ptr.add(pstr_loc);
             let slice = std::slice::from_raw_parts(char_ptr, heap.inner.byte_len - pstr_loc);
-            std::str::from_utf8_unchecked(&slice)
+            std::str::from_utf8_unchecked(slice)
         };
 
         PStrSegmentIter { string_buf }

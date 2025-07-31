@@ -254,7 +254,7 @@ impl std::ops::Deref for AtomString<'_> {
     fn deref(&self) -> &Self::Target {
         match self {
             Self::Static(reference) => reference,
-            Self::Inlined(inlined) => inlined_to_str(&inlined),
+            Self::Inlined(inlined) => inlined_to_str(inlined),
             Self::Dynamic(guard) => guard.deref(),
         }
     }
