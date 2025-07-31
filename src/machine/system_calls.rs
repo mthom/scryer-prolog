@@ -989,6 +989,7 @@ impl MachineState {
             }
         }
 
+        #[allow(clippy::never_loop)] // TODO why is there a loop here that never loops?
         loop {
             match lexer.lookahead_char() {
                 Err(e) if e.is_unexpected_eof() => {
