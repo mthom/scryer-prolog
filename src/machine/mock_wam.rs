@@ -249,6 +249,7 @@ pub(crate) fn parse_and_write_parsed_term_to_heap(
 
 impl Machine {
     /// For use in tests.
+    #[allow(clippy::unbuffered_bytes)]
     pub fn test_load_file(&mut self, file: &str) -> Vec<u8> {
         let stream = Stream::from_owned_string(
             std::fs::read_to_string(AsRef::<std::path::Path>::as_ref(file)).unwrap(),
@@ -260,6 +261,7 @@ impl Machine {
     }
 
     /// For use in tests.
+    #[allow(clippy::unbuffered_bytes)]
     pub fn test_load_string(&mut self, code: &str) -> Vec<u8> {
         let stream = Stream::from_owned_string(code.to_owned(), &mut self.machine_st.arena);
 
