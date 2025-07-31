@@ -526,7 +526,7 @@ impl IndexStore {
         &'a self,
         range: R,
     ) -> impl Iterator<Item = Stream> + 'a {
-        self.streams.range(range).into_iter().copied()
+        self.streams.range(range).copied()
     }
 
     /// Forcibly sets `alias` to `stream`.
