@@ -10,7 +10,6 @@ use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::fmt;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::i64;
 use std::io::{Error as IOError, ErrorKind};
 use std::ops::Not;
 use std::ops::RangeInclusive;
