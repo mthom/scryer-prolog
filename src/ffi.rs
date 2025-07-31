@@ -324,7 +324,7 @@ impl ForeignFunctionTable {
         let mut pointer_args =
             Self::build_pointer_args(&mut args, &function_impl.args, &mut self.structs)?;
 
-        return unsafe {
+        unsafe {
             macro_rules! call_and_return {
                 ($type:ty) => {{
                     let mut n: Box<u8> = Box::new(0);
@@ -410,7 +410,7 @@ impl ForeignFunctionTable {
                 }
                 _ => unreachable!(),
             }
-        };
+        }
     }
 
     fn read_struct(

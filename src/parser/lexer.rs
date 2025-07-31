@@ -959,8 +959,8 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                     ))))
                 }
             },
-            Ok(NumberToken::Number(n)) => return Ok(Token::Literal(n.to_literal())),
-            Err(e) => return Err(e),
+            Ok(NumberToken::Number(n)) => Ok(Token::Literal(n.to_literal())),
+            Err(e) => Err(e),
         }
     }
 
