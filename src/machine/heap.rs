@@ -612,7 +612,6 @@ impl Heap {
         }
     }
 
-    #[must_use]
     pub fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter, usize> {
         let section;
         let len = heap_index!(num_cells);
