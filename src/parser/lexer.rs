@@ -63,6 +63,7 @@ enum Number {
 
 impl Number {
     #[inline]
+    #[allow(clippy::wrong_self_convention)]
     fn to_literal(self) -> Literal {
         match self {
             Number::BigInt(ibig) => Literal::Integer(ibig),
@@ -80,6 +81,7 @@ enum NumberToken {
 
 impl NumberToken {
     #[inline]
+    #[allow(clippy::wrong_self_convention)]
     fn to_token(self) -> Option<Token> {
         match self {
             NumberToken::Number(number) => Some(Token::Literal(number.to_literal())),
