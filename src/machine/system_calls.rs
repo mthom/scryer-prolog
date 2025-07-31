@@ -784,7 +784,7 @@ impl MachineState {
                 let steps = if max_steps > -1 {
                     std::cmp::min(max_steps, num_steps as i64)
                 } else {
-                    max_steps as i64
+                    max_steps
                 };
 
                 self.finalize_skip_max_list(steps, pstr_loc); // cell);
