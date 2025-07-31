@@ -3936,14 +3936,14 @@ impl Machine {
 
         self.indices.remove_stream(stream);
 
-        stream.close().or_else(|_| {
+        stream.close().map_err(|_| {
             let stub = functor_stub(atom!("close"), 1);
             let addr = stream.into();
             let err = self
                 .machine_st
                 .existence_error(ExistenceError::Stream(addr));
 
-            Err(self.machine_st.error_form(err, stub))
+            self.machine_st.error_form(err, stub)
         })
     }
 
