@@ -159,17 +159,17 @@ impl From<CodeIndexOffset> for CodeIndex {
     }
 }
 
-impl Into<CodeIndexOffset> for CodeIndex {
+impl From<CodeIndex> for CodeIndexOffset {
     #[inline(always)]
-    fn into(self) -> CodeIndexOffset {
-        self.0
+    fn from(value: CodeIndex) -> CodeIndexOffset {
+        value.0
     }
 }
 
-impl Into<CodeIndexOffset> for &'_ CodeIndex {
+impl From<&'_ CodeIndex> for CodeIndexOffset {
     #[inline(always)]
-    fn into(self) -> CodeIndexOffset {
-        self.0
+    fn from(value: &'_ CodeIndex) -> CodeIndexOffset {
+        value.0
     }
 }
 
