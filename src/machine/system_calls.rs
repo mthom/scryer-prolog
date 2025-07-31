@@ -194,7 +194,7 @@ fn pstr_segment_char_count_up_to(
     let mut byte_offset = 0;
 
     if max_chars > 0 {
-        while let Some(c) = char_iter.next() {
+        for c in &mut char_iter {
             if c == '\u{0}' {
                 break;
             }
