@@ -698,9 +698,9 @@ mod tests {
         let functor = variadic_functor(
             atom!("switch_on_constants"),
             1,
-            constants.iter().map(|(c, ptr)| {
-                functor!(atom!(":"), [cell((c.clone())), indexing_code_ptr((*ptr))])
-            }),
+            constants
+                .iter()
+                .map(|(c, ptr)| functor!(atom!(":"), [cell((*c)), indexing_code_ptr((*ptr))])),
         );
 
         heap.truncate(0);
