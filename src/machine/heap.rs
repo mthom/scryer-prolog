@@ -745,10 +745,8 @@ impl Heap {
     // the heap to a pre-allocated resource error
     pub(crate) fn push_cell(&mut self, cell: HeapCellValue) -> Result<(), usize> {
         unsafe {
-            if self.inner.byte_len == self.inner.byte_cap {
-                if !self.grow() {
-                    return Err(self.resource_error_offset());
-                }
+            if self.inner.byte_len == self.inner.byte_cap && !self.grow() {
+                return Err(self.resource_error_offset());
             }
 
             // SAFETY:
