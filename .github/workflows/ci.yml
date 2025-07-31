@@ -49,7 +49,6 @@ jobs:
           - { os: ubuntu-22.04,   rust-version: nightly, target: 'wasm32-unknown-unknown',   publish: true, args: '--no-default-features' , test-args: '--no-run --no-default-features', use_swap: true }
           # Cargo.toml rust-version
           - { os: ubuntu-22.04,   rust-version: "1.85",  target: 'x86_64-unknown-linux-gnu'}
-          # rust versions
           - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu'}
           - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu', miri: true, components: "miri"} 
     defaults:
