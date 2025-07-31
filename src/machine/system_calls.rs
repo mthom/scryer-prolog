@@ -4152,9 +4152,7 @@ impl Machine {
 
                 let mut functor_writer = Heap::functor_writer(functor);
 
-                if let Err(e) = functor_writer(heap) {
-                    return Err(e);
-                }
+                functor_writer(heap)?;
 
                 num_functors += 1;
             }
