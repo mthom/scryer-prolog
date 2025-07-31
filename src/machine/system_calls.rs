@@ -3793,11 +3793,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn first_stream(&mut self) {
-        let first_stream = self
-            .indices
-            .iter_streams(..)
-            .filter(|s| !s.is_null_stream())
-            .next();
+        let first_stream = self.indices.iter_streams(..).find(|s| !s.is_null_stream());
 
         if let Some(first_stream) = first_stream {
             let stream = first_stream.into();
@@ -3817,8 +3813,7 @@ impl Machine {
             .indices
             .iter_streams(prev_stream..)
             .filter(|s| !s.is_null_stream())
-            .skip(1)
-            .next();
+            .nth(1);
 
         if let Some(next_stream) = next_stream {
             let var = self.deref_register(2).as_var().unwrap();
