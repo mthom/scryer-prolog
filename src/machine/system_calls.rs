@@ -194,7 +194,7 @@ fn pstr_segment_char_count_up_to(
     let mut byte_offset = 0;
 
     if max_chars > 0 {
-        while let Some(c) = char_iter.next() {
+        for c in &mut char_iter {
             if c == '\u{0}' {
                 break;
             }
@@ -784,7 +784,7 @@ impl MachineState {
                 let steps = if max_steps > -1 {
                     std::cmp::min(max_steps, num_steps as i64)
                 } else {
-                    max_steps as i64
+                    max_steps
                 };
 
                 self.finalize_skip_max_list(steps, pstr_loc); // cell);
@@ -989,6 +989,7 @@ impl MachineState {
             }
         }
 
+        #[allow(clippy::never_loop)] // TODO why is there a loop here that never loops?
         loop {
             match lexer.lookahead_char() {
                 Err(e) if e.is_unexpected_eof() => {
@@ -2327,7 +2328,7 @@ impl Machine {
 
                 let cell = step_or_resource_error!(
                     self.machine_st,
-                    self.machine_st.heap.allocate_cstr(&*name.as_str())
+                    self.machine_st.heap.allocate_cstr(&name.as_str())
                 );
 
                 unify!(self.machine_st, self.machine_st.registers[2], cell);
@@ -2386,7 +2387,7 @@ impl Machine {
                     self.machine_st,
                     sized_iter_to_heap_list(
                         &mut self.machine_st.heap,
-                        (&*name).chars().count(),
+                        name.chars().count(),
                         iter,
                     )
                 );
@@ -2916,7 +2917,7 @@ impl Machine {
 
         let string = match Number::try_from((n, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Float(OrderedFloat(n))) => {
-                format!("{0:<20?}", n)
+                format!("{n:<20?}")
             }
             Ok(Number::Fixnum(n)) => n.get_num().to_string(),
             Ok(Number::Integer(n)) => n.to_string(),
@@ -3245,7 +3246,7 @@ impl Machine {
                     let n: u32 = (&*n).try_into().unwrap();
                     let n = char::try_from(n);
                     if let Ok(c) = n {
-                        write!(&mut stream, "{}", c).unwrap();
+                        write!(&mut stream, "{c}").unwrap();
                         return Ok(());
                     }
                 }
@@ -3253,7 +3254,7 @@ impl Machine {
                     let n = n.get_num();
 
                     if let Some(c) = u32::try_from(n).ok().and_then(char::from_u32) {
-                        write!(&mut stream, "{}", c).unwrap();
+                        write!(&mut stream, "{c}").unwrap();
                         return Ok(());
                     }
                 }
@@ -3295,13 +3296,13 @@ impl Machine {
             read_heap_cell!(addr,
                 (HeapCellValueTag::Atom, (name, _arity)) => {
                     if let Some(c) = name.as_char() {
-                        write!(&mut stream, "{}", c).unwrap();
+                        write!(&mut stream, "{c}").unwrap();
                         return Ok(());
                     }
                 }
                 /*
                 (HeapCellValueTag::Char, c) => {
-                    write!(&mut stream, "{}", c).unwrap();
+                    write!(&mut stream, "{c}").unwrap();
                     return Ok(());
                 }
                 */
@@ -3792,11 +3793,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn first_stream(&mut self) {
-        let first_stream = self
-            .indices
-            .iter_streams(..)
-            .filter(|s| !s.is_null_stream())
-            .next();
+        let first_stream = self.indices.iter_streams(..).find(|s| !s.is_null_stream());
 
         if let Some(first_stream) = first_stream {
             let stream = first_stream.into();
@@ -3816,8 +3813,7 @@ impl Machine {
             .indices
             .iter_streams(prev_stream..)
             .filter(|s| !s.is_null_stream())
-            .skip(1)
-            .next();
+            .nth(1);
 
         if let Some(next_stream) = next_stream {
             let var = self.deref_register(2).as_var().unwrap();
@@ -3935,14 +3931,14 @@ impl Machine {
 
         self.indices.remove_stream(stream);
 
-        stream.close().or_else(|_| {
+        stream.close().map_err(|_| {
             let stub = functor_stub(atom!("close"), 1);
             let addr = stream.into();
             let err = self
                 .machine_st
                 .existence_error(ExistenceError::Stream(addr));
 
-            Err(self.machine_st.error_form(err, stub))
+            self.machine_st.error_form(err, stub)
         })
     }
 
@@ -4152,9 +4148,7 @@ impl Machine {
 
                 let mut functor_writer = Heap::functor_writer(functor);
 
-                if let Err(e) = functor_writer(heap) {
-                    return Err(e);
-                }
+                functor_writer(heap)?;
 
                 num_functors += 1;
             }
@@ -7637,7 +7631,7 @@ impl Machine {
 
         let buffer = git_version!(cargo_prefix = "cargo:", fallback = "unknown");
         let cstr_cell =
-            step_or_resource_error!(self.machine_st, self.machine_st.heap.allocate_cstr(&buffer));
+            step_or_resource_error!(self.machine_st, self.machine_st.heap.allocate_cstr(buffer));
 
         unify!(self.machine_st, cstr_cell, self.machine_st.registers[1]);
     }
@@ -8622,7 +8616,7 @@ impl Machine {
         ];
 
         for spec in SPECIFIERS {
-            fstr.push_str(&format!("'{}'=\"%{}\", ", spec, spec).to_string());
+            fstr.push_str(&format!("'{spec}'=\"%{spec}\", "));
         }
 
         fstr.push_str("finis].");
@@ -8719,7 +8713,7 @@ impl Machine {
                 Ok(result)
             }
             scraper::Node::Comment(comment) => {
-                let comment = self.machine_st.heap.allocate_cstr(&comment)?;
+                let comment = self.machine_st.heap.allocate_cstr(comment)?;
 
                 let result = str_loc_as_cell!(self.machine_st.heap.cell_len());
                 let mut writer = self.machine_st.heap.reserve(2)?;

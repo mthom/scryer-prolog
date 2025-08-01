@@ -403,7 +403,7 @@ impl<'a> Iterator for ClauseIterator<'a> {
                             self.state_stack
                                 .push(ClauseIteratorState::RemainingBranches(branches, 0));
                         }
-                        &ChunkedTerms::Chunk { ref terms } => {
+                        ChunkedTerms::Chunk { ref terms } => {
                             return Some(ClauseItem::Chunk { terms });
                         }
                     }

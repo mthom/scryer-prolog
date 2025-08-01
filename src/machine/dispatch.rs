@@ -3277,7 +3277,7 @@ impl Machine {
                     &Instruction::PutPartialString(_, ref string, reg) => {
                         self.machine_st[reg] = backtrack_on_resource_error!(
                             self.machine_st,
-                            self.machine_st.heap.allocate_pstr(&string)
+                            self.machine_st.heap.allocate_pstr(string)
                         );
 
                         self.machine_st.p += 1;

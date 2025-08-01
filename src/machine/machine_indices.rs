@@ -159,17 +159,17 @@ impl From<CodeIndexOffset> for CodeIndex {
     }
 }
 
-impl Into<CodeIndexOffset> for CodeIndex {
+impl From<CodeIndex> for CodeIndexOffset {
     #[inline(always)]
-    fn into(self) -> CodeIndexOffset {
-        self.0
+    fn from(value: CodeIndex) -> CodeIndexOffset {
+        value.0
     }
 }
 
-impl Into<CodeIndexOffset> for &'_ CodeIndex {
+impl From<&'_ CodeIndex> for CodeIndexOffset {
     #[inline(always)]
-    fn into(self) -> CodeIndexOffset {
-        self.0
+    fn from(value: &'_ CodeIndex) -> CodeIndexOffset {
+        value.0
     }
 }
 
@@ -206,7 +206,7 @@ impl VarKey {
     #[inline]
     pub(crate) fn to_string(&self) -> String {
         match self {
-            VarKey::AnonVar(h) => format!("_{}", h),
+            VarKey::AnonVar(h) => format!("_{h}"),
             VarKey::VarPtr(var) => var.borrow().to_string(),
         }
     }
@@ -526,7 +526,7 @@ impl IndexStore {
         &'a self,
         range: R,
     ) -> impl Iterator<Item = Stream> + 'a {
-        self.streams.range(range).into_iter().copied()
+        self.streams.range(range).copied()
     }
 
     /// Forcibly sets `alias` to `stream`.

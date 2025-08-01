@@ -372,11 +372,11 @@ pub enum ModuleSource {
 
 impl ModuleSource {
     pub(crate) fn as_functor_stub(&self) -> MachineStub {
-        match self {
-            &ModuleSource::Library(name) => {
+        match *self {
+            ModuleSource::Library(name) => {
                 functor!(atom!("library"), [atom_as_cell(name)])
             }
-            &ModuleSource::File(name) => {
+            ModuleSource::File(name) => {
                 functor!(name)
             }
         }
@@ -627,9 +627,9 @@ impl Default for Number {
 impl fmt::Display for Number {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Number::Float(fl) => write!(f, "{}", fl),
-            Number::Integer(n) => write!(f, "{}", n),
-            Number::Rational(r) => write!(f, "{}", r),
+            Number::Float(fl) => write!(f, "{fl}"),
+            Number::Integer(n) => write!(f, "{n}"),
+            Number::Rational(r) => write!(f, "{r}"),
             Number::Fixnum(n) => write!(f, "{}", n.get_num()),
         }
     }

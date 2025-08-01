@@ -251,7 +251,7 @@ impl DebrayAllocator {
             }
         }
 
-        if self.branch_stack.len() > 0 {
+        if !self.branch_stack.is_empty() {
             for var_num in subsumed_hits {
                 self.branch_stack.add_branch_occurrence(var_num);
             }

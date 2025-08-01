@@ -126,14 +126,14 @@ pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStrea
         match file.read_to_string(&mut src) {
             Ok(_) => {}
             Err(e) => {
-                panic!("error reading file: {:?}", e);
+                panic!("error reading file: {e:?}");
             }
         }
 
         let syntax = match syn::parse_file(&src) {
             Ok(s) => s,
             Err(e) => {
-                panic!("parse error: {} in file {:?}", e, path);
+                panic!("parse error: {e} in file {path:?}");
             }
         };
         Ok(syntax)

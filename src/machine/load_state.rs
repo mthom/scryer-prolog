@@ -546,27 +546,21 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             for export in removed_module.module_decl.exports.iter() {
                 match export {
                     ModuleExport::PredicateKey(ref key) => {
-                        match (
+                        if let (Some(module_code_idx), Some(target_code_idx)) = (
                             removed_module.code_dir.get(key).cloned(),
                             code_dir.get_mut(key).cloned(),
                         ) {
-                            (Some(module_code_idx), Some(target_code_idx)) => {
-                                let code_index_tbl =
-                                    &mut LS::machine_st(payload).arena.code_index_tbl;
-                                let module_code_ptr =
-                                    code_index_tbl.get_entry(module_code_idx.into());
-                                let target_code_ptr =
-                                    code_index_tbl.get_entry(target_code_idx.into());
+                            let code_index_tbl = &mut LS::machine_st(payload).arena.code_index_tbl;
+                            let module_code_ptr = code_index_tbl.get_entry(module_code_idx.into());
+                            let target_code_ptr = code_index_tbl.get_entry(target_code_idx.into());
 
-                                if module_code_ptr == target_code_ptr {
-                                    let old_index_ptr = target_code_idx
-                                        .replace(code_index_tbl, IndexPtr::undefined());
-                                    payload
-                                        .retraction_info
-                                        .push_record(predicate_retractor(*key, old_index_ptr));
-                                }
+                            if module_code_ptr == target_code_ptr {
+                                let old_index_ptr =
+                                    target_code_idx.replace(code_index_tbl, IndexPtr::undefined());
+                                payload
+                                    .retraction_info
+                                    .push_record(predicate_retractor(*key, old_index_ptr));
                             }
-                            _ => {}
                         }
                     }
                     ModuleExport::OpDecl(op_decl) => {
@@ -688,12 +682,12 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let code_index_tbl = &mut LS::machine_st(&mut self.payload).arena.code_index_tbl;
 
         if module_name == atom!("user") {
-            return *self
+            *self
                 .wam_prelude
                 .indices
                 .code_dir
                 .entry(key)
-                .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), code_index_tbl));
+                .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), code_index_tbl))
         } else {
             self.get_or_insert_local_code_index(module_name, key)
         }

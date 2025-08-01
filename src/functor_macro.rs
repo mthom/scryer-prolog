@@ -698,9 +698,9 @@ mod tests {
         let functor = variadic_functor(
             atom!("switch_on_constants"),
             1,
-            constants.iter().map(|(c, ptr)| {
-                functor!(atom!(":"), [cell((c.clone())), indexing_code_ptr((*ptr))])
-            }),
+            constants
+                .iter()
+                .map(|(c, ptr)| functor!(atom!(":"), [cell((*c)), indexing_code_ptr((*ptr))])),
         );
 
         heap.truncate(0);
@@ -739,12 +739,12 @@ mod tests {
             ]
         );
 
-        println!("{:?}", stub);
+        println!("{stub:?}");
 
         // now the error form
         let lineless_error_form = functor!(atom!("error"), [functor(stub), functor(culprit)]);
 
-        println!("{:?}", lineless_error_form);
+        println!("{lineless_error_form:?}");
 
         let mut heap = Heap::new();
         let mut functor_writer = Heap::functor_writer(lineless_error_form);

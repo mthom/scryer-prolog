@@ -111,7 +111,7 @@ pub(crate) fn as_partial_string(
                 tail_ref = tail;
             }
             Term::CompleteString(_, cstr) => {
-                string += &*cstr.as_str();
+                string += cstr.as_str();
                 tail = Term::Literal(Cell::default(), Literal::Atom(atom!("[]")));
                 break;
             }

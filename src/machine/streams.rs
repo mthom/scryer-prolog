@@ -1653,7 +1653,8 @@ impl MachineState {
                 };
 
                 stream.set_past_end_of_stream(true);
-                Ok(unify!(self, result, end_of_stream))
+                unify!(self, result, end_of_stream);
+                Ok(())
             }
             EOFAction::Reset => {
                 if !stream.reset() {

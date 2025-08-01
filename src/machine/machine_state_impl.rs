@@ -847,13 +847,11 @@ impl MachineState {
                             if let Some(c) = char_iter.next() {
                                 if n == 1 {
                                     self.unify_char(c, a3);
+                                } else if char_iter.next().is_some() {
+                                    unify_fn!(*self, pstr_loc_as_cell!(pstr_loc + c.len_utf8()), a3);
                                 } else {
-                                    if char_iter.next().is_some() {
-                                        unify_fn!(*self, pstr_loc_as_cell!(pstr_loc + c.len_utf8()), a3);
-                                    } else {
-                                        let tail_idx = Heap::pstr_tail_idx(pstr_loc + c.len_utf8());
-                                        unify_fn!(*self, self.heap[tail_idx], a3);
-                                    }
+                                    let tail_idx = Heap::pstr_tail_idx(pstr_loc + c.len_utf8());
+                                    unify_fn!(*self, self.heap[tail_idx], a3);
                                 }
                             } else {
                                 unreachable!()

@@ -612,7 +612,6 @@ impl Heap {
         }
     }
 
-    #[must_use]
     pub fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter, usize> {
         let section;
         let len = heap_index!(num_cells);
@@ -745,10 +744,8 @@ impl Heap {
     // the heap to a pre-allocated resource error
     pub(crate) fn push_cell(&mut self, cell: HeapCellValue) -> Result<(), usize> {
         unsafe {
-            if self.inner.byte_len == self.inner.byte_cap {
-                if !self.grow() {
-                    return Err(self.resource_error_offset());
-                }
+            if self.inner.byte_len == self.inner.byte_cap && !self.grow() {
+                return Err(self.resource_error_offset());
             }
 
             // SAFETY:
@@ -1009,7 +1006,7 @@ impl<'a> PStrSegmentIter<'a> {
         let string_buf = unsafe {
             let char_ptr = heap.inner.ptr.add(pstr_loc);
             let slice = std::slice::from_raw_parts(char_ptr, heap.inner.byte_len - pstr_loc);
-            std::str::from_utf8_unchecked(&slice)
+            std::str::from_utf8_unchecked(slice)
         };
 
         PStrSegmentIter { string_buf }

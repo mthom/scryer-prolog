@@ -137,10 +137,7 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                         let cell = self.heap[h];
                         let arity = cell_as_atom_cell!(self.heap[h]).get_arity();
 
-                        let last_cell_loc = match self.traverse_subterm(h + 1, arity) {
-                            Some(last_cell_loc) => last_cell_loc,
-                            None => return None,
-                        };
+                        let last_cell_loc = self.traverse_subterm(h + 1, arity)?;
 
                         if last_cell_loc == h {
                             if self.backward() {
@@ -171,10 +168,7 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                         let mut cell = self.heap[self.current];
                         cell.set_value(self.next);
 
-                        let last_cell_loc = match self.traverse_subterm(self.next as usize, 2) {
-                            Some(last_cell_loc) => last_cell_loc,
-                            None => return None,
-                        };
+                        let last_cell_loc = self.traverse_subterm(self.next as usize, 2)?;
 
                         if self.cycle_detection_active() {
                             for idx in (self.next as usize..last_cell_loc).rev() {

@@ -56,7 +56,7 @@ impl MockWAM {
         let mut printer = HCPrinter::new(
             &mut self.machine_st.heap,
             &mut self.machine_st.stack,
-            &mut self.machine_st.arena,
+            &self.machine_st.arena,
             &self.op_dir,
             PrinterOutputter::new(),
             term_write_result.heap_loc,
@@ -195,15 +195,11 @@ pub fn all_cells_marked_and_unforwarded(heap: &Heap, offset: usize) {
 
         assert!(
             cell.get_mark_bit(),
-            "cell {:?} at index {} is not marked",
-            cell,
-            curr_idx
+            "cell {cell:?} at index {curr_idx} is not marked"
         );
         assert!(
             !cell.get_forwarding_bit(),
-            "cell {:?} at index {} is forwarded",
-            cell,
-            curr_idx
+            "cell {cell:?} at index {curr_idx} is forwarded"
         );
     }
 }
@@ -227,9 +223,7 @@ pub fn all_cells_unmarked(iter: &impl SizedHeap) {
 
         assert!(
             !cell.get_mark_bit(),
-            "cell {:?} at index {} is still marked",
-            cell,
-            curr_idx
+            "cell {cell:?} at index {curr_idx} is still marked"
         );
     }
 }
@@ -255,6 +249,7 @@ pub(crate) fn parse_and_write_parsed_term_to_heap(
 
 impl Machine {
     /// For use in tests.
+    #[allow(clippy::unbuffered_bytes)]
     pub fn test_load_file(&mut self, file: &str) -> Vec<u8> {
         let stream = Stream::from_owned_string(
             std::fs::read_to_string(AsRef::<std::path::Path>::as_ref(file)).unwrap(),
@@ -266,6 +261,7 @@ impl Machine {
     }
 
     /// For use in tests.
+    #[allow(clippy::unbuffered_bytes)]
     pub fn test_load_string(&mut self, code: &str) -> Vec<u8> {
         let stream = Stream::from_owned_string(code.to_owned(), &mut self.machine_st.arena);
 

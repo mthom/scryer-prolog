@@ -133,7 +133,7 @@ fn merge_indices(
             );
 
             retraction_info.push_record(RetractionRecord::AddedIndex(
-                skeleton[clause_index].opt_arg_index_key.clone(),
+                skeleton[clause_index].opt_arg_index_key,
                 clause_loc,
             ));
         } else {
@@ -246,7 +246,7 @@ fn remove_index_from_subsequence(
         // appear anywhere inside an Internal record.
         retraction_info.push_record(RetractionRecord::RemovedIndex(
             index_loc,
-            opt_arg_index_key.clone(),
+            *opt_arg_index_key,
             offset,
         ));
     }
@@ -808,7 +808,7 @@ fn prepend_compiled_clause(
                 skeleton.clauses[0].clause_start = clause_loc + 2;
 
                 retraction_info.push_record(RetractionRecord::AddedIndex(
-                    skeleton.clauses[0].opt_arg_index_key.clone(),
+                    skeleton.clauses[0].opt_arg_index_key,
                     skeleton.clauses[0].clause_start,
                 ));
 
@@ -1070,7 +1070,7 @@ fn append_compiled_clause(
             skeleton.clauses[target_pos].opt_arg_index_key += index_loc - 1;
 
             retraction_info.push_record(RetractionRecord::AddedIndex(
-                skeleton.clauses[target_pos].opt_arg_index_key.clone(),
+                skeleton.clauses[target_pos].opt_arg_index_key,
                 skeleton.clauses[target_pos].clause_start,
             ));
 

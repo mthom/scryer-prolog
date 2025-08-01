@@ -659,8 +659,8 @@ impl MachineState {
                 &self.atom_tbl,
             )
         );
-
-        Ok(unify_fn!(*self, var_names_offset, var_names_addr))
+        unify_fn!(*self, var_names_offset, var_names_addr);
+        Ok(())
     }
 
     pub fn read_term_body(&mut self, mut term_write_result: TermWriteResult) -> CallResult {
