@@ -893,7 +893,7 @@ in&nbsp;person.
 - [Scryer Prolog Meetup 2023](https://hsd-pbsa.de/veranstaltung/scryer-prolog-meetup-2023/)
   in Düsseldorf, Germany. Its [announcement](https://github.com/mthom/scryer-prolog/discussions/1813)
   and [discussion](https://github.com/mthom/scryer-prolog/discussions/2160).
-- [Scryer Prolog Meetup 2024](https://www.digitalaustria.gv.at/eng/insights/Digital-Austria-Events-EN/Scryer-Prolog-Meetup-2024.html)
+- [Scryer Prolog Meetup 2024](https://www.digitalaustria.gv.at/wissenswertes/events/scryerprologmeetup2024)
   in Vienna, Austria. Its [announcement and discussion](https://github.com/mthom/scryer-prolog/discussions/2377).
 - **Save the date:** The [Scryer Prolog Meetup 2025](https://hsd-pbsa.de/veranstaltung/scryer-prolog-meetup-2025/)
   will take place on Nov.&nbsp;13th and 14th&nbsp;2025 in Düsseldorf, Germany.
