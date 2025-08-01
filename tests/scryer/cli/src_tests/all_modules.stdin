@@ -27,6 +27,7 @@ use_module(library(ordsets)).
 use_module(library(os)).
 use_module(library(pairs)).
 use_module(library(pio)).
+use_module(library(process)).
 use_module(library(queues)).
 use_module(library(random)).
 use_module(library(reif)).
