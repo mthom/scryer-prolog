@@ -56,6 +56,7 @@ fn issue2725_dcg_without_module() {
 #[cfg(feature = "http")]
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+#[cfg_attr(not(miri), ignore = "flaky due to network requests")]
 fn http_open_hanging() {
     load_module_test_with_tokio_runtime(
         "tests-pl/issue-http_open-hanging.pl",
