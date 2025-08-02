@@ -62,8 +62,8 @@ Assocs are Key-Value associations implemented as  a balanced binary tree
 Authors: R.A.O'Keefe, L.Damas, V.S.Costa and Jan Wielemaker
 */
 
-:- meta_predicate map_assoc(1, ?).
-:- meta_predicate map_assoc(2, ?, ?).
+:- meta_predicate(map_assoc(1, ?)).
+:- meta_predicate(map_assoc(2, ?, ?)).
 
 %% empty_assoc(?Assoc) is semidet.
 %

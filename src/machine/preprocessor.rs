@@ -213,7 +213,7 @@ fn setup_qualified_import(mut terms: Vec<Term>) -> Result<UseModuleExport, Compi
  * setup_meta_predicate tries to extract meta-predicate information
  * from an appropriately formed declaration
  *
- * :- meta_predicate maplist(:, ?, ?).
+ * :- meta_predicate(maplist(:, ?, ?)).
  *
  * indicating that, for each QueryTerm call to maplist/3, the first
  * argument is to be expanded with the call resolution ((:)/2)

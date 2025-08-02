@@ -29,9 +29,9 @@
 
 :- use_module(library(format), [portray_clause/1]).
 
-:- meta_predicate *(0).
-:- meta_predicate $(0).
-:- meta_predicate $-(0).
+:- meta_predicate(*(0)).
+:- meta_predicate($(0)).
+:- meta_predicate($-(0)).
 
 %% $-(Goal)
 %

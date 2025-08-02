@@ -105,7 +105,7 @@ run_initialization_goals(Module) :-
     ;  true
     ).
 
-:- meta_predicate success_or_warning(0).
+:- meta_predicate(success_or_warning(0)).
 
 success_or_warning(Goal) :-
     (   call(Goal) ->
@@ -403,7 +403,7 @@ predicate_indicator_sequence(PI_Seq) :-
        )
     ).
 
-:- meta_predicate add_predicate_declaration(3, ?).
+:- meta_predicate(add_predicate_declaration(3, ?)).
 
 add_predicate_declaration(Handler, Name/Arity) :-
     predicate_indicator(Name/Arity),

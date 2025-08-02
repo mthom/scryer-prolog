@@ -12,7 +12,7 @@
                   ]).
 
 
-:- meta_predicate check_(1, ?, ?).
+:- meta_predicate(check_(1, ?, ?)).
 
 
 %% must_be(Type, Term)

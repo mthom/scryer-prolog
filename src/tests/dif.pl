@@ -15,7 +15,7 @@ assert_p(A, B) :-
     phrase(portray_clause_(A), Portrayed),
     phrase((B, ".\n"), Portrayed).
 
-:- meta_predicate call_residual_goals(0, ?).
+:- meta_predicate(call_residual_goals(0, ?)).
 
 call_residual_goals(Goal, ResidualGoals) :-
     call_residue_vars(Goal, Vars),
