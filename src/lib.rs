@@ -11,8 +11,11 @@ pub(crate) mod macros;
 pub(crate) mod atom_table;
 #[macro_use]
 pub(crate) mod arena;
+pub(crate) mod offset_table;
 #[macro_use]
 pub(crate) mod parser;
+#[macro_use]
+pub(crate) mod functor_macro;
 mod allocator;
 mod arithmetic;
 pub(crate) mod codegen;

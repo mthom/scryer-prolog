@@ -200,10 +200,12 @@ impl VarData {
 
             match build_stack.front_mut() {
                 Some(ChunkedTerms::Branch(_)) => {
-                    build_stack.push_front(ChunkedTerms::Chunk(VecDeque::from(vec![term])));
+                    build_stack.push_front(ChunkedTerms::Chunk {
+                        terms: VecDeque::from(vec![term]),
+                    });
                 }
-                Some(ChunkedTerms::Chunk(chunk)) => {
-                    chunk.push_front(term);
+                Some(ChunkedTerms::Chunk { terms, .. }) => {
+                    terms.push_front(term);
                 }
                 None => {
                     unreachable!()
@@ -423,7 +425,6 @@ impl VariableClassifier {
                         // "probe_head_var". note the difference between it
                         // and "probe_body_var".
                         let branch_info_v = self.branch_map.entry(var_ptr.clone()).or_default();
-
                         let needs_new_branch = branch_info_v.is_empty();
 
                         if needs_new_branch {
@@ -578,7 +579,7 @@ impl VariableClassifier {
                             mut terms,
                         ) if terms.len() == 3 => {
                             if let Some(last_arg) = terms.last() {
-                                if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
+                                if let Term::Literal(_, Literal::CodeIndexOffset(_)) = last_arg {
                                     terms.pop();
                                     state_stack.push(TraversalState::Term(Term::Clause(
                                         Cell::default(),
@@ -801,7 +802,7 @@ impl VariableClassifier {
                                 self.call_policy,
                             ));
                         }
-                        Term::Literal(_, Literal::Atom(atom!("!")) | Literal::Char('!')) => {
+                        Term::Literal(_, Literal::Atom(atom!("!"))) => {
                             let (var_num, is_global) =
                                 if let Some(var_num) = self.global_cut_var_num_override {
                                     (var_num, false)
@@ -879,10 +880,10 @@ impl BranchMap {
 
                     for var_info in chunk.vars.iter_mut() {
                         if var_info.lvl == Level::Shallow {
-                            let term_loc = var_info.chunk_type.to_gen_context(chunk.chunk_num);
+                            let context = var_info.chunk_type.to_gen_context(chunk.chunk_num);
                             temp_var_data
                                 .use_set
-                                .insert((term_loc, var_info.classify_info.arg_c));
+                                .insert((context, var_info.classify_info.arg_c));
                         }
                     }
 

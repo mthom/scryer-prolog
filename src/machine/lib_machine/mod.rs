@@ -1,14 +1,15 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use crate::atom_table;
 use crate::heap_iter::{stackful_post_order_iter, NonListElider};
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{
-    ArenaHeaderTag, F64Offset, F64Ptr, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC,
-    LIB_QUERY_SUCCESS,
+    ArenaHeaderTag, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS,
 };
+use crate::offset_table::*;
 use crate::parser::ast::{Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};
@@ -175,10 +176,13 @@ impl Term {
     ) -> Self {
         // Adapted from MachineState::read_term_from_heap
         let mut term_stack = vec![];
-        let iter = stackful_post_order_iter::<NonListElider>(
+
+        machine.machine_st.heap[0] = heap_cell;
+
+        let mut iter = stackful_post_order_iter::<NonListElider>(
             &mut machine.machine_st.heap,
             &mut machine.machine_st.stack,
-            heap_cell,
+            0,
         );
 
         let mut anon_count: usize = 0;
@@ -193,7 +197,7 @@ impl Term {
             },
         };
 
-        for addr in iter {
+        while let Some(addr) = iter.next() {
             let addr = unmark_cell_bits!(addr);
 
             read_heap_cell!(addr,
@@ -244,11 +248,11 @@ impl Term {
                 (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
                     let var = var_names.get(&addr).map(|x| x.borrow().clone());
                     match var {
-                        Some(Var::Named(name)) => term_stack.push(Term::Var(name)),
+                        Some(Var::Named(name)) => term_stack.push(Term::Var(name.as_ref().to_owned())),
                         _ => {
                             let anon_name = loop {
                                 // Generate a name for the anonymous variable
-                                let anon_name = count_to_letter_code(anon_count);
+                                let anon_name = Rc::new(count_to_letter_code(anon_count));
 
                                 // Find if this name is already being used
                                 var_names.sort_by(|_, a, _, b| {
@@ -269,21 +273,19 @@ impl Term {
                                     },
                                 }
                             };
-                            term_stack.push(Term::Var(anon_name));
+                            term_stack.push(Term::Var(anon_name.as_ref().to_owned()));
                         },
                     }
                 }
-                (HeapCellValueTag::F64, f) => {
-                    term_stack.push(Term::Float((*f).into()));
-                }
-                (HeapCellValueTag::Char, c) => {
-                    term_stack.push(Term::Atom(c.into()));
+                (HeapCellValueTag::F64Offset, offset) => {
+                    let f = machine.machine_st.arena.f64_tbl.get_entry(offset);
+                    term_stack.push(Term::Float(f.into()));
                 }
                 (HeapCellValueTag::Fixnum, n) => {
                     term_stack.push(Term::Integer(n.into()));
                 }
                 (HeapCellValueTag::Cons, ptr) => {
-                    if let Ok(n) = Number::try_from(addr) {
+                    if let Ok(n) = Number::try_from((addr, &machine.machine_st.arena.f64_tbl)) {
                         match n {
                             Number::Integer(i) => term_stack.push(Term::Integer((*i).clone())),
                             Number::Rational(r) => term_stack.push(Term::Rational((*r).clone())),
@@ -296,7 +298,7 @@ impl Term {
                                     Term::atom(alias.as_str().to_string())
                                 } else {
                                     Term::compound("$stream", [
-                                        Term::integer(stream.as_ptr() as usize)
+                                        Term::integer(stream.as_ptr().addr())
                                     ])
                                 };
                                 term_stack.push(stream_term);
@@ -310,35 +312,7 @@ impl Term {
                         );
                     }
                 }
-                (HeapCellValueTag::CStr, s) => {
-                    term_stack.push(Term::String(s.as_str().to_string()));
-                }
                 (HeapCellValueTag::Atom, (name, arity)) => {
-                    //let h = iter.focus().value() as usize;
-                    //let mut arity = arity;
-
-                    // Not sure why/if this is needed.
-                    // Might find out with better testing later.
-                    /*
-                    if iter.heap.len() > h + arity + 1 {
-                        let value = iter.heap[h + arity + 1];
-
-                        if let Some(idx) = get_structure_index(value) {
-                            // in the second condition, arity == 0,
-                            // meaning idx cannot pertain to this atom
-                            // if it is the direct subterm of a larger
-                            // structure.
-                            if arity > 0 || !iter.direct_subterm_of_str(h) {
-                                term_stack.push(
-                                    Term::Literal(Cell::default(), Literal::CodeIndex(idx))
-                                );
-
-                                arity += 1;
-                            }
-                        }
-                    }
-                    */
-
                     if arity == 0 {
                         let atom_name = name.as_str().to_string();
                         if atom_name == "[]" {
@@ -354,8 +328,9 @@ impl Term {
                         term_stack.push(Term::Compound(name.as_str().to_string(), subterms));
                     }
                 }
-                (HeapCellValueTag::PStr, atom) => {
+                (HeapCellValueTag::PStrLoc, pstr_loc) => {
                     let tail = term_stack.pop().unwrap();
+                    let char_iter = iter.base_iter.heap.char_iter(pstr_loc);
 
                     match tail {
                         Term::Atom(atom) => {
@@ -363,21 +338,18 @@ impl Term {
                                 term_stack.push(Term::String(atom.as_str().to_string()));
                             }
                         },
+                        Term::List(l) if l.is_empty() => {
+                            term_stack.push(Term::String(char_iter.collect()));
+                        }
                         Term::List(l) => {
-                            let mut list: Vec<Term> = atom
-                                .as_str()
-                                .to_string()
-                                .chars()
+                            let mut list: Vec<Term> = char_iter
                                 .map(|x| Term::Atom(x.to_string()))
                                 .collect();
                             list.extend(l.into_iter());
                             term_stack.push(Term::List(list));
                         },
                         _ => {
-                            let mut list: Vec<Term> = atom
-                                .as_str()
-                                .to_string()
-                                .chars()
+                            let mut list: Vec<Term> = char_iter
                                 .map(|x| Term::Atom(x.to_string()))
                                 .collect();
 
@@ -403,19 +375,6 @@ impl Term {
                         }
                     }
                 }
-                // I dont know if this is needed here.
-                /*
-                (HeapCellValueTag::PStrLoc, h) => {
-                    let atom = cell_as_atom_cell!(iter.heap[h]).get_name();
-                    let tail = term_stack.pop().unwrap();
-
-                    term_stack.push(Term::PartialString(
-                        Cell::default(),
-                        atom.as_str().to_owned(),
-                        Box::new(tail),
-                    ));
-                }
-                */
                 _ => {
                     unreachable!();
                 }
@@ -467,11 +426,20 @@ impl Iterator for QueryState<'_> {
             // this should halt the search for solutions as it
             // does in the Scryer top-level. the exception term is
             // contained in self.machine_st.ball.
-            let h = machine.machine_st.heap.len();
-            machine
+            let h = machine.machine_st.heap.cell_len();
+
+            if let Err(resource_err_loc) = machine
                 .machine_st
                 .heap
-                .extend(machine.machine_st.ball.stub.clone());
+                .append(&machine.machine_st.ball.stub)
+            {
+                return Some(Err(Term::from_heapcell(
+                    machine,
+                    machine.machine_st.heap[resource_err_loc],
+                    &mut IndexMap::new(),
+                )));
+            }
+
             let exception_term =
                 Term::from_heapcell(machine, machine.machine_st.heap[h], &mut var_names.clone());
 
@@ -503,7 +471,7 @@ impl Iterator for QueryState<'_> {
             let mut var_name = var_key.to_string();
             if var_name.starts_with('_') {
                 let should_print = var_names.values().any(|x| match x.borrow().clone() {
-                    Var::Named(v) => v == var_name,
+                    Var::Named(v) => *v == *var_name,
                     _ => false,
                 });
                 if !should_print {
@@ -522,10 +490,10 @@ impl Iterator for QueryState<'_> {
                 // Var dict is in the order things appear in the query. If var_name appears
                 // after term in the query, switch their places.
                 let var_name_idx = var_dict
-                    .get_index_of(&VarKey::VarPtr(Var::Named(var_name.clone()).into()))
+                    .get_index_of(&VarKey::VarPtr(Var::from(var_name.clone()).into()))
                     .unwrap();
                 let term_idx =
-                    var_dict.get_index_of(&VarKey::VarPtr(Var::Named(term_str.clone()).into()));
+                    var_dict.get_index_of(&VarKey::VarPtr(Var::from(term_str.clone()).into()));
                 if let Some(idx) = term_idx {
                     if idx < var_name_idx {
                         let new_term = Term::Var(var_name);
@@ -559,7 +527,7 @@ impl Machine {
     /// Consults a module into the [`Machine`] from a string.
     pub fn consult_module_string(&mut self, module_name: &str, program: impl Into<String>) {
         let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
-        self.machine_st.registers[1] = stream.into();
+        self.machine_st.registers[1] = stream_as_cell!(stream);
         self.machine_st.registers[2] = atom_as_cell!(&atom_table::AtomTable::build_with(
             &self.machine_st.atom_tbl,
             module_name
@@ -588,7 +556,7 @@ impl Machine {
         or_frame.prelude.attr_var_queue_len = 0;
 
         self.machine_st.b = stub_b;
-        self.machine_st.hb = self.machine_st.heap.len();
+        self.machine_st.hb = self.machine_st.heap.cell_len();
         self.machine_st.block = stub_b;
     }
 
@@ -606,9 +574,8 @@ impl Machine {
         self.allocate_stub_choice_point();
 
         // Write parsed term to heap
-        let term_write_result =
-            write_term_to_heap(&term, &mut self.machine_st.heap, &self.machine_st.atom_tbl)
-                .expect("couldn't write term to heap");
+        let term_write_result = write_term_to_heap(&term, &mut self.machine_st.heap)
+            .expect("couldn't write term to heap");
 
         let var_names: IndexMap<_, _> = term_write_result
             .var_dict
@@ -630,9 +597,15 @@ impl Machine {
             .indices
             .code_dir
             .get(&(atom!("call"), 1))
-            .expect("couldn't get code index")
-            .local()
-            .unwrap();
+            .cloned()
+            .map(|offset| {
+                self.machine_st
+                    .arena
+                    .code_index_tbl
+                    .get_entry(offset.into())
+                    .p() as usize
+            })
+            .expect("couldn't get code index");
 
         self.machine_st.execute_at_index(1, call_index_p);
 

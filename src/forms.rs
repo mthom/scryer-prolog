@@ -1,11 +1,12 @@
 use crate::arena::*;
 use crate::atom_table::*;
+use crate::functor_macro::*;
 use crate::instructions::*;
 use crate::machine::disjuncts::VarData;
-use crate::machine::heap::*;
 use crate::machine::loader::PredicateQueue;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
+use crate::offset_table::OffsetTable;
 use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
 use crate::parser::parser::CompositeOpDesc;
@@ -25,18 +26,6 @@ use std::ops::{AddAssign, Deref, DerefMut};
 use std::path::PathBuf;
 
 pub type PredicateKey = (Atom, usize); // name, arity.
-
-/*
-// vars of predicate, toplevel offset.  Vec<Term> is always a vector
-// of vars (we get their adjoining cells this way).
-pub type JumpStub = Vec<Term>;
-*/
-
-#[derive(Debug)]
-pub enum TopLevel {
-    Fact(Fact, VarData), // Term, line_num, col_num
-    Rule(Rule, VarData), // Rule, line_num, col_num
-}
 
 #[derive(Debug, Clone, Copy)]
 pub enum AppendOrPrepend {
@@ -82,6 +71,28 @@ pub enum CallPolicy {
     Counted,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum GenContext {
+    Head,
+    Mid(usize),
+    Last(usize), // Mid & Last: chunk_num
+}
+
+impl GenContext {
+    #[inline]
+    pub fn chunk_num(&self) -> usize {
+        match self {
+            GenContext::Head => 0,
+            &GenContext::Mid(cn) | &GenContext::Last(cn) => cn,
+        }
+    }
+
+    #[inline]
+    pub fn is_last(self) -> bool {
+        matches!(self, GenContext::Last(_))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChunkType {
     Head,
@@ -121,7 +132,7 @@ impl ChunkType {
 #[derive(Debug)]
 pub enum ChunkedTerms {
     Branch(Vec<VecDeque<ChunkedTerms>>),
-    Chunk(VecDeque<QueryTerm>),
+    Chunk { terms: VecDeque<QueryTerm> },
 }
 
 #[derive(Debug)]
@@ -161,22 +172,30 @@ impl ChunkedTermVec {
 
     #[inline]
     pub fn add_chunk(&mut self) {
-        self.chunk_vec
-            .push_back(ChunkedTerms::Chunk(VecDeque::from(vec![])));
+        let chunk = ChunkedTerms::Chunk {
+            terms: VecDeque::from(vec![]),
+        };
+        self.chunk_vec.push_back(chunk);
     }
 
     pub fn push_chunk_term(&mut self, term: QueryTerm) {
         match self.chunk_vec.back_mut() {
             Some(ChunkedTerms::Branch(_)) => {
-                self.chunk_vec
-                    .push_back(ChunkedTerms::Chunk(VecDeque::from(vec![term])));
+                let chunk = ChunkedTerms::Chunk {
+                    terms: VecDeque::from(vec![term]),
+                };
+
+                self.chunk_vec.push_back(chunk);
             }
-            Some(ChunkedTerms::Chunk(chunk)) => {
-                chunk.push_back(term);
+            Some(ChunkedTerms::Chunk { terms, .. }) => {
+                terms.push_back(term);
             }
             None => {
-                self.chunk_vec
-                    .push_back(ChunkedTerms::Chunk(VecDeque::from(vec![term])));
+                let chunk = ChunkedTerms::Chunk {
+                    terms: VecDeque::from(vec![term]),
+                };
+
+                self.chunk_vec.push_back(chunk);
             }
         }
     }
@@ -353,9 +372,9 @@ pub enum ModuleSource {
 
 impl ModuleSource {
     pub(crate) fn as_functor_stub(&self) -> MachineStub {
-        match self {
+        match *self {
             ModuleSource::Library(name) => {
-                functor!(atom!("library"), [atom(name)])
+                functor!(atom!("library"), [atom_as_cell(name)])
             }
             ModuleSource::File(name) => {
                 functor!(name)
@@ -608,9 +627,9 @@ impl Default for Number {
 impl fmt::Display for Number {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Number::Float(fl) => write!(f, "{}", fl),
-            Number::Integer(n) => write!(f, "{}", n),
-            Number::Rational(r) => write!(f, "{}", r),
+            Number::Float(fl) => write!(f, "{fl}"),
+            Number::Integer(n) => write!(f, "{n}"),
+            Number::Rational(r) => write!(f, "{r}"),
             Number::Fixnum(n) => write!(f, "{}", n.get_num()),
         }
     }
@@ -679,17 +698,18 @@ impl ArenaFrom<isize> for Number {
 impl ArenaFrom<u32> for Number {
     #[inline]
     fn arena_from(value: u32, _arena: &mut Arena) -> Number {
-        Number::Fixnum(Fixnum::build_with(value as i64))
+        Number::Fixnum(Fixnum::build_with(value))
     }
 }
 
 impl ArenaFrom<i32> for Number {
     #[inline]
     fn arena_from(value: i32, _arena: &mut Arena) -> Number {
-        Number::Fixnum(Fixnum::build_with(value as i64))
+        Number::Fixnum(Fixnum::build_with(value))
     }
 }
 
+/*
 impl ArenaFrom<Number> for Literal {
     #[inline]
     fn arena_from(value: Number, arena: &mut Arena) -> Literal {
@@ -701,6 +721,21 @@ impl ArenaFrom<Number> for Literal {
         }
     }
 }
+*/
+
+impl ArenaFrom<u64> for HeapCellValue {
+    #[inline]
+    fn arena_from(value: u64, arena: &mut Arena) -> HeapCellValue {
+        HeapCellValue::from(fixnum!(Literal, value as i64, arena))
+    }
+}
+
+impl ArenaFrom<usize> for HeapCellValue {
+    #[inline]
+    fn arena_from(value: usize, arena: &mut Arena) -> HeapCellValue {
+        HeapCellValue::arena_from(value as u64, arena)
+    }
+}
 
 impl ArenaFrom<Number> for HeapCellValue {
     #[inline]
@@ -708,7 +743,7 @@ impl ArenaFrom<Number> for HeapCellValue {
         match value {
             Number::Fixnum(n) => fixnum_as_cell!(n),
             Number::Integer(n) => typed_arena_ptr_as_cell!(n),
-            Number::Float(OrderedFloat(n)) => HeapCellValue::from(float_alloc!(n, arena)),
+            Number::Float(n) => HeapCellValue::from(arena.f64_tbl.build_with(n)),
             Number::Rational(n) => typed_arena_ptr_as_cell!(n),
         }
     }
@@ -771,10 +806,10 @@ impl Number {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub(crate) enum OptArgIndexKey {
-    Literal(usize, usize, Literal, Vec<Literal>), // index, IndexingCode location, opt arg, alternatives
-    List(usize, usize),                           // index, IndexingCode location
+    Literal(usize, usize, Literal, Option<Literal>), // index, IndexingCode location, opt arg, alternatives
+    List(usize, usize),                              // index, IndexingCode location
     None,
     Structure(usize, usize, Atom, usize), // index, IndexingCode location, name, arity
 }

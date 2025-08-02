@@ -20,6 +20,7 @@ use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
 
 /*
  * The loader compiles Prolog terms read from a TermStream instance,
@@ -382,7 +383,6 @@ impl<'a> LoadState<'a> for BootstrappingLoadState<'a> {
         let repo_len = loader.wam_prelude.code.len();
 
         loader.payload.retraction_info.reset(repo_len);
-
         loader.remove_module_op_exports();
 
         Ok(loader.payload.compilation_target)
@@ -720,7 +720,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         self.wam_prelude.indices.modules.get_mut(&module_name)
                     {
                         if let Some(code_idx) = module.code_dir.get_mut(&key) {
-                            code_idx.set(old_code_idx)
+                            let code_index_tbl =
+                                &mut LS::machine_st(&mut self.payload).arena.code_index_tbl;
+                            code_idx.set(code_index_tbl, old_code_idx);
                         }
                     }
                 }
@@ -741,7 +743,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 }
                 RetractionRecord::ReplacedUserPredicate(key, old_code_idx) => {
                     if let Some(code_idx) = self.wam_prelude.indices.code_dir.get_mut(&key) {
-                        code_idx.set(old_code_idx)
+                        let code_index_tbl =
+                            &mut LS::machine_st(&mut self.payload).arena.code_index_tbl;
+                        code_idx.set(code_index_tbl, old_code_idx)
                     }
                 }
                 RetractionRecord::AddedIndex(index_key, clause_loc) => {
@@ -762,7 +766,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             ) => {
                                 remove_constant_indices(
                                     constant,
-                                    &overlapping_constants,
+                                    overlapping_constants,
                                     indexing_code,
                                     clause_loc - index_loc, // WAS: &inner_index_locs,
                                 );
@@ -1046,8 +1050,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let cell = machine_st[r];
 
         let export_list = machine_st.read_term_from_heap(cell);
-        let atom_tbl = &mut LS::machine_st(&mut self.payload).atom_tbl;
-        let export_list = setup_module_export_list(export_list, atom_tbl)?;
+        let export_list = setup_module_export_list(export_list)?;
 
         Ok(export_list.into_iter().collect())
     }
@@ -1060,7 +1063,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
                 self.payload.clause_clauses.push((head, body));
             }
-            head @ Term::Literal(_, Literal::Atom(..)) | head @ Term::Clause(..) => {
+            head @ (Term::Clause(..) | Term::Literal(_, Literal::Atom(_))) => {
                 let body = Term::Literal(Cell::default(), Literal::Atom(atom!("true")));
                 self.payload.clause_clauses.push((head, body));
             }
@@ -1218,14 +1221,18 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
          * but to multifile and discontiguous predicates as well.
          */
 
-        let code_index = self.get_or_insert_code_index(key, compilation_target);
+        let offset = self.get_or_insert_code_index(key, compilation_target);
+        let code_idx_ptr = LS::machine_st(&mut self.payload)
+            .arena
+            .code_index_tbl
+            .get_entry(offset.into());
 
-        if code_index.is_undefined() {
-            set_code_index(
-                &mut self.payload.retraction_info,
+        if code_idx_ptr.is_undefined() {
+            set_code_index::<LS>(
+                &mut self.payload,
                 &compilation_target,
                 key,
-                code_index,
+                offset,
                 IndexPtr::dynamic_undefined(),
             );
         }
@@ -1289,13 +1296,16 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
     fn add_clause_clause_if_dynamic(&mut self, term: &Term) -> Result<(), SessionError> {
         if let Some(predicate_name) = ClauseInfo::name(term) {
-            let arity = ClauseInfo::arity(term);
+            let predicate_arity = ClauseInfo::arity(term);
             let predicates_compilation_target = self.payload.predicates.compilation_target;
 
             let is_dynamic = self
                 .wam_prelude
                 .indices
-                .get_predicate_skeleton(&predicates_compilation_target, &(predicate_name, arity))
+                .get_predicate_skeleton(
+                    &predicates_compilation_target,
+                    &(predicate_name, predicate_arity),
+                )
                 .map(|skeleton| skeleton.core.is_dynamic)
                 .unwrap_or(false);
 
@@ -1369,8 +1379,9 @@ impl<'a> MachinePreludeView<'a> {
 impl MachineState {
     pub(super) fn read_term_from_heap(&mut self, term_addr: HeapCellValue) -> Term {
         let mut term_stack = vec![];
+        self.heap[0] = term_addr;
         let mut iter =
-            stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, term_addr);
+            stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, 0);
 
         while let Some(addr) = iter.next() {
             let addr = unmark_cell_bits!(addr);
@@ -1384,45 +1395,31 @@ impl MachineState {
 
                     match as_partial_string(head, tail) {
                         Ok((string, Some(tail))) => {
-                            term_stack.push(Term::PartialString(Cell::default(), string, tail));
+                            term_stack.push(Term::PartialString(Cell::default(), Rc::new(string), tail));
                         }
                         Ok((string, None)) => {
-                            let atom = AtomTable::build_with(&self.atom_tbl, &string);
-                            term_stack.push(Term::CompleteString(Cell::default(), atom));
+                            term_stack.push(Term::CompleteString(Cell::default(), Rc::new(string)));
                         }
                         Err(cons_term) => term_stack.push(cons_term),
                     }
                 }
+                (HeapCellValueTag::Cons | HeapCellValueTag::Fixnum | HeapCellValueTag::F64Offset) => {
+                    term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
+                }
                 (HeapCellValueTag::StackVar, h) => {
-                    term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("s_{}", h))));
+                    term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("s_{h}"))));
                 }
                 (HeapCellValueTag::Var | HeapCellValueTag::AttrVar, h) => {
-                    term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("_{}", h))));
-                }
-                (HeapCellValueTag::Cons | HeapCellValueTag::CStr | HeapCellValueTag::Fixnum |
-                 HeapCellValueTag::Char | HeapCellValueTag::F64) => {
-                    term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
+                    term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("_{h}"))));
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     let h = iter.focus().value() as usize;
                     let mut arity = arity;
+                    let value = iter.heap[h.saturating_sub(1)];
 
-                    if iter.heap.len() > h + arity + 1 {
-                        let value = iter.heap[h + arity + 1];
-
-                        if let Some(idx) = get_structure_index(value) {
-                            // in the second condition, arity == 0,
-                            // meaning idx cannot pertain to this atom
-                            // if it is the direct subterm of a larger
-                            // structure.
-                            if arity > 0 || !iter.direct_subterm_of_str(h) {
-                                term_stack.push(
-                                    Term::Literal(Cell::default(), Literal::CodeIndex(idx))
-                                );
-
-                                arity += 1;
-                            }
-                        }
+                    if let Some(idx) = get_structure_index(value) {
+                        term_stack.push(Term::Literal(Cell::default(), Literal::CodeIndexOffset(idx.into())));
+                        arity += 1;
                     }
 
                     if arity == 0 {
@@ -1435,28 +1432,22 @@ impl MachineState {
                         term_stack.push(Term::Clause(Cell::default(), name, subterms));
                     }
                 }
-                (HeapCellValueTag::PStr, atom) => {
-                    let tail = term_stack.pop().unwrap();
-
-                    if let Term::Literal(_, Literal::Atom(atom!("[]"))) = &tail {
-                        term_stack.push(Term::CompleteString(Cell::default(), atom));
-                    } else {
-                        term_stack.push(Term::PartialString(
-                            Cell::default(),
-                            atom.as_str().to_owned(),
-                            Box::new(tail),
-                        ));
-                    }
-                }
                 (HeapCellValueTag::PStrLoc, h) => {
-                    let atom = cell_as_atom_cell!(iter.heap[h]).get_name();
+                    let HeapStringScan { string, .. } = iter.heap.scan_slice_to_str(h);
                     let tail = term_stack.pop().unwrap();
 
-                    term_stack.push(Term::PartialString(
-                        Cell::default(),
-                        atom.as_str().to_owned(),
-                        Box::new(tail),
-                    ));
+                    term_stack.push(if matches!(tail, Term::Literal(_, Literal::Atom(atom!("[]")))) {
+                        Term::CompleteString(
+                            Cell::default(),
+                            Rc::new(string.to_owned()),
+                        )
+                    } else {
+                        Term::PartialString(
+                            Cell::default(),
+                            Rc::new(string.to_owned()),
+                            Box::new(tail),
+                        )
+                    });
                 }
                 _ => {
                 }
@@ -1605,7 +1596,7 @@ impl Machine {
         let predicate_name = cell_as_atom!(self.deref_register(2));
 
         let arity = self.deref_register(3);
-        let arity = match Number::try_from(arity) {
+        let arity = match Number::try_from((arity, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Integer(n)) if *n >= Integer::ZERO && *n <= Integer::from(MAX_ARITY) => {
                 let value: usize = (&*n).try_into().unwrap();
                 Ok(value)
@@ -1981,7 +1972,6 @@ impl Machine {
         };
 
         let stub_gen = || functor_stub(key.0, key.1);
-
         let head = self.deref_register(2);
 
         if head.is_var() {
@@ -2017,7 +2007,14 @@ impl Machine {
                     .wam_prelude
                     .indices
                     .get_predicate_code_index(name, arity, module_name)
-                    .map(|code_idx| code_idx.get_tag())
+                    .map(|offset| {
+                        loader
+                            .payload
+                            .machine_st
+                            .arena
+                            .code_index_tbl
+                            .with_entry(offset.into(), |idx| idx.tag())
+                    })
                     .unwrap_or(IndexPtrTag::DynamicUndefined);
 
                 if idx_tag == IndexPtrTag::Index {
@@ -2123,14 +2120,16 @@ impl Machine {
                 .indices
                 .remove_predicate_skeleton(&compilation_target, &key)
                 .map(|skeleton| {
-                    let mut clause_clause_skeleton = loader
-                        .wam_prelude
-                        .indices
-                        .remove_predicate_skeleton(
+                    let mut clause_clause_skeleton =
+                        match loader.wam_prelude.indices.remove_predicate_skeleton(
                             &clause_clause_compilation_target,
                             &(atom!("$clause"), 2),
-                        )
-                        .unwrap();
+                        ) {
+                            Some(skeleton) => skeleton,
+                            None => {
+                                return vec![];
+                            }
+                        };
 
                     let result = skeleton
                         .core
@@ -2160,9 +2159,16 @@ impl Machine {
                 .indices
                 .remove_predicate_skeleton(&compilation_target, &key);
 
-            let mut code_index = loader.get_or_insert_code_index(key, compilation_target);
+            let offset = loader.get_or_insert_code_index(key, compilation_target);
 
-            code_index.set(IndexPtr::undefined());
+            loader
+                .payload
+                .machine_st
+                .arena
+                .code_index_tbl
+                .with_entry_mut(offset.into(), |code_idx| {
+                    *code_idx = IndexPtr::undefined();
+                });
 
             loader.payload.compilation_target = clause_clause_compilation_target;
 
@@ -2192,7 +2198,7 @@ impl Machine {
             .machine_st
             .store(self.machine_st.deref(self.machine_st[temp_v!(3)]));
 
-        let target_pos = match Number::try_from(target_pos) {
+        let target_pos = match Number::try_from((target_pos, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
                 value
@@ -2342,29 +2348,38 @@ impl Machine {
             .get_meta_predicate_spec(predicate_name, arity, &compilation_target)
         {
             Some(meta_specs) => {
-                let term_loc = self.machine_st.heap.len();
+                let term_loc = self.machine_st.heap.cell_len();
 
-                self.machine_st
-                    .heap
-                    .push(atom_as_cell!(predicate_name, arity));
-                self.machine_st
-                    .heap
-                    .extend(meta_specs.iter().map(|meta_spec| match meta_spec {
-                        MetaSpec::Minus => atom_as_cell!(atom!("+")),
-                        MetaSpec::Plus => atom_as_cell!(atom!("-")),
-                        MetaSpec::Either => atom_as_cell!(atom!("?")),
-                        MetaSpec::Colon => atom_as_cell!(atom!(":")),
-                        MetaSpec::RequiresExpansionWithArgument(ref arg_num) => {
-                            fixnum_as_cell!(Fixnum::build_with(*arg_num as i64))
-                        }
-                    }));
+                let mut writer = match self.machine_st.heap.reserve(3 + meta_specs.len()) {
+                    Ok(writer) => writer,
+                    Err(err_loc) => {
+                        self.machine_st.throw_resource_error(err_loc);
+                        return;
+                    }
+                };
 
-                let heap_loc = self.machine_st.heap.len();
+                writer.write_with(|section| {
+                    section.push_cell(atom_as_cell!(predicate_name, arity));
 
-                self.machine_st
-                    .heap
-                    .push(atom_as_cell!(atom!("meta_predicate"), 1));
-                self.machine_st.heap.push(str_loc_as_cell!(term_loc));
+                    for meta_spec in meta_specs.iter() {
+                        section.push_cell(match meta_spec {
+                            MetaSpec::Minus => atom_as_cell!(atom!("+")),
+                            MetaSpec::Plus => atom_as_cell!(atom!("-")),
+                            MetaSpec::Either => atom_as_cell!(atom!("?")),
+                            MetaSpec::Colon => atom_as_cell!(atom!(":")),
+                            MetaSpec::RequiresExpansionWithArgument(ref arg_num) => {
+                                fixnum_as_cell!(/* FIXME this is not safe */ unsafe {
+                                    Fixnum::build_with_unchecked(*arg_num as i64)
+                                })
+                            }
+                        });
+                    }
+
+                    section.push_cell(atom_as_cell!(atom!("meta_predicate"), 1));
+                    section.push_cell(str_loc_as_cell!(term_loc));
+                });
+
+                let heap_loc = self.machine_st.heap.cell_len() - 2;
 
                 unify!(
                     self.machine_st,

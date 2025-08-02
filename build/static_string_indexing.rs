@@ -84,6 +84,18 @@ impl<'ast> Visit<'ast> for StaticStrVisitor {
     }
 }
 
+const INLINED_ATOM_MAX_LEN: usize = 6;
+
+fn static_string_index(string: &str, index: usize) -> u64 {
+    if !string.is_empty() && string.len() <= INLINED_ATOM_MAX_LEN && !string.contains('\u{0}') {
+        let mut string_buf: [u8; 8] = [0u8; 8];
+        string_buf[..string.len()].copy_from_slice(string.as_bytes());
+        (u64::from_le_bytes(string_buf) << 1) | 1
+    } else {
+        (index << 1) as u64
+    }
+}
+
 pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStream {
     use quote::*;
 
@@ -114,14 +126,14 @@ pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStrea
         match file.read_to_string(&mut src) {
             Ok(_) => {}
             Err(e) => {
-                panic!("error reading file: {:?}", e);
+                panic!("error reading file: {e:?}");
             }
         }
 
         let syntax = match syn::parse_file(&src) {
             Ok(s) => s,
             Err(e) => {
-                panic!("parse error: {} in file {:?}", e, path);
+                panic!("parse error: {e} in file {path:?}");
             }
         };
         Ok(syntax)
@@ -149,11 +161,29 @@ pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStrea
         visitor.visit_file(&syntax)
     }
 
-    let indices = (0..visitor.static_strs.len()).map(|i| (i << 3) as u64);
-    let indices_iter = indices.clone();
+    let mut static_str_keys = vec![];
+    let mut static_strs = vec![];
+    let mut static_str_indices = vec![];
 
-    let static_strs_len = visitor.static_strs.len();
-    let static_strs: &Vec<_> = &visitor.static_strs.into_iter().collect();
+    let indices: Vec<u64> = visitor
+        .static_strs
+        .iter()
+        .map(|string| {
+            let index = static_string_index(string, static_strs.len());
+
+            static_str_keys.push(string);
+
+            if index & 1 == 1 {
+                index
+            } else {
+                static_str_indices.push(index);
+                static_strs.push(string);
+                index
+            }
+        })
+        .collect();
+
+    let static_strs_len = static_strs.len();
 
     quote! {
         static STRINGS: [&str; #static_strs_len] = [
@@ -163,11 +193,12 @@ pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStrea
         ];
 
         macro_rules! atom {
-            #((#static_strs) => { Atom { index: #indices_iter } };)*
+            #((#static_str_keys) => { Atom { index: #indices } };)*
+            ($name:literal) => {compile_error!(concat!("unknown static atom ", $name))};
         }
 
         pub static STATIC_ATOMS_MAP: phf::Map<&'static str, Atom> = phf::phf_map! {
-            #(#static_strs => { Atom { index: #indices } },)*
+            #(#static_strs => { Atom { index: #static_str_indices } },)*
         };
     }
 }

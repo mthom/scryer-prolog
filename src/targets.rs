@@ -6,6 +6,8 @@ use crate::instructions::*;
 use crate::iterators::*;
 use crate::types::*;
 
+use std::rc::Rc;
+
 pub(crate) struct FactInstruction;
 pub(crate) struct QueryInstruction;
 
@@ -14,14 +16,14 @@ pub(crate) trait CompilationTarget<'a> {
 
     fn iter(term: &'a Term) -> Self::Iterator;
 
-    fn to_constant(lvl: Level, literal: Literal, r: RegType) -> Instruction;
+    fn to_constant(lvl: Level, constant: Literal, r: RegType) -> Instruction;
     fn to_list(lvl: Level, r: RegType) -> Instruction;
     fn to_structure(lvl: Level, name: Atom, arity: usize, r: RegType) -> Instruction;
 
     fn to_void(num_subterms: usize) -> Instruction;
     fn is_void_instr(instr: &Instruction) -> bool;
 
-    fn to_pstr(lvl: Level, string: Atom, r: RegType, has_tail: bool) -> Instruction;
+    fn to_pstr(lvl: Level, string: Rc<String>, r: RegType) -> Instruction;
 
     fn incr_void_instr(instr: &mut Instruction);
 
@@ -67,8 +69,8 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         matches!(instr, &Instruction::UnifyVoid(_))
     }
 
-    fn to_pstr(lvl: Level, string: Atom, r: RegType, has_tail: bool) -> Instruction {
-        Instruction::GetPartialString(lvl, string, r, has_tail)
+    fn to_pstr(lvl: Level, string: Rc<String>, r: RegType) -> Instruction {
+        Instruction::GetPartialString(lvl, string, r)
     }
 
     fn incr_void_instr(instr: &mut Instruction) {
@@ -125,16 +127,12 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
         Instruction::PutStructure(name, arity, r)
     }
 
-    fn to_constant(lvl: Level, constant: Literal, reg: RegType) -> Instruction {
-        Instruction::PutConstant(lvl, HeapCellValue::from(constant), reg)
-    }
-
     fn to_list(lvl: Level, reg: RegType) -> Instruction {
         Instruction::PutList(lvl, reg)
     }
 
-    fn to_pstr(lvl: Level, string: Atom, r: RegType, has_tail: bool) -> Instruction {
-        Instruction::PutPartialString(lvl, string, r, has_tail)
+    fn to_pstr(lvl: Level, string: Rc<String>, r: RegType) -> Instruction {
+        Instruction::PutPartialString(lvl, string, r)
     }
 
     fn to_void(subterms: usize) -> Instruction {
@@ -153,6 +151,10 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
 
     fn constant_subterm(constant: Literal) -> Instruction {
         Instruction::SetConstant(HeapCellValue::from(constant))
+    }
+
+    fn to_constant(lvl: Level, constant: Literal, reg: RegType) -> Instruction {
+        Instruction::PutConstant(lvl, HeapCellValue::from(constant), reg)
     }
 
     fn argument_to_variable(arg: RegType, val: usize) -> Instruction {

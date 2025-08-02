@@ -7,6 +7,7 @@ use crate::debray_allocator::*;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::*;
+use crate::offset_table::*;
 use crate::targets::QueryInstruction;
 use crate::types::*;
 
@@ -88,7 +89,7 @@ impl<'a> ArithInstructionIterator<'a> {
 
 #[derive(Debug)]
 pub(crate) enum ArithTermRef<'a> {
-    Literal(&'a Literal),
+    Literal(Literal),
     Op(Atom, usize), // name, arity.
     Var(Level, &'a Cell<VarReg>, VarPtr),
 }
@@ -117,7 +118,7 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
                         self.push_subterm(lvl.child_level(), &subterms[child_num]);
                     }
                 }
-                TermIterState::Literal(_, _, c) => return Some(Ok(ArithTermRef::Literal(c))),
+                TermIterState::Literal(_, _, c) => return Some(Ok(ArithTermRef::Literal(*c))),
                 TermIterState::Var(lvl, cell, var_ptr) => {
                     return Some(Ok(ArithTermRef::Var(lvl, cell, var_ptr)));
                 }
@@ -137,6 +138,7 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
 #[derive(Debug)]
 pub(crate) struct ArithmeticEvaluator<'a> {
     marker: &'a mut DebrayAllocator,
+    f64_tbl: &'a F64Table,
     interm: Vec<ArithmeticTerm>,
     interm_c: usize,
 }
@@ -155,11 +157,18 @@ impl<'a> ArithmeticTermIter<'a> for &'a Term {
     }
 }
 
-fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), ArithmeticError> {
+fn push_literal(
+    f64_tbl: &F64Table,
+    interm: &mut Vec<ArithmeticTerm>,
+    c: &Literal,
+) -> Result<(), ArithmeticError> {
     match c {
         Literal::Fixnum(n) => interm.push(ArithmeticTerm::Number(Number::Fixnum(*n))),
         Literal::Integer(n) => interm.push(ArithmeticTerm::Number(Number::Integer(*n))),
-        Literal::Float(n) => interm.push(ArithmeticTerm::Number(Number::Float(*n.as_ptr()))),
+        &Literal::F64Offset(offset) => {
+            let n = f64_tbl.get_entry(offset);
+            interm.push(ArithmeticTerm::Number(Number::Float(n)));
+        }
         Literal::Rational(n) => interm.push(ArithmeticTerm::Number(Number::Rational(*n))),
         Literal::Atom(name) if name == &atom!("e") => interm.push(ArithmeticTerm::Number(
             Number::Float(OrderedFloat(std::f64::consts::E)),
@@ -177,9 +186,14 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), Ari
 }
 
 impl<'a> ArithmeticEvaluator<'a> {
-    pub(crate) fn new(marker: &'a mut DebrayAllocator, target_int: usize) -> Self {
+    pub(crate) fn new(
+        marker: &'a mut DebrayAllocator,
+        f64_tbl: &'a F64Table,
+        target_int: usize,
+    ) -> Self {
         ArithmeticEvaluator {
             marker,
+            f64_tbl,
             interm: Vec::new(),
             interm_c: target_int,
         }
@@ -317,7 +331,7 @@ impl<'a> ArithmeticEvaluator<'a> {
 
         for term_ref in src.iter()? {
             match term_ref? {
-                ArithTermRef::Literal(c) => push_literal(&mut self.interm, c)?,
+                ArithTermRef::Literal(c) => push_literal(self.f64_tbl, &mut self.interm, &c)?,
                 ArithTermRef::Var(lvl, cell, name) => {
                     let var_num = name.to_var_num().unwrap();
 
@@ -357,9 +371,8 @@ impl<'a> ArithmeticEvaluator<'a> {
 pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Result<Number, EvalError> {
     match n {
         &Number::Integer(i) => {
-            let result = (&*i).try_into();
-            if let Ok(value) = result {
-                Ok(fixnum!(Number, value, arena))
+            if let Ok(value) = Fixnum::build_with_checked(&*i) {
+                Ok(Number::Fixnum(value))
             } else {
                 Ok(*n)
             }
@@ -368,11 +381,14 @@ pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Result<Number, EvalErro
         &Number::Float(f) => {
             let f = f.floor();
 
-            const I64_MIN_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MIN as f64);
-            const I64_MAX_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MAX as f64);
+            const FIXNUM_MIN_TO_F: OrderedFloat<f64> = OrderedFloat(Fixnum::MIN as f64);
+            const FIXNUM_MAX_TO_F: OrderedFloat<f64> = OrderedFloat(Fixnum::MAX as f64);
 
-            if I64_MIN_TO_F <= f && f <= I64_MAX_TO_F {
-                Ok(fixnum!(Number, f.into_inner() as i64, arena))
+            if (FIXNUM_MIN_TO_F..=FIXNUM_MAX_TO_F).contains(&f) {
+                Ok(Number::Fixnum(
+                    // Safety: We checked that the value is in range
+                    unsafe { Fixnum::build_with_unchecked(f.into_inner() as i64) },
+                ))
             } else {
                 Ok(Number::Integer(arena_alloc!(
                     Integer::try_from(classify_float(f.0)?).unwrap_or_else(|_| {
@@ -385,8 +401,8 @@ pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Result<Number, EvalErro
         Number::Rational(ref r) => {
             let floor = r.floor();
 
-            if let Ok(value) = (&floor).try_into() {
-                Ok(fixnum!(Number, value, arena))
+            if let Ok(value) = Fixnum::build_with_checked(&floor) {
+                Ok(Number::Fixnum(value))
             } else {
                 Ok(Number::Integer(arena_alloc!(floor, arena)))
             }
@@ -649,11 +665,11 @@ impl Ord for Number {
     }
 }
 
-impl TryFrom<HeapCellValue> for Number {
+impl TryFrom<(HeapCellValue, &'_ F64Table)> for Number {
     type Error = ();
 
     #[inline]
-    fn try_from(value: HeapCellValue) -> Result<Number, Self::Error> {
+    fn try_from((value, f64_tbl): (HeapCellValue, &F64Table)) -> Result<Number, Self::Error> {
         read_heap_cell!(value,
            (HeapCellValueTag::Cons, c) => {
                match_untyped_arena_ptr!(c,
@@ -668,8 +684,9 @@ impl TryFrom<HeapCellValue> for Number {
                   }
                )
            }
-           (HeapCellValueTag::F64, n) => {
-               Ok(Number::Float(*n))
+           (HeapCellValueTag::F64Offset, offset) => {
+               let n = f64_tbl.get_entry(offset);
+               Ok(Number::Float(n))
            }
            (HeapCellValueTag::Fixnum | HeapCellValueTag::CutPoint, n) => {
                Ok(Number::Fixnum(n))

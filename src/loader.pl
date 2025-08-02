@@ -299,7 +299,7 @@ expand_term_goals(Terms0, Terms) :-
           (  atom(Module) ->
              prolog_load_context(module, Target),
              module_expanded_head_variables(Head2, HeadVars),
-             catch(expand_goal(Body0, Target, Body1, HeadVars, []),
+             catch('$call'(loader:expand_goal(Body0, Target, Body1, HeadVars, [])),
                    error(type_error(callable, Pred), _),
                    (  loader:print_goal_expansion_warning(Pred),
                       builtins:(Body1 = Body0)
@@ -309,7 +309,7 @@ expand_term_goals(Terms0, Terms) :-
           )
        ;  module_expanded_head_variables(Head1, HeadVars),
           prolog_load_context(module, Target),
-          catch(expand_goal(Body0, Target, Body1, HeadVars, []),
+          catch('$call'(loader:expand_goal(Body0, Target, Body1, HeadVars, [])),
                 error(type_error(callable, Pred), _),
                 (  loader:print_goal_expansion_warning(Pred),
                    builtins:(Body1 = Body0)

@@ -3,31 +3,27 @@
 #[cfg(feature = "http")]
 use crate::http::{HttpListener, HttpResponse};
 use crate::machine::loader::LiveLoadState;
-use crate::machine::machine_indices::*;
 use crate::machine::streams::*;
-use crate::raw_block::*;
+use crate::offset_table::*;
 use crate::read::*;
 use crate::types::UntypedArenaPtr;
 
 use crate::parser::dashu::{Integer, Rational};
-use arcu::atomic::Arcu;
-use arcu::epoch_counters::GlobalEpochCounterPool;
-use arcu::rcu_ref::RcuRef;
-use arcu::Rcu;
 use ordered_float::OrderedFloat;
 
-use std::cell::UnsafeCell;
 use std::fmt;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+use std::io::PipeReader;
+use std::io::PipeWriter;
 use std::mem;
 use std::mem::ManuallyDrop;
 use std::net::TcpListener;
 use std::ops::{Deref, DerefMut};
+use std::process::Child;
 use std::ptr;
 use std::ptr::addr_of_mut;
 use std::ptr::NonNull;
-use std::sync::RwLock;
 
 macro_rules! arena_alloc {
     ($e:expr, $arena:expr) => {{
@@ -38,8 +34,7 @@ macro_rules! arena_alloc {
 
 macro_rules! float_alloc {
     ($e:expr, $arena:expr) => {{
-        let result = $e;
-        unsafe { $arena.f64_tbl.build_with(result).as_ptr() }
+        $arena.f64_tbl.build_with(OrderedFloat($e))
     }};
 }
 
@@ -53,120 +48,6 @@ where
 
     debug_assert!(payload_offset > header_offset);
     payload_offset - header_offset
-}
-
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::Weak;
-
-const F64_TABLE_INIT_SIZE: usize = 1 << 16;
-const F64_TABLE_ALIGN: usize = 8;
-
-#[inline(always)]
-fn global_f64table() -> &'static RwLock<Weak<F64Table>> {
-    static GLOBAL_ATOM_TABLE: RwLock<Weak<F64Table>> = RwLock::new(Weak::new());
-    &GLOBAL_ATOM_TABLE
-}
-
-impl RawBlockTraits for F64Table {
-    #[inline]
-    fn init_size() -> usize {
-        F64_TABLE_INIT_SIZE
-    }
-
-    #[inline]
-    fn align() -> usize {
-        F64_TABLE_ALIGN
-    }
-}
-
-#[derive(Debug)]
-pub struct F64Table {
-    block: Arcu<RawBlock<F64Table>, GlobalEpochCounterPool>,
-    update: Mutex<()>,
-}
-
-// TODO: Actually prove this, as it's probably unsound right now
-unsafe impl Send for F64Table {}
-unsafe impl Sync for F64Table {}
-
-#[inline(always)]
-pub fn lookup_float(
-    offset: F64Offset,
-) -> RcuRef<RawBlock<F64Table>, UnsafeCell<OrderedFloat<f64>>> {
-    let f64table = global_f64table()
-        .read()
-        .unwrap()
-        .upgrade()
-        .expect("We should only be looking up floats while there is a float table");
-
-    RcuRef::try_map(f64table.block.read(), |raw_block| unsafe {
-        raw_block
-            .base
-            .add(offset.0)
-            .cast_mut()
-            .cast::<UnsafeCell<OrderedFloat<f64>>>()
-            .as_ref()
-    })
-    .expect("The offset should result in a non-null pointer")
-}
-
-impl F64Table {
-    #[inline]
-    pub fn new() -> Arc<Self> {
-        let upgraded = global_f64table().read().unwrap().upgrade();
-        // don't inline upgraded, otherwise temporary will be dropped too late in case of None
-        if let Some(atom_table) = upgraded {
-            atom_table
-        } else {
-            let mut guard = global_f64table().write().unwrap();
-            // try to upgrade again in case we lost the race on the write lock
-            if let Some(atom_table) = guard.upgrade() {
-                atom_table
-            } else {
-                let atom_table = Arc::new(Self {
-                    block: Arcu::new(RawBlock::new(), GlobalEpochCounterPool),
-                    update: Mutex::new(()),
-                });
-                *guard = Arc::downgrade(&atom_table);
-                atom_table
-            }
-        }
-    }
-
-    #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn build_with(&self, value: f64) -> F64Offset {
-        let update_guard = self.update.lock();
-
-        // we don't have an index table for lookups as AtomTable does so
-        // just get the epoch after we take the upgrade lock
-        let mut block_epoch = self.block.read();
-
-        let mut ptr;
-
-        loop {
-            ptr = block_epoch.alloc(mem::size_of::<f64>());
-
-            if ptr.is_null() {
-                let new_block = block_epoch.grow_new().unwrap();
-                self.block.replace(new_block);
-                block_epoch = self.block.read();
-            } else {
-                break;
-            }
-        }
-
-        ptr::write(ptr as *mut OrderedFloat<f64>, OrderedFloat(value));
-
-        let float = F64Offset(ptr as usize - block_epoch.base as usize);
-
-        // atometable would have to update the index table at this point
-
-        // expicit drop to ensure we don't accidentally drop it early
-        drop(update_guard);
-
-        float
-    }
 }
 
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq)]
@@ -193,11 +74,10 @@ pub enum ArenaHeaderTag {
     TcpListener = 0b1000000,
     HttpListener = 0b1000001,
     HttpResponse = 0b1000010,
+    PipeWriter = 0b1000011,
     Dropped = 0b1000100,
-    IndexPtrDynamicUndefined = 0b1000101,
-    IndexPtrDynamicIndex = 0b1000110,
-    IndexPtrIndex = 0b1000111,
-    IndexPtrUndefined = 0b1001000,
+    PipeReader = 0b1001001,
+    ChildProcess = 0b1001010,
 }
 
 #[bitfield]
@@ -436,137 +316,6 @@ pub trait ArenaAllocated {
     }
 }
 
-#[derive(Debug)]
-pub struct F64Ptr(RcuRef<RawBlock<F64Table>, UnsafeCell<OrderedFloat<f64>>>);
-
-impl Clone for F64Ptr {
-    fn clone(&self) -> Self {
-        Self(RcuRef::clone(&self.0))
-    }
-}
-
-impl PartialEq for F64Ptr {
-    fn eq(&self, other: &F64Ptr) -> bool {
-        RcuRef::ptr_eq(&self.0, &other.0) || self.deref() == other.deref()
-    }
-}
-
-impl Eq for F64Ptr {}
-
-impl PartialOrd for F64Ptr {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for F64Ptr {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (**self).cmp(&**other)
-    }
-}
-
-impl Hash for F64Ptr {
-    #[inline(always)]
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        (self as &OrderedFloat<f64>).hash(hasher)
-    }
-}
-
-impl fmt::Display for F64Ptr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self as &OrderedFloat<f64>)
-    }
-}
-
-impl Deref for F64Ptr {
-    type Target = OrderedFloat<f64>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.0.get().as_ref().unwrap() }
-    }
-}
-
-impl DerefMut for F64Ptr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.0.get().as_mut().unwrap() }
-    }
-}
-
-impl F64Ptr {
-    #[inline(always)]
-    pub fn from_offset(offset: F64Offset) -> Self {
-        Self(lookup_float(offset))
-    }
-
-    #[inline(always)]
-    pub fn as_offset(&self) -> F64Offset {
-        F64Offset(self.0.get() as usize - RcuRef::get_root(&self.0).base as usize)
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct F64Offset(usize);
-
-impl F64Offset {
-    #[inline(always)]
-    pub fn new(offset: usize) -> Self {
-        Self(offset)
-    }
-
-    #[inline(always)]
-    pub fn from_ptr(ptr: F64Ptr) -> Self {
-        ptr.as_offset()
-    }
-
-    #[inline(always)]
-    pub fn as_ptr(self) -> F64Ptr {
-        F64Ptr::from_offset(self)
-    }
-
-    #[inline(always)]
-    pub fn to_u64(self) -> u64 {
-        self.0 as u64
-    }
-}
-
-impl PartialEq for F64Offset {
-    #[inline(always)]
-    fn eq(&self, other: &F64Offset) -> bool {
-        self.as_ptr() == other.as_ptr()
-    }
-}
-
-impl Eq for F64Offset {}
-
-impl PartialOrd for F64Offset {
-    #[inline(always)]
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for F64Offset {
-    #[inline(always)]
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.as_ptr().cmp(&other.as_ptr())
-    }
-}
-
-impl Hash for F64Offset {
-    #[inline(always)]
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        self.as_ptr().hash(hasher)
-    }
-}
-
-impl fmt::Display for F64Offset {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "F64Offset({})", self.0)
-    }
-}
-
 impl ArenaAllocated for Integer {
     type Payload = Self;
     #[inline]
@@ -644,43 +393,16 @@ impl ArenaAllocated for HttpResponse {
     }
 }
 
-impl ArenaAllocated for IndexPtr {
-    type Payload = Self;
+impl ArenaAllocated for Child {
+    type Payload = ManuallyDrop<Self>;
     #[inline]
     fn tag() -> ArenaHeaderTag {
-        ArenaHeaderTag::IndexPtrUndefined
+        ArenaHeaderTag::ChildProcess
     }
-
-    #[inline]
-    fn header_offset_from_payload() -> usize {
-        0
-    }
-
-    /// #  Safety
-    /// - the caller must guarantee that the pointee type of UntypedArenaPtr is T
-    /// - the pointer must be non-null
-    unsafe fn typed_ptr(ptr: UntypedArenaPtr) -> TypedArenaPtr<Self> {
-        TypedArenaPtr(NonNull::new_unchecked(
-            ptr.get_ptr().cast_mut().cast::<IndexPtr>(),
-        ))
-    }
-
-    #[inline]
-    fn alloc(arena: &mut Arena, value: Self) -> TypedArenaPtr<Self> {
-        let slab = Box::new(IndexPtrSlab {
-            next: arena.base.take(),
-            index_ptr: value,
-        });
-
-        let (allocated_ptr, untyped_slab) = slab.to_untyped();
-        arena.base = Some(untyped_slab);
-        allocated_ptr
-    }
-
-    /// # Safety
-    /// - ptr points to an allocated slab of the correct kind
-    unsafe fn dealloc(ptr: NonNull<TypedAllocSlab<Self>>) {
-        drop(unsafe { Box::from_raw(ptr.as_ptr().cast::<IndexPtrSlab>()) });
+}
+impl AllocateInArena<Child> for Child {
+    fn arena_allocate(self, arena: &mut Arena) -> TypedArenaPtr<Child> {
+        Child::alloc(arena, ManuallyDrop::new(self))
     }
 }
 
@@ -691,13 +413,6 @@ pub struct AllocSlab {
     header: ArenaHeader,
 }
 
-#[repr(C)]
-#[derive(Debug)]
-pub struct IndexPtrSlab {
-    next: Option<UntypedArenaSlab>,
-    index_ptr: IndexPtr,
-}
-
 const _: () = {
     if std::mem::align_of::<AllocSlab>() < std::mem::align_of::<*const ()>() {
         panic!("alignment of AllocSlab is too low");
@@ -706,33 +421,7 @@ const _: () = {
     if std::mem::offset_of!(AllocSlab, header) % std::mem::align_of::<*const ()>() != 0 {
         panic!("alignment of header not a multiple of pointers alignment");
     }
-
-    if std::mem::offset_of!(AllocSlab, header) != std::mem::offset_of!(IndexPtrSlab, index_ptr) {
-        panic!("IndexPtrSlab.index_ptr and AllocSlab.header are at different offsets");
-    }
 };
-
-impl IndexPtrSlab {
-    #[inline]
-    pub fn to_untyped(self: Box<Self>) -> (TypedArenaPtr<IndexPtr>, UntypedArenaSlab) {
-        let raw_box = Box::into_raw(self);
-
-        // safety: the pointer from Box::into_raw fullfills addr_of_mut's saftey requirements
-        let index_ptr_ptr = unsafe { ptr::addr_of_mut!((*raw_box).index_ptr) };
-        let allocated_ptr = TypedArenaPtr(
-            // safety: the pointer points into a valid allocation so it is non null
-            unsafe { NonNull::new_unchecked(index_ptr_ptr) },
-        );
-
-        let untyped_arena = UntypedArenaSlab {
-            // safety: pointer from Box::into_raw is never null
-            slab: unsafe { NonNull::new_unchecked(raw_box.cast::<AllocSlab>()) },
-            tag: <IndexPtr as ArenaAllocated>::tag(),
-        };
-
-        (allocated_ptr, untyped_arena)
-    }
-}
 
 #[repr(C)]
 #[derive(Debug)]
@@ -786,7 +475,8 @@ impl Drop for UntypedArenaSlab {
 #[derive(Debug)]
 pub struct Arena {
     base: Option<UntypedArenaSlab>,
-    pub f64_tbl: Arc<F64Table>,
+    pub f64_tbl: F64Table,
+    pub code_index_tbl: CodeIndexTable,
 }
 
 unsafe impl Send for Arena {}
@@ -799,6 +489,7 @@ impl Arena {
         Arena {
             base: None,
             f64_tbl: F64Table::new(),
+            code_index_tbl: CodeIndexTable::new(),
         }
     }
 }
@@ -874,11 +565,14 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {
         ArenaHeaderTag::StandardErrorStream => {
             drop_typed_slab_in_place!(StandardErrorStream, value);
         }
-        ArenaHeaderTag::IndexPtrUndefined
-        | ArenaHeaderTag::IndexPtrDynamicUndefined
-        | ArenaHeaderTag::IndexPtrDynamicIndex
-        | ArenaHeaderTag::IndexPtrIndex => {
-            drop_typed_slab_in_place!(IndexPtr, value);
+        ArenaHeaderTag::PipeReader => {
+            drop_typed_slab_in_place!(PipeReader, value);
+        }
+        ArenaHeaderTag::PipeWriter => {
+            drop_typed_slab_in_place!(PipeWriter, value);
+        }
+        ArenaHeaderTag::ChildProcess => {
+            drop_typed_slab_in_place!(Child, value);
         }
         ArenaHeaderTag::NullStream => {
             unreachable!("NullStream is never arena allocated!");
@@ -904,35 +598,34 @@ const_assert!(mem::size_of::<OrderedFloat<f64>>() == 8);
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
-
     use crate::arena::*;
     use crate::atom_table::*;
     use crate::machine::mock_wam::*;
-    use crate::machine::partial_string::*;
+    use crate::types::*;
 
     use crate::parser::dashu::{Integer, Rational};
     use ordered_float::OrderedFloat;
 
     #[test]
     fn float_ptr_cast() {
-        let wam = MockWAM::new();
+        let mut wam = MockWAM::new();
 
         let f = 0f64;
         let fp = float_alloc!(f, wam.machine_st.arena);
-        let mut cell = HeapCellValue::from(fp.clone());
+        let mut cell = HeapCellValue::from(fp);
 
-        assert_eq!(cell.get_tag(), HeapCellValueTag::F64);
+        assert_eq!(cell.get_tag(), HeapCellValueTag::F64Offset);
         assert!(!cell.get_mark_bit());
-        assert_eq!(fp.deref(), &OrderedFloat(f));
+        assert_eq!(wam.machine_st.arena.f64_tbl.get_entry(fp), OrderedFloat(f));
 
         cell.set_mark_bit(true);
 
         assert!(cell.get_mark_bit());
 
         read_heap_cell!(cell,
-            (HeapCellValueTag::F64, ptr) => {
-                assert_eq!(OrderedFloat(*ptr), OrderedFloat(f))
+            (HeapCellValueTag::F64Offset, offset) => {
+                let fp = wam.machine_st.arena.f64_tbl.get_entry(offset);
+                assert_eq!(fp, OrderedFloat(0f64))
             }
             _ => { unreachable!() }
         );
@@ -943,12 +636,12 @@ mod tests {
         let mut wam = MockWAM::new();
         #[cfg(target_pointer_width = "32")]
         let const_value = HeapCellValue::from(ConsPtr::build_with(
-            0x0000_0431 as *const _,
+            std::ptr::without_provenance(0x0000_0431),
             ConsPtrMaskTag::Cons,
         ));
         #[cfg(target_pointer_width = "64")]
         let const_value = HeapCellValue::from(ConsPtr::build_with(
-            0x0000_5555_ff00_0431 as *const _,
+            std::ptr::without_provenance(0x0000_5555_ff00_0431),
             ConsPtrMaskTag::Cons,
         ));
 
@@ -992,7 +685,7 @@ mod tests {
 
         assert!(!big_int_ptr.as_ptr().is_null());
 
-        let cell = HeapCellValue::from(Literal::Integer(big_int_ptr));
+        let cell = HeapCellValue::from(big_int_ptr);
         assert_eq!(cell.get_tag(), HeapCellValueTag::Cons);
 
         let untyped_arena_ptr = match cell.to_untyped_arena_ptr() {
@@ -1098,31 +791,6 @@ mod tests {
             _ => { unreachable!() }
         );
 
-        // complete string
-
-        let pstr_var_cell =
-            put_partial_string(&mut wam.machine_st.heap, "ronan", &wam.machine_st.atom_tbl);
-        let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
-
-        assert_eq!(pstr_cell.get_tag(), HeapCellValueTag::PStr);
-
-        match pstr_cell.to_pstr() {
-            Some(pstr) => {
-                assert_eq!(&*pstr.as_str_from(0), "ronan");
-            }
-            None => {
-                unreachable!();
-            }
-        }
-
-        read_heap_cell!(pstr_cell,
-            (HeapCellValueTag::PStr, pstr_atom) => {
-                let pstr = PartialString::from(pstr_atom);
-                assert_eq!(&*pstr.as_str_from(0), "ronan");
-            }
-            _ => { unreachable!() }
-        );
-
         // fixnum
 
         let fixnum_cell = fixnum_as_cell!(Fixnum::build_with(3));
@@ -1141,7 +809,9 @@ mod tests {
             _ => { unreachable!() }
         );
 
-        let fixnum_b_cell = fixnum_as_cell!(Fixnum::build_with(1 << 54));
+        let fixnum_b_cell = fixnum_as_cell!(
+            Fixnum::build_with_checked(1i64 << 54).expect("1 << 54 fits in Fixnum")
+        );
 
         assert_eq!(fixnum_b_cell.get_tag(), HeapCellValueTag::Fixnum);
 
@@ -1150,41 +820,29 @@ mod tests {
             None => unreachable!(),
         }
 
-        if Fixnum::build_with_checked(1 << 56).is_ok() {
-            unreachable!()
-        }
+        Fixnum::build_with_checked(1i64 << 56).expect_err("1 << 56 is too large for fixnum");
 
-        if Fixnum::build_with_checked(i64::MAX).is_ok() {
-            unreachable!()
-        }
+        Fixnum::build_with_checked(i64::MAX).expect_err("i64::MAX is too large for Fixnum");
+        Fixnum::build_with_checked(i64::MIN).expect_err("i64::MIN is too small for Fixnum");
+        assert_eq!(
+            Fixnum::build_with_checked(-1i64)
+                .expect("-1 fits in fixnum")
+                .get_num(),
+            -1
+        );
 
-        if Fixnum::build_with_checked(i64::MIN).is_ok() {
-            unreachable!()
-        }
+        Fixnum::build_with_checked((1i64 << 55) - 1)
+            .expect("(1 << 55) - 1 is the largest value that fits in Fixnum");
 
-        match Fixnum::build_with_checked(-1) {
-            Ok(n) => assert_eq!(n.get_num(), -1),
-            _ => unreachable!(),
-        }
+        Fixnum::build_with_checked(-(1i64 << 55))
+            .expect("-(1 << 55) is the smallest value that fits in fixnum");
+        Fixnum::build_with_checked(-(1i64 << 55) - 1)
+            .expect_err("-(1<<55) - 1 is too small for Fixnum");
 
-        match Fixnum::build_with_checked((1 << 55) - 1) {
-            Ok(n) => assert_eq!(n.get_num(), (1 << 55) - 1),
-            _ => unreachable!(),
-        }
-
-        match Fixnum::build_with_checked(-(1 << 55)) {
-            Ok(n) => assert_eq!(n.get_num(), -(1 << 55)),
-            _ => unreachable!(),
-        }
-
-        if Fixnum::build_with_checked(-(1 << 55) - 1).is_ok() {
-            unreachable!()
-        }
-
-        match Fixnum::build_with_checked(-1) {
-            Ok(n) => assert_eq!(-n, Fixnum::build_with(1)),
-            _ => unreachable!(),
-        }
+        assert_eq!(
+            -Fixnum::build_with_checked(-1i64).expect("-1 fits in Fixnum"),
+            Fixnum::build_with(1)
+        );
 
         // float
 
@@ -1192,7 +850,7 @@ mod tests {
         let float_ptr = float_alloc!(float, wam.machine_st.arena);
         let cell = HeapCellValue::from(float_ptr);
 
-        assert_eq!(cell.get_tag(), HeapCellValueTag::F64);
+        assert_eq!(cell.get_tag(), HeapCellValueTag::F64Offset);
 
         // char
 
@@ -1200,8 +858,8 @@ mod tests {
         let char_cell = char_as_cell!(c);
 
         read_heap_cell!(char_cell,
-            (HeapCellValueTag::Char, c) => {
-                assert_eq!(c, 'c');
+            (HeapCellValueTag::Atom, (c, _arity)) => {
+                assert_eq!(&*c.as_str(), "c");
             }
             _ => { unreachable!() }
         );
@@ -1210,8 +868,8 @@ mod tests {
         let cyrillic_char_cell = char_as_cell!(c);
 
         read_heap_cell!(cyrillic_char_cell,
-            (HeapCellValueTag::Char, c) => {
-                assert_eq!(c, 'Ћ');
+            (HeapCellValueTag::Atom, (c, _arity)) => {
+                assert_eq!(&*c.as_str(), "Ћ");
             }
             _ => { unreachable!() }
         );

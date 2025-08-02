@@ -4,16 +4,13 @@ pub use crate::machine::machine_state::*;
 pub use crate::machine::streams::*;
 pub use crate::machine::*;
 pub use crate::parser::ast::*;
-use crate::read::*;
-pub use crate::types::*;
-
-use std::sync::Arc;
 
 #[cfg(test)]
 use crate::machine::copier::CopierTarget;
+use crate::read::TermWriteResult;
 
 #[cfg(test)]
-use std::ops::{Deref, DerefMut, Index, IndexMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut, Range};
 
 // a mini-WAM for test purposes.
 
@@ -31,7 +28,6 @@ impl MockWAM {
         Self {
             machine_st: MachineState::new(),
             op_dir,
-            //flags: MachineFlags::default(),
         }
     }
 
@@ -55,16 +51,15 @@ impl MockWAM {
         term_string: &'static str,
     ) -> Result<String, CompilationError> {
         let term_write_result = self.parse_and_write_parsed_term_to_heap(term_string)?;
-
-        print_heap_terms(self.machine_st.heap.iter(), term_write_result.heap_loc);
+        print_heap_terms(&self.machine_st.heap, term_write_result.heap_loc);
 
         let mut printer = HCPrinter::new(
             &mut self.machine_st.heap,
-            Arc::clone(&self.machine_st.atom_tbl),
             &mut self.machine_st.stack,
+            &self.machine_st.arena,
             &self.op_dir,
             PrinterOutputter::new(),
-            heap_loc_as_cell!(term_write_result.heap_loc),
+            term_write_result.heap_loc,
         );
 
         printer.var_names = term_write_result
@@ -95,6 +90,7 @@ pub struct TermCopyingMockWAM<'a> {
 impl<'a> Index<usize> for TermCopyingMockWAM<'a> {
     type Output = HeapCellValue;
 
+    #[inline]
     fn index(&self, index: usize) -> &HeapCellValue {
         &self.wam.machine_st.heap[index]
     }
@@ -112,6 +108,7 @@ impl<'a> IndexMut<usize> for TermCopyingMockWAM<'a> {
 impl<'a> Deref for TermCopyingMockWAM<'a> {
     type Target = MockWAM;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         self.wam
     }
@@ -119,6 +116,7 @@ impl<'a> Deref for TermCopyingMockWAM<'a> {
 
 #[cfg(test)]
 impl<'a> DerefMut for TermCopyingMockWAM<'a> {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.wam
     }
@@ -153,10 +151,6 @@ impl<'a> CopierTarget for TermCopyingMockWAM<'a> {
         }
     }
 
-    fn push(&mut self, val: HeapCellValue) {
-        self.wam.machine_st.heap.push(val);
-    }
-
     fn push_attr_var_queue(&mut self, attr_var_loc: usize) {
         self.wam
             .machine_st
@@ -170,43 +164,66 @@ impl<'a> CopierTarget for TermCopyingMockWAM<'a> {
     }
 
     fn threshold(&self) -> usize {
-        self.wam.machine_st.heap.len()
+        self.wam.machine_st.heap.cell_len()
+    }
+
+    #[inline(always)]
+    fn copy_pstr_to_threshold(&mut self, pstr_loc: usize) -> Result<usize, usize> {
+        self.wam.machine_st.heap.copy_pstr_within(pstr_loc)
+    }
+
+    #[inline(always)]
+    fn as_slice_from<'b>(&'b self, from: usize) -> Box<dyn Iterator<Item = u8> + 'b> {
+        Box::new(self.wam.machine_st.heap.as_slice()[from..].iter().cloned())
+    }
+
+    #[inline(always)]
+    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter, usize> {
+        self.wam.machine_st.heap.reserve(num_cells)
+    }
+
+    #[inline(always)]
+    fn copy_slice_to_end(&mut self, bounds: Range<usize>) -> Result<(), usize> {
+        self.wam.machine_st.heap.copy_slice_to_end(bounds)
     }
 }
 
 #[cfg(test)]
-pub fn all_cells_marked_and_unforwarded(heap: &[HeapCellValue]) {
-    for (idx, cell) in heap.iter().enumerate() {
+pub fn all_cells_marked_and_unforwarded(heap: &Heap, offset: usize) {
+    for curr_idx in offset..heap.cell_len() {
+        let cell = heap[curr_idx];
+
         assert!(
             cell.get_mark_bit(),
-            "cell {:?} at index {} is not marked",
-            cell,
-            idx
+            "cell {cell:?} at index {curr_idx} is not marked"
         );
         assert!(
             !cell.get_forwarding_bit(),
-            "cell {:?} at index {} is forwarded",
-            cell,
-            idx
+            "cell {cell:?} at index {curr_idx} is forwarded"
         );
     }
 }
 
 #[cfg(test)]
-pub fn all_cells_unmarked(heap: &Heap) {
-    for (idx, cell) in heap.iter().enumerate() {
-        assert!(
-            !cell.get_mark_bit(),
-            "cell {:?} at index {} is still marked",
-            cell,
-            idx
-        );
+pub fn unmark_all_cells(heap: &mut Heap, offset: usize) {
+    for idx in offset..heap.cell_len() {
+        heap[idx].set_mark_bit(false);
+    }
+}
+
+#[cfg(test)]
+pub fn all_cells_unmarked(iter: &impl SizedHeap) {
+    let mut idx = 0;
+    let cell_len = iter.cell_len();
+
+    while idx < cell_len {
+        let curr_idx = idx;
+        idx += 1;
+        let cell = iter[curr_idx];
 
         assert!(
-            !cell.get_forwarding_bit(),
-            "cell {:?} at index {} is still forwarded",
-            cell,
-            idx
+            !cell.get_mark_bit(),
+            "cell {cell:?} at index {curr_idx} is still marked"
         );
     }
 }
@@ -232,6 +249,7 @@ pub(crate) fn parse_and_write_parsed_term_to_heap(
 
 impl Machine {
     /// For use in tests.
+    #[allow(clippy::unbuffered_bytes)]
     pub fn test_load_file(&mut self, file: &str) -> Vec<u8> {
         let stream = Stream::from_owned_string(
             std::fs::read_to_string(AsRef::<std::path::Path>::as_ref(file)).unwrap(),
@@ -243,6 +261,7 @@ impl Machine {
     }
 
     /// For use in tests.
+    #[allow(clippy::unbuffered_bytes)]
     pub fn test_load_string(&mut self, code: &str) -> Vec<u8> {
         let stream = Stream::from_owned_string(code.to_owned(), &mut self.machine_st.arena);
 
@@ -254,6 +273,8 @@ impl Machine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::functor_macro::FunctorElement;
 
     #[test]
     fn unify_tests() {
@@ -387,36 +408,66 @@ mod tests {
 
         wam.heap.clear();
 
-        wam.heap.push(pstr_as_cell!(atom!("this is a string")));
-        wam.heap.push(heap_loc_as_cell!(1));
+        let mut writer = wam.heap.reserve(96).unwrap();
 
-        wam.heap.push(pstr_as_cell!(atom!("this is a string")));
-        wam.heap.push(pstr_loc_as_cell!(4));
+        writer.write_with(|section| {
+            section.push_pstr("this is a string"); // 0
 
-        wam.heap.push(pstr_offset_as_cell!(0));
-        wam.heap.push(fixnum_as_cell!(Fixnum::build_with(6)));
+            let h = section.cell_len();
+            assert_eq!(h, 3);
 
-        unify!(wam, pstr_loc_as_cell!(0), pstr_loc_as_cell!(2));
+            section.push_cell(heap_loc_as_cell!(h)); // 3
+            section.push_pstr("this is a string"); // 4
+
+            let h = section.cell_len();
+            assert_eq!(h + 1, 8);
+
+            section.push_cell(pstr_loc_as_cell!(heap_index!(h + 1))); // 7
+            section.push_pstr("this is a string"); // 8
+
+            section.push_cell(pstr_loc_as_cell!(heap_index!(h + 1)));
+        });
+
+        unify!(wam, pstr_loc_as_cell!(0), pstr_loc_as_cell!(heap_index!(4)));
 
         assert!(!wam.fail);
 
-        assert_eq!(wam.heap[1], pstr_loc_as_cell!(4));
-
-        all_cells_unmarked(&wam.heap);
+        assert_eq!(
+            wam.heap
+                .slice_to_str(heap_index!(0), "this is a string".len()),
+            "this is a string"
+        );
+        assert_eq!(wam.heap[3], pstr_loc_as_cell!(heap_index!(8)));
+        assert_eq!(
+            wam.heap
+                .slice_to_str(heap_index!(4), "this is a string".len()),
+            "this is a string"
+        );
+        assert_eq!(wam.heap[7], pstr_loc_as_cell!(heap_index!(8)));
+        assert_eq!(
+            wam.heap
+                .slice_to_str(heap_index!(8), "this is a string".len()),
+            "this is a string"
+        );
+        assert_eq!(wam.heap[11], pstr_loc_as_cell!(heap_index!(8)));
 
         wam.heap.clear();
 
-        wam.heap.push(list_loc_as_cell!(1));
-        wam.heap.push(atom_as_cell!(atom!("a")));
-        wam.heap.push(list_loc_as_cell!(3));
-        wam.heap.push(atom_as_cell!(atom!("b")));
-        wam.heap.push(heap_loc_as_cell!(0));
+        let mut writer = wam.heap.reserve(96).unwrap();
 
-        wam.heap.push(list_loc_as_cell!(6));
-        wam.heap.push(atom_as_cell!(atom!("a")));
-        wam.heap.push(list_loc_as_cell!(8));
-        wam.heap.push(atom_as_cell!(atom!("b")));
-        wam.heap.push(heap_loc_as_cell!(5));
+        writer.write_with(|section| {
+            section.push_cell(list_loc_as_cell!(1));
+            section.push_cell(atom_as_cell!(atom!("a")));
+            section.push_cell(list_loc_as_cell!(3));
+            section.push_cell(atom_as_cell!(atom!("b")));
+            section.push_cell(heap_loc_as_cell!(0));
+
+            section.push_cell(list_loc_as_cell!(6));
+            section.push_cell(atom_as_cell!(atom!("a")));
+            section.push_cell(list_loc_as_cell!(8));
+            section.push_cell(atom_as_cell!(atom!("b")));
+            section.push_cell(heap_loc_as_cell!(5));
+        });
 
         unify!(wam, heap_loc_as_cell!(0), heap_loc_as_cell!(5));
 
@@ -426,17 +477,21 @@ mod tests {
 
         wam.heap.clear();
 
-        wam.heap.push(list_loc_as_cell!(1));
-        wam.heap.push(atom_as_cell!(atom!("a")));
-        wam.heap.push(list_loc_as_cell!(3));
-        wam.heap.push(atom_as_cell!(atom!("b")));
-        wam.heap.push(heap_loc_as_cell!(0));
+        let mut writer = wam.heap.reserve(96).unwrap();
 
-        wam.heap.push(list_loc_as_cell!(6));
-        wam.heap.push(atom_as_cell!(atom!("a")));
-        wam.heap.push(list_loc_as_cell!(8));
-        wam.heap.push(atom_as_cell!(atom!("c")));
-        wam.heap.push(heap_loc_as_cell!(5));
+        writer.write_with(|section| {
+            section.push_cell(list_loc_as_cell!(1));
+            section.push_cell(atom_as_cell!(atom!("a")));
+            section.push_cell(list_loc_as_cell!(3));
+            section.push_cell(atom_as_cell!(atom!("b")));
+            section.push_cell(heap_loc_as_cell!(0));
+
+            section.push_cell(list_loc_as_cell!(6));
+            section.push_cell(atom_as_cell!(atom!("a")));
+            section.push_cell(list_loc_as_cell!(8));
+            section.push_cell(atom_as_cell!(atom!("c")));
+            section.push_cell(heap_loc_as_cell!(5));
+        });
 
         unify!(wam, heap_loc_as_cell!(0), heap_loc_as_cell!(5));
 
@@ -444,19 +499,24 @@ mod tests {
 
         wam.fail = false;
         all_cells_unmarked(&wam.heap);
+
         wam.heap.clear();
 
-        wam.heap.push(list_loc_as_cell!(1));
-        wam.heap.push(atom_as_cell!(atom!("a")));
-        wam.heap.push(list_loc_as_cell!(3));
-        wam.heap.push(atom_as_cell!(atom!("b")));
-        wam.heap.push(heap_loc_as_cell!(5));
+        let mut writer = wam.heap.reserve(96).unwrap();
 
-        wam.heap.push(list_loc_as_cell!(6));
-        wam.heap.push(atom_as_cell!(atom!("a")));
-        wam.heap.push(list_loc_as_cell!(8));
-        wam.heap.push(atom_as_cell!(atom!("b")));
-        wam.heap.push(heap_loc_as_cell!(0));
+        writer.write_with(|section| {
+            section.push_cell(list_loc_as_cell!(1));
+            section.push_cell(atom_as_cell!(atom!("a")));
+            section.push_cell(list_loc_as_cell!(3));
+            section.push_cell(atom_as_cell!(atom!("b")));
+            section.push_cell(heap_loc_as_cell!(5));
+
+            section.push_cell(list_loc_as_cell!(6));
+            section.push_cell(atom_as_cell!(atom!("a")));
+            section.push_cell(list_loc_as_cell!(8));
+            section.push_cell(atom_as_cell!(atom!("b")));
+            section.push_cell(heap_loc_as_cell!(0));
+        });
 
         unify!(wam, heap_loc_as_cell!(0), heap_loc_as_cell!(5));
 
@@ -468,7 +528,7 @@ mod tests {
             let term_write_result_1 =
                 parse_and_write_parsed_term_to_heap(&mut wam, "X = g(X,y).", &op_dir).unwrap();
 
-            print_heap_terms(wam.heap.iter(), term_write_result_1.heap_loc);
+            print_heap_terms(&wam.heap, term_write_result_1.heap_loc);
 
             unify!(wam, heap_loc_as_cell!(2), str_loc_as_cell!(4));
 
@@ -510,8 +570,15 @@ mod tests {
 
         let mut wam = MachineState::new();
 
-        wam.heap.push(heap_loc_as_cell!(0));
-        wam.heap.push(heap_loc_as_cell!(1));
+        // clear the heap of resource error data etc
+        wam.heap.clear();
+
+        let mut writer = wam.heap.reserve(96).unwrap();
+
+        writer.write_with(|section| {
+            section.push_cell(heap_loc_as_cell!(0));
+            section.push_cell(heap_loc_as_cell!(1));
+        });
 
         assert_eq!(
             compare_term_test!(wam, wam.heap[0], wam.heap[1]),
@@ -533,12 +600,10 @@ mod tests {
             Some(Ordering::Equal)
         );
 
+        let cstr_cell = wam.heap.allocate_cstr("string").unwrap();
+
         assert_eq!(
-            compare_term_test!(
-                wam,
-                atom_as_cell!(atom!("atom")),
-                atom_as_cstr_cell!(atom!("string"))
-            ),
+            compare_term_test!(wam, atom_as_cell!(atom!("atom")), cstr_cell),
             Some(Ordering::Less)
         );
 
@@ -571,8 +636,12 @@ mod tests {
 
         wam.heap.clear();
 
-        wam.heap.push(atom_as_cell!(atom!("f"), 1));
-        wam.heap.push(heap_loc_as_cell!(1));
+        let mut writer = wam.heap.reserve(96).unwrap();
+
+        writer.write_with(|section| {
+            section.push_cell(atom_as_cell!(atom!("f"), 1));
+            section.push_cell(heap_loc_as_cell!(1));
+        });
 
         assert_eq!(
             compare_term_test!(wam, heap_loc_as_cell!(0), heap_loc_as_cell!(0)),
@@ -586,21 +655,25 @@ mod tests {
 
         wam.heap.clear();
 
-        // [1,2,3]
-        wam.heap.push(list_loc_as_cell!(1));
-        wam.heap.push(fixnum_as_cell!(Fixnum::build_with(1)));
-        wam.heap.push(list_loc_as_cell!(3));
-        wam.heap.push(fixnum_as_cell!(Fixnum::build_with(2)));
-        wam.heap.push(list_loc_as_cell!(5));
-        wam.heap.push(fixnum_as_cell!(Fixnum::build_with(3)));
-        wam.heap.push(empty_list_as_cell!());
+        let mut writer = wam.heap.reserve(96).unwrap();
 
-        // [1,2]
-        wam.heap.push(list_loc_as_cell!(8));
-        wam.heap.push(fixnum_as_cell!(Fixnum::build_with(1)));
-        wam.heap.push(list_loc_as_cell!(10));
-        wam.heap.push(fixnum_as_cell!(Fixnum::build_with(2)));
-        wam.heap.push(empty_list_as_cell!());
+        writer.write_with(|section| {
+            // [1,2,3]
+            section.push_cell(list_loc_as_cell!(1));
+            section.push_cell(fixnum_as_cell!(Fixnum::build_with(1)));
+            section.push_cell(list_loc_as_cell!(3));
+            section.push_cell(fixnum_as_cell!(Fixnum::build_with(2)));
+            section.push_cell(list_loc_as_cell!(5));
+            section.push_cell(fixnum_as_cell!(Fixnum::build_with(3)));
+            section.push_cell(empty_list_as_cell!());
+
+            // [1,2]
+            section.push_cell(list_loc_as_cell!(8));
+            section.push_cell(fixnum_as_cell!(Fixnum::build_with(1)));
+            section.push_cell(list_loc_as_cell!(10));
+            section.push_cell(fixnum_as_cell!(Fixnum::build_with(2)));
+            section.push_cell(empty_list_as_cell!());
+        });
 
         assert_eq!(
             compare_term_test!(wam, heap_loc_as_cell!(7), heap_loc_as_cell!(7)),
@@ -626,12 +699,10 @@ mod tests {
             Some(Ordering::Greater)
         );
 
+        let cstr_cell = wam.heap.allocate_cstr("string").unwrap();
+
         assert_eq!(
-            compare_term_test!(
-                wam,
-                empty_list_as_cell!(),
-                atom_as_cstr_cell!(atom!("string"))
-            ),
+            compare_term_test!(wam, empty_list_as_cell!(), cstr_cell),
             Some(Ordering::Less)
         );
 
@@ -662,55 +733,63 @@ mod tests {
     fn is_cyclic_term_tests() {
         let mut wam = MachineState::new();
 
-        assert!(!wam.is_cyclic_term(atom_as_cell!(atom!("f"))));
-        assert!(!wam.is_cyclic_term(fixnum_as_cell!(Fixnum::build_with(555))));
+        let mut writer = wam.heap.reserve(96).unwrap();
 
-        wam.heap.push(heap_loc_as_cell!(0));
+        writer.write_with(|section| {
+            section.push_cell(atom_as_cell!(atom!("f")));
+            section.push_cell(fixnum_as_cell!(Fixnum::build_with(555)));
+            section.push_cell(heap_loc_as_cell!(0));
+        });
 
-        assert!(!wam.is_cyclic_term(heap_loc_as_cell!(0)));
+        assert!(!wam.is_cyclic_term(0));
+        assert!(!wam.is_cyclic_term(1));
+        assert!(!wam.is_cyclic_term(2));
 
         all_cells_unmarked(&wam.heap);
         wam.heap.clear();
 
-        wam.heap
-            .extend(functor!(atom!("f"), [atom(atom!("a")), atom(atom!("b"))]));
+        let mut functor_writer = Heap::functor_writer(functor!(
+            atom!("f"),
+            [atom_as_cell((atom!("a"))), atom_as_cell((atom!("b")))]
+        ));
 
-        assert!(!wam.is_cyclic_term(str_loc_as_cell!(0)));
+        functor_writer(&mut wam.heap).unwrap();
+
+        let h = wam.heap.cell_len();
+        wam.heap.push_cell(str_loc_as_cell!(0)).unwrap();
+
+        assert!(!wam.is_cyclic_term(h));
 
         all_cells_unmarked(&wam.heap);
 
-        assert!(!wam.is_cyclic_term(heap_loc_as_cell!(1)));
+        assert!(!wam.is_cyclic_term(1));
 
         all_cells_unmarked(&wam.heap);
 
-        assert!(!wam.is_cyclic_term(heap_loc_as_cell!(2)));
+        assert!(!wam.is_cyclic_term(2));
 
         all_cells_unmarked(&wam.heap);
 
         wam.heap[2] = str_loc_as_cell!(0);
 
-        print_heap_terms(wam.heap.iter(), 0);
+        print_heap_terms(&wam.heap, 0);
 
-        assert!(wam.is_cyclic_term(str_loc_as_cell!(0)));
+        assert!(wam.is_cyclic_term(2));
 
         all_cells_unmarked(&wam.heap);
 
         wam.heap[2] = atom_as_cell!(atom!("b"));
         wam.heap[1] = str_loc_as_cell!(0);
 
-        assert!(wam.is_cyclic_term(str_loc_as_cell!(0)));
-
-        all_cells_unmarked(&wam.heap);
-
-        assert!(wam.is_cyclic_term(heap_loc_as_cell!(1)));
+        assert!(wam.is_cyclic_term(1));
 
         all_cells_unmarked(&wam.heap);
 
         wam.heap.clear();
 
-        wam.heap.push(pstr_as_cell!(atom!("a string")));
-        wam.heap.push(empty_list_as_cell!());
+        let h = wam.heap.cell_len();
+        wam.heap.allocate_cstr("a string").unwrap();
 
-        assert!(!wam.is_cyclic_term(pstr_loc_as_cell!(0)));
+        assert!(!wam.is_cyclic_term(h));
     }
 }

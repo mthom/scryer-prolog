@@ -3,6 +3,7 @@ use crate::parser::ast::*;
 
 use crate::forms::*;
 use crate::instructions::*;
+use crate::types::HeapCellValue;
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
@@ -112,7 +113,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
 
         match constant_key {
             Some(OptArgIndexKey::Literal(_, _, constant, _)) => {
-                constants.insert(*constant, constant_ptr);
+                constants.insert(HeapCellValue::from(*constant), constant_ptr);
             }
             _ if constant_ptr.is_external() => {
                 // this must be a defunct clause, because it's been deleted
@@ -144,7 +145,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
     fn add_static_indexed_choice_for_constant(
         &mut self,
         external: usize,
-        constant: Literal,
+        constant: HeapCellValue,
         index: usize,
     ) {
         let third_level_index = if self.append_or_prepend.is_append() {
@@ -181,7 +182,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
     fn add_dynamic_indexed_choice_for_constant(
         &mut self,
         external: usize,
-        constant: Literal,
+        constant: HeapCellValue,
         index: usize,
     ) {
         let third_level_index = if self.append_or_prepend.is_append() {
@@ -235,8 +236,8 @@ impl<'a> IndexingCodeMergingPtr<'a> {
 
     fn index_overlapping_constant(
         &mut self,
-        orig_constant: Literal,
-        overlapping_constant: Literal,
+        orig_constant: HeapCellValue,
+        overlapping_constant: HeapCellValue,
         index: usize,
     ) {
         loop {
@@ -316,7 +317,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         }
     }
 
-    fn index_constant(&mut self, constant: Literal, index: usize) {
+    fn index_constant(&mut self, constant: HeapCellValue, index: usize) {
         loop {
             let indexing_code_len = self.indexing_code.len();
 
@@ -633,12 +634,15 @@ pub(crate) fn merge_clause_index(
     match &opt_arg_index_key {
         OptArgIndexKey::Literal(_, index_loc, constant, ref overlapping_constants) => {
             let offset = new_clause_loc - index_loc + 1;
-            merging_ptr.index_constant(*constant, offset);
+            merging_ptr.index_constant(HeapCellValue::from(*constant), offset);
 
-            for overlapping_constant in overlapping_constants {
+            if let Some(overlapping_constant) = overlapping_constants {
                 merging_ptr.offset = 0;
-
-                merging_ptr.index_overlapping_constant(*constant, *overlapping_constant, offset);
+                merging_ptr.index_overlapping_constant(
+                    HeapCellValue::from(*constant),
+                    HeapCellValue::from(*overlapping_constant),
+                    offset,
+                );
             }
         }
         OptArgIndexKey::Structure(_, index_loc, name, arity) => {
@@ -664,7 +668,7 @@ pub(crate) fn merge_clause_index(
 
 pub(crate) fn remove_constant_indices(
     constant: Literal,
-    overlapping_constants: &[Literal],
+    overlapping_constants: Option<Literal>,
     indexing_code: &mut [IndexingLine],
     offset: usize,
 ) {
@@ -693,15 +697,13 @@ pub(crate) fn remove_constant_indices(
 
     let mut constants_index = 0;
 
-    for constant in iter {
+    for constant in iter.map(|l| HeapCellValue::from(*l)) {
         loop {
             match &mut indexing_code[index] {
                 IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
                     ref mut constants,
                 )) => {
                     constants_index = index;
-
-                    let constant = *constant;
 
                     match constants.get(&constant).cloned() {
                         Some(IndexingCodePtr::DynamicExternal(_))
@@ -740,7 +742,7 @@ pub(crate) fn remove_constant_indices(
                                 IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
                                     ref mut constants,
                                 )) => {
-                                    constants.insert(*constant, ext);
+                                    constants.insert(constant, ext);
                                 }
                                 _ => {
                                     unreachable!()
@@ -773,7 +775,7 @@ pub(crate) fn remove_constant_indices(
                                 IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
                                     ref mut constants,
                                 )) => {
-                                    constants.insert(*constant, ext);
+                                    constants.insert(constant, ext);
                                 }
                                 _ => {
                                     unreachable!()
@@ -1033,7 +1035,7 @@ pub(crate) fn remove_index(
 ) {
     match opt_arg_index_key {
         OptArgIndexKey::Literal(_, _, constant, ref overlapping_constants) => {
-            remove_constant_indices(*constant, overlapping_constants, indexing_code, clause_loc);
+            remove_constant_indices(*constant, *overlapping_constants, indexing_code, clause_loc);
         }
         OptArgIndexKey::Structure(_, _, name, arity) => {
             remove_structure_index(*name, *arity, indexing_code, clause_loc);
@@ -1095,56 +1097,26 @@ fn uncap_choice_seq_with_try(prelude: &mut [IndexedChoiceInstruction]) {
     }
 }
 
-pub(crate) fn constant_key_alternatives(
-    constant: Literal,
-    atom_tbl: &AtomTable,
-    // arena: &mut Arena,
-) -> Vec<Literal> {
-    let mut constants = vec![];
+pub(crate) fn constant_key_alternatives(constant: Literal) -> Option<Literal> {
+    let n = match &constant {
+        Literal::Rational(n) if n.denominator().is_one() => n.numerator(),
+        Literal::Integer(n) => n,
+        _ => return None,
+    };
 
-    match constant {
-        Literal::Atom(ref name) => {
-            if let Some(c) = name.as_char() {
-                constants.push(Literal::Char(c));
-            }
-        }
-        Literal::Char(c) => {
-            let atom = AtomTable::build_with(atom_tbl, &c.to_string());
-            constants.push(Literal::Atom(atom));
-        }
-        /*
-        // constant_to_literal takes care of the downward conversion from Integer to Fixnum
-        // if possible.
-        Literal::Fixnum(ref n) => {
-            constants.push(Literal::Integer(arena_alloc!(n, arena)));
-        }
-        */
-        Literal::Integer(ref n) => {
-            let result = (&**n).try_into();
-            if let Ok(value) = result {
-                Fixnum::build_with_checked(value)
-                    .map(|n| {
-                        constants.push(Literal::Fixnum(n));
-                    })
-                    .unwrap();
-            }
-        }
-        _ => {}
-    }
-
-    constants
+    Fixnum::build_with_checked(n).map(Literal::Fixnum).ok()
 }
 
 #[derive(Debug)]
 pub(crate) struct StaticCodeIndices {
-    constants: IndexMap<Literal, VecDeque<IndexedChoiceInstruction>, FxBuildHasher>,
+    constants: IndexMap<HeapCellValue, VecDeque<IndexedChoiceInstruction>, FxBuildHasher>,
     lists: VecDeque<IndexedChoiceInstruction>,
     structures: IndexMap<(Atom, usize), VecDeque<IndexedChoiceInstruction>, FxBuildHasher>,
 }
 
 #[derive(Debug)]
 pub(crate) struct DynamicCodeIndices {
-    constants: IndexMap<Literal, VecDeque<usize>, FxBuildHasher>,
+    constants: IndexMap<HeapCellValue, VecDeque<usize>, FxBuildHasher>,
     lists: VecDeque<usize>,
     structures: IndexMap<(Atom, usize), VecDeque<usize>, FxBuildHasher>,
 }
@@ -1156,7 +1128,7 @@ pub(crate) trait Indexer {
 
     fn constants(
         &mut self,
-    ) -> &mut IndexMap<Literal, VecDeque<Self::ThirdLevelIndex>, FxBuildHasher>;
+    ) -> &mut IndexMap<HeapCellValue, VecDeque<Self::ThirdLevelIndex>, FxBuildHasher>;
     fn lists(&mut self) -> &mut VecDeque<Self::ThirdLevelIndex>;
     fn structures(
         &mut self,
@@ -1204,7 +1176,7 @@ impl Indexer for StaticCodeIndices {
     #[inline]
     fn constants(
         &mut self,
-    ) -> &mut IndexMap<Literal, VecDeque<IndexedChoiceInstruction>, FxBuildHasher> {
+    ) -> &mut IndexMap<HeapCellValue, VecDeque<IndexedChoiceInstruction>, FxBuildHasher> {
         &mut self.constants
     }
 
@@ -1328,7 +1300,7 @@ impl Indexer for DynamicCodeIndices {
     }
 
     #[inline]
-    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<usize>, FxBuildHasher> {
+    fn constants(&mut self) -> &mut IndexMap<HeapCellValue, VecDeque<usize>, FxBuildHasher> {
         &mut self.constants
     }
 
@@ -1447,14 +1419,13 @@ impl<I: Indexer> CodeOffsets<I> {
         self.indices.lists().push_back(index);
     }
 
-    fn index_constant(
-        &mut self,
-        atom_tbl: &AtomTable,
-        constant: Literal,
-        index: usize,
-    ) -> Vec<Literal> {
-        let overlapping_constants = constant_key_alternatives(constant, atom_tbl);
-        let code = self.indices.constants().entry(constant).or_default();
+    fn index_constant(&mut self, constant: Literal, index: usize) -> Option<Literal> {
+        let overlapping_constant_opt = constant_key_alternatives(constant);
+        let code = self
+            .indices
+            .constants()
+            .entry(HeapCellValue::from(constant))
+            .or_default();
 
         let is_initial_index = code.is_empty();
         code.push_back(I::compute_index(
@@ -1463,8 +1434,8 @@ impl<I: Indexer> CodeOffsets<I> {
             self.non_counted_bt,
         ));
 
-        for constant in &overlapping_constants {
-            let code = self.indices.constants().entry(*constant).or_default();
+        if let Some(constant) = overlapping_constant_opt.map(HeapCellValue::from) {
+            let code = self.indices.constants().entry(constant).or_default();
 
             let is_initial_index = code.is_empty();
             let index = I::compute_index(is_initial_index, index, self.non_counted_bt);
@@ -1472,7 +1443,7 @@ impl<I: Indexer> CodeOffsets<I> {
             code.push_back(index);
         }
 
-        overlapping_constants
+        overlapping_constant_opt
     }
 
     fn index_structure(&mut self, name: Atom, arity: usize, index: usize) -> usize {
@@ -1494,14 +1465,13 @@ impl<I: Indexer> CodeOffsets<I> {
         optimal_arg: &Term,
         index: usize,
         clause_index_info: &mut ClauseIndexInfo,
-        atom_tbl: &AtomTable,
     ) {
         match optimal_arg {
             &Term::Clause(_, atom!("."), ref terms) if terms.len() == 2 => {
                 clause_index_info.opt_arg_index_key = OptArgIndexKey::List(self.optimal_index, 0);
                 self.index_list(index);
             }
-            &Term::Cons(..) | &Term::Literal(_, Literal::String(_)) | &Term::PartialString(..) => {
+            &Term::Cons(..) | &Term::PartialString(..) | &Term::CompleteString(..) => {
                 clause_index_info.opt_arg_index_key = OptArgIndexKey::List(self.optimal_index, 0);
                 self.index_list(index);
             }
@@ -1512,7 +1482,7 @@ impl<I: Indexer> CodeOffsets<I> {
                 self.index_structure(name, terms.len(), index);
             }
             &Term::Literal(_, constant) => {
-                let overlapping_constants = self.index_constant(atom_tbl, constant, index);
+                let overlapping_constants = self.index_constant(constant, index);
 
                 clause_index_info.opt_arg_index_key =
                     OptArgIndexKey::Literal(self.optimal_index, 0, constant, overlapping_constants);

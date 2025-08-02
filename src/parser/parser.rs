@@ -3,6 +3,7 @@ use dashu::Rational;
 
 use crate::arena::*;
 use crate::atom_table::*;
+use crate::offset_table::OffsetTable;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::lexer::*;
@@ -10,6 +11,7 @@ use crate::parser::lexer::*;
 use std::cell::Cell;
 use std::mem;
 use std::ops::Neg;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TokenType {
@@ -73,7 +75,6 @@ pub(crate) fn as_partial_string(
                 return Err(Term::Cons(Cell::default(), Box::new(head), Box::new(tail)));
             }
         }
-        Term::Literal(_, Literal::Char(c)) => c.to_string(),
         _ => {
             return Err(Term::Cons(Cell::default(), Box::new(head), Box::new(tail)));
         }
@@ -93,9 +94,6 @@ pub(crate) fn as_partial_string(
                             return Err(Term::Cons(Cell::default(), Box::new(head), orig_tail));
                         }
                     }
-                    Term::Literal(_, Literal::Char(c)) => {
-                        string.push(*c);
-                    }
                     _ => {
                         tail = Term::Cons(
                             Cell::default(),
@@ -113,7 +111,7 @@ pub(crate) fn as_partial_string(
                 tail_ref = tail;
             }
             Term::CompleteString(_, cstr) => {
-                string += &*cstr.as_str();
+                string += cstr.as_str();
                 tail = Term::Literal(Cell::default(), Literal::Atom(atom!("[]")));
                 break;
             }
@@ -124,12 +122,16 @@ pub(crate) fn as_partial_string(
         }
     }
 
-    match &tail {
+    match tail {
         Term::AnonVar | Term::Var(..) => Ok((string, Some(Box::new(tail)))),
         Term::Literal(_, Literal::Atom(atom!("[]"))) => Ok((string, None)),
-        Term::Literal(_, Literal::String(tail)) => {
-            string += &*tail.as_str();
+        Term::CompleteString(_, tail) => {
+            string += &tail;
             Ok((string, None))
+        }
+        Term::PartialString(_, tail_string, tail) => {
+            string += &tail_string;
+            Ok((string, Some(tail)))
         }
         _ => Ok((string, Some(Box::new(tail)))),
     }
@@ -237,7 +239,7 @@ pub struct Parser<'a, R> {
     terms: Vec<Term>,
 }
 
-fn read_tokens<R: CharRead>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserError> {
+pub fn read_tokens<R: CharRead>(lexer: &mut Lexer<'_, R>) -> Result<Vec<Token>, ParserError> {
     let mut tokens = vec![];
 
     loop {
@@ -263,22 +265,30 @@ fn read_tokens<R: CharRead>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserEr
     }
 
     tokens.reverse();
-
     Ok(tokens)
 }
 
-fn atomize_term(atom_tbl: &AtomTable, term: &Term) -> Option<Atom> {
+fn atomize_term(term: &Term) -> Option<Atom> {
     match term {
-        Term::Literal(_, ref c) => atomize_constant(atom_tbl, *c),
+        &Term::Literal(_, Literal::Atom(c)) => Some(c),
         _ => None,
     }
 }
 
-fn atomize_constant(atom_tbl: &AtomTable, c: Literal) -> Option<Atom> {
-    match c {
-        Literal::Atom(ref name) => Some(*name),
-        Literal::Char(c) => Some(AtomTable::build_with(atom_tbl, &c.to_string())),
-        _ => None,
+impl TokenType {
+    fn sep_to_atom(&mut self) -> Option<Atom> {
+        match self {
+            TokenType::Open | TokenType::OpenCT => Some(atom!("(")),
+            TokenType::Close => Some(atom!(")")),
+            TokenType::OpenList => Some(atom!("[")),
+            TokenType::CloseList => Some(atom!("]")),
+            TokenType::OpenCurly => Some(atom!("{")),
+            TokenType::CloseCurly => Some(atom!("}")),
+            TokenType::HeadTailSeparator => Some(atom!("|")),
+            TokenType::Comma => Some(atom!(",")),
+            TokenType::End => Some(atom!(".")),
+            _ => None,
+        }
     }
 }
 
@@ -298,21 +308,6 @@ impl<'a, R: CharRead> Parser<'a, R> {
             tokens: vec![],
             stack: vec![],
             terms: vec![],
-        }
-    }
-
-    fn sep_to_atom(&mut self, tt: TokenType) -> Option<Atom> {
-        match tt {
-            TokenType::Open | TokenType::OpenCT => Some(atom!("(")),
-            TokenType::Close => Some(atom!(")")),
-            TokenType::OpenList => Some(atom!("[")),
-            TokenType::CloseList => Some(atom!("]")),
-            TokenType::OpenCurly => Some(atom!("{")),
-            TokenType::CloseCurly => Some(atom!("}")),
-            TokenType::HeadTailSeparator => Some(atom!("|")),
-            TokenType::Comma => Some(atom!(",")),
-            TokenType::End => Some(atom!(".")),
-            _ => None,
         }
     }
 
@@ -385,9 +380,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
     fn shift(&mut self, token: Token, priority: usize, spec: Specifier) {
         let tt = match token {
-            Token::Literal(Literal::String(s))
-                if self.lexer.machine_st.flags.double_quotes.is_codes() =>
-            {
+            Token::String(s) if self.lexer.machine_st.flags.double_quotes.is_codes() => {
                 let mut list = Term::Literal(Cell::default(), Literal::Atom(atom!("[]")));
 
                 for c in s.as_str().chars().rev() {
@@ -395,7 +388,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         Cell::default(),
                         Box::new(Term::Literal(
                             Cell::default(),
-                            Literal::Fixnum(Fixnum::build_with(c as i64)),
+                            Literal::Fixnum(Fixnum::build_with(c)),
                         )),
                         Box::new(list),
                     );
@@ -404,10 +397,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 self.terms.push(list);
                 TokenType::Term
             }
-            Token::Literal(Literal::String(s))
-                if self.lexer.machine_st.flags.double_quotes.is_chars() =>
-            {
-                self.terms.push(Term::CompleteString(Cell::default(), s));
+            Token::String(s) => {
+                debug_assert!(self.lexer.machine_st.flags.double_quotes.is_chars());
+                self.terms
+                    .push(Term::CompleteString(Cell::default(), Rc::new(s)));
                 TokenType::Term
             }
             Token::Literal(c) => {
@@ -549,17 +542,13 @@ impl<'a, R: CharRead> Parser<'a, R> {
         let idx = self.terms.len() - arity;
 
         if TokenType::Term == self.stack[stack_len].tt
-            && atomize_term(&self.lexer.machine_st.atom_tbl, &self.terms[idx - 1]).is_some()
+            && atomize_term(&self.terms[idx - 1]).is_some()
         {
             self.stack.truncate(stack_len + 1);
 
             let mut subterms: Vec<_> = self.terms.drain(idx..).collect();
 
-            if let Some(name) = self
-                .terms
-                .pop()
-                .and_then(|t| atomize_term(&self.lexer.machine_st.atom_tbl, &t))
-            {
+            if let Some(name) = self.terms.pop().and_then(|t| atomize_term(&t)) {
                 // reduce the '.' functor to a cons cell if it applies.
                 if name == atom!(".") && subterms.len() == 2 {
                     let tail = subterms.pop().unwrap();
@@ -567,12 +556,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
                     self.terms.push(match as_partial_string(head, tail) {
                         Ok((string_buf, Some(tail))) => {
-                            Term::PartialString(Cell::default(), string_buf, tail)
+                            Term::PartialString(Cell::default(), Rc::new(string_buf), tail)
                         }
                         Ok((string_buf, None)) => {
-                            let atom =
-                                AtomTable::build_with(&self.lexer.machine_st.atom_tbl, &string_buf);
-                            Term::CompleteString(Cell::default(), atom)
+                            Term::CompleteString(Cell::default(), Rc::new(string_buf))
                         }
                         Err(term) => term,
                     });
@@ -754,11 +741,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
         self.terms.push(match list {
             Term::Cons(_, head, tail) => match as_partial_string(*head, *tail) {
                 Ok((string_buf, Some(tail))) => {
-                    Term::PartialString(Cell::default(), string_buf, tail)
+                    Term::PartialString(Cell::default(), Rc::new(string_buf), tail)
                 }
                 Ok((string_buf, None)) => {
-                    let atom = AtomTable::build_with(&self.lexer.machine_st.atom_tbl, &string_buf);
-                    Term::CompleteString(Cell::default(), atom)
+                    Term::CompleteString(Cell::default(), Rc::new(string_buf))
                 }
                 Err(term) => term,
             },
@@ -846,7 +832,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     return false;
                 }
 
-                if let Some(atom) = self.sep_to_atom(self.stack[idx].tt) {
+                if let Some(atom) = self.stack[idx].tt.sep_to_atom() {
                     self.terms
                         .push(Term::Literal(Cell::default(), Literal::Atom(atom)));
                 }
@@ -967,8 +953,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
         }
 
         match token {
-            Token::Literal(Literal::Fixnum(n)) => {
-                self.negate_number(n, |n, _| -n, |n, _| Literal::Fixnum(n))
+            Token::String(string) => {
+                self.shift(Token::String(string), 0, TERM);
             }
             Token::Literal(Literal::Integer(n)) => {
                 self.negate_number(n, negate_int_rc, |n, _| Literal::Integer(n))
@@ -976,21 +962,34 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::Literal(Literal::Rational(n)) => {
                 self.negate_number(n, negate_rat_rc, |r, _| Literal::Rational(r))
             }
-            Token::Literal(Literal::Float(n)) if F64Ptr::from_offset(n).is_infinite() => {
-		return Err(ParserError::InfiniteFloat(
-		    self.lexer.line_num,
-		    self.lexer.col_num,
-		));
-	    }
-	    Token::Literal(Literal::Float(n)) => self.negate_number(
-                **n.as_ptr(),
-                |n, _| -n,
-                |n, arena| Literal::from(float_alloc!(n, arena)),
-	    ),
-            Token::Literal(c) => {
-                let atomized = atomize_constant(&self.lexer.machine_st.atom_tbl, c);
+            Token::Literal(Literal::F64Offset(n))
+                if self
+                    .lexer
+                    .machine_st
+                    .arena
+                    .f64_tbl
+                    .get_entry(n)
+                    .is_infinite() =>
+            {
+                return Err(ParserError::InfiniteFloat(
+                    self.lexer.line_num,
+                    self.lexer.col_num,
+                ));
+            }
+            Token::Literal(Literal::F64Offset(n)) => {
+                let n = self.lexer.machine_st.arena.f64_tbl.get_entry(n);
 
-                if let Some(name) = atomized {
+                self.negate_number(
+                    n,
+                    |n, _| -n,
+                    |n, arena| Literal::F64Offset(arena.f64_tbl.build_with(n)),
+                )
+            }
+            Token::Literal(Literal::Fixnum(n)) => {
+                self.negate_number(n, |n, _| -n, |n, _| Literal::Fixnum(n))
+            }
+            Token::Literal(c) => {
+                if let Literal::Atom(name) = c {
                     if !self.shift_op(name, op_dir)? {
                         self.shift(Token::Literal(c), 0, TERM);
                     }

@@ -2,7 +2,6 @@ use crate::forms::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
-use crate::machine::preprocessor::*;
 use crate::machine::term_stream::*;
 use crate::machine::*;
 use crate::parser::ast::*;
@@ -16,35 +15,38 @@ use std::mem;
 
 pub(super) type ModuleOpExports = Vec<(OpDecl, Option<OpDesc>)>;
 
-pub(super) fn set_code_index(
-    retraction_info: &mut RetractionInfo,
+pub(super) fn set_code_index<'a, LS: LoadState<'a>>(
+    payload: &mut <LS as LoadState<'a>>::LoaderFieldType,
     compilation_target: &CompilationTarget,
     key: PredicateKey,
-    mut code_index: CodeIndex,
+    code_idx: CodeIndex,
     code_ptr: IndexPtr,
 ) {
-    let record = match compilation_target {
-        CompilationTarget::User => {
-            if IndexPtrTag::Undefined == code_index.get().tag() {
-                code_index.set(code_ptr);
-                RetractionRecord::AddedUserPredicate(key)
-            } else {
-                let replaced = code_index.replace(code_ptr);
-                RetractionRecord::ReplacedUserPredicate(key, replaced)
+    let record = LS::machine_st(payload).arena.code_index_tbl.with_entry_mut(
+        code_idx.into(),
+        |code_idx_ptr| match compilation_target {
+            CompilationTarget::User => {
+                if IndexPtrTag::Undefined == code_idx_ptr.tag() {
+                    *code_idx_ptr = code_ptr;
+                    RetractionRecord::AddedUserPredicate(key)
+                } else {
+                    let replaced = mem::replace(code_idx_ptr, code_ptr);
+                    RetractionRecord::ReplacedUserPredicate(key, replaced)
+                }
             }
-        }
-        CompilationTarget::Module(ref module_name) => {
-            if IndexPtrTag::Undefined == code_index.get().tag() {
-                code_index.set(code_ptr);
-                RetractionRecord::AddedModulePredicate(*module_name, key)
-            } else {
-                let replaced = code_index.replace(code_ptr);
-                RetractionRecord::ReplacedModulePredicate(*module_name, key, replaced)
+            CompilationTarget::Module(ref module_name) => {
+                if IndexPtrTag::Undefined == code_idx_ptr.tag() {
+                    *code_idx_ptr = code_ptr;
+                    RetractionRecord::AddedModulePredicate(*module_name, key)
+                } else {
+                    let replaced = mem::replace(code_idx_ptr, code_ptr);
+                    RetractionRecord::ReplacedModulePredicate(*module_name, key, replaced)
+                }
             }
-        }
-    };
+        },
+    );
 
-    retraction_info.push_record(record);
+    payload.retraction_info.push_record(record);
 }
 
 fn add_op_decl_as_module_export<'a, LS: LoadState<'a>>(
@@ -134,21 +136,28 @@ pub(super) fn import_module_exports<'a, LS: LoadState<'a>>(
                 }
 
                 if let Some(src_code_index) = imported_module.code_dir.get(&key).cloned() {
-                    let arena = &mut LS::machine_st(payload).arena;
+                    let code_idx_tbl = &mut LS::machine_st(payload).arena.code_index_tbl;
 
                     let target_code_index = *code_dir
                         .entry(key)
-                        .or_insert_with(|| CodeIndex::default(arena));
+                        .or_insert_with(|| CodeIndex::default(code_idx_tbl));
 
-                    set_code_index(
-                        &mut payload.retraction_info,
+                    let src_code_index_ptr = code_idx_tbl.get_entry(src_code_index.into());
+
+                    set_code_index::<LS>(
+                        payload,
                         compilation_target,
                         key,
                         target_code_index,
-                        src_code_index.get(),
+                        src_code_index_ptr,
                     );
 
-                    if src_code_index.is_dynamic_undefined() {
+                    if LS::machine_st(payload)
+                        .arena
+                        .code_index_tbl
+                        .get_entry(src_code_index.into())
+                        .is_dynamic_undefined()
+                    {
                         code_dir.insert(key, src_code_index);
                     }
                 } else {
@@ -190,19 +199,20 @@ fn import_module_exports_into_module<'a, LS: LoadState<'a>>(
                     meta_predicates.insert(key, meta_specs.clone());
                 }
 
-                if let Some(src_code_index) = imported_module.code_dir.get(&key) {
-                    let arena = &mut LS::machine_st(payload).arena;
+                if let Some(src_code_index) = imported_module.code_dir.get(&key).cloned() {
+                    let code_index_tbl = &mut LS::machine_st(payload).arena.code_index_tbl;
 
+                    let src_code_ptr = code_index_tbl.get_entry(src_code_index.into());
                     let target_code_index = *code_dir
                         .entry(key)
-                        .or_insert_with(|| CodeIndex::default(arena));
+                        .or_insert_with(|| CodeIndex::default(code_index_tbl));
 
-                    set_code_index(
-                        &mut payload.retraction_info,
+                    set_code_index::<LS>(
+                        payload,
                         compilation_target,
                         key,
                         target_code_index,
-                        src_code_index.get(),
+                        src_code_ptr,
                     );
                 } else {
                     return Err(SessionError::ModuleDoesNotContainExport(
@@ -243,21 +253,21 @@ fn import_qualified_module_exports<'a, LS: LoadState<'a>>(
                         .insert(key, meta_specs.clone());
                 }
 
-                if let Some(src_code_index) = imported_module.code_dir.get(&key) {
-                    let arena = &mut LS::machine_st(payload).arena;
+                if let Some(src_code_index) = imported_module.code_dir.get(&key).cloned() {
+                    let code_index_tbl = &mut LS::machine_st(payload).arena.code_index_tbl;
 
-                    let target_code_index = *wam_prelude
-                        .indices
-                        .code_dir
-                        .entry(key)
-                        .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), arena));
+                    let src_code_ptr = code_index_tbl.get_entry(src_code_index.into());
+                    let target_code_index =
+                        *wam_prelude.indices.code_dir.entry(key).or_insert_with(|| {
+                            CodeIndex::new(IndexPtr::undefined(), code_index_tbl)
+                        });
 
-                    set_code_index(
-                        &mut payload.retraction_info,
+                    set_code_index::<LS>(
+                        payload,
                         compilation_target,
                         key,
                         target_code_index,
-                        src_code_index.get(),
+                        src_code_ptr,
                     );
                 } else {
                     return Err(SessionError::ModuleDoesNotContainExport(
@@ -304,19 +314,20 @@ fn import_qualified_module_exports_into_module<'a, LS: LoadState<'a>>(
                     meta_predicates.insert(key, meta_specs.clone());
                 }
 
-                if let Some(src_code_index) = imported_module.code_dir.get(&key) {
-                    let arena = &mut LS::machine_st(payload).arena;
+                if let Some(src_code_index) = imported_module.code_dir.get(&key).cloned() {
+                    let code_index_tbl = &mut LS::machine_st(payload).arena.code_index_tbl;
 
+                    let src_code_ptr = code_index_tbl.get_entry(src_code_index.into());
                     let target_code_index = *code_dir
                         .entry(key)
-                        .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), arena));
+                        .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), code_index_tbl));
 
-                    set_code_index(
-                        &mut payload.retraction_info,
+                    set_code_index::<LS>(
+                        payload,
                         &payload_compilation_target,
                         key,
                         target_code_index,
-                        src_code_index.get(),
+                        src_code_ptr,
                     );
                 } else {
                     return Err(SessionError::ModuleDoesNotContainExport(
@@ -434,19 +445,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         self.retract_local_clauses_impl(clause_clause_compilation_target, key, clause_locs);
     }
 
-    pub(super) fn try_term_to_tl(
-        &mut self,
-        term: Term,
-        preprocessor: &mut Preprocessor,
-    ) -> Result<PredicateClause, SessionError> {
-        let tl = preprocessor.try_term_to_tl(self, term)?;
-
-        Ok(match tl {
-            TopLevel::Fact(fact, var_data) => PredicateClause::Fact(fact, var_data),
-            TopLevel::Rule(rule, var_data) => PredicateClause::Rule(rule, var_data),
-        })
-    }
-
     #[inline]
     pub(super) fn remove_module_op_exports(&mut self) {
         for (mut op_decl, record) in self.payload.module_op_exports.drain(0..) {
@@ -482,11 +480,14 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     .indices
                     .get_predicate_skeleton(local_compilation_target, key)
                 {
-                    let old_index_ptr = code_index.replace(if global_skeleton.core.is_dynamic {
-                        IndexPtr::dynamic_undefined()
-                    } else {
-                        IndexPtr::undefined()
-                    });
+                    let old_index_ptr = code_index.replace(
+                        &mut LS::machine_st(&mut self.payload).arena.code_index_tbl,
+                        if global_skeleton.core.is_dynamic {
+                            IndexPtr::dynamic_undefined()
+                        } else {
+                            IndexPtr::undefined()
+                        },
+                    );
 
                     self.payload.retraction_info.push_record(
                         RetractionRecord::ReplacedModulePredicate(module_name, *key, old_index_ptr),
@@ -500,8 +501,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 continue;
             }
 
-            if !code_index.is_undefined() && !code_index.is_dynamic_undefined() {
-                let old_index_ptr = code_index.replace(IndexPtr::undefined());
+            let code_index_tbl = &mut LS::machine_st(&mut self.payload).arena.code_index_tbl;
+            let code_ptr = code_index_tbl.get_entry((*code_index).into());
+
+            if !code_ptr.is_undefined() && !code_ptr.is_dynamic_undefined() {
+                let old_index_ptr = code_index.replace(code_index_tbl, IndexPtr::undefined());
 
                 self.payload.retraction_info.push_record(
                     RetractionRecord::ReplacedModulePredicate(module_name, *key, old_index_ptr),
@@ -531,27 +535,32 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             None => return,
         };
 
-        fn remove_module_exports(
+        fn remove_module_exports<'b, LS: LoadState<'b>>(
+            payload: &mut <LS as LoadState<'b>>::LoaderFieldType,
             removed_module: &Module,
             code_dir: &mut CodeDir,
             op_dir: &mut OpDir,
-            retraction_info: &mut RetractionInfo,
             predicate_retractor: impl Fn(PredicateKey, IndexPtr) -> RetractionRecord,
             op_retractor: impl Fn(OpDecl, OpDesc) -> RetractionRecord,
         ) {
             for export in removed_module.module_decl.exports.iter() {
                 match export {
                     ModuleExport::PredicateKey(ref key) => {
-                        match (removed_module.code_dir.get(key), code_dir.get_mut(key)) {
-                            (Some(module_code_index), Some(target_code_index))
-                                if module_code_index.get() == target_code_index.get() =>
-                            {
+                        if let (Some(module_code_idx), Some(target_code_idx)) = (
+                            removed_module.code_dir.get(key).cloned(),
+                            code_dir.get_mut(key).cloned(),
+                        ) {
+                            let code_index_tbl = &mut LS::machine_st(payload).arena.code_index_tbl;
+                            let module_code_ptr = code_index_tbl.get_entry(module_code_idx.into());
+                            let target_code_ptr = code_index_tbl.get_entry(target_code_idx.into());
+
+                            if module_code_ptr == target_code_ptr {
                                 let old_index_ptr =
-                                    target_code_index.replace(IndexPtr::undefined());
-                                retraction_info
+                                    target_code_idx.replace(code_index_tbl, IndexPtr::undefined());
+                                payload
+                                    .retraction_info
                                     .push_record(predicate_retractor(*key, old_index_ptr));
                             }
-                            _ => {}
                         }
                     }
                     ModuleExport::OpDecl(op_decl) => {
@@ -559,7 +568,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             .swap_remove(&(op_decl.name, op_decl.op_desc.get_spec().fixity()));
 
                         if let Some(op_desc) = op_dir_value_opt {
-                            retraction_info.push_record(op_retractor(*op_decl, op_desc));
+                            payload
+                                .retraction_info
+                                .push_record(op_retractor(*op_decl, op_desc));
                         }
                     }
                 }
@@ -568,11 +579,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         match self.payload.compilation_target {
             CompilationTarget::User => {
-                remove_module_exports(
+                remove_module_exports::<LS>(
+                    &mut self.payload,
                     &removed_module,
                     &mut self.wam_prelude.indices.code_dir,
                     &mut self.wam_prelude.indices.op_dir,
-                    &mut self.payload.retraction_info,
                     RetractionRecord::ReplacedUserPredicate,
                     RetractionRecord::ReplacedUserOp,
                 );
@@ -592,11 +603,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     .modules
                     .get_mut(&target_module_name)
                 {
-                    remove_module_exports(
+                    remove_module_exports::<LS>(
+                        &mut self.payload,
                         &removed_module,
                         &mut module.code_dir,
                         &mut module.op_dir,
-                        &mut self.payload.retraction_info,
                         predicate_retractor,
                         op_retractor,
                     );
@@ -622,7 +633,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             Some(ref mut module) => *module.code_dir.entry(key).or_insert_with(|| {
                 CodeIndex::new(
                     IndexPtr::undefined(),
-                    &mut LS::machine_st(&mut self.payload).arena,
+                    &mut LS::machine_st(&mut self.payload).arena.code_index_tbl,
                 )
             }),
             None => {
@@ -632,7 +643,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     Some(ref mut module) => *module.code_dir.entry(key).or_insert_with(|| {
                         CodeIndex::new(
                             IndexPtr::undefined(),
-                            &mut LS::machine_st(&mut self.payload).arena,
+                            &mut LS::machine_st(&mut self.payload).arena.code_index_tbl,
                         )
                     }),
                     None => {
@@ -648,7 +659,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         key: PredicateKey,
         compilation_target: CompilationTarget,
     ) -> CodeIndex {
-        let arena = &mut LS::machine_st(&mut self.payload).arena;
+        let code_index_tbl = &mut LS::machine_st(&mut self.payload).arena.code_index_tbl;
 
         match compilation_target {
             CompilationTarget::User => *self
@@ -656,7 +667,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 .indices
                 .code_dir
                 .entry(key)
-                .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), arena)),
+                .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), code_index_tbl)),
             CompilationTarget::Module(module_name) => {
                 self.get_or_insert_local_code_index(module_name, key)
             }
@@ -668,15 +679,15 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         module_name: Atom,
         key: PredicateKey,
     ) -> CodeIndex {
-        let arena = &mut LS::machine_st(&mut self.payload).arena;
+        let code_index_tbl = &mut LS::machine_st(&mut self.payload).arena.code_index_tbl;
 
         if module_name == atom!("user") {
-            return *self
+            *self
                 .wam_prelude
                 .indices
                 .code_dir
                 .entry(key)
-                .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), arena));
+                .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), code_index_tbl))
         } else {
             self.get_or_insert_local_code_index(module_name, key)
         }

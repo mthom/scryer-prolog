@@ -324,7 +324,7 @@ impl ForeignFunctionTable {
         let mut pointer_args =
             Self::build_pointer_args(&mut args, &function_impl.args, &mut self.structs)?;
 
-        return unsafe {
+        unsafe {
             macro_rules! call_and_return {
                 ($type:ty) => {{
                     let mut n: Box<u8> = Box::new(0);
@@ -410,7 +410,7 @@ impl ForeignFunctionTable {
                 }
                 _ => unreachable!(),
             }
-        };
+        }
     }
 
     fn read_struct(
@@ -517,7 +517,7 @@ impl Value {
     fn as_ptr(&mut self) -> Result<*mut c_void, FFIError> {
         match self {
             Value::CString(ref mut cstr) => Ok(&mut *cstr as *mut _ as *mut c_void),
-            Value::Int(n) => Ok(*n as *mut c_void),
+            Value::Int(n) => Ok(std::ptr::with_exposed_provenance_mut(*n as usize)),
             _ => Err(FFIError::ValueCast),
         }
     }

@@ -19,7 +19,7 @@ pub struct RawBlock<T: RawBlockTraits> {
 
 impl<T: RawBlockTraits> RawBlock<T> {
     #[inline]
-    fn empty_block() -> Self {
+    pub fn empty_block() -> Self {
         RawBlock {
             base: ptr::null(),
             top: ptr::null(),
@@ -66,8 +66,8 @@ impl<T: RawBlockTraits> RawBlock<T> {
                 false
             } else {
                 self.base = new_base;
-                self.top = (self.base as usize + size * 2) as *const _;
-                *self.ptr.get_mut() = (self.base as usize + size) as *mut _;
+                self.top = self.base.add(size * 2);
+                *self.ptr.get_mut() = self.base.add(size).cast_mut();
                 true
             }
         }
@@ -83,7 +83,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
                 // allocation failed
                 None
             } else {
-                let allocated = (*self.ptr.get()) as usize - self.base as usize;
+                let allocated = (*self.ptr.get()).addr() - self.base.addr();
                 self.base.copy_to(new_block.base.cast_mut(), allocated);
                 *new_block.ptr.get_mut() = new_block.base.add(allocated).cast_mut();
                 Some(new_block)
@@ -93,7 +93,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
 
     #[inline]
     pub fn size(&self) -> usize {
-        self.top as usize - self.base as usize
+        self.top.addr() - self.base.addr()
     }
 
     #[inline(always)]
@@ -105,7 +105,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
             self.base
         );
 
-        self.top as usize - (*self.ptr.get()) as usize
+        self.top.addr() - (*self.ptr.get()).addr()
     }
 
     pub unsafe fn alloc(&self, size: usize) -> *mut u8 {

@@ -6,6 +6,7 @@ use crate::parser::ast::*;
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::iter::*;
+use std::rc::Rc;
 use std::vec::Vec;
 
 #[allow(clippy::borrowed_box)]
@@ -15,26 +16,10 @@ pub(crate) enum TermRef<'a> {
     Cons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     Literal(Level, &'a Cell<RegType>, &'a Literal),
     Clause(Level, &'a Cell<RegType>, Atom, &'a Vec<Term>),
-    PartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
-    CompleteString(Level, &'a Cell<RegType>, Atom),
+    PartialString(Level, &'a Cell<RegType>, Rc<String>, &'a Box<Term>),
+    CompleteString(Level, &'a Cell<RegType>, Rc<String>),
     Var(Level, &'a Cell<VarReg>, VarPtr),
 }
-
-/*
-impl<'a> TermRef<'a> {
-    pub(crate) fn level(&self) -> Level {
-        match self {
-            TermRef::AnonVar(lvl) |
-            TermRef::Cons(lvl, ..) |
-            TermRef::Literal(lvl, ..) |
-            TermRef::Var(lvl, ..) |
-            TermRef::Clause(lvl, ..) |
-            TermRef::CompleteString(lvl, ..) |
-            TermRef::PartialString(lvl, ..) => *lvl,
-        }
-    }
-}
-*/
 
 #[allow(clippy::borrowed_box)]
 #[derive(Debug)]
@@ -44,9 +29,9 @@ pub(crate) enum TermIterState<'a> {
     Literal(Level, &'a Cell<RegType>, &'a Literal),
     InitialCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     FinalCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
-    InitialPartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
-    FinalPartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
-    CompleteString(Level, &'a Cell<RegType>, Atom),
+    InitialPartialString(Level, &'a Cell<RegType>, Rc<String>, &'a Box<Term>),
+    FinalPartialString(Level, &'a Cell<RegType>, Rc<String>, &'a Box<Term>),
+    CompleteString(Level, &'a Cell<RegType>, Rc<String>),
     Var(Level, &'a Cell<VarReg>, VarPtr),
 }
 
@@ -62,9 +47,11 @@ impl<'a> TermIterState<'a> {
             }
             Term::Literal(cell, constant) => TermIterState::Literal(lvl, cell, constant),
             Term::PartialString(cell, string_buf, tail) => {
-                TermIterState::InitialPartialString(lvl, cell, string_buf, tail)
+                TermIterState::InitialPartialString(lvl, cell, string_buf.clone(), tail)
             }
-            Term::CompleteString(cell, atom) => TermIterState::CompleteString(lvl, cell, *atom),
+            Term::CompleteString(cell, string) => {
+                TermIterState::CompleteString(lvl, cell, string.clone())
+            }
             Term::Var(cell, var_ptr) => TermIterState::Var(lvl, cell, var_ptr.clone()),
         }
     }
@@ -182,11 +169,11 @@ impl<'a> Iterator for QueryIterator<'a> {
                         .push(TermIterState::FinalPartialString(lvl, cell, string, tail));
                     self.push_subterm(lvl.child_level(), tail);
                 }
-                TermIterState::FinalPartialString(lvl, cell, atom, tail) => {
-                    return Some(TermRef::PartialString(lvl, cell, atom, tail));
+                TermIterState::FinalPartialString(lvl, cell, string, tail) => {
+                    return Some(TermRef::PartialString(lvl, cell, string, tail));
                 }
-                TermIterState::CompleteString(lvl, cell, atom) => {
-                    return Some(TermRef::CompleteString(lvl, cell, atom));
+                TermIterState::CompleteString(lvl, cell, string) => {
+                    return Some(TermRef::CompleteString(lvl, cell, string));
                 }
                 TermIterState::FinalCons(lvl, cell, head, tail) => {
                     return Some(TermRef::Cons(lvl, cell, head, tail));
@@ -242,16 +229,20 @@ impl<'a> FactIterator<'a> {
                 head.as_ref(),
                 tail.as_ref(),
             )],
-            Term::PartialString(cell, string_buf, tail) => {
+            Term::PartialString(cell, string, tail) => {
                 vec![TermIterState::InitialPartialString(
                     Level::Root,
                     cell,
-                    string_buf,
+                    string.clone(),
                     tail,
                 )]
             }
-            Term::CompleteString(cell, atom) => {
-                vec![TermIterState::CompleteString(Level::Root, cell, *atom)]
+            Term::CompleteString(cell, string) => {
+                vec![TermIterState::CompleteString(
+                    Level::Root,
+                    cell,
+                    string.clone(),
+                )]
             }
             Term::Literal(cell, constant) => {
                 vec![TermIterState::Literal(Level::Root, cell, constant)]
@@ -336,7 +327,7 @@ pub(crate) enum ClauseItem<'a> {
     FirstBranch(usize),
     NextBranch,
     BranchEnd(usize),
-    Chunk(&'a VecDeque<QueryTerm>),
+    Chunk { terms: &'a VecDeque<QueryTerm> },
 }
 
 #[derive(Debug)]
@@ -412,8 +403,8 @@ impl<'a> Iterator for ClauseIterator<'a> {
                             self.state_stack
                                 .push(ClauseIteratorState::RemainingBranches(branches, 0));
                         }
-                        ChunkedTerms::Chunk(chunk) => {
-                            return Some(ClauseItem::Chunk(chunk));
+                        ChunkedTerms::Chunk { ref terms } => {
+                            return Some(ClauseItem::Chunk { terms });
                         }
                     }
                 }

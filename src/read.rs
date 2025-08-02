@@ -1,4 +1,5 @@
 use crate::parser::ast::*;
+use crate::parser::lexer::Lexer;
 use crate::parser::parser::*;
 
 use crate::atom_table::*;
@@ -32,9 +33,9 @@ use std::sync::Arc;
 type SubtermDeque = VecDeque<(usize, usize)>;
 
 pub(crate) fn devour_whitespace<R: CharRead>(
-    parser: &mut Parser<'_, R>,
+    lexer: &mut Lexer<'_, R>,
 ) -> Result<bool, ParserError> {
-    match parser.lexer.scan_for_layout() {
+    match lexer.scan_for_layout() {
         Err(e) if e.is_unexpected_eof() => Ok(true),
         Err(e) => Err(e),
         Ok(_) => Ok(false),
@@ -80,7 +81,7 @@ impl MachineState {
         };
 
         inner.add_lines_read(num_lines_read);
-        write_term_to_heap(&term, &mut self.heap, &self.atom_tbl)
+        write_term_to_heap(&term, &mut self.heap)
     }
 }
 
@@ -295,16 +296,14 @@ impl CharRead for ReadlineStream {
 pub(crate) fn write_term_to_heap(
     term: &Term,
     heap: &mut Heap,
-    atom_tbl: &AtomTable,
 ) -> Result<TermWriteResult, CompilationError> {
-    let term_writer = TermWriter::new(heap, atom_tbl);
+    let term_writer = TermWriter::new(heap);
     term_writer.write_term_to_heap(term)
 }
 
 #[derive(Debug)]
-struct TermWriter<'a, 'b> {
+struct TermWriter<'a> {
     heap: &'a mut Heap,
-    atom_tbl: &'b AtomTable,
     queue: SubtermDeque,
     var_dict: HeapVarDict,
 }
@@ -315,12 +314,11 @@ pub struct TermWriteResult {
     pub var_dict: HeapVarDict,
 }
 
-impl<'a, 'b> TermWriter<'a, 'b> {
+impl<'a> TermWriter<'a> {
     #[inline]
-    fn new(heap: &'a mut Heap, atom_tbl: &'b AtomTable) -> Self {
+    fn new(heap: &'a mut Heap) -> Self {
         TermWriter {
             heap,
-            atom_tbl,
             queue: SubtermDeque::new(),
             var_dict: HeapVarDict::with_hasher(FxBuildHasher::default()),
         }
@@ -338,25 +336,23 @@ impl<'a, 'b> TermWriter<'a, 'b> {
     }
 
     #[inline]
-    fn push_stub_addr(&mut self) {
-        let h = self.heap.len();
-        self.heap.push(heap_loc_as_cell!(h));
+    fn push_stub_addr(&mut self) -> Result<(), CompilationError> {
+        let h = self.heap.cell_len();
+        self.push_cell(heap_loc_as_cell!(h))
+    }
+
+    #[inline]
+    fn push_cell(&mut self, cell: HeapCellValue) -> Result<(), CompilationError> {
+        self.heap
+            .push_cell(cell)
+            .map_err(CompilationError::FiniteMemoryInHeap)
     }
 
     fn term_as_addr(&mut self, term: &TermRef, h: usize) -> HeapCellValue {
         match term {
             &TermRef::Cons(..) => list_loc_as_cell!(h),
             &TermRef::AnonVar(_) | &TermRef::Var(..) => heap_loc_as_cell!(h),
-            TermRef::CompleteString(_, _, src) => {
-                if src.as_str().is_empty() {
-                    empty_list_as_cell!()
-                } else if self.heap[h].get_tag() == HeapCellValueTag::CStr {
-                    heap_loc_as_cell!(h)
-                } else {
-                    pstr_loc_as_cell!(h)
-                }
-            }
-            &TermRef::PartialString(..) => pstr_loc_as_cell!(h),
+            TermRef::PartialString(..) | TermRef::CompleteString(..) => heap_loc_as_cell!(h),
             &TermRef::Literal(_, _, literal) => HeapCellValue::from(*literal),
             &TermRef::Clause(_, _, _, subterms) if subterms.is_empty() => heap_loc_as_cell!(h),
             &TermRef::Clause(..) => str_loc_as_cell!(h),
@@ -364,45 +360,45 @@ impl<'a, 'b> TermWriter<'a, 'b> {
     }
 
     fn write_term_to_heap(mut self, term: &Term) -> Result<TermWriteResult, CompilationError> {
-        let heap_loc = self.heap.len();
+        let heap_loc = self.heap.cell_len();
 
         for term in breadth_first_iter(term, RootIterationPolicy::Iterated) {
-            let h = self.heap.len();
+            let h = self.heap.cell_len();
 
             match &term {
                 &TermRef::Cons(Level::Root, ..) => {
                     self.queue.push_back((2, h + 1));
-                    self.heap.push(list_loc_as_cell!(h + 1));
+                    self.push_cell(list_loc_as_cell!(h + 1))?;
 
-                    self.push_stub_addr();
-                    self.push_stub_addr();
+                    self.push_stub_addr()?;
+                    self.push_stub_addr()?;
 
                     continue;
                 }
                 &TermRef::Cons(..) => {
                     self.queue.push_back((2, h));
 
-                    self.push_stub_addr();
-                    self.push_stub_addr();
+                    self.push_stub_addr()?;
+                    self.push_stub_addr()?;
                 }
                 &TermRef::Clause(Level::Root, _, name, subterms) => {
                     if subterms.len() > MAX_ARITY {
                         return Err(CompilationError::ExceededMaxArity);
                     }
 
-                    self.heap.push(if subterms.is_empty() {
+                    self.push_cell(if subterms.is_empty() {
                         heap_loc_as_cell!(heap_loc + 1)
                     } else {
                         str_loc_as_cell!(heap_loc + 1)
-                    });
+                    })?;
 
                     self.queue.push_back((subterms.len(), h + 2));
                     let named = atom_as_cell!(name, subterms.len());
 
-                    self.heap.push(named);
+                    self.push_cell(named)?;
 
                     for _ in 0..subterms.len() {
-                        self.push_stub_addr();
+                        self.push_stub_addr()?;
                     }
 
                     continue;
@@ -411,20 +407,20 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                     self.queue.push_back((subterms.len(), h + 1));
                     let named = atom_as_cell!(name, subterms.len());
 
-                    self.heap.push(named);
+                    self.push_cell(named)?;
 
                     for _ in 0..subterms.len() {
-                        self.push_stub_addr();
+                        self.push_stub_addr()?;
                     }
                 }
                 &TermRef::AnonVar(Level::Root) | TermRef::Literal(Level::Root, ..) => {
                     let addr = self.term_as_addr(&term, h);
-                    self.heap.push(addr);
+                    self.push_cell(addr)?;
                 }
                 &TermRef::Var(Level::Root, _, ref var_ptr) => {
                     let addr = self.term_as_addr(&term, h);
                     self.var_dict.insert(VarKey::VarPtr(var_ptr.clone()), addr);
-                    self.heap.push(addr);
+                    self.push_cell(addr)?;
                 }
                 &TermRef::AnonVar(_) => {
                     if let Some((arity, site_h)) = self.queue.pop_front() {
@@ -438,25 +434,53 @@ impl<'a, 'b> TermWriter<'a, 'b> {
 
                     continue;
                 }
-                TermRef::CompleteString(_, _, src) => {
-                    let src = src.as_str().to_owned();
-                    put_complete_string(self.heap, &src, self.atom_tbl);
+                TermRef::CompleteString(lvl, _, src) => {
+                    if let Level::Root = lvl {
+                        self.push_stub_addr()?;
+                    }
+
+                    let cell = self
+                        .heap
+                        .allocate_cstr(src)
+                        .map_err(CompilationError::FiniteMemoryInHeap)?;
+
+                    let new_h = self.heap.cell_len();
+                    self.push_cell(cell)?;
+
+                    if !matches!(lvl, Level::Root) {
+                        self.modify_head_of_queue(&term, new_h);
+                    } else {
+                        self.heap[h] = cell;
+                    }
+
+                    continue;
                 }
-                &TermRef::PartialString(lvl, _, src, _) => {
+                TermRef::PartialString(lvl, _, src, _) => {
                     if let Level::Root = lvl {
-                        // Var tags can't refer directly to partial strings,
-                        // so a PStrLoc cell must be pushed.
-                        self.heap.push(pstr_loc_as_cell!(heap_loc + 1));
+                        self.push_stub_addr()?;
                     }
 
-                    allocate_pstr(self.heap, src.as_str(), self.atom_tbl);
+                    let cell = self
+                        .heap
+                        .allocate_pstr(src)
+                        .map_err(CompilationError::FiniteMemoryInHeap)?;
 
-                    let h = self.heap.len();
-                    self.queue.push_back((1, h - 1));
+                    let tail_h = self.heap.cell_len();
+                    self.push_stub_addr()?;
 
-                    if let Level::Root = lvl {
-                        continue;
+                    if matches!(lvl, Level::Root) {
+                        self.heap[h] = cell;
+                    } else {
+                        self.push_cell(cell)?;
+                    };
+
+                    self.queue.push_back((1, tail_h));
+
+                    if !matches!(lvl, Level::Root) {
+                        self.modify_head_of_queue(&term, tail_h + 1);
                     }
+
+                    continue;
                 }
                 TermRef::Var(.., var) => {
                     if let Some((arity, site_h)) = self.queue.pop_front() {

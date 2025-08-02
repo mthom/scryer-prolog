@@ -45,6 +45,7 @@ use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
+use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
@@ -207,13 +208,8 @@ pub(crate) fn import_builtin_impls(code_dir: &CodeDir, builtins: &mut Module) {
 #[inline]
 pub(crate) fn get_structure_index(value: HeapCellValue) -> Option<CodeIndex> {
     read_heap_cell!(value,
-        (HeapCellValueTag::Cons, cons_ptr) => {
-             match_untyped_arena_ptr!(cons_ptr,
-                 (ArenaHeaderTag::IndexPtr, ip) => {
-                     return Some(CodeIndex::from(ip));
-                 }
-                 _ => {}
-             );
+        (HeapCellValueTag::CodeIndexOffset, offset) => {
+            return Some(CodeIndex::from(offset));
         }
         _ => {
         }
@@ -246,7 +242,7 @@ impl Machine {
     }
 
     /// Runs the predicate `key` in `module_name` until completion.
-    /// Siltently ignores failure, thrown errors and choice points.
+    /// Silently ignores failure, thrown errors and choice points.
     ///
     /// Consider using [`Machine::run_query`] if you wish to handle
     /// predicates that may fail, leave a choice point or throw.
@@ -256,8 +252,14 @@ impl Machine {
         key: PredicateKey,
     ) -> std::process::ExitCode {
         if let Some(module) = self.indices.modules.get(&module_name) {
-            if let Some(code_index) = module.code_dir.get(&key) {
-                let p = code_index.local().unwrap();
+            if let Some(code_idx) = module.code_dir.get(&key) {
+                let index_ptr = self
+                    .machine_st
+                    .arena
+                    .code_index_tbl
+                    .get_entry(code_idx.into());
+                let p = index_ptr.local().unwrap();
+
                 // Leave a halting choice point to backtrack to in case the predicate fails or throws.
                 self.allocate_stub_choice_point();
 
@@ -328,8 +330,13 @@ impl Machine {
         self.load_file(path_buf.to_str().unwrap(), stream);
 
         if let Some(module) = self.indices.modules.get(&atom!("$atts")) {
-            if let Some(code_index) = module.code_dir.get(&(atom!("driver"), 2)) {
-                self.machine_st.attr_var_init.verify_attrs_loc = code_index.local().unwrap();
+            if let Some(code_idx) = module.code_dir.get(&(atom!("driver"), 2)) {
+                let index_ptr = self
+                    .machine_st
+                    .arena
+                    .code_index_tbl
+                    .get_entry(code_idx.into());
+                self.machine_st.attr_var_init.verify_attrs_loc = index_ptr.local().unwrap();
             }
         }
     }
@@ -343,13 +350,16 @@ impl Machine {
             for arity in 1..66 {
                 let key = (atom!("call"), arity);
 
-                match loader.code_dir.get(&key) {
+                match loader.code_dir.get(&key).cloned() {
                     Some(src_code_index) => {
-                        let target_code_index = target_code_dir
-                            .entry(key)
-                            .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), arena));
+                        let code_index_tbl = &mut arena.code_index_tbl;
 
-                        target_code_index.set(src_code_index.get());
+                        let target_code_index = target_code_dir.entry(key).or_insert_with(|| {
+                            CodeIndex::new(IndexPtr::undefined(), code_index_tbl)
+                        });
+
+                        let src_code_ptr = code_index_tbl.get_entry(src_code_index.into());
+                        target_code_index.set(code_index_tbl, src_code_ptr);
                     }
                     None => {
                         unreachable!();
@@ -458,7 +468,7 @@ impl Machine {
                 key,
                 CodeIndex::new(
                     IndexPtr::index(p + impls_offset),
-                    &mut self.machine_st.arena,
+                    &mut self.machine_st.arena.code_index_tbl,
                 ),
             );
         }
@@ -485,7 +495,10 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn run_verify_attr_interrupt(&mut self, arity: usize) {
         let p = self.machine_st.attr_var_init.verify_attrs_loc;
-        self.machine_st.verify_attr_interrupt(p, arity);
+        step_or_resource_error!(
+            self.machine_st,
+            self.machine_st.verify_attr_interrupt(p, arity)
+        );
     }
 
     fn next_clause_applicable(&mut self, mut offset: usize) -> bool {
@@ -509,8 +522,8 @@ impl Machine {
                                     .select_switch_on_term_index(cell, v, c, l, s)
                             }
                             IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(hm)) => {
-                                let lit = self.machine_st.constant_to_literal(cell);
-                                hm.get(&lit).cloned().unwrap_or(IndexingCodePtr::Fail)
+                                // let lit = self.machine_st.constant_to_literal(cell);
+                                hm.get(&cell).cloned().unwrap_or(IndexingCodePtr::Fail)
                             }
                             IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(hm)) => {
                                 self.machine_st.select_switch_on_structure_index(cell, hm)
@@ -536,34 +549,8 @@ impl Machine {
 
                     if cell.is_var() {
                         offset += 1;
-                    } else if lit.get_tag() == HeapCellValueTag::CStr {
-                        read_heap_cell!(cell,
-                            (HeapCellValueTag::CStr) => {
-                                if cell == lit {
-                                    offset += 1;
-                                } else {
-                                    return false;
-                                }
-                            }
-                            (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc) => {
-                                offset += 1;
-                            }
-                            (HeapCellValueTag::Str, s) => {
-                                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
-                                    .get_name_and_arity();
-
-                                if name == atom!(".") && arity == 2 {
-                                    offset += 1;
-                                } else {
-                                    return false;
-                                }
-                            }
-                            _ => {
-                                return false;
-                            }
-                        );
                     } else {
-                        self.machine_st.write_literal_to_var(cell, lit);
+                        unify!(self.machine_st, cell, lit);
 
                         if self.machine_st.fail {
                             self.machine_st.fail = false;
@@ -577,7 +564,7 @@ impl Machine {
                     let cell = self.deref_register(t);
 
                     read_heap_cell!(cell,
-                        (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc | HeapCellValueTag::CStr) => {
+                        (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc) => {// | HeapCellValueTag::CStr) => {
                             offset += 1;
                         }
                         (HeapCellValueTag::Str, s) => {
@@ -616,27 +603,24 @@ impl Machine {
                         }
                     );
                 }
-                &Instruction::GetPartialString(
-                    Level::Shallow,
-                    string,
-                    RegType::Temp(t),
-                    has_tail,
-                ) => {
+                &Instruction::GetPartialString(Level::Shallow, ref string, RegType::Temp(t)) => {
                     let cell = self.deref_register(t);
 
                     read_heap_cell!(cell,
-                        (HeapCellValueTag::CStr, cstr) => {
-                            if !has_tail && string != cstr {
-                                return false;
-                            }
+                        (HeapCellValueTag::PStrLoc, pstr_loc) => {
+                            let heap_slice = &self.machine_st.heap.as_slice()[pstr_loc ..];
 
-                            offset += 1;
+                            match compare_pstr_slices(heap_slice, string.as_bytes()) {
+                                PStrSegmentCmpResult::Continue(..) => offset += 1,
+                                _ => return false,
+                            }
                         }
-                        (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc) => {
+                        (HeapCellValueTag::Lis) => {
                             offset += 1;
                         }
                         (HeapCellValueTag::Str, s) => {
-                            let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s]).get_name_and_arity();
+                            let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                                .get_name_and_arity();
 
                             if name == atom!(".") && arity == 2 {
                                 offset += 1;
@@ -759,7 +743,7 @@ impl Machine {
             or_frame.prelude.boip = 0;
             or_frame.prelude.biip = 0;
             or_frame.prelude.tr = self.machine_st.tr;
-            or_frame.prelude.h = self.machine_st.heap.len();
+            or_frame.prelude.h = self.machine_st.heap.cell_len();
             or_frame.prelude.b0 = self.machine_st.b0;
             or_frame.prelude.attr_var_queue_len =
                 self.machine_st.attr_var_init.attr_var_queue.len();
@@ -770,7 +754,7 @@ impl Machine {
                 or_frame[i] = self.machine_st.registers[i + 1];
             }
 
-            self.machine_st.hb = self.machine_st.heap.len();
+            self.machine_st.hb = self.machine_st.heap.cell_len();
         }
 
         self.machine_st.p += 1;
@@ -791,7 +775,7 @@ impl Machine {
             or_frame.prelude.boip = self.machine_st.oip;
             or_frame.prelude.biip = self.machine_st.iip + iip_offset; // 1
             or_frame.prelude.tr = self.machine_st.tr;
-            or_frame.prelude.h = self.machine_st.heap.len();
+            or_frame.prelude.h = self.machine_st.heap.cell_len();
             or_frame.prelude.b0 = self.machine_st.b0;
             or_frame.prelude.attr_var_queue_len =
                 self.machine_st.attr_var_init.attr_var_queue.len();
@@ -802,7 +786,7 @@ impl Machine {
                 or_frame[i] = self.machine_st.registers[i + 1];
             }
 
-            self.machine_st.hb = self.machine_st.heap.len();
+            self.machine_st.hb = self.machine_st.heap.cell_len();
 
             // self.machine_st.oip = 0;
             // self.machine_st.iip = 0;
@@ -1069,13 +1053,15 @@ impl Machine {
 
         if module_name == atom!("user") {
             if let Some(idx) = self.indices.code_dir.get(&(name, arity)).cloned() {
-                self.try_call(name, arity, idx.get())
+                let index_ptr = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
+                self.try_call(name, arity, index_ptr)
             } else {
                 Err(self.machine_st.throw_undefined_error(name, arity))
             }
         } else if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
-                self.try_call(name, arity, idx.get())
+                let index_ptr = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
+                self.try_call(name, arity, index_ptr)
             } else {
                 self.undefined_procedure(name, arity)
             }
@@ -1098,14 +1084,24 @@ impl Machine {
         let (name, arity) = key;
 
         if module_name == atom!("user") {
-            if let Some(idx) = self.indices.code_dir.get(&(name, arity)).cloned() {
-                self.try_execute(name, arity, idx.get())
+            if let Some(offset) = self.indices.code_dir.get(&(name, arity)).cloned() {
+                let index_ptr = self
+                    .machine_st
+                    .arena
+                    .code_index_tbl
+                    .get_entry(offset.into());
+                self.try_execute(name, arity, index_ptr)
             } else {
                 self.undefined_procedure(name, arity)
             }
         } else if let Some(module) = self.indices.modules.get(&module_name) {
-            if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
-                self.try_execute(name, arity, idx.get())
+            if let Some(offset) = module.code_dir.get(&(name, arity)).cloned() {
+                let index_ptr = self
+                    .machine_st
+                    .arena
+                    .code_index_tbl
+                    .get_entry(offset.into());
+                self.try_execute(name, arity, index_ptr)
             } else {
                 self.undefined_procedure(name, arity)
             }
@@ -1147,12 +1143,24 @@ impl Machine {
             let r_c_w_h = self
                 .indices
                 .get_predicate_code_index(r_c_w_h_atom, 0, iso_ext)
-                .and_then(|item| item.local())
+                .and_then(|code_idx| {
+                    self.machine_st
+                        .arena
+                        .code_index_tbl
+                        .get_entry(code_idx.into())
+                        .local()
+                })
                 .unwrap();
             let r_c_wo_h = self
                 .indices
                 .get_predicate_code_index(r_c_wo_h_atom, 1, iso_ext)
-                .and_then(|item| item.local())
+                .and_then(|code_idx| {
+                    self.machine_st
+                        .arena
+                        .code_index_tbl
+                        .get_entry(code_idx.into())
+                        .local()
+                })
                 .unwrap();
             (r_c_w_h, r_c_wo_h)
         });
@@ -1162,8 +1170,10 @@ impl Machine {
                 let (idx, arity) = if self.machine_st.effective_block() > prev_block {
                     (r_c_w_h, 0)
                 } else {
-                    self.machine_st.registers[1] =
-                        fixnum_as_cell!(Fixnum::build_with(b_cutoff as i64));
+                    self.machine_st.registers[1] = fixnum_as_cell!(
+                        /* FIXME this is not safe */
+                        unsafe { Fixnum::build_with_unchecked(b_cutoff as i64) }
+                    );
 
                     (r_c_wo_h, 1)
                 };

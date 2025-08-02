@@ -2,21 +2,24 @@
 
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::machine::machine_indices::*;
+use crate::offset_table::*;
 use crate::parser::char_reader::*;
 use crate::types::HeapCellValueTag;
 
 use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::io::{Error as IOError, ErrorKind};
+use std::ops::Not;
+use std::ops::RangeInclusive;
 use std::ops::{Deref, Neg};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::vec::Vec;
 
-use crate::parser::dashu::{Integer, Rational};
-
+use dashu::Integer;
+use dashu::Rational;
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use scryer_modular_bitfield::error::OutOfBounds;
@@ -24,7 +27,7 @@ use scryer_modular_bitfield::prelude::*;
 
 pub type Specifier = u32;
 
-pub const MAX_ARITY: usize = 1023;
+pub const MAX_ARITY: usize = 255;
 
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -264,8 +267,8 @@ impl RegType {
 impl fmt::Display for RegType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            RegType::Perm(val) => write!(f, "Y{}", val),
-            RegType::Temp(val) => write!(f, "X{}", val),
+            RegType::Perm(val) => write!(f, "Y{val}"),
+            RegType::Temp(val) => write!(f, "X{val}"),
         }
     }
 }
@@ -287,10 +290,10 @@ impl VarReg {
 impl fmt::Display for VarReg {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            VarReg::Norm(RegType::Perm(reg)) => write!(f, "Y{}", reg),
-            VarReg::Norm(RegType::Temp(reg)) => write!(f, "X{}", reg),
-            VarReg::ArgAndNorm(RegType::Perm(reg), arg) => write!(f, "Y{} A{}", reg, arg),
-            VarReg::ArgAndNorm(RegType::Temp(reg), arg) => write!(f, "X{} A{}", reg, arg),
+            VarReg::Norm(RegType::Perm(reg)) => write!(f, "Y{reg}"),
+            VarReg::Norm(RegType::Temp(reg)) => write!(f, "X{reg}"),
+            VarReg::ArgAndNorm(RegType::Perm(reg), arg) => write!(f, "Y{reg} A{arg}"),
+            VarReg::ArgAndNorm(RegType::Temp(reg), arg) => write!(f, "X{reg} A{arg}"),
         }
     }
 }
@@ -305,28 +308,6 @@ macro_rules! temp_v {
     ($x:expr) => {
         $crate::parser::ast::RegType::Temp($x)
     };
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum GenContext {
-    Head,
-    Mid(usize),
-    Last(usize), // Mid & Last: chunk_num
-}
-
-impl GenContext {
-    #[inline]
-    pub fn chunk_num(self) -> usize {
-        match self {
-            GenContext::Head => 0,
-            GenContext::Mid(cn) | GenContext::Last(cn) => cn,
-        }
-    }
-
-    #[inline]
-    pub fn is_last(self) -> bool {
-        matches!(self, GenContext::Last(_))
-    }
 }
 
 #[bitfield]
@@ -420,7 +401,7 @@ pub fn default_op_dir() -> OpDir {
     op_dir
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum ArithmeticError {
     NonEvaluableFunctor(Literal, usize),
     UninstantiatedVar,
@@ -465,9 +446,9 @@ impl ParserError {
             ParserError::InvalidSingleQuotedCharacter(..) => {
                 atom!("invalid_single_quoted_character")
             }
-	    ParserError::InfiniteFloat(..) => {
-		atom!("infinite_float")
-	    }
+            ParserError::InfiniteFloat(..) => {
+                atom!("infinite_float")
+            }
             ParserError::IO(e) if e.kind() == ErrorKind::UnexpectedEof => {
                 atom!("unexpected_end_of_file")
             }
@@ -570,9 +551,90 @@ pub struct Fixnum {
     tag: B6,
 }
 
+mod private {
+    use dashu::Integer;
+
+    pub(crate) trait FitsInFixnumSeal {}
+    pub(crate) trait MightNotFitInFixnumSeal {}
+
+    macro_rules! impl_fits_in_fixnum {
+        ($t:ty) => {
+            impl $crate::parser::ast::private::FitsInFixnumSeal for $t {}
+
+            impl $crate::parser::ast::FitsInFixnum for $t {
+                fn into_i56(self) -> i64 {
+                    self.into()
+                }
+            }
+        };
+    }
+
+    impl_fits_in_fixnum!(u8);
+    impl_fits_in_fixnum!(i8);
+    impl_fits_in_fixnum!(u16);
+    impl_fits_in_fixnum!(i16);
+    impl_fits_in_fixnum!(u32);
+    impl_fits_in_fixnum!(i32);
+
+    impl FitsInFixnumSeal for char {}
+    impl super::FitsInFixnum for char {
+        fn into_i56(self) -> i64 {
+            u32::from(self) as i64
+        }
+    }
+
+    impl MightNotFitInFixnumSeal for i64 {}
+    impl MightNotFitInFixnumSeal for &Integer {}
+    impl MightNotFitInFixnumSeal for Integer {}
+    impl MightNotFitInFixnumSeal for usize {}
+}
+
+#[allow(private_bounds)]
+pub trait FitsInFixnum: private::FitsInFixnumSeal {
+    fn into_i56(self) -> i64;
+}
+
+#[allow(private_bounds)]
+pub trait MightNotFitInFixnum: private::MightNotFitInFixnumSeal {
+    fn try_into_i56(self) -> Option<i64>;
+}
+
+impl<T> MightNotFitInFixnum for T
+where
+    T: private::MightNotFitInFixnumSeal + TryInto<i64>,
+{
+    fn try_into_i56(self) -> Option<i64> {
+        let val = self.try_into().ok()?;
+        if Fixnum::RANGE.contains(&val) {
+            Some(val)
+        } else {
+            None
+        }
+    }
+}
+
 impl Fixnum {
+    pub(crate) const MIN: i64 = -(1 << 55);
+    pub(crate) const MAX: i64 = (1 << 55) - 1;
+    const RANGE: RangeInclusive<i64> = Self::MIN..=Self::MAX;
+
+    // if you have a type that is not guaranteed to fit use `Fixnum::build_with_checked` or `Fixnum::build_with_unchecked` instead
     #[inline]
-    pub fn build_with(num: i64) -> Self {
+    pub fn build_with(num: impl FitsInFixnum) -> Self {
+        // Safety: FitsInFixnum is only implemented by types that only have valid values
+        // and FitsInFixnumSeal ensures no one outside this crate can violate that
+        unsafe { Self::build_with_unchecked(num.into_i56()) }
+    }
+
+    #[inline]
+    pub unsafe fn build_with_unchecked(num: i64) -> Self {
+        debug_assert!(
+            Self::RANGE.contains(&num),
+            "{num} should be in the range {}..={}",
+            Self::MIN,
+            Self::MAX
+        );
+
         Fixnum::new()
             .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 56) - 1))
             .with_tag(HeapCellValueTag::Fixnum as u8)
@@ -581,12 +643,8 @@ impl Fixnum {
     }
 
     #[inline]
-    pub fn as_cutpoint(num: i64) -> Self {
-        Fixnum::new()
-            .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 56) - 1))
-            .with_tag(HeapCellValueTag::CutPoint as u8)
-            .with_m(false)
-            .with_f(false)
+    pub fn as_cutpoint(self) -> Self {
+        self.with_tag(HeapCellValueTag::CutPoint as u8)
     }
 
     #[inline]
@@ -595,20 +653,14 @@ impl Fixnum {
         HeapCellValueTag::from_bytes(self.tag()).unwrap()
     }
 
+    // if you have a type that is guaranteed to fit use `Fixnum::build_with` instead
     #[inline]
-    pub fn build_with_checked(num: i64) -> Result<Self, OutOfBounds> {
-        const UPPER_BOUND: i64 = (1 << 55) - 1;
-        const LOWER_BOUND: i64 = -(1 << 55);
-
-        if (LOWER_BOUND..=UPPER_BOUND).contains(&num) {
-            Ok(Fixnum::new()
-                .with_m(false)
-                .with_f(false)
-                .with_tag(HeapCellValueTag::Fixnum as u8)
-                .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 56) - 1)))
-        } else {
-            Err(OutOfBounds {})
-        }
+    pub fn build_with_checked(num: impl MightNotFitInFixnum) -> Result<Self, OutOfBounds> {
+        Ok(unsafe {
+            // Safety: all MightNotFitInFixnum impls return None when the value is out-of-bounds
+            // and MightNotFitInFixnumSeal ensures no one outside this crate can violate that
+            Self::build_with_unchecked(num.try_into_i56().ok_or(OutOfBounds {})?)
+        })
     }
 
     #[inline]
@@ -618,6 +670,10 @@ impl Fixnum {
         debug_assert!(!overflowed);
         n
     }
+
+    pub fn checked_abs(self) -> Option<Self> {
+        Self::build_with_checked(self.get_num().abs()).ok()
+    }
 }
 
 impl Neg for Fixnum {
@@ -625,23 +681,33 @@ impl Neg for Fixnum {
 
     #[inline]
     fn neg(self) -> Self::Output {
-        Fixnum::build_with(-self.get_num())
+        // Safety: the truncating behaviour is correct
+        unsafe { Self::build_with_unchecked(-self.get_num()) }
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+impl Not for Fixnum {
+    type Output = Self;
+
+    #[inline]
+    fn not(self) -> Self::Output {
+        // Safety: the truncating behaviour is correct
+        unsafe { Self::build_with_unchecked(!self.get_num()) }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum Literal {
     Atom(Atom),
-    Char(char),
-    CodeIndex(CodeIndex),
+    CodeIndexOffset(CodeIndexOffset),
     Fixnum(Fixnum),
     Integer(TypedArenaPtr<Integer>),
     Rational(TypedArenaPtr<Rational>),
-    Float(F64Offset),
-    String(Atom),
+    F64Offset(F64Offset),
 }
 
-impl From<F64Ptr> for Literal {
+/*
+impl From<F64Ptr<'_>> for Literal {
     #[inline(always)]
     fn from(ptr: F64Ptr) -> Literal {
         Literal::Float(ptr.as_offset())
@@ -654,16 +720,15 @@ impl fmt::Display for Literal {
             Literal::Atom(ref atom) => {
                 write!(f, "{}", atom.flat_index())
             }
-            Literal::Char(c) => write!(f, "'{}'", *c as u32),
-            Literal::CodeIndex(i) => write!(f, "{:x}", i.as_ptr() as u64),
+            Literal::CodeIndexOffset(i) => write!(f, "{}", *i),
             Literal::Fixnum(n) => write!(f, "{}", n.get_num()),
             Literal::Integer(ref n) => write!(f, "{}", n),
             Literal::Rational(ref n) => write!(f, "{}", n),
-            Literal::Float(ref n) => write!(f, "{}", *n),
-            Literal::String(ref s) => write!(f, "\"{}\"", s.as_str()),
+            Literal::FloatOffset(ref n) => write!(f, "{}", *n),
         }
     }
 }
+*/
 
 impl Literal {
     pub fn as_atom(&self, atom_tbl: &Arc<AtomTable>) -> Option<Atom> {
@@ -742,20 +807,20 @@ impl From<&str> for VarPtr {
 pub enum Var {
     Generated(usize),
     InSitu(usize),
-    Named(String),
+    Named(Rc<String>),
 }
 
 impl From<String> for Var {
     #[inline(always)]
     fn from(value: String) -> Var {
-        Var::Named(value)
+        Var::Named(Rc::new(value))
     }
 }
 
 impl From<&str> for Var {
     #[inline(always)]
     fn from(value: &str) -> Var {
-        Var::Named(value.to_owned())
+        Var::Named(Rc::new(value.to_owned()))
     }
 }
 
@@ -764,8 +829,8 @@ impl Var {
     #[inline(always)]
     pub fn to_string(&self) -> String {
         match self {
-            Var::InSitu(n) | Var::Generated(n) => format!("_{}", n),
-            Var::Named(value) => value.to_owned(),
+            Var::InSitu(n) | Var::Generated(n) => format!("_{n}"),
+            Var::Named(value) => value.as_ref().clone(),
         }
     }
 }
@@ -778,8 +843,8 @@ pub enum Term {
     Literal(Cell<RegType>, Literal),
     // PartialString wraps a String in anticipation of it absorbing
     // other PartialString variants in as_partial_string.
-    PartialString(Cell<RegType>, String, Box<Term>),
-    CompleteString(Cell<RegType>, Atom),
+    PartialString(Cell<RegType>, Rc<String>, Box<Term>),
+    CompleteString(Cell<RegType>, Rc<String>),
     Var(Cell<VarReg>, VarPtr),
 }
 
@@ -792,10 +857,9 @@ impl Term {
     }
 
     pub fn name(&self) -> Option<Atom> {
-        match self {
-            &Term::Literal(_, Literal::Atom(ref atom)) | &Term::Clause(_, ref atom, ..) => {
-                Some(*atom)
-            }
+        match *self {
+            Term::Literal(_, Literal::Atom(atom)) => Some(atom),
+            Term::Clause(_, atom, ..) => Some(atom),
             _ => None,
         }
     }
@@ -810,7 +874,7 @@ impl Term {
 
 pub(crate) fn unfold_by_str_once(term: &mut Term, s: Atom) -> Option<(Term, Term)> {
     if let Term::Clause(_, ref name, ref mut subterms) = term {
-        if let Some(Term::Literal(_, Literal::CodeIndex(_))) = subterms.last() {
+        if let Some(Term::Literal(_, Literal::CodeIndexOffset(_))) = subterms.last() {
             subterms.pop();
         }
 

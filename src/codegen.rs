@@ -6,6 +6,7 @@ use crate::forms::*;
 use crate::indexing::*;
 use crate::instructions::*;
 use crate::iterators::*;
+use crate::offset_table::F64Table;
 use crate::parser::ast::*;
 use crate::targets::*;
 use crate::types::*;
@@ -269,10 +270,10 @@ impl CodeGenSettings {
 }
 
 #[derive(Debug)]
-pub(crate) struct CodeGenerator<'a> {
-    pub(crate) atom_tbl: &'a AtomTable,
+pub(crate) struct CodeGenerator<'f64_tbl> {
     marker: DebrayAllocator,
     settings: CodeGenSettings,
+    f64_tbl: &'f64_tbl F64Table,
     pub(crate) skeleton: PredicateSkeleton,
 }
 
@@ -319,33 +320,12 @@ impl DebrayAllocator {
     }
 }
 
-// if the final argument of the structure is a Literal::Index,
-// decrement the arity of the PutStructure instruction by 1.
-fn trim_structure_by_last_arg(instr: &mut Instruction, last_arg: &Term) {
-    match instr {
-        Instruction::PutStructure(_, ref mut arity, _)
-        | Instruction::GetStructure(.., ref mut arity, _) => {
-            if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
-                // it is acceptable if arity == 0 is the result of
-                // this decrement. call/N will have to read the index
-                // constant for '$call_inline' to succeed. to find it,
-                // it must know the heap location of the index.
-                // self.store must stop before reading the atom into a
-                // register.
-
-                *arity -= 1;
-            }
-        }
-        _ => {}
-    }
-}
-
 trait AddToFreeList<'a, Target: CompilationTarget<'a>> {
     fn add_term_to_free_list(&mut self, r: RegType);
     fn add_subterm_to_free_list(&mut self, term: &Term);
 }
 
-impl<'a, 'b> AddToFreeList<'a, FactInstruction> for CodeGenerator<'b> {
+impl<'a> AddToFreeList<'a, FactInstruction> for CodeGenerator<'_> {
     fn add_term_to_free_list(&mut self, r: RegType) {
         self.marker.add_reg_to_free_list(r);
     }
@@ -353,7 +333,7 @@ impl<'a, 'b> AddToFreeList<'a, FactInstruction> for CodeGenerator<'b> {
     fn add_subterm_to_free_list(&mut self, _term: &Term) {}
 }
 
-impl<'a, 'b> AddToFreeList<'a, QueryInstruction> for CodeGenerator<'b> {
+impl<'a> AddToFreeList<'a, QueryInstruction> for CodeGenerator<'_> {
     #[inline(always)]
     fn add_term_to_free_list(&mut self, _r: RegType) {}
 
@@ -375,12 +355,12 @@ fn structure_cell(term: &Term) -> Option<&Cell<RegType>> {
     }
 }
 
-impl<'b> CodeGenerator<'b> {
-    pub(crate) fn new(atom_tbl: &'b AtomTable, settings: CodeGenSettings) -> Self {
+impl<'f64_tbl> CodeGenerator<'f64_tbl> {
+    pub(crate) fn new(f64_tbl: &'f64_tbl F64Table, settings: CodeGenSettings) -> Self {
         CodeGenerator {
-            atom_tbl,
             marker: DebrayAllocator::new(),
             settings,
+            f64_tbl,
             skeleton: PredicateSkeleton::new(),
         }
     }
@@ -446,99 +426,99 @@ impl<'b> CodeGenerator<'b> {
         };
     }
 
-    fn compile_target<'a, Target, Iter>(&mut self, iter: Iter, term_loc: GenContext) -> CodeDeque
+    fn compile_target<'a, Target, Iter>(&mut self, iter: Iter, context: GenContext) -> CodeDeque
     where
         Target: crate::targets::CompilationTarget<'a>,
         Iter: Iterator<Item = TermRef<'a>>,
-        CodeGenerator<'b>: AddToFreeList<'a, Target>,
+        CodeGenerator<'f64_tbl>: AddToFreeList<'a, Target>,
     {
         let mut target = CodeDeque::new();
 
         for term in iter {
             match term {
                 TermRef::AnonVar(lvl @ Level::Shallow) => {
-                    if let GenContext::Head = term_loc {
+                    if let GenContext::Head = context {
                         self.marker.advance_arg();
                     } else {
                         self.marker
-                            .mark_anon_var::<Target>(lvl, term_loc, &mut target);
+                            .mark_anon_var::<Target>(lvl, context, &mut target);
                     }
                 }
                 TermRef::Clause(lvl, cell, name, terms) => {
-                    self.marker
-                        .mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    target.push_back(Target::to_structure(lvl, name, terms.len(), cell.get()));
+                    let terms_range =
+                        if let Some(subterm @ Term::Literal(_, Literal::CodeIndexOffset(_))) =
+                            terms.last()
+                        {
+                            self.subterm_to_instr::<Target>(subterm, context, &mut target);
+                            0..terms.len() - 1
+                        } else {
+                            0..terms.len()
+                        };
 
-                    <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_term_to_free_list(
+                    self.marker
+                        .mark_non_var::<Target>(lvl, context, cell, &mut target);
+                    target.push_back(Target::to_structure(lvl, name, terms_range.end, cell.get()));
+
+                    <CodeGenerator as AddToFreeList<'a, Target>>::add_term_to_free_list(
                         self,
                         cell.get(),
                     );
 
-                    if let Some(instr) = target.back_mut() {
-                        if let Some(term) = terms.last() {
-                            trim_structure_by_last_arg(instr, term);
-                        }
+                    for subterm in &terms[terms_range.clone()] {
+                        self.subterm_to_instr::<Target>(subterm, context, &mut target);
                     }
 
-                    for subterm in terms {
-                        self.subterm_to_instr::<Target>(subterm, term_loc, &mut target);
-                    }
-
-                    for subterm in terms {
-                        <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
+                    for subterm in &terms[terms_range] {
+                        <CodeGenerator as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
                             self, subterm,
                         );
                     }
                 }
                 TermRef::Cons(lvl, cell, head, tail) => {
                     self.marker
-                        .mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
+                        .mark_non_var::<Target>(lvl, context, cell, &mut target);
                     target.push_back(Target::to_list(lvl, cell.get()));
 
-                    <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_term_to_free_list(
+                    <CodeGenerator as AddToFreeList<'a, Target>>::add_term_to_free_list(
                         self,
                         cell.get(),
                     );
 
-                    self.subterm_to_instr::<Target>(head, term_loc, &mut target);
-                    self.subterm_to_instr::<Target>(tail, term_loc, &mut target);
+                    self.subterm_to_instr::<Target>(head, context, &mut target);
+                    self.subterm_to_instr::<Target>(tail, context, &mut target);
 
-                    <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
+                    <CodeGenerator as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
                         self, head,
                     );
-                    <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
+                    <CodeGenerator as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
                         self, tail,
                     );
                 }
-                TermRef::Literal(lvl @ Level::Shallow, cell, Literal::String(ref string)) => {
-                    self.marker
-                        .mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    target.push_back(Target::to_pstr(lvl, *string, cell.get(), false));
-                }
                 TermRef::Literal(lvl @ Level::Shallow, cell, constant) => {
                     self.marker
-                        .mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
+                        .mark_non_var::<Target>(lvl, context, cell, &mut target);
                     target.push_back(Target::to_constant(lvl, *constant, cell.get()));
                 }
                 TermRef::PartialString(lvl, cell, string, tail) => {
                     self.marker
-                        .mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    let atom = AtomTable::build_with(self.atom_tbl, string);
+                        .mark_non_var::<Target>(lvl, context, cell, &mut target);
 
-                    target.push_back(Target::to_pstr(lvl, atom, cell.get(), true));
-                    self.subterm_to_instr::<Target>(tail, term_loc, &mut target);
+                    target.push_back(Target::to_pstr(lvl, string.clone(), cell.get()));
+                    self.subterm_to_instr::<Target>(tail, context, &mut target);
                 }
-                TermRef::CompleteString(lvl, cell, atom) => {
+                TermRef::CompleteString(lvl, cell, string) => {
                     self.marker
-                        .mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    target.push_back(Target::to_pstr(lvl, atom, cell.get(), false));
+                        .mark_non_var::<Target>(lvl, context, cell, &mut target);
+
+                    target.push_back(Target::to_pstr(lvl, string.clone(), cell.get()));
+                    target.push_back(Target::constant_subterm(Literal::Atom(atom!("[]"))));
                 }
                 TermRef::Var(lvl @ Level::Shallow, cell, var) => {
                     self.marker.mark_var::<Target>(
                         var.to_var_num().unwrap(),
                         lvl,
                         cell,
-                        term_loc,
+                        context,
                         &mut target,
                     );
                 }
@@ -600,9 +580,7 @@ impl<'b> CodeGenerator<'b> {
                 compare_number_instr!(cmp, at_1, at_2)
             }
             InlinedClauseType::IsAtom(..) => match &terms[0] {
-                Term::Literal(_, Literal::Char(_))
-                | Term::Literal(_, Literal::Atom(atom!("[]")))
-                | Term::Literal(_, Literal::Atom(..)) => {
+                Term::Literal(_, Literal::Atom(..)) => {
                     instr!("$succeed")
                 }
                 Term::Var(ref vr, ref name) => {
@@ -630,9 +608,6 @@ impl<'b> CodeGenerator<'b> {
                 | Term::CompleteString(..) => {
                     instr!("$fail")
                 }
-                Term::Literal(_, Literal::String(_)) => {
-                    instr!("$fail")
-                }
                 Term::Literal(..) => {
                     instr!("$succeed")
                 }
@@ -654,8 +629,7 @@ impl<'b> CodeGenerator<'b> {
                 Term::Clause(..)
                 | Term::Cons(..)
                 | Term::PartialString(..)
-                | Term::CompleteString(..)
-                | Term::Literal(_, Literal::String(..)) => {
+                | Term::CompleteString(..) => {
                     instr!("$succeed")
                 }
                 Term::Var(ref vr, ref name) => {
@@ -695,7 +669,7 @@ impl<'b> CodeGenerator<'b> {
                 }
             },
             InlinedClauseType::IsFloat(..) => match terms[0] {
-                Term::Literal(_, Literal::Float(_)) => {
+                Term::Literal(_, Literal::F64Offset(_)) => {
                     instr!("$succeed")
                 }
                 Term::Var(ref vr, ref name) => {
@@ -716,7 +690,7 @@ impl<'b> CodeGenerator<'b> {
                 }
             },
             InlinedClauseType::IsNumber(..) => match terms[0] {
-                Term::Literal(_, Literal::Float(_))
+                Term::Literal(_, Literal::F64Offset(_))
                 | Term::Literal(_, Literal::Rational(_))
                 | Term::Literal(_, Literal::Integer(_))
                 | Term::Literal(_, Literal::Fixnum(_)) => {
@@ -810,7 +784,6 @@ impl<'b> CodeGenerator<'b> {
 
         // inlined predicates are never counted, so this overrides nothing.
         self.add_call(code, call_instr, CallPolicy::Counted);
-
         Ok(())
     }
 
@@ -821,7 +794,7 @@ impl<'b> CodeGenerator<'b> {
         term_loc: GenContext,
         arg: usize,
     ) -> Result<ArithCont, ArithmeticError> {
-        let mut evaluator = ArithmeticEvaluator::new(&mut self.marker, target_int);
+        let mut evaluator = ArithmeticEvaluator::new(&mut self.marker, self.f64_tbl, target_int);
         evaluator.compile_is(term, term_loc, arg)
     }
 
@@ -891,7 +864,7 @@ impl<'b> CodeGenerator<'b> {
             Term::Literal(
                 _,
                 c @ Literal::Integer(_)
-                | c @ Literal::Float(_)
+                | c @ Literal::F64Offset(_)
                 | c @ Literal::Rational(_)
                 | c @ Literal::Fixnum(_),
             ) => {
@@ -909,7 +882,6 @@ impl<'b> CodeGenerator<'b> {
 
         let at = at.unwrap_or(interm!(1));
         self.add_call(code, instr!("is", temp_v!(1), at), call_policy);
-
         Ok(())
     }
 
@@ -924,9 +896,9 @@ impl<'b> CodeGenerator<'b> {
 
         while let Some(clause_item) = clause_iter.next() {
             match clause_item {
-                ClauseItem::Chunk(chunk) => {
-                    for (idx, term) in chunk.iter().enumerate() {
-                        let term_loc = if idx + 1 < chunk.len() {
+                ClauseItem::Chunk { terms } => {
+                    for (idx, term) in terms.iter().enumerate() {
+                        let term_loc = if idx + 1 < terms.len() {
                             GenContext::Mid(chunk_num)
                         } else {
                             self.marker.in_tail_position = clause_iter.in_tail_position();
@@ -1147,27 +1119,24 @@ impl<'b> CodeGenerator<'b> {
         'outer: for (right, clause) in clauses.iter().enumerate() {
             if let Some(args) = clause.args() {
                 for (instantiated_arg_index, arg) in args.iter().enumerate() {
-                    match arg {
-                        Term::Var(..) | Term::AnonVar => {}
-                        _ => {
-                            if optimal_index != instantiated_arg_index {
-                                if left >= right {
-                                    optimal_index = instantiated_arg_index;
-                                    continue 'outer;
-                                }
-
-                                subseqs.push(ClauseSpan {
-                                    left,
-                                    right,
-                                    instantiated_arg_index: optimal_index,
-                                });
-
+                    if !matches!(arg, Term::Var(..) | Term::AnonVar) {
+                        if optimal_index != instantiated_arg_index {
+                            if left >= right {
                                 optimal_index = instantiated_arg_index;
-                                left = right;
+                                continue 'outer;
                             }
 
-                            continue 'outer;
+                            subseqs.push(ClauseSpan {
+                                left,
+                                right,
+                                instantiated_arg_index: optimal_index,
+                            });
+
+                            optimal_index = instantiated_arg_index;
+                            left = right;
                         }
+
+                        continue 'outer;
                     }
                 }
             }
@@ -1260,7 +1229,7 @@ impl<'b> CodeGenerator<'b> {
                 let index = code.len();
 
                 if clauses_len > 1 || self.settings.is_extensible {
-                    code_offsets.index_term(arg, index, &mut clause_index_info, self.atom_tbl);
+                    code_offsets.index_term(arg, index, &mut clause_index_info);
                 }
             }
 

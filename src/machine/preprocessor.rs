@@ -21,11 +21,10 @@ pub(crate) fn to_op_decl_spec(spec: Atom) -> Result<OpDeclSpec, CompilationError
     })
 }
 
-fn setup_op_decl(mut terms: Vec<Term>, atom_tbl: &AtomTable) -> Result<OpDecl, CompilationError> {
+fn setup_op_decl(mut terms: Vec<Term>) -> Result<OpDecl, CompilationError> {
     // should allow non-partial lists?
     let name = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Atom(name)) => name,
-        Term::Literal(_, Literal::Char(c)) => AtomTable::build_with(atom_tbl, &c.to_string()),
         other => {
             return Err(CompilationError::InvalidDirective(
                 DirectiveError::InvalidOpDeclNameType(other),
@@ -112,16 +111,13 @@ fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, Compilatio
     }
 }
 
-fn setup_module_export(
-    mut term: Term,
-    atom_tbl: &AtomTable,
-) -> Result<ModuleExport, CompilationError> {
+fn setup_module_export(mut term: Term) -> Result<ModuleExport, CompilationError> {
     setup_predicate_indicator(&mut term)
         .map(ModuleExport::PredicateKey)
         .or_else(|_| {
             if let Term::Clause(_, name, terms) = term {
                 if terms.len() == 3 && name == atom!("op") {
-                    Ok(ModuleExport::OpDecl(setup_op_decl(terms, atom_tbl)?))
+                    Ok(ModuleExport::OpDecl(setup_op_decl(terms)?))
                 } else {
                     Err(CompilationError::InvalidModuleDecl)
                 }
@@ -140,12 +136,11 @@ pub(crate) fn build_rule_body(vars: &[Term], body_term: Term) -> Term {
 
 pub(super) fn setup_module_export_list(
     mut export_list: Term,
-    atom_tbl: &AtomTable,
 ) -> Result<Vec<ModuleExport>, CompilationError> {
     let mut exports = vec![];
 
     while let Term::Cons(_, t1, t2) = export_list {
-        let module_export = setup_module_export(*t1, atom_tbl)?;
+        let module_export = setup_module_export(*t1)?;
 
         exports.push(module_export);
         export_list = *t2;
@@ -158,10 +153,7 @@ pub(super) fn setup_module_export_list(
     }
 }
 
-fn setup_module_decl(
-    mut terms: Vec<Term>,
-    atom_tbl: &AtomTable,
-) -> Result<ModuleDecl, CompilationError> {
+fn setup_module_decl(mut terms: Vec<Term>) -> Result<ModuleDecl, CompilationError> {
     let export_list = terms.pop().unwrap();
     let name = terms.pop().unwrap();
 
@@ -171,8 +163,7 @@ fn setup_module_decl(
     }
     .ok_or(CompilationError::InvalidModuleDecl)?;
 
-    let exports = setup_module_export_list(export_list, atom_tbl)?;
-
+    let exports = setup_module_export_list(export_list)?;
     Ok(ModuleDecl { name, exports })
 }
 
@@ -191,10 +182,7 @@ fn setup_use_module_decl(mut terms: Vec<Term>) -> Result<ModuleSource, Compilati
 
 type UseModuleExport = (ModuleSource, IndexSet<ModuleExport>);
 
-fn setup_qualified_import(
-    mut terms: Vec<Term>,
-    atom_tbl: &AtomTable,
-) -> Result<UseModuleExport, CompilationError> {
+fn setup_qualified_import(mut terms: Vec<Term>) -> Result<UseModuleExport, CompilationError> {
     let mut export_list = terms.pop().unwrap();
     let module_src = match terms.pop().unwrap() {
         Term::Clause(_, name, mut terms) if name == atom!("library") && terms.len() == 1 => {
@@ -210,7 +198,7 @@ fn setup_qualified_import(
     let mut exports = IndexSet::new();
 
     while let Term::Cons(_, t1, t2) = export_list {
-        exports.insert(setup_module_export(*t1, atom_tbl)?);
+        exports.insert(setup_module_export(*t1)?);
         export_list = *t2;
     }
 
@@ -252,7 +240,7 @@ fn setup_qualified_import(
  * contained in src/lib/ops_and_meta_predicates.pl, which is loaded before
  * src/lib/builtins.pl.
  *
- * Meta-specs have three forms:
+ * Meta-specs have four forms:
  *
  * (:)  (the argument should be expanded with (:)/2 as described above)
  * +    (mode declarations under the mode syntax, which currently have no effect)
@@ -340,23 +328,15 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
                 let (name, arity) = setup_predicate_indicator(&mut terms.pop().unwrap())?;
                 Ok(Declaration::Dynamic(name, arity))
             }
-            (atom!("module"), 2) => {
-                let atom_tbl = &mut LS::machine_st(&mut loader.payload).atom_tbl;
-                Ok(Declaration::Module(setup_module_decl(terms, atom_tbl)?))
-            }
-            (atom!("op"), 3) => {
-                let atom_tbl = &mut LS::machine_st(&mut loader.payload).atom_tbl;
-                Ok(Declaration::Op(setup_op_decl(terms, atom_tbl)?))
-            }
+            (atom!("module"), 2) => Ok(Declaration::Module(setup_module_decl(terms)?)),
+            (atom!("op"), 3) => Ok(Declaration::Op(setup_op_decl(terms)?)),
             (atom!("non_counted_backtracking"), 1) => {
                 let (name, arity) = setup_predicate_indicator(&mut terms.pop().unwrap())?;
                 Ok(Declaration::NonCountedBacktracking(name, arity))
             }
             (atom!("use_module"), 1) => Ok(Declaration::UseModule(setup_use_module_decl(terms)?)),
             (atom!("use_module"), 2) => {
-                let atom_tbl = &mut LS::machine_st(&mut loader.payload).atom_tbl;
-                let (name, exports) = setup_qualified_import(terms, atom_tbl)?;
-
+                let (name, exports) = setup_qualified_import(terms)?;
                 Ok(Declaration::UseQualifiedModule(name, exports))
             }
             (atom!("meta_predicate"), 1) => {
@@ -444,7 +424,7 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
 
                 let term = match term {
                     Term::Clause(cell, name, mut terms) => {
-                        if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
+                        if let Some(Term::Literal(_, Literal::CodeIndexOffset(_))) = terms.last() {
                             arg_terms
                                 .push(process_term(module_name, Term::Clause(cell, name, terms)));
 
@@ -453,7 +433,10 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
 
                         let idx = loader.get_or_insert_qualified_code_index(module_name, key);
 
-                        terms.push(Term::Literal(Cell::default(), Literal::CodeIndex(idx)));
+                        terms.push(Term::Literal(
+                            Cell::default(),
+                            Literal::CodeIndexOffset(idx.into()),
+                        ));
                         process_term(module_name, Term::Clause(cell, name, terms))
                     }
                     Term::Literal(cell, Literal::Atom(name)) => {
@@ -464,7 +447,10 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
                             Term::Clause(
                                 cell,
                                 name,
-                                vec![Term::Literal(Cell::default(), Literal::CodeIndex(idx))],
+                                vec![Term::Literal(
+                                    Cell::default(),
+                                    Literal::CodeIndexOffset(idx.into()),
+                                )],
                             ),
                         )
                     }
@@ -489,7 +475,7 @@ pub(super) fn clause_to_query_term<'a, LS: LoadState<'a>>(
     mut terms: Vec<Term>,
     call_policy: CallPolicy,
 ) -> QueryTerm {
-    if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
+    if let Some(Term::Literal(_, Literal::CodeIndexOffset(_))) = terms.last() {
         // supplementary code vector indices are unnecessary for
         // root-level clauses.
         terms.pop();
@@ -524,7 +510,7 @@ pub(super) fn qualified_clause_to_query_term<'a, LS: LoadState<'a>>(
     mut terms: Vec<Term>,
     call_policy: CallPolicy,
 ) -> QueryTerm {
-    if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
+    if let Some(Term::Literal(_, Literal::CodeIndexOffset(_))) = terms.last() {
         // supplementary code vector indices are unnecessary for
         // root-level clauses.
         terms.pop();
@@ -605,7 +591,7 @@ impl Preprocessor {
         &mut self,
         loader: &mut Loader<'a, LS>,
         term: Term,
-    ) -> Result<TopLevel, CompilationError> {
+    ) -> Result<PredicateClause, CompilationError> {
         match term {
             Term::Clause(r, name, mut terms) => {
                 let is_rule = name == atom!(":-") && terms.len() == 2;
@@ -615,16 +601,16 @@ impl Preprocessor {
                     let head = terms.pop().unwrap();
 
                     let (rule, var_data) = self.setup_rule(loader, head, tail)?;
-                    Ok(TopLevel::Rule(rule, var_data))
+                    Ok(PredicateClause::Rule(rule, var_data))
                 } else {
                     let term = Term::Clause(r, name, terms);
                     let (fact, var_data) = self.setup_fact(term)?;
-                    Ok(TopLevel::Fact(fact, var_data))
+                    Ok(PredicateClause::Fact(fact, var_data))
                 }
             }
             term => {
                 let (fact, var_data) = self.setup_fact(term)?;
-                Ok(TopLevel::Fact(fact, var_data))
+                Ok(PredicateClause::Fact(fact, var_data))
             }
         }
     }
