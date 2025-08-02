@@ -1,0 +1,73 @@
+-- 1 -
+? dup bool
+++ 1 +
+anamorphism [pop []] swap [dip swons] genrec
+app1 grba infrst
+app2 [grba swap grba swap] dip [infrst] cons ii
+app3 3 appN
+appN [grabN] cons dip map disenstacken
+at drop first
+average [sum 1.0 *] [size] cleave /
+b [i] dip i
+binary unary popd
+ccons cons cons
+cleave fork popdd
+clop cleave popdd
+codireco cons dip rest cons
+dinfrirst dip infrst
+disenstacken ? [uncons ?] loop pop
+down_to_zero [0 >] [dup --] while
+drop [rest] times
+dupd [dup] dip
+dupdd [dup] dipd
+dupdipd dup dipd
+enstacken stack [clear] dip
+flatten [] swap [concat] step
+fork [i] app2
+fourth rest third
+gcd true [tuck mod dup 0 >] loop pop
+grabN [] swap [cons] times
+grba [stack popd] dip
+hypot [sqr] ii + sqrt
+ifte [nullary] dipd swap branch
+ii [dip] dupdip i
+infra swons swaack [i] dip swaack
+infrst infra first
+make_generator [codireco] ccons
+neg 0 swap -
+not [true] [false] branch
+nullary [stack] dinfrirst
+of swap at
+pam [i] map
+pm [+] [-] clop
+popd [pop] dip
+popdd [pop] dipd
+popop pop pop
+popopd [popop] dip
+popopdd [popop] dipd
+primrec [i] genrec
+product 1 swap [*] step
+quoted [unit] dip
+range [0 <=] [1 - dup] anamorphism
+range_to_zero unit [down_to_zero] infra
+reverse [] swap shunt
+rrest rest rest
+run [] swap infra
+second rest first
+shift uncons [swons] dip
+shunt [swons] step
+size 0 swap [pop ++] step
+split_at [drop] [take] clop
+sqr dup *
+step_zero 0 roll> step
+sum 0 swap [+] step
+swons swap cons
+take [] rolldown [shift] times pop
+ternary binary popd
+third rest second
+unary nullary popd
+unit [] cons
+unquoted [i] dip
+unswons uncons swap
+while swap [nullary] cons dup dipd concat loop
+x dup i
