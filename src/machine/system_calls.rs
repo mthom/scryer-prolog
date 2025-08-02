@@ -56,6 +56,8 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use std::net::{TcpListener, TcpStream};
 use std::num::NonZeroU32;
 use std::process;
+use std::process::Child;
+use std::process::Stdio;
 #[cfg(feature = "http")]
 use std::str::FromStr;
 #[cfg(feature = "http")]
@@ -8391,6 +8393,431 @@ impl Machine {
                 }
             },
         };
+    }
+
+    pub(crate) fn process_create(&mut self) -> CallResult {
+        fn stub_gen() -> Vec<FunctorElement> {
+            functor_stub(atom!("process_create"), 3)
+        }
+
+        // String
+        let exe_r = self.deref_register(1);
+        // [String,...]
+        let args_r = self.deref_register(2);
+        // [std] | [null] | [pipe, Var] | [file, String]
+        let stdin_r = self.deref_register(3);
+        let stdout_r = self.deref_register(4);
+        let stderr_r = self.deref_register(5);
+        // [env | environment, [[String, String],...]]
+        let env_r = self.deref_register(6);
+        // String ("." for keep current cwd)
+        let cwd_r = self.deref_register(7);
+        // Var
+        let pid_r = self.deref_register(8);
+
+        let exe = self
+            .machine_st
+            .value_to_str_like(exe_r)
+            .expect("invalid values should have been rejected on the prolog side");
+
+        let args = self
+            .machine_st
+            .try_from_list(args_r, stub_gen)
+            .expect("invalid values should have been rejected on the prolog side")
+            .into_iter()
+            .map(|arg| {
+                self.machine_st
+                    .value_to_str_like(arg)
+                    .expect("invalid values should have been rejected on the prolog side")
+                    .as_str()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+
+        let stdin_args = self.machine_st.try_from_list(stdin_r, stub_gen)?;
+        let stdin = self.handle_input_stream(stdin_args)?;
+
+        let stdout_args = self.machine_st.try_from_list(stdout_r, stub_gen)?;
+        let stdout = self.handle_output_stream(stdout_args)?;
+
+        let stderr_args = self.machine_st.try_from_list(stderr_r, stub_gen)?;
+        let stderr = self.handle_output_stream(stderr_args)?;
+
+        let env_args = self.machine_st.try_from_list(env_r, stub_gen)?;
+
+        let clear_env = match env_args[0].to_atom() {
+            Some(atom!("env")) => true,
+            Some(atom!("environment")) => false,
+            _ => panic!("Invalid value for clear_env"),
+        };
+
+        let envs = self
+            .machine_st
+            .try_from_list(env_args[1], stub_gen)?
+            .into_iter()
+            .map(|entry| {
+                let entry = self.machine_st.try_from_list(entry, stub_gen)?;
+                let name = self
+                    .machine_st
+                    .value_to_str_like(entry[0])
+                    .expect("invalid values should have been rejected on the prolog side")
+                    .as_str()
+                    .to_string();
+                let value = self
+                    .machine_st
+                    .value_to_str_like(entry[1])
+                    .expect("invalid values should have been rejected on the prolog side")
+                    .as_str()
+                    .to_string();
+                Ok((name, value))
+            })
+            .collect::<Result<Vec<_>, MachineStub>>()?;
+
+        let cwd = self
+            .machine_st
+            .value_to_str_like(cwd_r)
+            .expect("invalid values should have been rejected on the prolog side");
+
+        let mut command = std::process::Command::new(&*exe.as_str());
+        command.args(args);
+
+        if &*cwd.as_str() != "." {
+            command.current_dir(&*cwd.as_str());
+        }
+
+        if clear_env {
+            command.env_clear();
+        }
+
+        command
+            .envs(envs)
+            .stdin(stdin)
+            .stdout(stdout)
+            .stderr(stderr);
+
+        match command.spawn() {
+            Ok(child) => {
+                let child_process_alloc: TypedArenaPtr<Child> =
+                    arena_alloc!(child, &mut self.machine_st.arena);
+
+                unify!(
+                    self.machine_st,
+                    pid_r,
+                    typed_arena_ptr_as_cell!(child_process_alloc)
+                );
+
+                Ok(())
+            }
+            Err(_) => {
+                let perm_error = self.machine_st.permission_error(
+                    Permission::Create,
+                    atom!("process"),
+                    stub_gen(),
+                );
+                Err(self.machine_st.error_form(perm_error, stub_gen()))
+            }
+        }
+    }
+
+    fn handle_output_stream(&mut self, args: Vec<HeapCellValue>) -> Result<Stdio, MachineStub> {
+        Ok(match args[0].to_atom() {
+            Some(atom!("std")) => Stdio::inherit(),
+            Some(atom!("null")) => Stdio::null(),
+            Some(atom!("pipe")) => {
+                let (reader, writer) = match std::io::pipe() {
+                    Ok(pipe_pair) => pipe_pair,
+                    Err(_) => {
+                        return Err(self.machine_st.open_permission_error(
+                            atom!("anonymous_pipe"),
+                            atom!("process_create"),
+                            3,
+                        ));
+                    }
+                };
+
+                let stream = Stream::from_pipe_reader(reader, &mut self.machine_st.arena);
+
+                self.indices
+                    .add_stream(stream, atom!("process_create"), 3)
+                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+
+                self.machine_st
+                    .bind(args[1].as_var().unwrap(), stream.into());
+
+                Stdio::from(writer)
+            }
+            Some(atom!("file")) => {
+                let path = self.machine_st.value_to_str_like(args[1]).unwrap();
+
+                let file = match std::fs::File::open(&*path.as_str()) {
+                    Ok(file) => file,
+                    Err(_) => {
+                        return Err(self.machine_st.open_permission_error(
+                            args[1],
+                            atom!("process_create"),
+                            3,
+                        ));
+                    }
+                };
+                Stdio::from(file)
+            }
+            _ => {
+                panic!("Invalid stdout tag")
+            }
+        })
+    }
+
+    fn handle_input_stream(&mut self, args: Vec<HeapCellValue>) -> Result<Stdio, MachineStub> {
+        Ok(match args[0].to_atom() {
+            Some(atom!("std")) => Stdio::inherit(),
+            Some(atom!("null")) => Stdio::null(),
+            Some(atom!("pipe")) => {
+                let (reader, writer) = match std::io::pipe() {
+                    Ok(pipe_pair) => pipe_pair,
+                    Err(_) => {
+                        return Err(self.machine_st.open_permission_error(
+                            atom!("anonymous_pipe"),
+                            atom!("process_create"),
+                            3,
+                        ));
+                    }
+                };
+
+                let stream = Stream::from_pipe_writer(writer, &mut self.machine_st.arena);
+
+                self.indices
+                    .add_stream(stream, atom!("process_create"), 3)
+                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+
+                self.machine_st
+                    .bind(args[1].as_var().unwrap(), stream.into());
+
+                Stdio::from(reader)
+            }
+            Some(atom!("file")) => {
+                let path = self.machine_st.value_to_str_like(args[1]).unwrap();
+
+                let file = match std::fs::File::open(&*path.as_str()) {
+                    Ok(file) => file,
+                    Err(_) => {
+                        return Err(self.machine_st.open_permission_error(
+                            args[1],
+                            atom!("process_create"),
+                            3,
+                        ));
+                    }
+                };
+                Stdio::from(file)
+            }
+            _ => {
+                panic!("Invalid stdin tag")
+            }
+        })
+    }
+
+    pub(crate) fn process_id(&mut self) -> CallResult {
+        fn stub_gen() -> Vec<FunctorElement> {
+            functor_stub(atom!("process_id"), 2)
+        }
+
+        // Process
+        let process_r = self.deref_register(1);
+        // Pid
+        let pid_r = self.deref_register(2);
+
+        let Some(ptr) = process_r.to_untyped_arena_ptr() else {
+            let err = self.machine_st.type_error(ValidType::Process, process_r);
+            return Err(self.machine_st.error_form(err, stub_gen()));
+        };
+
+        let process = match_untyped_arena_ptr!(ptr,
+            (ArenaHeaderTag::ChildProcess, child_process) => {
+                child_process
+            }
+            (ArenaHeaderTag::Dropped, _dropped) => {
+                let err = self.machine_st.existence_error(ExistenceError::Process(process_r));
+                return Err(self.machine_st.error_form(err, stub_gen()));
+            }
+            _ => {
+                let err = self.machine_st.type_error(ValidType::Process, process_r);
+                return Err(self.machine_st.error_form(err, stub_gen()));
+            }
+        );
+
+        self.machine_st.bind(
+            pid_r.as_var().unwrap(),
+            fixnum_as_cell!(Fixnum::build_with(process.id())),
+        );
+
+        Ok(())
+    }
+
+    pub(crate) fn process_wait(&mut self) -> CallResult {
+        fn stub_gen() -> Vec<FunctorElement> {
+            functor_stub(atom!("process_wait"), 3)
+        }
+
+        // Process
+        let process_r = self.deref_register(1);
+        // Var | Status
+        let status_r = self.deref_register(2);
+        // timeout | 0
+        let timeout_r = self.deref_register(3);
+
+        let Some(ptr) = process_r.to_untyped_arena_ptr() else {
+            let err = self.machine_st.type_error(ValidType::Process, process_r);
+            return Err(self.machine_st.error_form(err, stub_gen()));
+        };
+
+        let mut process = match_untyped_arena_ptr!(ptr,
+            (ArenaHeaderTag::ChildProcess, child_process) => {
+                child_process
+            }
+            (ArenaHeaderTag::Dropped, _dropped) => {
+                let err = self.machine_st.existence_error(ExistenceError::Process(process_r));
+                return Err(self.machine_st.error_form(err, stub_gen()));
+            }
+            _ => {
+                let err = self.machine_st.type_error(ValidType::Process, process_r);
+                return Err(self.machine_st.error_form(err, stub_gen()));
+            }
+        );
+
+        let status = if let Some(atom) = timeout_r.to_atom() {
+            match atom {
+                atom!("infinite") => process.wait().map(Some),
+                _ => {
+                    panic!("Invalid Timeout value")
+                }
+            }
+        } else if let Some(timeout) = timeout_r.to_fixnum() {
+            if timeout.get_num() == 0 {
+                process.try_wait()
+            } else {
+                panic!("Invalid Timeout value")
+            }
+        } else {
+            panic!("Invalid Timeout value")
+        };
+
+        match status {
+            Ok(None) => {
+                unify!(self.machine_st, status_r, atom_as_cell!(atom!("timeout")));
+                Ok(())
+            }
+            Ok(Some(exit_status)) => {
+                if let Some(exit_code) = exit_status.code() {
+                    let mut writer =
+                        Heap::functor_writer(functor!(atom!("exit"), [fixnum(exit_code)]));
+
+                    match writer(&mut self.machine_st.heap) {
+                        Ok(loc) => {
+                            unify!(self.machine_st, status_r, loc);
+                        }
+                        Err(resource_err_loc) => {
+                            self.machine_st.throw_resource_error(resource_err_loc);
+                        }
+                    }
+                    Ok(())
+                } else {
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::process::ExitStatusExt;
+
+                        if let Some(signal) = ExitStatusExt::signal(&exit_status) {
+                            let mut writer =
+                                Heap::functor_writer(functor!(atom!("killed"), [fixnum(signal)]));
+
+                            match writer(&mut self.machine_st.heap) {
+                                Ok(loc) => {
+                                    unify!(self.machine_st, status_r, loc);
+                                }
+                                Err(resource_err_loc) => {
+                                    self.machine_st.throw_resource_error(resource_err_loc);
+                                }
+                            }
+                            Ok(())
+                        } else {
+                            let err = self.machine_st.unreachable_error();
+                            Err(self.machine_st.error_form(err, stub_gen()))
+                        }
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let err = self.machine_st.unreachable_error();
+                        Err(self.machine_st.error_form(err, stub_gen()))
+                    }
+                }
+            }
+            Err(_) => {
+                let perm_error = self.machine_st.permission_error(
+                    Permission::Modify,
+                    atom!("process"),
+                    stub_gen(),
+                );
+                Err(self.machine_st.error_form(perm_error, stub_gen()))
+            }
+        }
+    }
+
+    pub(crate) fn process_kill(&mut self) -> CallResult {
+        fn stub_gen() -> Vec<FunctorElement> {
+            functor_stub(atom!("process_kill"), 1)
+        }
+
+        // Pid
+        let process_r = self.deref_register(1);
+
+        let Some(ptr) = process_r.to_untyped_arena_ptr() else {
+            let err = self.machine_st.type_error(ValidType::Process, process_r);
+            return Err(self.machine_st.error_form(err, stub_gen()));
+        };
+
+        let mut process = match_untyped_arena_ptr!(ptr,
+            (ArenaHeaderTag::ChildProcess, child_process) => {
+                child_process
+            }
+            (ArenaHeaderTag::Dropped, _dropped) => {
+                let err = self.machine_st.existence_error(ExistenceError::Process(process_r));
+                return Err(self.machine_st.error_form(err, stub_gen()));
+            }
+            _ => {
+                let err = self.machine_st.type_error(ValidType::Process, process_r);
+                return Err(self.machine_st.error_form(err, stub_gen()));
+            }
+        );
+
+        if process.kill().is_err() {
+            let perm_error =
+                self.machine_st
+                    .permission_error(Permission::Modify, atom!("process"), stub_gen());
+            return Err(self.machine_st.error_form(perm_error, stub_gen()));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn process_release(&mut self) -> CallResult {
+        fn stub_gen() -> Vec<FunctorElement> {
+            functor_stub(atom!("process_release"), 1)
+        }
+
+        let process = self.deref_register(1);
+
+        if let Some(ptr) = process.to_untyped_arena_ptr() {
+            match_untyped_arena_ptr!(ptr,
+                (ArenaHeaderTag::ChildProcess, child_process) => {
+                    child_process.drop_payload();
+
+                    return Ok(());
+                }
+                _ => {
+                }
+            );
+        }
+
+        let err = self.machine_st.type_error(ValidType::Process, process);
+
+        Err(self.machine_st.error_form(err, stub_gen()))
     }
 
     #[inline(always)]

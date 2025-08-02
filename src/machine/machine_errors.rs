@@ -44,6 +44,7 @@ pub(crate) enum ValidType {
     //    PredicateIndicator,
     //    Variable
     TcpListener,
+    Process,
 }
 
 impl ValidType {
@@ -67,6 +68,7 @@ impl ValidType {
             //            ValidType::PredicateIndicator => atom!("predicate_indicator"),
             //            ValidType::Variable => atom!("variable")
             ValidType::TcpListener => atom!("tcp_listener"),
+            ValidType::Process => atom!("process"),
         }
     }
 }
@@ -410,6 +412,17 @@ impl MachineState {
                     location: None,
                 }
             }
+            ExistenceError::Process(culprit) => {
+                let stub = functor!(
+                    atom!("existence_error"),
+                    [atom_as_cell((atom!("process"))), cell(culprit)]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                }
+            }
         }
     }
 
@@ -583,6 +596,15 @@ impl MachineState {
             atom!("representation_error"),
             [atom_as_cell((flag.as_atom()))]
         );
+
+        MachineError {
+            stub,
+            location: None,
+        }
+    }
+
+    pub(super) fn unreachable_error(&self) -> MachineError {
+        let stub = functor!(atom!("system_error"));
 
         MachineError {
             stub,
@@ -1003,6 +1025,7 @@ pub enum ExistenceError {
     },
     SourceSink(HeapCellValue),
     Stream(HeapCellValue),
+    Process(HeapCellValue),
 }
 
 #[derive(Debug)]
