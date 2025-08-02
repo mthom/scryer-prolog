@@ -25,9 +25,9 @@ to learn more about them.
 :- use_module(library(lists), [append/3, member/2]).
 :- use_module(library(loader), [strip_module/3]).
 
-:- meta_predicate phrase(2, ?).
+:- meta_predicate(phrase(2, ?)).
 
-:- meta_predicate phrase(2, ?, ?).
+:- meta_predicate(phrase(2, ?, ?)).
 
 :- meta_predicate(phrase(3, ?, ?, ?)).
 

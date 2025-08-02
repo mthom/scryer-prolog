@@ -65,10 +65,10 @@ Some things that are still missing:
 	      http_basic_auth/4
 ]).
 
-:- meta_predicate http_listen(?, :).
-:- meta_predicate http_listen(?, :, ?).
+:- meta_predicate(http_listen(?, :)).
+:- meta_predicate(http_listen(?, :, ?)).
 
-:- meta_predicate http_basic_auth(:, :, ?, ?).
+:- meta_predicate(http_basic_auth(:, :, ?, ?)).
 
 :- use_module(library(charsio)).
 :- use_module(library(crypto)).

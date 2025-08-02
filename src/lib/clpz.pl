@@ -6173,7 +6173,7 @@ difference_arcs([V|Vs], FL0) -->
 
 writeln(T) :- write(T), nl.
 
-:- meta_predicate must_succeed(0).
+:- meta_predicate(must_succeed(0)).
 
 must_succeed(G) :-
         (   G -> true
@@ -6297,7 +6297,7 @@ put_free(F) :- put_attr(F, free, true).
 
 free_node(F) :- get_attr(F, free, true).
 
-:- meta_predicate with_local_attributes(?, 0, ?).
+:- meta_predicate(with_local_attributes(?, 0, ?)).
 
 :- dynamic(nat_copy/1).
 
