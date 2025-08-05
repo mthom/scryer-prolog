@@ -1,6 +1,6 @@
 # Scryer Prolog
 
-Scryer Prolog aims to become to ISO Prolog what GHC is to Haskell: an open
+Scryer Prolog aims to become to ISO Prolog[^iso] what GHC is to Haskell: an open
 source industrial strength production environment that is also a
 testbed for bleeding edge research in logic and constraint
 programming, which is itself written in a high-level language.
@@ -859,7 +859,7 @@ also be performed automatically.
 
 ## Applications
 
-Scryer Prolog's strong commitment to the Prolog ISO standard makes it
+Scryer Prolog's strong commitment to the Prolog ISO standard[^iso] makes it
 ideally suited for use in corporations and government&nbsp;agencies
 that are subject to strict regulations pertaining to interoperability,
 standards&nbsp;compliance and warranty.
@@ -881,6 +881,8 @@ Successful existing applications of Scryer Prolog include:
 Scryer Prolog is also very well suited for teaching and learning
 Prolog, and for testing syntactic conformance and hence portability of
 existing Prolog&nbsp;programs.
+
+[^iso]: [ISO/IEC 13211-1:1995](https://www.iso.org/standard/21413.html), as modified by technical corrigenda [Cor.1:2007](https://www.iso.org/standard/50405.html), [Cor.2:2012](https://www.iso.org/standard/58033.html), and [Cor.3:2017](https://www.iso.org/standard/73194.html).
 
 ## Scryer Prolog Meetups
 
