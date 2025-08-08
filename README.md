@@ -188,6 +188,8 @@ Scryer Prolog has basic WebAssembly support. You can follow `wasm-pack`'s [offic
 
 However, none of the [default features](https://doc.rust-lang.org/cargo/reference/features.html#the-default-feature) are currently supported. The preferred way of disabling them is passing [extra options](https://rustwasm.github.io/wasm-pack/book/commands/build.html#extra-options) to `wasm-pack`.
 
+Please note: Building can fail if there is not enough RAM (rustc will exit with "(signal: 9, SIGKILL: kill)", [see more](https://github.com/mthom/scryer-prolog/issues/3028)). This can be an issue, e.g. while building in Docker containers. Please make sure there is enough RAM by increasing the memory available for the docker process to e.g. 16 GB.
+
 For example, if you want a minimal working package without using any bundler like `webpack`, you can do this:
 ```
 wasm-pack build --target web -- --no-default-features
