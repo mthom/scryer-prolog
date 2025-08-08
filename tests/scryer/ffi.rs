@@ -9,7 +9,7 @@ use crate::helper::load_module_test_with_input;
 
 use current_platform::CURRENT_PLATFORM;
 
-const TMP_DIR: &'static str = env!("CARGO_TARGET_TMPDIR");
+const TMP_DIR: &str = env!("CARGO_TARGET_TMPDIR");
 
 // each test is building its own library so that they can easier run in parallel,
 // i.e. don't need to wait for a large dynamic library to compile,
@@ -123,12 +123,12 @@ fn ffi_return_values() {
                     0xC0DE
                 }
 
-                
+
                 #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_i32() -> i32 {
                     -0xBEEFBEE
                 }
-                
+
                 #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_u32() -> u32 {
                     0xC0DEB000
@@ -138,7 +138,7 @@ fn ffi_return_values() {
                 extern "C" fn ffi_return_values_i64() -> i64 {
                     -0xBEEFBEE5C0DEB00
                 }
-                
+
                 #[unsafe(no_mangle)]
                 extern "C" fn ffi_return_values_u64() -> u64 {
                     0xFEDCBA9876543210
