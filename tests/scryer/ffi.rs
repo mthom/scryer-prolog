@@ -257,13 +257,22 @@ fn ffi_cstr() {
                 use std::ffi::CStr;
 
                 #[unsafe(no_mangle)]
-                extern "C" fn ffi_cstr_len(c_str: *const core::ffi::c_char) -> u64 {
-                    unsafe { CStr::from_ptr(c_str) }.count_bytes() as u64
+                extern "C" fn ffi_cstr_len(c_str: Option<std::ptr::NonNull<core::ffi::c_char>>) -> u64 {
+                    if let Some(c_str) = c_str {
+                        unsafe { CStr::from_ptr(c_str.as_ptr()) }.count_bytes() as u64
+                    } else {
+                        u64::MAX
+                    }
                 }
 
                 #[unsafe(no_mangle)]
                 extern "C" fn ffi_example_cstr() -> *const core::ffi::c_char {
                     c"Rust Lang".as_ptr()
+                }
+
+                #[unsafe(no_mangle)]
+                extern "C" fn ffi_null_cstr() -> *const core::ffi::c_char {
+                    std::ptr::null()
                 }
             "##,
     );
@@ -271,6 +280,6 @@ fn ffi_cstr() {
     load_module_test_with_input(
         "tests-pl/ffi_cstr.pl",
         format!("LIB={dynlib_path:?}."),
-        r#"13-[R,u,s,t, ,L,a,n,g]"#,
+        format!(r#"13-[R,u,s,t, ,L,a,n,g]-0-{}"#, u64::MAX).as_str(),
     );
 }

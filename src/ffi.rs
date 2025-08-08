@@ -80,8 +80,18 @@ impl FunctionImpl {
     }
 
     unsafe fn call_cstr(&self, args: &[Arg], _: &mut Arena) -> Result<Value, FfiError> {
-        let ptr = unsafe { self.cif.call::<*mut c_char>(self.code_ptr, args) };
-        Ok(Value::CString(unsafe { CStr::from_ptr(ptr) }.to_owned()))
+        let ptr = unsafe {
+            self.cif
+                .call::<Option<NonNull<c_char>>>(self.code_ptr, args)
+        };
+
+        if let Some(cstr) = ptr {
+            Ok(Value::CString(
+                unsafe { CStr::from_ptr(cstr.as_ptr()) }.to_owned(),
+            ))
+        } else {
+            Ok(Value::Number(Number::Fixnum(Fixnum::build_with(0))))
+        }
     }
 
     unsafe fn call_struct(
@@ -353,7 +363,7 @@ impl<'args, 'val> PointerArgs<'args, 'val> {
                 ArgValue::I64(a) => libffi::middle::arg(a),
                 ArgValue::F32(a) => libffi::middle::arg(a),
                 ArgValue::F64(a) => libffi::middle::arg(a),
-                ArgValue::Ptr(ptr, _) => unsafe { std::mem::transmute::<*mut c_void, Arg>(*ptr) },
+                ArgValue::Ptr(ptr, _) => Arg::new(ptr),
                 ArgValue::Struct(s) => unsafe {
                     std::mem::transmute::<*mut c_void, Arg>(s.ptr.as_ptr())
                 },
@@ -653,7 +663,7 @@ impl Value {
 
     fn as_ptr(&mut self) -> Result<*mut c_void, FfiError> {
         match self {
-            Value::CString(ref mut cstr) => Ok(&mut *cstr as *mut _ as *mut c_void),
+            Value::CString(ref mut cstr) => Ok(cstr.as_ptr().cast_mut().cast()),
             Value::Number(Number::Fixnum(fixnum)) => Ok(std::ptr::with_exposed_provenance_mut(
                 fixnum.get_num() as usize,
             )),
