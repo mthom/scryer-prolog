@@ -250,6 +250,7 @@ answer_description(instantiation_error).
 answer_description(type_error(_Type,_Culprit)).
 answer_description(domain_error(_Domain, _Culprit)).
 answer_description(syntax_error(_Error)).
+answer_description(representation_error(_Flag)).
 answer_description(resource_error(_Ressource)).
 answer_description(uninstantiation_error(_Culprit)).
 answer_description('|'(_AD,_ADs)).
