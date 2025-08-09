@@ -145,7 +145,7 @@ array_type(ElemType, Len, ArrayType) :-
 with_locals(Locals, Goal) :-
     verify_locals(Locals),
     allocate_locals(Locals),
-    ( catch(Goal, E, (deallocate(Locals), throw(E))) -> deallocate_locals(Locals)
+    ( catch(Goal, E, (deallocate_locals(Locals), throw(E))) -> deallocate_locals(Locals)
     ; deallocate_locals(Locals), false
     ).
 
