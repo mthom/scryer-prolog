@@ -132,6 +132,7 @@ deallocate(Allocator, Type, Ptr) :-
 :- dynamic(is_array_type_defined/1).
 
 array_type(ElemType, Len, ArrayType) :-
+    (Len =< 0 -> domain_error(greater_than_zero, Len, array_type/3); true),
     phrase(format_("$[~a;~d]", [ElemType, Len]), ArrayTypeName),
     atom_chars(ArrayType, ArrayTypeName),
     (is_array_type_defined(ArrayType) -> true
