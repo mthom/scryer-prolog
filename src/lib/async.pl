@@ -29,7 +29,6 @@
 
 
 :- module(async, [async_event_loop/1, await/1]).
-:- use_module(library(reif)).
 :- use_module(library(queues)).
 :- use_module(library(cont)).
 
@@ -344,11 +343,8 @@ taskqcall_deque(Q, Nq) :-
 resume_internal(none,_Meaningless,Q,Q).
 resume_internal(cont(Cont),Task,Q,Nq) :-
         que_task_enque(Q,Task,Nq0),
-        if_(Cont=true,
-           Nq=Nq0,
-           que_task_enque(Nq0,Cont,Nq)
-          ).
-
+        que_task_enque(Nq0,Cont,Nq).
+        
 handle_await(G,Val,Cont) :-
         reset(G, zurück(Val), Cont).
 
