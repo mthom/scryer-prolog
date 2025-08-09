@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/async.pl", "-f", "-g", "use_module(library(async_tests)), charsio_tests:main_quiet(async_tests)"]
