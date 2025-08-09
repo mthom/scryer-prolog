@@ -54,6 +54,7 @@ And a new window should pop up!
 :- use_module(library(error)).
 :- use_module(library(format)).
 :- use_module(library(dcgs)).
+:- use_module(library(iso_ext)).
 
 %% foreign_struct(+Name, +Elements).
 %
@@ -144,9 +145,10 @@ array_type(ElemType, Len, ArrayType) :-
 
 with_locals(Locals, Goal) :-
     verify_locals(Locals),
-    allocate_locals(Locals),
-    ( catch(Goal, E, (deallocate_locals(Locals), throw(E))) -> deallocate_locals(Locals)
-    ; deallocate_locals(Locals), false
+    setup_call_cleanup(
+        allocate_locals(Locals),
+        Goal,
+        deallocate_locals(Locals)
     ).
 
 verify_locals(Locals) :-
