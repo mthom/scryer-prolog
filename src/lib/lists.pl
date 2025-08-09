@@ -42,17 +42,17 @@ List manipulation predicates
 :- use_module(library(error)).
 
 
-:- meta_predicate maplist(1, ?).
-:- meta_predicate maplist(2, ?, ?).
-:- meta_predicate maplist(3, ?, ?, ?).
-:- meta_predicate maplist(4, ?, ?, ?, ?).
-:- meta_predicate maplist(5, ?, ?, ?, ?, ?).
-:- meta_predicate maplist(6, ?, ?, ?, ?, ?, ?).
-:- meta_predicate maplist(7, ?, ?, ?, ?, ?, ?, ?).
-:- meta_predicate maplist(8, ?, ?, ?, ?, ?, ?, ?, ?).
+:- meta_predicate(maplist(1, ?)).
+:- meta_predicate(maplist(2, ?, ?)).
+:- meta_predicate(maplist(3, ?, ?, ?)).
+:- meta_predicate(maplist(4, ?, ?, ?, ?)).
+:- meta_predicate(maplist(5, ?, ?, ?, ?, ?)).
+:- meta_predicate(maplist(6, ?, ?, ?, ?, ?, ?)).
+:- meta_predicate(maplist(7, ?, ?, ?, ?, ?, ?, ?)).
+:- meta_predicate(maplist(8, ?, ?, ?, ?, ?, ?, ?, ?)).
 
-:- meta_predicate foldl(3, ?, ?, ?).
-:- meta_predicate foldl(4, ?, ?, ?, ?).
+:- meta_predicate(foldl(3, ?, ?, ?)).
+:- meta_predicate(foldl(4, ?, ?, ?, ?)).
 
 :- use_module(library(error)).
 

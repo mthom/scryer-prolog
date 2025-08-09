@@ -399,7 +399,7 @@ copy_term(Term, Copy, Gs) :-
    ;  true
    ).
 
-:- meta_predicate call_residue_vars(0, ?).
+:- meta_predicate(call_residue_vars(0, ?)).
 
 call_residue_vars(Goal, Vars) :-
     can_be(list, Vars),
