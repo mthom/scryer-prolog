@@ -1,4 +1,4 @@
-:- module(ffi, [use_foreign_module/2, foreign_struct/2]).
+:- module(ffi, [use_foreign_module/2, foreign_struct/2, with_locals/2, allocate/4, deallocate/3, read_ptr/3]).
 
 /** Foreign Function Interface
 
@@ -127,3 +127,45 @@ deallocate(Allocator, Type, Ptr) :-
     must_be(integer, Ptr),
     '$ffi_deallocate'(Allocator, Type, Ptr).
 
+:- dynamic(is_array_type_defined/1).
+
+array_type(ElemType, Len, ArrayType) :-
+    phrase(format("$[~a;~d]", [ElemType, Len]), ArrayTypeName),
+    atom_chars(ArrayType, ArrayTypeName),
+    (is_array_type_defined(ArrayType) -> true
+    ;   length(Fields, Len),
+        maplist('='(ElemType), Fields),
+        foreign_struct(ArrayType, Fields),
+        assertz(is_array_type_defined(ArrayType))
+    ).
+
+with_locals(Locals, Goal) :-
+    verify_locals(Locals),
+    allocate_locals(Locals),
+    ( catch(Goal, E, (deallocate(Locals), throw(E), false)) -> Success = true
+    ; Success = false
+    ),
+    deallocate_locals(Locals).
+
+verify_locals(Locals) :-
+    must_be(list, Locals),
+    ( maplist(verify_local, Locals) -> true
+    ; domain_error(locals_decl_list, Locals, [verify_locals/1])
+    ).
+
+verify_local(let(Var, Type, Init)) :-
+    must_be(var, Var),
+    must_be(atom, Type),
+    ground(Init).
+
+allocate_locals([]).
+allocate_locals([let(Var, Type, Init) | Ls]) :-
+    allocate(rust, Type, Init , Var),
+    (catch(allocate_locals(Ls), E, (deallocate_locals([let(Var, Type, Init)]), throw(E))) -> true
+    ; deallocate_locals(let(Var, Type, Init)), false
+    ).
+
+deallocate_locals([]).
+deallocate_locals([let(Var, Type, _) | Ls]) :-
+    deallocate(rust, Type, Var),
+    deallocate_locals(Ls).
