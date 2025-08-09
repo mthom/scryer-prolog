@@ -6,10 +6,11 @@
 :- module(error, [must_be/2,
                   can_be/2,
                   instantiation_error/0,
-                  instantiation_error/1,
                   domain_error/2,
-                  domain_error/3,
                   type_error/2,
+                  representation_error/1,
+                  instantiation_error/1,
+                  domain_error/3,
                   type_error/3,
                   call_with_error_context/2
                   ]).
@@ -221,10 +222,6 @@ list_or_partial_list(Ls) :-
 
    The variants without context promote the use of
    call_with_error_context/2.
-
-   The variants *with* context would not have been needed if
-   call_with_error_context/2 had been found earlier. In the future,
-   we may be able to remove them.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 instantiation_error :-
@@ -236,6 +233,14 @@ domain_error(Type, Term) :-
 type_error(Type, Term) :-
     throw(error(type_error(Type, Term), [])).
 
+representation_error(Flag) :-
+    throw(error(representation_error(Flag), [])).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   The variants *with* context would not have been needed if
+   call_with_error_context/2 had been found earlier. In the future,
+   we may be able to remove them.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 instantiation_error(Context) :-
     throw(error(instantiation_error, Context)).
