@@ -26,6 +26,33 @@ pub fn prolog_benches() -> BTreeMap<&'static str, PrologBenchmark> {
             Strategy::Reuse,
             btreemap! { "Name" => Term::string("SPACE") },
         ),
+        /* FIXME: Following 3 benchmarks don't bind any variables and shouldn't
+         * produce any leaf answer, but test validate_benchmarks() fails if last
+         * element is `btreemap! {}`, because result of a query is `[True]`, but
+         * test case expects `[LeafAnswer { bindings: {} }]`. As a workaround
+         * I've just added dummy variable unification.
+         */
+        (
+            "memberbench_baseline",
+            "benches/reif.pl",
+            "run(memberchk,4),X=done.",
+            Strategy::Reuse,
+            btreemap! { "X" => Term::atom("done") },
+        ),
+        (
+            "memberbench_if_expanded",
+            "benches/reif.pl",
+            "run(memberd_ifc,4),Y=done.",
+            Strategy::Reuse,
+            btreemap! { "Y" => Term::atom("done") },
+        ),
+        (
+            "memberbench_if_not_expanded",
+            "benches/reif.pl",
+            "run(memberd_fif,4),Z=done.",
+            Strategy::Reuse,
+            btreemap! { "Z" => Term::atom("done") },
+        ),
     ]
     .map(|b| {
         (
