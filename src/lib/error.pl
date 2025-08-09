@@ -5,6 +5,11 @@
 
 :- module(error, [must_be/2,
                   can_be/2,
+                  instantiation_error/0,
+                  domain_error/2,
+                  type_error/2,
+                  representation_error/1,
+                  resource_error/1,
                   instantiation_error/1,
                   domain_error/3,
                   type_error/3,
@@ -215,6 +220,30 @@ list_or_partial_list(Ls) :-
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Shorthands for throwing ISO errors.
+
+   The variants without context promote the use of
+   call_with_error_context/2.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+instantiation_error :-
+    throw(error(instantiation_error, [])).
+
+domain_error(Type, Term) :-
+    throw(error(domain_error(Type, Term), [])).
+
+type_error(Type, Term) :-
+    throw(error(type_error(Type, Term), [])).
+
+representation_error(Flag) :-
+    throw(error(representation_error(Flag), [])).
+
+resource_error(Resource) :-
+    throw(error(resource_error(Resource), [])).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   The variants *with* context would not have been needed if
+   call_with_error_context/2 had been found earlier. In the future,
+   we may be able to remove them.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 instantiation_error(Context) :-
