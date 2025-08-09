@@ -761,6 +761,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   public key signatures and signature verification with&nbsp;Ed25519,
   ECDH key&nbsp;exchange over Curve25519 (X25519), authenticated symmetric
   encryption with ChaCha20-Poly1305, and reasoning about elliptic curves.
+* [`process`](src/lib/process.pl)
+  Create and manage parallel processes.
 * [`uuid`](src/lib/uuid.pl) UUIDv4 generation and hex representation
 * [`tls`](src/lib/tls.pl)
   Predicates for negotiating TLS connections explicitly.
