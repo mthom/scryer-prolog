@@ -11,8 +11,8 @@ The main predicate is `use_foreign_module/2`. It takes a library name (which dep
 operating system could be a `.so`, `.dylib` or `.dll` file). and a list of functions. Each
 function is defined by its name, a list of the type of the arguments, and the return argument.
 
-Types available are: `sint8`, `uint8`, `sint16`, `uint16`, `sint32`, `uint32`, `sint64`,
-`uint64`, `f32`, `f64`, `cstr`, `void`, `bool`, `ptr` and custom structs, which can be defined
+Types available are: `sint8`/`i8`, `uint8`/`u8`, `sint16`/`i16`, `uint16`/`u16`, `sint32`/`i32`, `uint32`/`u32`, `sint64`/`i64`,
+`uint64`/`u64`, `f32`, `f64`, `cstr`, `void`, `bool`, `ptr` and custom structs, which can be defined
 with `foreign_struct/2`.
 
 After that, each function on the lists maps to a predicate created in the ffi module which
@@ -26,6 +26,12 @@ on the return value on the native side.
 ffi:FUNCTION_NAME(+InputArg1, ..., +InputArgN, -ReturnArg). % for all return types except void and bool
 ffi:FUNCTION_NAME(+InputArg1, ..., +InputArgN). % for void and bool
 ```
+
+## Notes regarding cstr
+
+- When using `cstr` as an argument type the string will be deallocated once the function returns.
+- When using `cstr` as a return type the string will be copied and won't be deallocated.
+
 
 ## Example
 

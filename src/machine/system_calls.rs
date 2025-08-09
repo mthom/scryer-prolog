@@ -5004,65 +5004,80 @@ impl Machine {
     #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn foreign_call(&mut self) -> CallResult {
+        fn stub_gen() -> Vec<FunctorElement> {
+            functor_stub(atom!("foreign_call"), 3)
+        }
+
+        fn map_arg(
+            machine_st: &mut MachineState,
+            source: HeapCellValue,
+        ) -> Result<crate::ffi::Value, FfiError> {
+            if let Ok(number) = Number::try_from((source, &machine_st.arena.f64_tbl)) {
+                Ok(Value::Number(number))
+            } else if let Some(string) = machine_st.value_to_str_like(source) {
+                Ok(Value::CString(CString::new(&*string.as_str()).unwrap()))
+            } else if let Ok(args) = machine_st.try_from_list(source, stub_gen) {
+                // structs are lists represented as lists
+                // the head is a string with the struct type name
+                // the tail are the struct field values
+
+                let mut iter = args.into_iter();
+                if let Some(struct_name) = machine_st.value_to_str_like(iter.next().unwrap()) {
+                    Ok(Value::Struct(
+                        struct_name.as_str().to_string(),
+                        iter.map(|x| map_arg(machine_st, x))
+                            .collect::<Result<_, _>>()?,
+                    ))
+                } else {
+                    // empty list is an invalid struct repr
+                    Err(FfiError::InvalidStruct)
+                }
+            } else {
+                Err(FfiError::InvalidArgument)
+            }
+        }
+
         let function_name = self.deref_register(1);
         let args_reg = self.deref_register(2);
         let return_value = self.deref_register(3);
         if let Some(function_name) = self.machine_st.value_to_str_like(function_name) {
-            let stub_gen = || functor_stub(atom!("foreign_call"), 3);
-            fn map_arg(machine_st: &mut MachineState, source: HeapCellValue) -> crate::ffi::Value {
-                match Number::try_from((source, &machine_st.arena.f64_tbl)) {
-                    Ok(Number::Fixnum(n)) => Value::Int(n.get_num()),
-                    Ok(Number::Float(n)) => Value::Float(n.into_inner()),
-                    _ => {
-                        let stub_gen = || functor_stub(atom!("foreign_call"), 3);
-                        if let Some(string) = machine_st.value_to_str_like(source) {
-                            Value::CString(CString::new(&*string.as_str()).unwrap())
-                        } else {
-                            match machine_st.try_from_list(source, stub_gen) {
-                                Ok(args) => {
-                                    let mut iter = args.into_iter();
-                                    if let Some(struct_name) =
-                                        machine_st.value_to_str_like(iter.next().unwrap())
-                                    {
-                                        Value::Struct(
-                                            struct_name.as_str().to_string(),
-                                            iter.map(|x| map_arg(machine_st, x)).collect(),
-                                        )
-                                    } else {
-                                        unreachable!()
-                                    }
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             match self.machine_st.try_from_list(args_reg, stub_gen) {
                 Ok(args) => {
-                    let args: Vec<_> = args
+                    let args = match args
                         .into_iter()
                         .map(|x| map_arg(&mut self.machine_st, x))
-                        .collect();
-                    match self
-                        .foreign_function_table
-                        .exec(&function_name.as_str(), args)
+                        .collect::<Result<Vec<_>, _>>()
                     {
+                        Ok(args) => args,
+                        Err(err) => {
+                            let err = self.machine_st.ffi_error(err);
+                            return Err(self.machine_st.error_form(err, stub_gen()));
+                        }
+                    };
+
+                    match self.foreign_function_table.exec(
+                        &function_name.as_str(),
+                        args,
+                        &mut self.machine_st.arena,
+                    ) {
                         Ok(result) => {
                             match result {
-                                Value::Int(n) => self.machine_st.unify_fixnum(
-                                    Fixnum::build_with_checked(n).unwrap_or_else(|_| {
-                                        todo!("handle integer values that don't fit in fixnum")
-                                    }),
-                                    return_value,
-                                ),
-                                Value::Float(n) => {
-                                    let n = float_alloc!(n, self.machine_st.arena);
-                                    self.machine_st.unify_f64(n, return_value)
-                                }
+                                Value::Number(n) => match n {
+                                    Number::Float(OrderedFloat(n)) => {
+                                        let n = float_alloc!(n, self.machine_st.arena);
+                                        self.machine_st.unify_f64(n, return_value)
+                                    }
+                                    Number::Integer(typed_arena_ptr) => {
+                                        self.machine_st.unify_big_int(typed_arena_ptr, return_value)
+                                    }
+                                    Number::Rational(typed_arena_ptr) => {
+                                        self.machine_st
+                                            .unify_rational(typed_arena_ptr, return_value);
+                                    }
+                                    Number::Fixnum(fixnum) => {
+                                        self.machine_st.unify_fixnum(fixnum, return_value)
+                                    }
+                                },
                                 Value::Struct(name, args) => {
                                     let struct_value = resource_error_call_result!(
                                         self.machine_st,
@@ -5083,10 +5098,8 @@ impl Machine {
                             return Ok(());
                         }
                         Err(e) => {
-                            let stub = functor_stub(atom!("current_input"), 1);
                             let err = self.machine_st.ffi_error(e);
-
-                            return Err(self.machine_st.error_form(err, stub));
+                            return Err(self.machine_st.error_form(err, stub_gen()));
                         }
                     }
                 }
@@ -5102,34 +5115,26 @@ impl Machine {
     fn build_struct(&mut self, name: &str, mut args: Vec<Value>) -> Result<HeapCellValue, usize> {
         args.insert(0, Value::CString(CString::new(name).unwrap()));
 
-        let mut expanded_args = Vec::with_capacity(args.len());
+        let cells: Vec<_> = args
+            .into_iter()
+            .map(|val| {
+                Ok(match val {
+                    Value::Number(n) => match n {
+                        Number::Float(OrderedFloat(f)) => {
+                            HeapCellValue::from(float_alloc!(f, self.machine_st.arena))
+                        }
+                        _ => integer_as_cell!(n),
+                    },
+                    Value::CString(cstr) => atom_as_cell!(AtomTable::build_with(
+                        &self.machine_st.atom_tbl,
+                        &cstr.into_string().unwrap()
+                    )),
+                    Value::Struct(name, struct_args) => self.build_struct(&name, struct_args)?,
+                })
+            })
+            .collect::<Result<_, usize>>()?;
 
-        for val in args {
-            expanded_args.push(match val {
-                Value::Int(n) => {
-                    if let Ok(fixnum) = Fixnum::build_with_checked(n) {
-                        fixnum_as_cell!(fixnum)
-                    } else {
-                        integer_as_cell!(Number::Integer(arena_alloc!(
-                            Integer::from(n),
-                            &mut self.machine_st.arena
-                        )))
-                    }
-                }
-                Value::Float(n) => HeapCellValue::from(float_alloc!(n, self.machine_st.arena)),
-                Value::CString(cstr) => atom_as_cell!(AtomTable::build_with(
-                    &self.machine_st.atom_tbl,
-                    &cstr.into_string().unwrap()
-                )),
-                Value::Struct(name, struct_args) => self.build_struct(&name, struct_args)?,
-            });
-        }
-
-        sized_iter_to_heap_list(
-            &mut self.machine_st.heap,
-            expanded_args.len(),
-            expanded_args.into_iter(),
-        )
+        sized_iter_to_heap_list(&mut self.machine_st.heap, cells.len(), cells.into_iter())
     }
 
     #[cfg(feature = "ffi")]
@@ -5150,7 +5155,11 @@ impl Machine {
                 Err(e) => return Err(e),
             };
             self.foreign_function_table
-                .define_struct(&struct_name.as_str(), fields);
+                .define_struct(&struct_name.as_str(), fields)
+                .map_err(|err| {
+                    let ffi_error = self.machine_st.ffi_error(err);
+                    self.machine_st.error_form(ffi_error, stub_gen())
+                })?;
             return Ok(());
         }
         self.machine_st.fail = true;
