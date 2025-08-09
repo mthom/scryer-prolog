@@ -52,6 +52,8 @@ And a new window should pop up!
 
 :- use_module(library(lists)).
 :- use_module(library(error)).
+:- use_module(library(format)).
+:- use_module(library(dcgs)).
 
 %% foreign_struct(+Name, +Elements).
 %
@@ -130,11 +132,11 @@ deallocate(Allocator, Type, Ptr) :-
 :- dynamic(is_array_type_defined/1).
 
 array_type(ElemType, Len, ArrayType) :-
-    phrase(format("$[~a;~d]", [ElemType, Len]), ArrayTypeName),
+    phrase(format_("$[~a;~d]", [ElemType, Len]), ArrayTypeName),
     atom_chars(ArrayType, ArrayTypeName),
     (is_array_type_defined(ArrayType) -> true
     ;   length(Fields, Len),
-        maplist('='(ElemType), Fields),
+        maplist(=(ElemType), Fields),
         foreign_struct(ArrayType, Fields),
         assertz(is_array_type_defined(ArrayType))
     ).
@@ -142,10 +144,9 @@ array_type(ElemType, Len, ArrayType) :-
 with_locals(Locals, Goal) :-
     verify_locals(Locals),
     allocate_locals(Locals),
-    ( catch(Goal, E, (deallocate(Locals), throw(E), false)) -> Success = true
-    ; Success = false
-    ),
-    deallocate_locals(Locals).
+    ( catch(Goal, E, (deallocate(Locals), throw(E))) -> deallocate_locals(Locals)
+    ; deallocate_locals(Locals), false
+    ).
 
 verify_locals(Locals) :-
     must_be(list, Locals),
@@ -162,7 +163,7 @@ allocate_locals([]).
 allocate_locals([let(Var, Type, Init) | Ls]) :-
     allocate(rust, Type, Init , Var),
     (catch(allocate_locals(Ls), E, (deallocate_locals([let(Var, Type, Init)]), throw(E))) -> true
-    ; deallocate_locals(let(Var, Type, Init)), false
+    ; deallocate_locals([let(Var, Type, Init)]), false
     ).
 
 deallocate_locals([]).
