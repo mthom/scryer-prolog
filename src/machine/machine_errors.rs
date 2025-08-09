@@ -613,7 +613,7 @@ impl MachineState {
     }
 
     #[cfg(feature = "ffi")]
-    pub(super) fn ffi_error(&self, err: FfiError) -> MachineError {
+    pub(super) fn ffi_error(&self, err: FfiError, culprit: HeapCellValue) -> MachineError {
         let error_atom = match err {
             FfiError::ValueCast => atom!("value_cast"),
             FfiError::ValueOutOfRange => atom!("value_out_of_range"),
@@ -628,7 +628,7 @@ impl MachineState {
             FfiError::LayoutError => atom!("layout_error"),
             FfiError::UnsupportedAbi => atom!("unsupported_abi"),
         };
-        let stub = functor!(atom!("ffi_error"), [atom_as_cell(error_atom)]);
+        let stub = functor!(atom!("ffi_error"), [atom_as_cell(error_atom), cell(culprit)]);
 
         MachineError {
             stub,

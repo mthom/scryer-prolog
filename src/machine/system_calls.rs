@@ -5026,10 +5026,10 @@ impl Machine {
                 ))
             } else {
                 // empty list is an invalid struct repr
-                Err(machine_st.error_form(machine_st.ffi_error(FfiError::InvalidStruct), stub_gen()))
+                Err(machine_st.error_form(machine_st.ffi_error(FfiError::InvalidStruct, source), stub_gen()))
             }
         } else {
-            Err(machine_st.error_form(machine_st.ffi_error(FfiError::InvalidArgument), stub_gen()))
+            Err(machine_st.error_form(machine_st.ffi_error(FfiError::InvalidArgument, source), stub_gen()))
         }
     }
 
@@ -5041,10 +5041,10 @@ impl Machine {
         }
 
 
-        let function_name = self.deref_register(1);
+        let function_name_arg = self.deref_register(1);
         let args_reg = self.deref_register(2);
         let return_value = self.deref_register(3);
-        if let Some(function_name) = self.machine_st.value_to_str_like(function_name) {
+        if let Some(function_name) = self.machine_st.value_to_str_like(function_name_arg) {
             match self.machine_st.try_from_list(args_reg, stub_gen) {
                 Ok(args) => {
                     let args = args
@@ -5061,7 +5061,7 @@ impl Machine {
                             return self.unify_ffi_result(return_value, result);
                         }
                         Err(e) => {
-                            let err = self.machine_st.ffi_error(e);
+                            let err = self.machine_st.ffi_error(e, function_name_arg);
                             return Err(self.machine_st.error_form(err, stub_gen()));
                         }
                     }
@@ -5141,9 +5141,9 @@ impl Machine {
     #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn define_foreign_struct(&mut self) -> CallResult {
-        let struct_name = self.deref_register(1);
+        let struct_name_arg = self.deref_register(1);
         let fields_reg = self.deref_register(2);
-        if let Some(struct_name) = self.machine_st.value_to_str_like(struct_name) {
+        if let Some(struct_name) = self.machine_st.value_to_str_like(struct_name_arg) {
             let stub_gen = || functor_stub(atom!("define_foreign_struct"), 2);
             let fields: Vec<Atom> = match self.machine_st.try_from_list(fields_reg, stub_gen) {
                 Ok(addrs) => {
@@ -5158,7 +5158,7 @@ impl Machine {
             self.foreign_function_table
                 .define_struct(&struct_name.as_str(), fields)
                 .map_err(|err| {
-                    let ffi_error = self.machine_st.ffi_error(err);
+                    let ffi_error = self.machine_st.ffi_error(err, struct_name_arg);
                     self.machine_st.error_form(ffi_error, stub_gen())
                 })?;
             return Ok(());
@@ -5171,7 +5171,8 @@ impl Machine {
         let stub_gen = || functor_stub(atom!("$ffi_allocate"), 4);
 
         let allocator = self.deref_register(1);
-        let ffi_type = self.deref_register(2).to_atom().unwrap();
+        let ffi_type_arg = self.deref_register(2);
+        let ffi_type = ffi_type_arg.to_atom().unwrap();
         let args = self.deref_register(3);
         let return_value = self.deref_register(4);
 
@@ -5185,7 +5186,7 @@ impl Machine {
         let value = match self.foreign_function_table.allocate(allocator, ffi_type, args, &mut self.machine_st.arena) {
             Ok(value) => value,
             Err(ffi_error) => {
-                let machine_error = self.machine_st.ffi_error(ffi_error);
+                let machine_error = self.machine_st.ffi_error(ffi_error, ffi_type_arg);
                 return Err(self.machine_st.error_form(machine_error, stub_gen()));
             },
         };
@@ -5196,14 +5197,15 @@ impl Machine {
     pub(crate) fn ffi_read_ptr(&mut self) -> CallResult {
         let stub_gen = || functor_stub(atom!("$ffi_read_ptr"), 3);
 
-        let ffi_type = self.deref_register(1).to_atom().unwrap();
+        let ffi_type_arg = self.deref_register(1);
+        let ffi_type = ffi_type_arg.to_atom().unwrap();
         let ptr = self.deref_register(2);
         let return_value = self.deref_register(3);
 
         let ptr = Self::map_ffi_arg(&mut self.machine_st, ptr, stub_gen)?;
 
         let value = self.foreign_function_table.read_ptr(ffi_type, ptr, &mut self.machine_st.arena).map_err(|ffi_error| {
-                let machine_error = self.machine_st.ffi_error(ffi_error);
+                let machine_error = self.machine_st.ffi_error(ffi_error, ffi_type_arg);
                 self.machine_st.error_form(machine_error, stub_gen())
         })?;
 
@@ -5214,7 +5216,8 @@ impl Machine {
         let stub_gen = || functor_stub(atom!("$ffi_deallocate"), 3);
 
         let allocator = self.deref_register(1);
-        let ffi_type = self.deref_register(2).to_atom().unwrap();
+        let ffi_type_arg = self.deref_register(2);
+        let ffi_type = ffi_type_arg.to_atom().unwrap();
         let ptr = self.deref_register(3);
 
 
@@ -5228,7 +5231,7 @@ impl Machine {
         match self.foreign_function_table.deallocate(allocator, ffi_type, ptr) {
             Ok(value) => value,
             Err(ffi_error) => {
-                let machine_error = self.machine_st.ffi_error(ffi_error);
+                let machine_error = self.machine_st.ffi_error(ffi_error, ffi_type_arg);
                 return Err(self.machine_st.error_form(machine_error, stub_gen()));
             },
         }
