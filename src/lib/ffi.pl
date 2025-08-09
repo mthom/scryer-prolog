@@ -73,6 +73,23 @@ use_foreign_module(LibName, Predicates) :-
     '$load_foreign_lib'(LibName, Predicates),
     maplist(assert_predicate, Predicates).
 
+allocate(Allocator, Type, Args, Ptr) :-
+    must_be(var, Ptr),
+    must_be(atom, Type),
+    must_be(atom, Allocator),
+    '$ffi_allocate'(Allocator, Type, Args, Ptr).
+
+read_ptr(Type, Ptr, Value) :-
+    must_be(var, Value),
+    must_be(atom, Type),
+    must_be(integer, Ptr),
+    '$ffi_read_ptr'(Type, Ptr, Value).
+
+deallocate(Allocator, Type, Ptr) :-
+    must_be(atom, Allocator),
+    must_be(integer, Ptr),
+    '$ffi_deallocate'(Allocator, Type, Ptr).
+
 assert_predicate(PredicateDefinition) :-
     PredicateDefinition =.. [Name, Inputs, void],
     length(Inputs, NumInputs),

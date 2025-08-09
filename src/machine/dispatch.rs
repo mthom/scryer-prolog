@@ -4331,6 +4331,36 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.define_foreign_struct());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallFfiAllocate => {
+                        #[cfg(feature = "ffi")]
+                        try_or_throw!(self.machine_st, self.ffi_allocate());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteFfiAllocate => {
+                        #[cfg(feature = "ffi")]
+                        try_or_throw!(self.machine_st, self.ffi_allocate());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
+                    &Instruction::CallFfiReadPtr => {
+                        #[cfg(feature = "ffi")]
+                        try_or_throw!(self.machine_st, self.ffi_read_ptr());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteFfiReadPtr => {
+                        #[cfg(feature = "ffi")]
+                        try_or_throw!(self.machine_st, self.ffi_read_ptr());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
+                    &Instruction::CallFfiDeallocate => {
+                        #[cfg(feature = "ffi")]
+                        try_or_throw!(self.machine_st, self.ffi_deallocate());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteFfiDeallocate => {
+                        #[cfg(feature = "ffi")]
+                        try_or_throw!(self.machine_st, self.ffi_deallocate());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallJsEval => {
                         try_or_throw!(self.machine_st, self.js_eval());
                         step_or_fail!(self, self.machine_st.p += 1);

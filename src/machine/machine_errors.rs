@@ -813,6 +813,7 @@ pub(crate) enum DomainErrorType {
     OperatorSpecifier,
     OperatorPriority,
     Directive,
+    Allocator,
 }
 
 impl DomainErrorType {
@@ -827,6 +828,7 @@ impl DomainErrorType {
             DomainErrorType::OperatorSpecifier => atom!("operator_specifier"),
             DomainErrorType::OperatorPriority => atom!("operator_priority"),
             DomainErrorType::Directive => atom!("directive"),
+            DomainErrorType::Allocator => atom!("allocator"),
         }
     }
 }

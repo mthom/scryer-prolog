@@ -184,7 +184,7 @@ impl IndexMut<RegType> for MachineState {
     }
 }
 
-pub type CallResult = Result<(), Vec<FunctorElement>>;
+pub type CallResult<Ok=()> = Result<Ok, Vec<FunctorElement>>;
 
 // size may be an upper bound.
 // true_size is calculated to compute the exact offset.

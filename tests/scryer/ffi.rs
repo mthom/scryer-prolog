@@ -283,3 +283,25 @@ fn ffi_cstr() {
         format!(r#"13-[R,u,s,t, ,L,a,n,g]-0-{}"#, u64::MAX).as_str(),
     );
 }
+
+
+
+#[test]
+#[cfg_attr(miri, ignore = "ffi")]
+fn ffi_heap() {
+    let dynlib_path = build_dynamic_library(
+        "ffi_heap",
+        r##"
+                #[unsafe(no_mangle)]
+                extern "C" fn ffi_set_u64(val: &mut u64) {
+                    *val = 133742
+                }
+            "##,
+    );
+
+    load_module_test_with_input(
+        "tests-pl/ffi_heap.pl",
+        format!("LIB={dynlib_path:?}."),
+        r#"133742"#,
+    );
+}
