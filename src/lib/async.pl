@@ -89,6 +89,8 @@ Here, the best implementation of `handle_connection/1` is non-obvious. A signica
 However, with a simple adjustment:
 
 ```prolog
+:- use_module(library(async)).
+  
 server_async :-
     server_options(connection_timeout_ms(Timeout)),
     wait_for_connection(Con, Timeout),
@@ -97,7 +99,7 @@ server_async :-
 
 
 main :-
-    async_event_loop([server]).
+    async_event_loop([server_async]).
 
 ```
 the server and the connections now have the ability to operate asyncronously.
