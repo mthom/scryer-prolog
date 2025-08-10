@@ -27,7 +27,6 @@ macro_rules! return_f64_reg {
 }
 
 impl Machine {
-
     #[inline(always)]
     pub(crate) fn erf(&mut self) {
         let x = number_as_f64!(self, 1);
@@ -119,5 +118,4 @@ impl Machine {
         let x = float_alloc!(invbetai(a, b, p), self.machine_st.arena);
         return_f64_reg!(self, x, 4);
     }
-
 }
