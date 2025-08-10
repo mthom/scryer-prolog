@@ -19,19 +19,23 @@ and for each field: we add to the pointer until we're aligned to the next data t
 and finally we add the pointer the size of what we've written.
 */
 
+use crate::arena::Arena;
 use crate::atom_table::Atom;
+use crate::forms::Number;
+use crate::parser::ast::{Fixnum, MightNotFitInFixnum};
 
-use std::alloc::{self, Layout};
-use std::any::Any;
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::error::Error;
-use std::ffi::{c_void, CString};
-use std::ptr::addr_of_mut;
-
-use libffi::low::type_tag::STRUCT;
-use libffi::low::{ffi_abi_FFI_DEFAULT_ABI, ffi_cif, ffi_type, prep_cif, types, CodePtr};
+use dashu::Integer;
+use libffi::middle::{Arg, Cif, CodePtr, Type};
 use libloading::{Library, Symbol};
+use ordered_float::OrderedFloat;
+use std::alloc::{self, Layout};
+use std::collections::HashMap;
+use std::error::Error;
+use std::ffi::{c_char, c_void, CStr, CString};
+use std::fmt::Debug;
+use std::marker::PhantomData;
+use std::ops::Deref;
+use std::ptr::NonNull;
 
 pub struct FunctionDefinition {
     pub name: String,
@@ -41,10 +45,120 @@ pub struct FunctionDefinition {
 
 #[derive(Debug)]
 pub struct FunctionImpl {
-    cif: ffi_cif,
-    args: Vec<*mut ffi_type>,
+    cif: Cif,
+    args: Vec<FfiType>,
     code_ptr: CodePtr,
-    return_struct_name: Option<String>,
+    return_type: FfiType,
+}
+
+impl FunctionImpl {
+    unsafe fn call_void(&self, args: &[Arg], _: &mut Arena) -> Result<Value, FfiError> {
+        self.cif.call::<()>(self.code_ptr, args);
+        Ok(Value::Number(Number::Fixnum(Fixnum::build_with(0))))
+    }
+
+    unsafe fn call_int<T>(&self, args: &[Arg], arena: &mut Arena) -> Result<Value, FfiError>
+    where
+        Integer: From<T>,
+        T: Copy + TryInto<i64> + MightNotFitInFixnum,
+    {
+        let n = self.cif.call::<T>(self.code_ptr, args);
+        Ok(Value::Number(fixnum!(Number, n, arena)))
+    }
+
+    unsafe fn call_float<T>(&self, args: &[Arg], _: &mut Arena) -> Result<Value, FfiError>
+    where
+        T: Into<f64>,
+    {
+        let n = self.cif.call::<T>(self.code_ptr, args);
+        Ok(Value::Number(Number::Float(OrderedFloat(n.into()))))
+    }
+
+    unsafe fn call_ptr(&self, args: &[Arg], arena: &mut Arena) -> Result<Value, FfiError> {
+        let ptr = unsafe { self.cif.call::<*mut c_void>(self.code_ptr, args) };
+        Ok(Value::Number(fixnum!(Number, ptr as isize, arena)))
+    }
+
+    unsafe fn call_cstr(&self, args: &[Arg], _: &mut Arena) -> Result<Value, FfiError> {
+        let ptr = unsafe {
+            self.cif
+                .call::<Option<NonNull<c_char>>>(self.code_ptr, args)
+        };
+
+        if let Some(cstr) = ptr {
+            Ok(Value::CString(
+                unsafe { CStr::from_ptr(cstr.as_ptr()) }.to_owned(),
+            ))
+        } else {
+            Ok(Value::Number(Number::Fixnum(Fixnum::build_with(0))))
+        }
+    }
+
+    unsafe fn call_struct(
+        &self,
+        return_type_name: Atom,
+        args: &[Arg],
+        arena: &mut Arena,
+        structs_table: &HashMap<String, StructImpl>,
+    ) -> Result<Value, FfiError> {
+        let struct_type = structs_table
+            .get(&*return_type_name.as_str())
+            .ok_or(FfiError::StructNotFound)?;
+        let ffi_type = unsafe { *struct_type.ffi_type.as_raw_ptr() };
+
+        let layout = Layout::from_size_align(ffi_type.size, ffi_type.alignment.into())
+            .map_err(|_| FfiError::LayoutError)?;
+
+        let alloc = FfiStruct::new(layout)?;
+
+        unsafe {
+            libffi::raw::ffi_call(
+                self.cif.as_raw_ptr(),
+                Some(*self.code_ptr.as_safe_fun()),
+                alloc.ptr.as_ptr(),
+                args.as_ptr() as *mut *mut c_void,
+            )
+        };
+
+        let struct_val = struct_type.read(
+            alloc.ptr.as_ptr(),
+            &return_type_name.as_str(),
+            structs_table,
+            arena,
+        );
+
+        drop(alloc);
+
+        struct_val
+    }
+
+    fn call(
+        &self,
+        args: &[Arg],
+        arena: &mut Arena,
+        structs_table: &HashMap<String, StructImpl>,
+    ) -> Result<Value, FfiError> {
+        let call_fn: unsafe fn(&Self, &[Arg], &mut Arena) -> Result<Value, FfiError> =
+            match self.return_type {
+                FfiType::Void => FunctionImpl::call_void,
+                FfiType::U8 => FunctionImpl::call_int::<u8>,
+                FfiType::I8 | FfiType::Bool => FunctionImpl::call_int::<i8>,
+                FfiType::U16 => FunctionImpl::call_int::<u16>,
+                FfiType::I16 => FunctionImpl::call_int::<i16>,
+                FfiType::U32 => FunctionImpl::call_int::<u32>,
+                FfiType::I32 => FunctionImpl::call_int::<i32>,
+                FfiType::U64 => FunctionImpl::call_int::<u64>,
+                FfiType::I64 => FunctionImpl::call_int::<i64>,
+                FfiType::F32 => FunctionImpl::call_float::<f32>,
+                FfiType::F64 => FunctionImpl::call_float::<f64>,
+                FfiType::Ptr => FunctionImpl::call_ptr,
+                FfiType::CStr => FunctionImpl::call_cstr,
+                FfiType::Struct(name) => {
+                    return unsafe { self.call_struct(name, args, arena, structs_table) }
+                }
+            };
+        unsafe { call_fn(self, args, arena) }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -53,26 +167,375 @@ pub struct ForeignFunctionTable {
     structs: HashMap<String, StructImpl>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct StructImpl {
-    ffi_type: ffi_type,
-    fields: Vec<*mut ffi_type>,
-    atom_fields: Vec<Atom>,
+    ffi_type: Type,
+    fields: Vec<FfiType>,
 }
 
-impl std::fmt::Debug for StructImpl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StructImpl")
-            .field("ffi_type", &&"<???>")
-            .field("fields", &self.fields)
-            .field("atom_fields", &self.atom_fields)
-            .finish()
+impl StructImpl {
+    fn build(
+        &self,
+        structs_table: &HashMap<String, StructImpl>,
+        struct_args: &mut [Value],
+    ) -> Result<FfiStruct, FfiError> {
+        let args = ArgValue::build_args(struct_args, &self.fields, structs_table)?;
+
+        let ffi_type = unsafe { *self.ffi_type.as_raw_ptr() };
+
+        let alloc = FfiStruct::new(
+            Layout::from_size_align(ffi_type.size, ffi_type.alignment.into())
+                .map_err(|_| FfiError::LayoutError)?,
+        )?;
+
+        let Ok(mut current_layout) = Layout::from_size_align(0, 1) else {
+            return Err(FfiError::LayoutError);
+        };
+
+        unsafe fn write_primitive<T>(
+            ptr: NonNull<c_void>,
+            layout: &mut Layout,
+            val: T,
+        ) -> Result<(), FfiError> {
+            let (new_layout, offset) = layout
+                .extend(Layout::new::<T>())
+                .map_err(|_| FfiError::LayoutError)?;
+            *layout = new_layout;
+            ptr.byte_offset(offset as isize).cast::<T>().write(val);
+            Ok(())
+        }
+
+        for arg in args {
+            unsafe {
+                match arg {
+                    ArgValue::U8(i) => write_primitive(alloc.ptr, &mut current_layout, i)?,
+                    ArgValue::I8(i) => write_primitive(alloc.ptr, &mut current_layout, i)?,
+                    ArgValue::U16(i) => write_primitive(alloc.ptr, &mut current_layout, i)?,
+                    ArgValue::I16(i) => write_primitive(alloc.ptr, &mut current_layout, i)?,
+                    ArgValue::U32(i) => write_primitive(alloc.ptr, &mut current_layout, i)?,
+                    ArgValue::I32(i) => write_primitive(alloc.ptr, &mut current_layout, i)?,
+                    ArgValue::U64(i) => write_primitive(alloc.ptr, &mut current_layout, i)?,
+                    ArgValue::I64(i) => write_primitive(alloc.ptr, &mut current_layout, i)?,
+                    ArgValue::F32(f) => write_primitive(alloc.ptr, &mut current_layout, f)?,
+                    ArgValue::F64(f) => write_primitive(alloc.ptr, &mut current_layout, f)?,
+                    ArgValue::Ptr(p, _) => write_primitive(alloc.ptr, &mut current_layout, p)?,
+                    ArgValue::Struct(arg) => {
+                        let Ok((new_layout, offset)) = current_layout.extend(arg.layout) else {
+                            return Err(FfiError::LayoutError);
+                        };
+
+                        current_layout = new_layout;
+
+                        std::ptr::copy(
+                            arg.ptr.as_ptr(),
+                            alloc.ptr.byte_offset(offset as isize).as_ptr(),
+                            arg.layout.size(),
+                        );
+                    }
+                }
+            }
+        }
+
+        if alloc.layout != current_layout.pad_to_align() {
+            // sanity check
+            return Err(FfiError::LayoutError);
+        }
+
+        Ok(alloc)
+    }
+
+    fn read(
+        &self,
+        ptr: *mut c_void,
+        struct_name: &str,
+        struct_table: &HashMap<String, StructImpl>,
+        arena: &mut Arena,
+    ) -> Result<Value, FfiError> {
+        unsafe {
+            let mut returns = Vec::new();
+
+            unsafe fn read_primitive<T>(
+                ptr: *mut c_void,
+                layout: &mut Layout,
+            ) -> Result<T, FfiError> {
+                let (new_layout, offset) = layout
+                    .extend(Layout::new::<T>())
+                    .map_err(|_| FfiError::LayoutError)?;
+                *layout = new_layout;
+                let n = std::ptr::read::<T>(ptr.byte_offset(offset as isize).cast());
+                Ok(n)
+            }
+
+            unsafe fn read_int<T>(
+                ptr: *mut c_void,
+                layout: &mut Layout,
+                arena: &mut Arena,
+            ) -> Result<Value, FfiError>
+            where
+                T: Copy + TryInto<i64> + MightNotFitInFixnum,
+                Integer: From<T>,
+            {
+                let n = read_primitive::<T>(ptr, layout)?;
+                Ok(Value::Number(fixnum!(Number, n, arena)))
+            }
+
+            unsafe fn read_float<T>(
+                ptr: *mut c_void,
+                layout: &mut Layout,
+            ) -> Result<Value, FfiError>
+            where
+                T: Into<f64>,
+            {
+                let n = read_primitive::<T>(ptr, layout)?;
+                Ok(Value::Number(Number::Float(OrderedFloat(n.into()))))
+            }
+
+            let mut layout = Layout::from_size_align(0, 1).map_err(|_| FfiError::LayoutError)?;
+
+            for field_type in &self.fields {
+                let val = match field_type {
+                    FfiType::U8 => read_int::<u8>(ptr, &mut layout, arena),
+                    FfiType::I8 | FfiType::Bool => read_int::<i8>(ptr, &mut layout, arena),
+                    FfiType::U16 => read_int::<u16>(ptr, &mut layout, arena),
+                    FfiType::I16 => read_int::<i16>(ptr, &mut layout, arena),
+                    FfiType::U32 => read_int::<u32>(ptr, &mut layout, arena),
+                    FfiType::I32 => read_int::<i32>(ptr, &mut layout, arena),
+                    FfiType::U64 => read_int::<u64>(ptr, &mut layout, arena),
+                    FfiType::I64 => read_int::<i64>(ptr, &mut layout, arena),
+                    FfiType::Ptr => {
+                        let ptr = read_primitive::<*mut c_void>(ptr, &mut layout)?;
+                        Ok(Value::Number(fixnum!(Number, ptr as isize, arena)))
+                    }
+                    FfiType::CStr => {
+                        let ptr = read_primitive::<*mut c_void>(ptr, &mut layout)?;
+                        Ok(Value::CString(CStr::from_ptr(ptr.cast()).to_owned()))
+                    }
+                    FfiType::F32 => read_float::<f32>(ptr, &mut layout),
+                    FfiType::F64 => read_float::<f64>(ptr, &mut layout),
+                    FfiType::Struct(substruct) => {
+                        let Some(substruct_type) = struct_table.get(&*substruct.as_str()) else {
+                            return Err(FfiError::StructNotFound);
+                        };
+
+                        let ffi_type = *substruct_type.ffi_type.as_raw_ptr();
+                        let field_layout =
+                            Layout::from_size_align(ffi_type.size, ffi_type.alignment as usize)
+                                .map_err(|_| FfiError::LayoutError)?;
+                        let (new_layout, offset) = layout
+                            .extend(field_layout)
+                            .map_err(|_| FfiError::LayoutError)?;
+                        layout = new_layout;
+                        let field_ptr = ptr.byte_offset(offset as isize);
+                        let struct_val = substruct_type.read(
+                            field_ptr,
+                            &substruct.as_str(),
+                            struct_table,
+                            arena,
+                        )?;
+                        Ok(struct_val)
+                    }
+                    FfiType::Void => unreachable!("void is not a valid field type"),
+                };
+                returns.push(val?);
+            }
+            Ok(Value::Struct(struct_name.to_string(), returns))
+        }
     }
 }
 
-struct PointerArgs {
-    pointers: Vec<*mut c_void>,
-    _memory: Vec<Box<dyn Any>>,
+struct PointerArgs<'a, 'val> {
+    memory: Vec<Arg>,
+    phantom: PhantomData<&'a mut ArgValue<'val>>,
+}
+
+impl<'args, 'val> PointerArgs<'args, 'val> {
+    fn new(args: &'args [ArgValue<'val>]) -> Self {
+        let args = args
+            .iter()
+            .map(|arg| match arg {
+                ArgValue::U8(a) => libffi::middle::arg(a),
+                ArgValue::I8(a) => libffi::middle::arg(a),
+                ArgValue::U16(a) => libffi::middle::arg(a),
+                ArgValue::I16(a) => libffi::middle::arg(a),
+                ArgValue::U32(a) => libffi::middle::arg(a),
+                ArgValue::I32(a) => libffi::middle::arg(a),
+                ArgValue::U64(a) => libffi::middle::arg(a),
+                ArgValue::I64(a) => libffi::middle::arg(a),
+                ArgValue::F32(a) => libffi::middle::arg(a),
+                ArgValue::F64(a) => libffi::middle::arg(a),
+                ArgValue::Ptr(ptr, _) => Arg::new(ptr),
+                ArgValue::Struct(s) => unsafe {
+                    std::mem::transmute::<*mut c_void, Arg>(s.ptr.as_ptr())
+                },
+            })
+            .collect();
+
+        PointerArgs {
+            memory: args,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl Deref for PointerArgs<'_, '_> {
+    type Target = [Arg];
+
+    fn deref(&self) -> &Self::Target {
+        &self.memory
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum FfiType {
+    Void,
+    Bool,
+    U8,
+    I8,
+    U16,
+    I16,
+    U32,
+    I32,
+    U64,
+    I64,
+    F32,
+    F64,
+    Ptr,
+    CStr,
+    Struct(Atom),
+}
+
+impl FfiType {
+    fn from_atom(atom: &Atom) -> Self {
+        match atom {
+            atom!("sint64") | atom!("i64") => Self::I64,
+            atom!("sint32") | atom!("i32") => Self::I32,
+            atom!("sint16") | atom!("i16") => Self::I16,
+            atom!("sint8") | atom!("i8") => Self::I8,
+            atom!("uint64") | atom!("u64") => Self::U64,
+            atom!("uint32") | atom!("u32") => Self::U32,
+            atom!("uint16") | atom!("u16") => Self::U16,
+            atom!("uint8") | atom!("u8") => Self::U8,
+            atom!("bool") => Self::Bool,
+            atom!("void") => Self::Void,
+            atom!("cstr") => Self::CStr,
+            atom!("ptr") => Self::Ptr,
+            atom!("f32") => Self::F32,
+            atom!("f64") => Self::F64,
+            struct_name => Self::Struct(*struct_name),
+        }
+    }
+
+    fn to_type(self, structs_table: &HashMap<String, StructImpl>) -> Result<Type, FfiError> {
+        Ok(match self {
+            Self::I64 => libffi::middle::Type::i64(),
+            Self::I32 => libffi::middle::Type::i32(),
+            Self::I16 => libffi::middle::Type::i16(),
+            Self::I8 => libffi::middle::Type::i8(),
+            Self::U64 => libffi::middle::Type::u64(),
+            Self::U32 => libffi::middle::Type::u32(),
+            Self::U16 => libffi::middle::Type::u16(),
+            Self::U8 => libffi::middle::Type::u8(),
+            Self::Bool => libffi::middle::Type::i8(),
+            Self::Void => libffi::middle::Type::void(),
+            Self::CStr => libffi::middle::Type::pointer(),
+            Self::Ptr => libffi::middle::Type::pointer(),
+            Self::F32 => libffi::middle::Type::f32(),
+            Self::F64 => libffi::middle::Type::f64(),
+            Self::Struct(struct_name) => structs_table
+                .get(&*struct_name.as_str())
+                .ok_or(FfiError::StructNotFound)?
+                .ffi_type
+                .clone(),
+        })
+    }
+}
+
+enum ArgValue<'a> {
+    U8(u8),
+    I8(i8),
+    U16(u16),
+    I16(i16),
+    U32(u32),
+    I32(i32),
+    U64(u64),
+    I64(i64),
+    F32(f32),
+    F64(f64),
+    Ptr(*mut c_void, PhantomData<&'a CString>),
+    Struct(FfiStruct),
+}
+
+impl<'val> ArgValue<'val> {
+    fn new(
+        val: &'val mut Value,
+        arg_type: &FfiType,
+        structs_table: &HashMap<String, StructImpl>,
+    ) -> Result<Self, FfiError> {
+        match arg_type {
+            FfiType::U8 => Ok(Self::U8(val.as_int()?)),
+            FfiType::I8 | FfiType::Bool => Ok(Self::I8(val.as_int()?)),
+            FfiType::U16 => Ok(Self::U16(val.as_int()?)),
+            FfiType::I16 => Ok(Self::I16(val.as_int()?)),
+            FfiType::U32 => Ok(Self::U32(val.as_int()?)),
+            FfiType::I32 => Ok(Self::I32(val.as_int()?)),
+            FfiType::U64 => Ok(Self::U64(val.as_int()?)),
+            FfiType::I64 => Ok(Self::I64(val.as_int()?)),
+            FfiType::F32 => Ok(Self::F32(val.as_float()? as f32)),
+            FfiType::F64 => Ok(Self::F64(val.as_float()?)),
+            FfiType::Ptr => Ok(Self::Ptr(val.as_ptr()?, PhantomData)),
+            FfiType::CStr => Ok(Self::Ptr(val.as_ptr()?, PhantomData)),
+            FfiType::Struct(atom) => {
+                let (name, args) = val.as_struct()?;
+
+                if &*atom.as_str() != name {
+                    return Err(FfiError::ValueCast);
+                }
+
+                let Some(struct_type) = structs_table.get(name) else {
+                    return Err(FfiError::StructNotFound);
+                };
+
+                Ok(Self::Struct(struct_type.build(structs_table, args)?))
+            }
+            FfiType::Void => Err(FfiError::InvalidArgumentType),
+        }
+    }
+
+    fn build_args(
+        args: &'val mut [Value],
+        types: &[FfiType],
+        structs_table: &HashMap<String, StructImpl>,
+    ) -> Result<Vec<Self>, FfiError> {
+        if types.len() != args.len() {
+            return Err(FfiError::ArgCountMismatch);
+        }
+
+        args.iter_mut()
+            .zip(types)
+            .map(|(arg, arg_type)| ArgValue::new(arg, arg_type, structs_table))
+            .collect::<Result<Vec<_>, _>>()
+    }
+}
+
+struct FfiStruct {
+    ptr: NonNull<c_void>,
+    layout: Layout,
+}
+
+impl FfiStruct {
+    fn new(layout: Layout) -> Result<Self, FfiError> {
+        if let Some(ptr) = NonNull::new(unsafe { alloc::alloc(layout) as *mut c_void }) {
+            Ok(FfiStruct { ptr, layout })
+        } else {
+            Err(FfiError::AllocationFailed)
+        }
+    }
+}
+
+impl Drop for FfiStruct {
+    fn drop(&mut self) {
+        unsafe { alloc::dealloc(self.ptr.as_ptr().cast(), self.layout) };
+    }
 }
 
 impl ForeignFunctionTable {
@@ -80,45 +543,35 @@ impl ForeignFunctionTable {
         self.table.extend(other.table);
     }
 
-    pub fn define_struct(&mut self, name: &str, atom_fields: Vec<Atom>) {
-        let mut fields: Vec<_> = atom_fields.iter().map(|x| self.map_type_ffi(x)).collect();
-        fields.push(std::ptr::null_mut::<ffi_type>());
-        let struct_type = ffi_type {
-            type_: STRUCT,
-            elements: fields.as_mut_ptr(),
-            ..Default::default()
+    pub fn define_struct(&mut self, name: &str, atom_fields: Vec<Atom>) -> Result<(), FfiError> {
+        let fields: Vec<_> = atom_fields.iter().map(FfiType::from_atom).collect();
+        let struct_type = libffi::middle::Type::structure(
+            fields
+                .iter()
+                .map(|field| field.to_type(&self.structs))
+                .collect::<Result<Vec<_>, _>>()?,
+        );
+
+        unsafe {
+            // ensure that size and alignment of struct_type are set properly
+            use libffi::low::{ffi_abi_FFI_DEFAULT_ABI, prep_cif};
+            prep_cif(
+                &mut Default::default(),
+                ffi_abi_FFI_DEFAULT_ABI,
+                1,
+                struct_type.as_raw_ptr(),
+                [struct_type.as_raw_ptr()].as_mut_ptr(),
+            )?;
         };
+
         self.structs.insert(
             name.to_string(),
             StructImpl {
                 ffi_type: struct_type,
                 fields,
-                atom_fields,
             },
         );
-    }
-
-    fn map_type_ffi(&mut self, source: &Atom) -> *mut ffi_type {
-        match source {
-            atom!("sint64") => addr_of_mut!(types::sint64),
-            atom!("sint32") => addr_of_mut!(types::sint32),
-            atom!("sint16") => addr_of_mut!(types::sint16),
-            atom!("sint8") => addr_of_mut!(types::sint8),
-            atom!("uint64") => addr_of_mut!(types::uint64),
-            atom!("uint32") => addr_of_mut!(types::uint32),
-            atom!("uint16") => addr_of_mut!(types::uint16),
-            atom!("uint8") => addr_of_mut!(types::uint8),
-            atom!("bool") => addr_of_mut!(types::sint8),
-            atom!("void") => addr_of_mut!(types::void),
-            atom!("cstr") => addr_of_mut!(types::pointer),
-            atom!("ptr") => addr_of_mut!(types::pointer),
-            atom!("f32") => addr_of_mut!(types::float),
-            atom!("f64") => addr_of_mut!(types::double),
-            struct_name => match self.structs.get_mut(&*struct_name.as_str()) {
-                Some(ref mut struct_type) => &mut struct_type.ffi_type,
-                None => unreachable!(),
-            },
-        }
+        Ok(())
     }
 
     pub(crate) fn load_library(
@@ -127,408 +580,135 @@ impl ForeignFunctionTable {
         functions: &Vec<FunctionDefinition>,
     ) -> Result<(), Box<dyn Error>> {
         let mut ff_table: ForeignFunctionTable = Default::default();
-        unsafe {
-            let library = Library::new(library_name)?;
-            for function in functions {
-                let symbol_name: CString = CString::new(function.name.clone())?;
-                let code_ptr: Symbol<*mut c_void> =
-                    library.get(&symbol_name.into_bytes_with_nul())?;
-                let mut args: Vec<_> = function.args.iter().map(|x| self.map_type_ffi(x)).collect();
-                let mut cif: ffi_cif = Default::default();
-                prep_cif(
-                    &mut cif,
-                    ffi_abi_FFI_DEFAULT_ABI,
-                    args.len(),
-                    self.map_type_ffi(&function.return_value),
-                    args.as_mut_ptr(),
-                )
-                .unwrap();
+        let library = unsafe { Library::new(library_name) }?;
+        for function in functions {
+            let symbol_name: CString = CString::new(function.name.clone())?;
+            let code_ptr: Symbol<*mut c_void> =
+                unsafe { library.get(symbol_name.as_bytes_with_nul()) }?;
+            let args: Vec<_> = function.args.iter().map(FfiType::from_atom).collect();
+            let return_type = FfiType::from_atom(&function.return_value);
 
-                let return_struct_name = if (*self.map_type_ffi(&function.return_value)).type_
-                    as u32
-                    == libffi::raw::FFI_TYPE_STRUCT
-                {
-                    Some(function.return_value.as_str().to_string())
-                } else {
-                    None
-                };
+            let cif = libffi::middle::Cif::new(
+                args.iter()
+                    .map(|arg| arg.to_type(&self.structs))
+                    .collect::<Result<Vec<_>, _>>()?,
+                return_type.to_type(&self.structs)?,
+            );
 
-                ff_table.table.insert(
-                    function.name.clone(),
-                    FunctionImpl {
-                        cif,
-                        args,
-                        code_ptr: CodePtr(code_ptr.into_raw().as_raw_ptr()),
-                        return_struct_name,
-                    },
-                );
-            }
-            std::mem::forget(library);
+            ff_table.table.insert(
+                function.name.clone(),
+                FunctionImpl {
+                    cif,
+                    args,
+                    code_ptr: CodePtr(unsafe { code_ptr.into_raw() }.as_raw_ptr()),
+                    return_type,
+                },
+            );
         }
+        std::mem::forget(library);
         self.merge(ff_table);
         Ok(())
     }
 
-    fn build_pointer_args(
-        args: &mut [Value],
-        type_args: &[*mut ffi_type],
-        structs_table: &mut HashMap<String, StructImpl>,
-    ) -> Result<PointerArgs, FFIError> {
-        let mut pointers = Vec::with_capacity(args.len());
-        let mut _memory = Vec::new();
-        for i in 0..args.len() {
-            let field_type = type_args[i];
-            unsafe {
-                macro_rules! push_int {
-                    ($type:ty) => {{
-                        let n: $type = <$type>::try_from(args[i].as_int()?)
-                            .map_err(|_| FFIError::ValueDontFit)?;
-                        let mut box_value = Box::new(n) as Box<dyn Any>;
-                        pointers.push(&mut *box_value as *mut _ as *mut c_void);
-                        _memory.push(box_value);
-                    }};
-                }
+    pub fn exec(
+        &mut self,
+        fn_name: &str,
+        mut args: Vec<Value>,
+        arena: &mut Arena,
+    ) -> Result<Value, FfiError> {
+        let fn_impl = self.table.get(fn_name).ok_or(FfiError::FunctionNotFound)?;
 
-                match (*field_type).type_ as u32 {
-                    libffi::raw::FFI_TYPE_UINT8 => push_int!(u8),
-                    libffi::raw::FFI_TYPE_SINT8 => push_int!(i8),
-                    libffi::raw::FFI_TYPE_UINT16 => push_int!(u16),
-                    libffi::raw::FFI_TYPE_SINT16 => push_int!(i16),
-                    libffi::raw::FFI_TYPE_UINT32 => push_int!(u32),
-                    libffi::raw::FFI_TYPE_SINT32 => push_int!(i32),
-                    libffi::raw::FFI_TYPE_UINT64 => push_int!(u64),
-                    libffi::raw::FFI_TYPE_SINT64 => push_int!(i64),
-                    libffi::raw::FFI_TYPE_FLOAT => {
-                        let n: f32 = args[i].as_float()? as f32;
-                        let mut box_value = Box::new(n) as Box<dyn Any>;
-                        pointers.push(&mut *box_value as *mut _ as *mut c_void);
-                        _memory.push(box_value);
-                    }
-                    libffi::raw::FFI_TYPE_DOUBLE => {
-                        let n: f64 = args[i].as_float()?;
-                        let mut box_value = Box::new(n) as Box<dyn Any>;
-                        pointers.push(&mut *box_value as *mut _ as *mut c_void);
-                        _memory.push(box_value);
-                    }
-                    libffi::raw::FFI_TYPE_POINTER => {
-                        let ptr: *mut c_void = args[i].as_ptr()?;
-                        pointers.push(ptr);
-                    }
-                    libffi::raw::FFI_TYPE_STRUCT => {
-                        let (mut ptr, _size, _align) =
-                            Self::build_struct(&mut args[i], structs_table)?;
-                        pointers.push(&mut *ptr as *mut _ as *mut c_void);
-                        _memory.push(ptr);
-                    }
-                    _ => return Err(FFIError::InvalidFFIType),
-                }
-            }
-        }
-        Ok(PointerArgs { pointers, _memory })
-    }
+        let args = ArgValue::build_args(&mut args, &fn_impl.args, &self.structs)?;
 
-    fn build_struct(
-        arg: &mut Value,
-        structs_table: &mut HashMap<String, StructImpl>,
-    ) -> Result<(Box<dyn Any>, usize, usize), FFIError> {
-        match arg {
-            Value::Struct(ref name, ref mut struct_args) => {
-                if let Some(ref mut struct_type) = structs_table.clone().get_mut(name) {
-                    let layout = Layout::from_size_align(
-                        struct_type.ffi_type.size,
-                        struct_type.ffi_type.alignment.into(),
-                    )
-                    .unwrap();
-                    let align = struct_type.ffi_type.alignment as usize;
-                    let size = struct_type.ffi_type.size;
-                    let ptr = unsafe { alloc::alloc(layout) as *mut c_void };
+        let args = PointerArgs::new(&args);
 
-                    if ptr.is_null() {
-                        panic!("allocation failed")
-                    }
-
-                    let mut field_ptr = ptr;
-
-                    #[allow(clippy::needless_range_loop)]
-                    for i in 0..(struct_type.fields.len() - 1) {
-                        macro_rules! try_write_int {
-                            ($type:ty) => {{
-                                field_ptr = field_ptr
-                                    .add(field_ptr.align_offset(std::mem::align_of::<$type>()));
-                                let n: $type = <$type>::try_from(struct_args[i].as_int()?)
-                                    .map_err(|_| FFIError::ValueDontFit)?;
-                                std::ptr::write(field_ptr as *mut $type, n);
-                                field_ptr = field_ptr.add(std::mem::size_of::<$type>());
-                            }};
-                        }
-
-                        macro_rules! write {
-                            ($type:ty, $value:expr) => {{
-                                let data: $type = $value;
-                                std::ptr::write(field_ptr as *mut $type, data);
-                                field_ptr = field_ptr.add(align);
-                            }};
-                        }
-
-                        let field = struct_type.fields[i];
-                        unsafe {
-                            match (*field).type_ as u32 {
-                                libffi::raw::FFI_TYPE_UINT8 => try_write_int!(u8),
-                                libffi::raw::FFI_TYPE_SINT8 => try_write_int!(i8),
-                                libffi::raw::FFI_TYPE_UINT16 => try_write_int!(u16),
-                                libffi::raw::FFI_TYPE_SINT16 => try_write_int!(i16),
-                                libffi::raw::FFI_TYPE_UINT32 => try_write_int!(u32),
-                                libffi::raw::FFI_TYPE_SINT32 => try_write_int!(i32),
-                                libffi::raw::FFI_TYPE_UINT64 => try_write_int!(u64),
-                                libffi::raw::FFI_TYPE_SINT64 => try_write_int!(i64),
-                                libffi::raw::FFI_TYPE_POINTER => {
-                                    write!(*mut c_void, struct_args[i].as_ptr()?)
-                                }
-                                libffi::raw::FFI_TYPE_FLOAT => {
-                                    write!(f32, struct_args[i].as_float()? as f32)
-                                }
-                                libffi::raw::FFI_TYPE_DOUBLE => {
-                                    write!(f64, struct_args[i].as_float()?)
-                                }
-                                libffi::raw::FFI_TYPE_STRUCT => {
-                                    let (struct_ptr, struct_size, struct_align) =
-                                        Self::build_struct(&mut struct_args[i], structs_table)?;
-                                    field_ptr = field_ptr.add(field_ptr.align_offset(struct_align));
-
-                                    std::ptr::copy(
-                                        &*struct_ptr as *const _ as *const c_void,
-                                        field_ptr,
-                                        struct_size,
-                                    );
-                                    field_ptr = field_ptr.add(struct_size);
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
-                            }
-                        }
-                    }
-
-                    #[allow(clippy::from_raw_with_void_ptr)]
-                    Ok((unsafe { Box::from_raw(ptr) }, size, align))
-                } else {
-                    Err(FFIError::InvalidStructName)
-                }
-            }
-            _ => Err(FFIError::ValueCast),
-        }
-    }
-
-    pub fn exec(&mut self, name: &str, mut args: Vec<Value>) -> Result<Value, FFIError> {
-        let function_impl = self.table.get_mut(name).ok_or(FFIError::FunctionNotFound)?;
-        let mut pointer_args =
-            Self::build_pointer_args(&mut args, &function_impl.args, &mut self.structs)?;
-
-        unsafe {
-            macro_rules! call_and_return {
-                ($type:ty) => {{
-                    let mut n: Box<u8> = Box::new(0);
-                    libffi::raw::ffi_call(
-                        &mut function_impl.cif,
-                        Some(*function_impl.code_ptr.as_safe_fun()),
-                        &mut *n as *mut _ as *mut c_void,
-                        pointer_args.pointers.as_mut_ptr() as *mut *mut c_void,
-                    );
-                    Ok(Value::Int(i64::from(*n)))
-                }};
-            }
-
-            match (*function_impl.cif.rtype).type_ as u32 {
-                libffi::raw::FFI_TYPE_VOID => call_and_return!(i32),
-                libffi::raw::FFI_TYPE_UINT8 => call_and_return!(u8),
-                libffi::raw::FFI_TYPE_SINT8 => call_and_return!(i8),
-                libffi::raw::FFI_TYPE_UINT16 => call_and_return!(u16),
-                libffi::raw::FFI_TYPE_SINT16 => call_and_return!(i16),
-                libffi::raw::FFI_TYPE_UINT32 => call_and_return!(u32),
-                libffi::raw::FFI_TYPE_SINT32 => call_and_return!(i32),
-                libffi::raw::FFI_TYPE_UINT64 => {
-                    let mut n: Box<u64> = Box::new(0);
-                    libffi::raw::ffi_call(
-                        &mut function_impl.cif,
-                        Some(*function_impl.code_ptr.as_safe_fun()),
-                        &mut *n as *mut _ as *mut c_void,
-                        pointer_args.pointers.as_mut_ptr(),
-                    );
-                    Ok(Value::Int(
-                        i64::try_from(*n).map_err(|_| FFIError::ValueDontFit)?,
-                    ))
-                }
-                libffi::raw::FFI_TYPE_SINT64 => call_and_return!(i64),
-                libffi::raw::FFI_TYPE_POINTER => call_and_return!(*mut c_void),
-                libffi::raw::FFI_TYPE_FLOAT => {
-                    let mut n: Box<f32> = Box::new(0.0);
-                    libffi::raw::ffi_call(
-                        &mut function_impl.cif,
-                        Some(*function_impl.code_ptr.as_safe_fun()),
-                        &mut *n as *mut _ as *mut c_void,
-                        pointer_args.pointers.as_mut_ptr(),
-                    );
-                    Ok(Value::Float((*n).into()))
-                }
-                libffi::raw::FFI_TYPE_DOUBLE => {
-                    let mut n: Box<f64> = Box::new(0.0);
-                    libffi::raw::ffi_call(
-                        &mut function_impl.cif,
-                        Some(*function_impl.code_ptr.as_safe_fun()),
-                        &mut *n as *mut _ as *mut c_void,
-                        pointer_args.pointers.as_mut_ptr(),
-                    );
-                    Ok(Value::Float(*n))
-                }
-                libffi::raw::FFI_TYPE_STRUCT => {
-                    let name = &function_impl
-                        .return_struct_name
-                        .clone()
-                        .ok_or(FFIError::StructNotFound)?;
-                    let struct_type = self.structs.get(name).ok_or(FFIError::StructNotFound)?;
-                    let layout = Layout::from_size_align(
-                        struct_type.ffi_type.size,
-                        struct_type.ffi_type.alignment.into(),
-                    )
-                    .unwrap();
-                    let ptr = alloc::alloc(layout) as *mut c_void;
-
-                    if ptr.is_null() {
-                        panic!("allocation failed")
-                    }
-
-                    libffi::raw::ffi_call(
-                        &mut function_impl.cif,
-                        Some(*function_impl.code_ptr.as_safe_fun()),
-                        &mut *ptr as *mut _,
-                        pointer_args.pointers.as_mut_ptr(),
-                    );
-                    let struct_val = self.read_struct(ptr, name, struct_type);
-                    #[allow(clippy::from_raw_with_void_ptr)]
-                    drop(Box::from_raw(ptr));
-                    struct_val
-                }
-                _ => unreachable!(),
-            }
-        }
-    }
-
-    fn read_struct(
-        &self,
-        ptr: *mut c_void,
-        name: &str,
-        struct_type: &StructImpl,
-    ) -> Result<Value, FFIError> {
-        unsafe {
-            let mut returns = Vec::new();
-            let mut field_ptr = ptr;
-
-            for i in 0..(struct_type.fields.len() - 1) {
-                let field = struct_type.fields[i];
-
-                macro_rules! read_and_push_int {
-                    ($type:ty) => {{
-                        field_ptr =
-                            field_ptr.add(field_ptr.align_offset(std::mem::align_of::<$type>()));
-                        let n = std::ptr::read(field_ptr as *mut $type);
-                        returns.push(Value::Int(i64::from(n)));
-                        field_ptr = field_ptr.add(std::mem::size_of::<$type>());
-                    }};
-                }
-
-                match (*field).type_ as u32 {
-                    libffi::raw::FFI_TYPE_UINT8 => read_and_push_int!(u8),
-                    libffi::raw::FFI_TYPE_SINT8 => read_and_push_int!(i8),
-                    libffi::raw::FFI_TYPE_UINT16 => read_and_push_int!(u16),
-                    libffi::raw::FFI_TYPE_SINT16 => read_and_push_int!(i16),
-                    libffi::raw::FFI_TYPE_UINT32 => read_and_push_int!(u32),
-                    libffi::raw::FFI_TYPE_SINT32 => read_and_push_int!(i32),
-                    libffi::raw::FFI_TYPE_UINT64 => {
-                        field_ptr =
-                            field_ptr.add(field_ptr.align_offset(std::mem::align_of::<u64>()));
-                        let n = std::ptr::read(field_ptr as *mut u64);
-                        returns.push(Value::Int(
-                            i64::try_from(n).map_err(|_| FFIError::ValueDontFit)?,
-                        ));
-                        field_ptr = field_ptr.add(std::mem::size_of::<u64>());
-                    }
-                    libffi::raw::FFI_TYPE_SINT64 => read_and_push_int!(i64),
-                    libffi::raw::FFI_TYPE_POINTER => read_and_push_int!(i64),
-                    libffi::raw::FFI_TYPE_FLOAT => {
-                        field_ptr =
-                            field_ptr.add(field_ptr.align_offset(std::mem::align_of::<f32>()));
-                        let n: f32 = std::ptr::read(field_ptr as *mut f32);
-                        returns.push(Value::Float(n.into()));
-                        field_ptr = field_ptr.add(std::mem::size_of::<f32>());
-                    }
-                    libffi::raw::FFI_TYPE_DOUBLE => {
-                        field_ptr =
-                            field_ptr.add(field_ptr.align_offset(std::mem::align_of::<f64>()));
-                        let n: f64 = std::ptr::read(field_ptr as *mut f64);
-                        returns.push(Value::Float(n));
-                        field_ptr = field_ptr.add(std::mem::size_of::<f64>());
-                    }
-                    libffi::raw::FFI_TYPE_STRUCT => {
-                        let substruct = struct_type.atom_fields[i].as_str();
-                        let struct_type = self
-                            .structs
-                            .get(&*substruct)
-                            .ok_or(FFIError::StructNotFound)?;
-                        field_ptr = field_ptr
-                            .add(field_ptr.align_offset(struct_type.ffi_type.alignment as usize));
-                        let struct_val = self.read_struct(field_ptr, &substruct, struct_type);
-                        returns.push(struct_val?);
-                        field_ptr = field_ptr.add(struct_type.ffi_type.size);
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                }
-            }
-            Ok(Value::Struct(name.into(), returns))
-        }
+        fn_impl.call(&args, arena, &self.structs)
     }
 }
 
 #[derive(Clone, Debug)]
 pub enum Value {
-    Int(i64),
-    Float(f64),
+    Number(Number),
     CString(CString),
     Struct(String, Vec<Value>),
 }
 
 impl Value {
-    fn as_int(&self) -> Result<i64, FFIError> {
+    fn as_int<I>(&self) -> Result<I, FfiError>
+    where
+        Integer: TryInto<I>,
+        i64: TryInto<I>,
+    {
         match self {
-            Value::Int(n) => Ok(*n),
-            _ => Err(FFIError::ValueCast),
+            Value::Number(Number::Integer(ibig_ptr)) => {
+                let ibig: &Integer = ibig_ptr;
+                ibig.clone()
+                    .try_into()
+                    .map_err(|_| FfiError::ValueOutOfRange)
+            }
+            Value::Number(Number::Fixnum(fixnum)) => fixnum
+                .get_num()
+                .try_into()
+                .map_err(|_| FfiError::ValueOutOfRange),
+            _ => Err(FfiError::ValueCast),
         }
     }
 
-    fn as_float(&self) -> Result<f64, FFIError> {
+    fn as_float(&self) -> Result<f64, FfiError> {
         match self {
-            Value::Float(n) => Ok(*n),
-            Value::Int(n) => Ok(*n as f64),
-            _ => Err(FFIError::ValueCast),
+            &Value::Number(Number::Float(OrderedFloat(f))) => Ok(f),
+            _ => Err(FfiError::ValueCast),
         }
     }
 
-    fn as_ptr(&mut self) -> Result<*mut c_void, FFIError> {
+    fn as_ptr(&mut self) -> Result<*mut c_void, FfiError> {
         match self {
-            Value::CString(ref mut cstr) => Ok(&mut *cstr as *mut _ as *mut c_void),
-            Value::Int(n) => Ok(std::ptr::with_exposed_provenance_mut(*n as usize)),
-            _ => Err(FFIError::ValueCast),
+            Value::CString(ref mut cstr) => Ok(cstr.as_ptr().cast_mut().cast()),
+            Value::Number(Number::Fixnum(fixnum)) => Ok(std::ptr::with_exposed_provenance_mut(
+                fixnum.get_num() as usize,
+            )),
+            _ => Err(FfiError::ValueCast),
+        }
+    }
+
+    fn as_struct(&mut self) -> Result<(&str, &mut [Self]), FfiError> {
+        match self {
+            Value::Struct(name, values) => Ok((name, values)),
+            _ => Err(FfiError::ValueCast),
         }
     }
 }
 
 #[derive(Debug)]
-pub enum FFIError {
+pub enum FfiError {
     ValueCast,
-    ValueDontFit,
-    InvalidFFIType,
-    InvalidStructName,
+    ValueOutOfRange,
+    InvalidArgumentType,
+    InvalidArgument,
+    InvalidFfiType,
+    InvalidStruct,
     FunctionNotFound,
     StructNotFound,
+    ArgCountMismatch,
+    AllocationFailed,
+    // LayoutError should never occour
+    LayoutError,
+    UnsupportedAbi,
+}
+
+impl std::fmt::Display for FfiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
+}
+
+impl Error for FfiError {}
+
+impl From<libffi::low::Error> for FfiError {
+    fn from(value: libffi::low::Error) -> Self {
+        match value {
+            libffi::low::Error::Typedef => FfiError::InvalidFfiType,
+            libffi::low::Error::Abi => FfiError::UnsupportedAbi,
+        }
+    }
 }

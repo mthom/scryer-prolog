@@ -119,6 +119,7 @@ js-sys = "0.3"
 ouroboros = "0.18"
 
 [dev-dependencies]
+current_platform = "0.2.0"
 maplit = "1.0.2"
 serial_test = "3.1.1"
 
