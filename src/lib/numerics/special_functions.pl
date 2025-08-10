@@ -58,14 +58,6 @@ erf(Xexpr, Erf) :-
 ?- witness((real(X), erf(X,Erf), erf(-X,_Erf), abs(Erf+_Erf) > 0)).
    false.
 
-% TODO: Remove this general answer description,
-%       added merely as a quad-check test case:
-?- length(Xs, L).
-   Xs = [], L = 0
-;  Xs = [_A], L = 1
-;  Xs = [_A,_B], L = 2
-;  ... .
-
 %% erfc(+X, -Erfc)
 %
 % Erfc is erfc(X) for X ∈ ℝ.
