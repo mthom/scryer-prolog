@@ -1,10 +1,10 @@
 use crate::machine::Number;
+use crate::offset_table::OffsetTable;
 use crate::Machine;
-use crate::offset_table::OffsetTable; // These appear now
-use ordered_float::OrderedFloat;      // to be required.
+use ordered_float::OrderedFloat;
+use puruspe::beta::*;
 use puruspe::error::*;
 use puruspe::gamma::*;
-use puruspe::beta::*;
 
 macro_rules! number_as_f64 {
     ($self: ident, $reg: literal) => {{
@@ -98,7 +98,7 @@ impl Machine {
     pub(crate) fn beta(&mut self) {
         let x = number_as_f64!(self, 1);
         let y = number_as_f64!(self, 2);
-        let beta_x_y = float_alloc!(beta(x,y), self.machine_st.arena);
+        let beta_x_y = float_alloc!(beta(x, y), self.machine_st.arena);
         return_f64_reg!(self, beta_x_y, 3);
     }
 
@@ -107,7 +107,7 @@ impl Machine {
         let a = number_as_f64!(self, 1);
         let b = number_as_f64!(self, 2);
         let x = number_as_f64!(self, 3);
-        let betai_a_b_x = float_alloc!(betai(a,b,x), self.machine_st.arena);
+        let betai_a_b_x = float_alloc!(betai(a, b, x), self.machine_st.arena);
         return_f64_reg!(self, betai_a_b_x, 4);
     }
 
@@ -116,7 +116,7 @@ impl Machine {
         let a = number_as_f64!(self, 1);
         let b = number_as_f64!(self, 2);
         let p = number_as_f64!(self, 3);
-        let x = float_alloc!(invbetai(a,b,p), self.machine_st.arena);
+        let x = float_alloc!(invbetai(a, b, p), self.machine_st.arena);
         return_f64_reg!(self, x, 4);
     }
 
