@@ -98,7 +98,7 @@ server_async :-
     await(server_async).
 
 
-main :-
+run :-
     async_event_loop([server_async]).
 
 ```
