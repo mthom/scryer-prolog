@@ -208,7 +208,7 @@ In addition, the results are reported "as completed".
 :- use_module(library(time)).
 
 
-main :-
+run :-
    time(random_counting_process_tasks).
 
 format_async(Format,Args) :-
@@ -253,7 +253,7 @@ random_counting_process_tasks(N) :-
         maplist(random_sleep_write_async, Tasks),
         async_event_loop(Tasks).
 
-?- main.
+?- run.
    %@ 1
    %@ 1
    %@ 2
@@ -295,17 +295,17 @@ bad_target :-
         write(pre_shift),nl,
         shift(success).
 
-main :-
+run :-
         async_event_loop([reset(bad_target, Any, cont(Cont)), Cont]).
 
-?- main.
+?- run.
 %@ pre_shift
 %@    false.
 
-main1 :-
+run1 :-
         async_event_loop([reset(bad_target, success, cont(Cont)), Cont]).
 
-?- main1.
+?- run1.
 %@    false.
 
 
@@ -314,10 +314,10 @@ good_target :-
         write(pre_await),nl,
         await(true).
 
-main2 :-
+run2 :-
         async_event_loop([reset(good_target, success, cont(Cont)), Cont]).
 
-?- main2.
+?- run2.
 %@ pre_await
 %@    true.
 ```
