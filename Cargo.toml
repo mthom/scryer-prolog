@@ -62,6 +62,7 @@ scryer-modular-bitfield = "0.11.4"
 num-order = { version = "1.2.0" }
 ordered-float = "5.0.0"
 phf = { version = "0.11", features = ["macros"] }
+puruspe = "0.4.1"
 rand = "0.8.5"
 ring = { version = "0.17.8", features = ["wasm32_unknown_unknown_js"] }
 ripemd = "0.1.3"
