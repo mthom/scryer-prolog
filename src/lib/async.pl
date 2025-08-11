@@ -38,8 +38,8 @@
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 %% async_event_loop(+Goals)
-% Goals is a list of goals that may be asyncronous, meaning that that `await/1`
-% will unify within this context and fail otherwise.
+% Goals is a list of goals that may invoke `await/1`. 
+
 
 async_event_loop([]).
 async_event_loop([X|Xs]) :-
@@ -51,6 +51,7 @@ async_event_loop([X|Xs]) :-
 % the `Goal` will operate as a coroutine. Note that it is asyncronous
 % but NOT concurrent or parallel without invoking an external process.
 
+:- meta_predicate(await(+)).
 await(G) :-
         shift(zurück(G)).
 
@@ -143,10 +144,6 @@ writem_async([]).
 
 
 ?- async_event_loop([writem_async([hello,world]), writem_async([cruel])]).
-   %@ hello
-   %@ cruel
-   %@ world
-   %@    true.
 ```
 
 
@@ -171,24 +168,8 @@ random_countable_async :-
         await(countable_async(0,R)).
 
    ?- async_event_loop([random_countable_async,countable_async(0,3)]).
-   %@ 0
-   %@ 0
-   %@ 1
-   %@ 1
-   %@ 2
-   %@ 2
-   %@ 3
-   %@ 4
-   %@    true.
 
    ?- async_event_loop([writem_async([a,b,c]),countable_async(0,3)]).
-   %@ a
-   %@ 0
-   %@ b
-   %@ 1
-   %@ c
-   %@ 2
-   %@    true.
 ```
 
 ## Communicating with external processes in Linux/MacOS
@@ -254,24 +235,6 @@ random_counting_process_tasks(N) :-
         async_event_loop(Tasks).
 
 ?- run.
-   %@ 1
-   %@ 1
-   %@ 2
-   %@ 2
-   %@ 2
-   %@ 2
-   %@ 2
-   %@ 2
-   %@ 2
-   %@ 2
-   %@ 2
-   %@ 3
-   %@ 3
-   %@ 3
-   %@ 3
-   %@ 3
-   %@    % CPU time: 0.185s, 230_079 inferences
-   %@    true.
 
 
 ```
@@ -296,17 +259,14 @@ bad_target :-
         shift(success).
 
 run :-
-        async_event_loop([reset(bad_target, Any, cont(Cont)), Cont]).
+        async_event_loop([reset(bad_target, _Any, cont(Cont)), Cont]).
 
 ?- run.
-%@ pre_shift
-%@    false.
 
 run1 :-
         async_event_loop([reset(bad_target, success, cont(Cont)), Cont]).
 
 ?- run1.
-%@    false.
 
 
 good_target :-
@@ -318,8 +278,6 @@ run2 :-
         async_event_loop([reset(good_target, success, cont(Cont)), Cont]).
 
 ?- run2.
-%@ pre_await
-%@    true.
 ```
 
 @author [James Tolton](https://www.lotusmundi.com)
@@ -346,7 +304,8 @@ resume_internal(none,_Meaningless,Q,Q).
 resume_internal(cont(Cont),Task,Q,Nq) :-
         que_task_enque(Q,Task,Nq0),
         que_task_enque(Nq0,Cont,Nq).
-        
+
+:- meta_predicate(handle_await(0, ?, ?)).
 handle_await(G,Val,Cont) :-
         reset(G, zurück(Val), Cont).
 
