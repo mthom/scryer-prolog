@@ -108,7 +108,7 @@ statistics(runtime, [T,unsupported]) :-
         '$cpu_now'(T0),
         T is T0*1000.
 
-:- meta_predicate time(0).
+:- meta_predicate(time(0)).
 
 :- dynamic(time_id/1).
 :- dynamic(time_state/3).

@@ -12,7 +12,7 @@
 		  map_list_to_pairs/3]).
 
 
-:- meta_predicate map_list_to_pairs(2, ?, ?).
+:- meta_predicate(map_list_to_pairs(2, ?, ?)).
 
 %% pairs_keys_values(?Pairs, ?Keys, ?Values)
 %

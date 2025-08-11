@@ -763,6 +763,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   public key signatures and signature verification with&nbsp;Ed25519,
   ECDH key&nbsp;exchange over Curve25519 (X25519), authenticated symmetric
   encryption with ChaCha20-Poly1305, and reasoning about elliptic curves.
+* [`process`](src/lib/process.pl)
+  Create and manage parallel processes.
 * [`uuid`](src/lib/uuid.pl) UUIDv4 generation and hex representation
 * [`tls`](src/lib/tls.pl)
   Predicates for negotiating TLS connections explicitly.
@@ -877,6 +879,7 @@ Successful existing applications of Scryer Prolog include:
   safety-critical and highly regulated domain of oncology
   trial&nbsp;design, described in [*An Executable Specification of
   Oncology Dose-Escalation Protocols with&nbsp;Prolog*](https://arxiv.org/abs/2402.08334)
+  and culminating in&nbsp;[**DEDUCTION**](https://codeberg.org/dcnorris/DEDUCTION)
 - semantic reasoning and queries in [AD4M](https://github.com/coasys/ad4m),
   an agent-centric distributed application meta-ontology.
 
