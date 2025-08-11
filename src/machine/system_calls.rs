@@ -5018,15 +5018,21 @@ impl Machine {
             // the tail are the struct field values
 
             let mut iter = args.into_iter();
-            if let Some(struct_name) = machine_st.value_to_str_like(iter.next().unwrap()) {
-                Ok(Value::Struct(
-                    struct_name.as_str().to_string(),
-                    iter.map(|x| Self::map_ffi_arg(machine_st, x, stub_gen))
-                        .collect::<Result<_, _>>()?,
-                ))
+
+            if let Some(head) = iter.next() {
+                if let Some(struct_name) = machine_st.value_to_str_like(head) {
+                    Ok(Value::Struct(
+                        struct_name.as_str().to_string(),
+                        iter.map(|x| Self::map_ffi_arg(machine_st, x, stub_gen))
+                            .collect::<Result<_, _>>()?,
+                    ))
+                } else {
+                    // first element of a struct needs to be the type
+                    Err(machine_st.error_form(machine_st.ffi_error(FfiError::ValueOutOfRange, head), stub_gen()))
+                }
             } else {
                 // empty list is an invalid struct repr
-                Err(machine_st.error_form(machine_st.ffi_error(FfiError::InvalidStruct, source), stub_gen()))
+                Err(machine_st.error_form(machine_st.ffi_error(FfiError::ValueOutOfRange, source), stub_gen()))
             }
         } else {
             Err(machine_st.error_form(machine_st.ffi_error(FfiError::InvalidArgument, source), stub_gen()))
