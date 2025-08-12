@@ -5004,15 +5004,15 @@ impl Machine {
     }
 
     fn map_ffi_arg(
-        machine_st: &mut MachineState,
+        &mut self,
         source: HeapCellValue,
         stub_gen: impl Copy + Fn() -> MachineStub
     ) -> CallResult<Value> {
-        if let Ok(number) = Number::try_from((source, &machine_st.arena.f64_tbl)) {
+        if let Ok(number) = Number::try_from((source, &self.machine_st.arena.f64_tbl)) {
             Ok(Value::Number(number))
-        } else if let Some(string) = machine_st.value_to_str_like(source) {
+        } else if let Some(string) = self.machine_st.value_to_str_like(source) {
             Ok(Value::CString(CString::new(&*string.as_str()).unwrap()))
-        } else if let Ok(args) = machine_st.try_from_list(source, stub_gen) {
+        } else if let Ok(args) = self.machine_st.try_from_list(source, stub_gen) {
             // structs are lists represented as lists
             // the head is a string with the struct type name
             // the tail are the struct field values
@@ -5020,22 +5020,42 @@ impl Machine {
             let mut iter = args.into_iter();
 
             if let Some(head) = iter.next() {
-                if let Some(struct_name) = machine_st.value_to_str_like(head) {
+                if let Some(struct_name) = self.machine_st.value_to_str_like(head) {
                     Ok(Value::Struct(
                         struct_name.as_str().to_string(),
-                        iter.map(|x| Self::map_ffi_arg(machine_st, x, stub_gen))
+                        iter.map(|x| self.map_ffi_arg( x, stub_gen))
                             .collect::<Result<_, _>>()?,
                     ))
+                } else if self.machine_st.deref(head).is_var() {
+                    let err = self.machine_st.instantiation_error();
+
+                    let src = stub_gen();
+
+                    let culprit = functor!(atom!("-"), [atom_as_cell((atom!("var"))), cell(head)]);
+
+                    let src = functor!(atom!("."), [functor(culprit), list([functor(src)])]);
+
+                    Err(self.machine_st.error_form(err, src))
                 } else {
                     // first element of a struct needs to be the type
-                    Err(machine_st.error_form(machine_st.ffi_error(FfiError::ValueOutOfRange, head), stub_gen()))
+                    Err(self.machine_st.error_form(self.machine_st.ffi_error(FfiError::ValueOutOfRange, head), stub_gen()))
                 }
             } else {
                 // empty list is an invalid struct repr
-                Err(machine_st.error_form(machine_st.ffi_error(FfiError::ValueOutOfRange, source), stub_gen()))
+                Err(self.machine_st.error_form(self.machine_st.ffi_error(FfiError::ValueOutOfRange, source), stub_gen()))
             }
+        } else if self.machine_st.deref(source).is_var() {
+            let err = self.machine_st.instantiation_error();
+
+            let src = stub_gen();
+
+            let culprit = functor!(atom!("-"), [atom_as_cell((atom!("var"))), cell(source)]);
+
+            let src = functor!(atom!("."), [functor(culprit), list([functor(src)])]);
+
+            Err(self.machine_st.error_form(err, src))
         } else {
-            Err(machine_st.error_form(machine_st.ffi_error(FfiError::InvalidArgument, source), stub_gen()))
+            Err(self.machine_st.error_form(self.machine_st.ffi_error(FfiError::InvalidArgument, source), stub_gen()))
         }
     }
 
@@ -5055,7 +5075,7 @@ impl Machine {
                 Ok(args) => {
                     let args = args
                         .into_iter()
-                        .map(|x| Self::map_ffi_arg(&mut self.machine_st, x, stub_gen))
+                        .map(|x| self.map_ffi_arg( x, stub_gen))
                         .collect::<Result<Vec<_>, _>>()?;
 
                     match self.foreign_function_table.exec(
@@ -5187,7 +5207,7 @@ impl Machine {
             self.machine_st.error_form(machine_error, stub_gen())
         })?;
 
-        let args = Self::map_ffi_arg(&mut self.machine_st, args, stub_gen)?;
+        let args = self.map_ffi_arg( args, stub_gen)?;
 
         let value = match self.foreign_function_table.allocate(allocator, ffi_type, args, &mut self.machine_st.arena) {
             Ok(value) => value,
@@ -5208,7 +5228,7 @@ impl Machine {
         let ptr = self.deref_register(2);
         let return_value = self.deref_register(3);
 
-        let ptr = Self::map_ffi_arg(&mut self.machine_st, ptr, stub_gen)?;
+        let ptr = self.map_ffi_arg(ptr, stub_gen)?;
 
         let value = self.foreign_function_table.read_ptr(ffi_type, ptr, &mut self.machine_st.arena).map_err(|ffi_error| {
                 let machine_error = self.machine_st.ffi_error(ffi_error, ffi_type_arg);
@@ -5232,7 +5252,7 @@ impl Machine {
             self.machine_st.error_form(machine_error, stub_gen())
         })?;
 
-        let ptr = Self::map_ffi_arg(&mut self.machine_st, ptr, stub_gen)?;
+        let ptr = self.map_ffi_arg(ptr, stub_gen)?;
 
         match self.foreign_function_table.deallocate(allocator, ffi_type, ptr) {
             Ok(value) => value,
