@@ -517,6 +517,30 @@ enum SystemClauseType {
     #[cfg(feature = "crypto-full")]
     #[strum_discriminants(strum(props(Arity = "6", Name = "$crypto_data_decrypt")))]
     CryptoDataDecrypt,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$beta")))]
+    Beta,
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$betai")))]
+    BetaI,
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$invbetai")))]
+    InvBetaI,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$gamma")))]
+    Gamma,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$ln_gamma")))]
+    LnGamma,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$gammp")))]
+    GammP,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$gammq")))]
+    GammQ,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$invgammp")))]
+    InvGammP,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$erf")))]
+    Erf,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$erfc")))]
+    Erfc,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$inverf")))]
+    InvErf,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$inverfc")))]
+    InvErfc,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_sign_raw")))]
     Ed25519SignRaw,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_verify_raw")))]
@@ -1899,6 +1923,21 @@ fn generate_instruction_preface() -> TokenStream {
                         functor!(atom!("call"), [atom_as_cell(name), fixnum(arity)])
                     }
                     //
+                    &Instruction::CallBeta |
+                    &Instruction::CallBetaI |
+                    &Instruction::CallInvBetaI |
+                    &Instruction::CallGamma |
+                    &Instruction::CallGammP |
+                    &Instruction::CallGammQ |
+                    &Instruction::CallInvGammP |
+                    &Instruction::CallLnGamma |
+                    &Instruction::CallErf |
+                    &Instruction::CallErfc |
+                    &Instruction::CallInvErf |
+                    &Instruction::CallInvErfc => {
+                        let (name, arity) = self.to_name_and_arity();
+                        functor!(atom!("call"), [atom_as_cell(name), fixnum(arity)])
+                    }
                     &Instruction::ExecuteAtomChars |
                     &Instruction::ExecuteAtomCodes |
                     &Instruction::ExecuteAtomLength |
@@ -2142,6 +2181,21 @@ fn generate_instruction_preface() -> TokenStream {
                         functor!(atom!("execute"), [atom_as_cell(name), fixnum(arity)])
                     }
                     //
+                    &Instruction::ExecuteBeta |
+                    &Instruction::ExecuteBetaI |
+                    &Instruction::ExecuteInvBetaI |
+                    &Instruction::ExecuteGamma |
+                    &Instruction::ExecuteGammP |
+                    &Instruction::ExecuteGammQ |
+                    &Instruction::ExecuteInvGammP |
+                    &Instruction::ExecuteLnGamma |
+                    &Instruction::ExecuteErf |
+                    &Instruction::ExecuteErfc |
+                    &Instruction::ExecuteInvErf |
+                    &Instruction::ExecuteInvErfc => {
+                        let (name, arity) = self.to_name_and_arity();
+                        functor!(atom!("execute"), [atom_as_cell(name), fixnum(arity)])
+                    }
                     &Instruction::Deallocate => {
                         functor!(atom!("deallocate"))
                     }
