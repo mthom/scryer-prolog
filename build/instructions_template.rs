@@ -495,6 +495,8 @@ enum SystemClauseType {
     WriteTerm,
     #[strum_discriminants(strum(props(Arity = "8", Name = "$write_term_to_chars")))]
     WriteTermToChars,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$integer_in_radix")))]
+    IntegerInRadix,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$scryer_prolog_version")))]
     ScryerPrologVersion,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$crypto_random_byte")))]
@@ -1844,6 +1846,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallInlinedInstructions |
                     &Instruction::CallWriteTerm |
                     &Instruction::CallWriteTermToChars |
+                    &Instruction::CallIntegerInRadix |
                     &Instruction::CallScryerPrologVersion |
                     &Instruction::CallCryptoRandomByte |
                     &Instruction::CallCryptoDataHash |
@@ -2102,6 +2105,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteInlinedInstructions |
                     &Instruction::ExecuteWriteTerm |
                     &Instruction::ExecuteWriteTermToChars |
+                    &Instruction::ExecuteIntegerInRadix |
                     &Instruction::ExecuteScryerPrologVersion |
                     &Instruction::ExecuteCryptoRandomByte |
                     &Instruction::ExecuteCryptoDataHash |
