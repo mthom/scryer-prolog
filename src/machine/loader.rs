@@ -1384,7 +1384,10 @@ impl MachineState {
             stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, 0);
 
         while let Some(addr) = iter.next() {
-            let addr = unmark_cell_bits!(addr);
+            let addr = unmark_cell_bits!(heap_bound_store(
+                iter.base_iter.heap,
+                heap_bound_deref(iter.base_iter.heap, addr),
+            ));
 
             read_heap_cell!(addr,
                 (HeapCellValueTag::Lis) => {
