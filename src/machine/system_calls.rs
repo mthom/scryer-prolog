@@ -84,6 +84,8 @@ use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 
 use crrl::{ed25519, secp256k1, x25519};
 
+pub(crate) mod special_math;
+
 #[cfg(feature = "tls")]
 use native_tls::{Identity, TlsAcceptor, TlsConnector};
 

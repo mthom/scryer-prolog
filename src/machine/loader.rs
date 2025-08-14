@@ -1386,6 +1386,15 @@ impl MachineState {
         while let Some(addr) = iter.next() {
             let addr = unmark_cell_bits!(addr);
 
+            let addr = if addr.is_var() {
+                unmark_cell_bits!(heap_bound_store(
+                    iter.base_iter.heap,
+                    heap_bound_deref(iter.base_iter.heap, addr)
+                ))
+            } else {
+                addr
+            };
+
             read_heap_cell!(addr,
                 (HeapCellValueTag::Lis) => {
                     use crate::parser::parser::as_partial_string;
