@@ -1193,9 +1193,13 @@ impl MachineState {
 
     // returns true on failure.
     pub fn ground_test(&mut self) -> bool {
-        let iter = eager_stackful_preorder_iter(&mut self.heap, self.registers[1]);
+        let term = self.store(self.deref(self.registers[1]));
 
-        for term in iter {
+        if term.is_stack_var() {
+            return true;
+        }
+
+        for term in eager_stackful_preorder_iter(&mut self.heap, term) {
             if term.is_var() {
                 return true;
             }
