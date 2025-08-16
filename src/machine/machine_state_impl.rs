@@ -564,9 +564,11 @@ impl MachineState {
                                             self.pdl.push(v2.offset_by(l2));
                                         }
                                         PStrSegmentCmpResult::Less => {
+                                            self.pdl.clear();
                                             return Some(Ordering::Less);
                                         }
                                         PStrSegmentCmpResult::Greater => {
+                                            self.pdl.clear();
                                             return Some(Ordering::Greater);
                                         }
                                     }
