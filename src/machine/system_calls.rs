@@ -5006,8 +5006,9 @@ impl Machine {
     fn map_ffi_arg(
         &mut self,
         source: HeapCellValue,
-        stub_gen: impl Copy + Fn() -> MachineStub
+        stub_gen: impl Copy + Fn() -> MachineStub,
     ) -> CallResult<Value> {
+        let source = self.machine_st.store(self.machine_st.deref(source));
         if let Ok(number) = Number::try_from((source, &self.machine_st.arena.f64_tbl)) {
             Ok(Value::Number(number))
         } else if let Some(string) = self.machine_st.value_to_str_like(source) {
@@ -5020,13 +5021,14 @@ impl Machine {
             let mut iter = args.into_iter();
 
             if let Some(head) = iter.next() {
+                let head = self.machine_st.store(self.machine_st.deref(head));
                 if let Some(struct_name) = self.machine_st.value_to_str_like(head) {
                     Ok(Value::Struct(
                         struct_name.as_str().to_string(),
-                        iter.map(|x| self.map_ffi_arg( x, stub_gen))
+                        iter.map(|x| self.map_ffi_arg(x, stub_gen))
                             .collect::<Result<_, _>>()?,
                     ))
-                } else if self.machine_st.deref(head).is_var() {
+                } else if head.is_var() {
                     let err = self.machine_st.instantiation_error();
 
                     let src = stub_gen();
@@ -5038,11 +5040,17 @@ impl Machine {
                     Err(self.machine_st.error_form(err, src))
                 } else {
                     // first element of a struct needs to be the type
-                    Err(self.machine_st.error_form(self.machine_st.ffi_error(FfiError::ValueOutOfRange, head), stub_gen()))
+                    Err(self.machine_st.error_form(
+                        self.machine_st.ffi_error(FfiError::ValueOutOfRange, head),
+                        stub_gen(),
+                    ))
                 }
             } else {
                 // empty list is an invalid struct repr
-                Err(self.machine_st.error_form(self.machine_st.ffi_error(FfiError::ValueOutOfRange, source), stub_gen()))
+                Err(self.machine_st.error_form(
+                    self.machine_st.ffi_error(FfiError::ValueOutOfRange, source),
+                    stub_gen(),
+                ))
             }
         } else if self.machine_st.deref(source).is_var() {
             let err = self.machine_st.instantiation_error();
@@ -5055,7 +5063,10 @@ impl Machine {
 
             Err(self.machine_st.error_form(err, src))
         } else {
-            Err(self.machine_st.error_form(self.machine_st.ffi_error(FfiError::InvalidArgument, source), stub_gen()))
+            Err(self.machine_st.error_form(
+                self.machine_st.ffi_error(FfiError::InvalidArgument, source),
+                stub_gen(),
+            ))
         }
     }
 
@@ -5066,7 +5077,6 @@ impl Machine {
             functor_stub(atom!("foreign_call"), 3)
         }
 
-
         let function_name_arg = self.deref_register(1);
         let args_reg = self.deref_register(2);
         let return_value = self.deref_register(3);
@@ -5075,7 +5085,7 @@ impl Machine {
                 Ok(args) => {
                     let args = args
                         .into_iter()
-                        .map(|x| self.map_ffi_arg( x, stub_gen))
+                        .map(|x| self.map_ffi_arg(x, stub_gen))
                         .collect::<Result<Vec<_>, _>>()?;
 
                     match self.foreign_function_table.exec(
@@ -5114,15 +5124,11 @@ impl Machine {
                     self.machine_st
                         .unify_rational(typed_arena_ptr, return_value);
                 }
-                Number::Fixnum(fixnum) => {
-                    self.machine_st.unify_fixnum(fixnum, return_value)
-                }
+                Number::Fixnum(fixnum) => self.machine_st.unify_fixnum(fixnum, return_value),
             },
             Value::Struct(name, args) => {
-                let struct_value = resource_error_call_result!(
-                    self.machine_st,
-                    self.build_struct(&name, args)
-                );
+                let struct_value =
+                    resource_error_call_result!(self.machine_st, self.build_struct(&name, args));
 
                 unify!(self.machine_st, return_value, struct_value);
             }
@@ -5203,18 +5209,25 @@ impl Machine {
         let return_value = self.deref_register(4);
 
         let allocator = FfiAllocator::try_from(allocator.to_atom().unwrap()).map_err(|_| {
-            let machine_error = self.machine_st.domain_error(DomainErrorType::Allocator, allocator);
+            let machine_error = self
+                .machine_st
+                .domain_error(DomainErrorType::Allocator, allocator);
             self.machine_st.error_form(machine_error, stub_gen())
         })?;
 
-        let args = self.map_ffi_arg( args, stub_gen)?;
+        let args = self.map_ffi_arg(args, stub_gen)?;
 
-        let value = match self.foreign_function_table.allocate(allocator, ffi_type, args, &mut self.machine_st.arena) {
+        let value = match self.foreign_function_table.allocate(
+            allocator,
+            ffi_type,
+            args,
+            &mut self.machine_st.arena,
+        ) {
             Ok(value) => value,
             Err(ffi_error) => {
                 let machine_error = self.machine_st.ffi_error(ffi_error, ffi_type_arg);
                 return Err(self.machine_st.error_form(machine_error, stub_gen()));
-            },
+            }
         };
 
         self.unify_ffi_result(return_value, value)
@@ -5230,10 +5243,13 @@ impl Machine {
 
         let ptr = self.map_ffi_arg(ptr, stub_gen)?;
 
-        let value = self.foreign_function_table.read_ptr(ffi_type, ptr, &mut self.machine_st.arena).map_err(|ffi_error| {
+        let value = self
+            .foreign_function_table
+            .read_ptr(ffi_type, ptr, &mut self.machine_st.arena)
+            .map_err(|ffi_error| {
                 let machine_error = self.machine_st.ffi_error(ffi_error, ffi_type_arg);
                 self.machine_st.error_form(machine_error, stub_gen())
-        })?;
+            })?;
 
         self.unify_ffi_result(return_value, value)
     }
@@ -5246,20 +5262,24 @@ impl Machine {
         let ffi_type = ffi_type_arg.to_atom().unwrap();
         let ptr = self.deref_register(3);
 
-
         let allocator = FfiAllocator::try_from(allocator.to_atom().unwrap()).map_err(|_| {
-            let machine_error = self.machine_st.domain_error(DomainErrorType::Allocator, allocator);
+            let machine_error = self
+                .machine_st
+                .domain_error(DomainErrorType::Allocator, allocator);
             self.machine_st.error_form(machine_error, stub_gen())
         })?;
 
         let ptr = self.map_ffi_arg(ptr, stub_gen)?;
 
-        match self.foreign_function_table.deallocate(allocator, ffi_type, ptr) {
+        match self
+            .foreign_function_table
+            .deallocate(allocator, ffi_type, ptr)
+        {
             Ok(value) => value,
             Err(ffi_error) => {
                 let machine_error = self.machine_st.ffi_error(ffi_error, ffi_type_arg);
                 return Err(self.machine_st.error_form(machine_error, stub_gen()));
-            },
+            }
         }
 
         Ok(())
