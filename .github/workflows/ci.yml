@@ -94,7 +94,7 @@ jobs:
         
       - name: Build release debian packages
         if: ${{ matrix.publish && contains(matrix.target,  'linux') }}
-        run: cargo deb
+        run: cargo deb --target ${{ matrix.target }}
         
       - name: Publish release binary artifact
         if: matrix.publish
