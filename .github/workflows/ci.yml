@@ -102,7 +102,7 @@ jobs:
         with:
           path: |
             target/${{ matrix.target }}/release/scryer-prolog*
-            target/${{ matrix.target }}/release/debian/scryer-prolog*.deb
+            target/${{ matrix.target }}/debian/scryer-prolog*.deb
           name: scryer-prolog_${{ matrix.os }}_${{ matrix.target }}
 
   logtalk-test:
@@ -211,8 +211,8 @@ jobs:
       - name: Zip binaries for release
         run: |
           zip scryer-prolog_macos-latest.zip ./scryer-prolog_macos-latest_x86_64-apple-darwin/scryer-prolog
-          zip scryer-prolog_ubuntu-22.04_i686.zip ./scryer-prolog_ubuntu-22.04_i686-unknown-linux-gnu/scryer-prolog ./scryer-prolog_ubuntu-22.04_i686-unknown-linux-gnu/debian/scryer-prolog*.deb
-          zip scryer-prolog_ubuntu-22.04_x86_64.zip ./scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu/scryer-prolog ./scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu/debian/scryer-prolog*.deb
+          zip scryer-prolog_ubuntu-22.04_i686.zip ./scryer-prolog_ubuntu-22.04_i686-unknown-linux-gnu/release/scryer-prolog ./scryer-prolog_ubuntu-22.04_i686-unknown-linux-gnu/debian/scryer-prolog*.deb
+          zip scryer-prolog_ubuntu-22.04_x86_64.zip ./scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu/release/scryer-prolog ./scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu/debian/scryer-prolog*.deb
           zip scryer-prolog_windows-latest.zip ./scryer-prolog_windows-latest_x86_64-pc-windows-msvc/scryer-prolog.exe
           zip scryer-prolog_wasm32.zip ./scryer-prolog_ubuntu-22.04_wasm32-unknown-unknown/scryer-prolog.wasm
       - name: Release
