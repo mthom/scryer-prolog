@@ -87,11 +87,22 @@ jobs:
         run: |
           cargo rustc --target ${{ matrix.target }} ${{ matrix.args }} --verbose --bin scryer-prolog --release
           echo "$PWD/target/release" >> $GITHUB_PATH
+
+      - name: Install cargo-deb for creating debian packages
+        if: ${{ matrix.publish && contains(matrix.target,  'linux') }}
+        run: cargo install cargo-deb --force --locked
+        
+      - name: Build release debian packages
+        if: ${{ matrix.publish && contains(matrix.target,  'linux') }}
+        run: cargo deb --target ${{ matrix.target }}
+        
       - name: Publish release binary artifact
         if: matrix.publish
         uses: actions/upload-artifact@v4
         with:
-          path: target/${{ matrix.target }}/release/scryer-prolog*
+          path: |
+            target/${{ matrix.target }}/release/scryer-prolog*
+            target/${{ matrix.target }}/debian/scryer-prolog*.deb
           name: scryer-prolog_${{ matrix.os }}_${{ matrix.target }}
 
   logtalk-test:
@@ -104,8 +115,8 @@ jobs:
         with:
           name: scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu
       - run: |
-          chmod +x scryer-prolog
-          echo "$PWD" >> "$GITHUB_PATH"
+          chmod +x release/scryer-prolog
+          echo "$PWD/release" >> "$GITHUB_PATH"
       - name: Install Logtalk
         uses: logtalk-actions/setup-logtalk@master
         with:
@@ -199,17 +210,17 @@ jobs:
       - uses: actions/download-artifact@v4
       - name: Zip binaries for release
         run: |
-          zip scryer-prolog_macos-11.zip ./scryer-prolog_macos-11_x86_64-apple-darwin/scryer-prolog
-          zip scryer-prolog_ubuntu-20.04.zip ./scryer-prolog_ubuntu-20.04_x86_64-unknown-linux-gnu/scryer-prolog
-          zip scryer-prolog_ubuntu-22.04.zip ./scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu/scryer-prolog
+          zip scryer-prolog_macos-latest.zip ./scryer-prolog_macos-latest_x86_64-apple-darwin/scryer-prolog
+          zip scryer-prolog_ubuntu-22.04_i686.zip ./scryer-prolog_ubuntu-22.04_i686-unknown-linux-gnu/release/scryer-prolog ./scryer-prolog_ubuntu-22.04_i686-unknown-linux-gnu/debian/scryer-prolog*.deb
+          zip scryer-prolog_ubuntu-22.04_x86_64.zip ./scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu/release/scryer-prolog ./scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu/debian/scryer-prolog*.deb
           zip scryer-prolog_windows-latest.zip ./scryer-prolog_windows-latest_x86_64-pc-windows-msvc/scryer-prolog.exe
           zip scryer-prolog_wasm32.zip ./scryer-prolog_ubuntu-22.04_wasm32-unknown-unknown/scryer-prolog.wasm
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            scryer-prolog_macos-11.zip
-            scryer-prolog_ubuntu-20.04.zip
-            scryer-prolog_ubuntu-22.04.zip
+            scryer-prolog_macos-latest.zip
+            scryer-prolog_ubuntu-22.04_i686.zip
+            scryer-prolog_ubuntu-22.04_x86_64.zip
             scryer-prolog_windows-latest.zip
             scryer-prolog_wasm32.zip
