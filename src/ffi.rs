@@ -104,7 +104,7 @@ impl FunctionImpl {
     ) -> Result<Value, FfiError> {
         let struct_type = structs_table
             .get(&*return_type_name.as_str())
-            .ok_or(FfiError::StructNotFound)?;
+            .ok_or(FfiError::StructNotFound(return_type_name))?;
         let ffi_type = unsafe { *struct_type.ffi_type.as_raw_ptr() };
 
         let layout = Layout::from_size_align(ffi_type.size, ffi_type.alignment.into())
@@ -175,10 +175,8 @@ struct StructImpl {
 }
 
 impl StructImpl {
-
-
     fn layout(&self) -> Result<Layout, FfiError> {
-        let ffi_type = unsafe {*self.ffi_type.as_raw_ptr()};
+        let ffi_type = unsafe { *self.ffi_type.as_raw_ptr() };
         Layout::from_size_align(ffi_type.size, ffi_type.alignment.into())
             .map_err(|_| FfiError::LayoutError)
     }
@@ -190,10 +188,7 @@ impl StructImpl {
     ) -> Result<FfiStruct, FfiError> {
         let args = ArgValue::build_args(struct_args, &self.fields, structs_table)?;
 
-        let alloc = FfiStruct::new(
-                self.layout()?,
-                FfiAllocator::Rust
-        )?;
+        let alloc = FfiStruct::new(self.layout()?, FfiAllocator::Rust)?;
 
         let Ok(mut current_layout) = Layout::from_size_align(0, 1) else {
             return Err(FfiError::LayoutError);
@@ -321,7 +316,7 @@ impl StructImpl {
                     FfiType::F64 => read_float::<f64>(ptr, &mut layout),
                     FfiType::Struct(substruct) => {
                         let Some(substruct_type) = struct_table.get(&*substruct.as_str()) else {
-                            return Err(FfiError::StructNotFound);
+                            return Err(FfiError::StructNotFound(*substruct));
                         };
 
                         let ffi_type = *substruct_type.ffi_type.as_raw_ptr();
@@ -349,7 +344,6 @@ impl StructImpl {
         }
     }
 }
-
 
 struct PointerArgs<'a, 'val> {
     memory: Vec<Arg>,
@@ -451,7 +445,7 @@ impl FfiType {
             Self::F64 => libffi::middle::Type::f64(),
             Self::Struct(struct_name) => structs_table
                 .get(&*struct_name.as_str())
-                .ok_or(FfiError::StructNotFound)?
+                .ok_or(FfiError::StructNotFound(struct_name))?
                 .ffi_type
                 .clone(),
         })
@@ -500,7 +494,7 @@ impl<'val> ArgValue<'val> {
                 }
 
                 let Some(struct_type) = structs_table.get(name) else {
-                    return Err(FfiError::StructNotFound);
+                    return Err(FfiError::StructNotFound(*atom));
                 };
 
                 Ok(Self::Struct(struct_type.build(structs_table, args)?))
@@ -534,7 +528,7 @@ struct FfiStruct {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum FfiAllocator {
     Rust,
-    C
+    C,
 }
 
 impl TryFrom<Atom> for FfiAllocator {
@@ -544,24 +538,19 @@ impl TryFrom<Atom> for FfiAllocator {
         match value {
             atom!("rust") => Ok(Self::Rust),
             atom!("c") => Ok(Self::C),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
 
 impl FfiAllocator {
-
     /// # Safety
     ///
     /// - layout must not have a size of 0
     unsafe fn alloc(self, layout: Layout) -> Result<NonNull<c_void>, FfiError> {
         let ptr = match self {
-            FfiAllocator::Rust => {
-                unsafe { alloc::alloc(layout).cast() }
-            },
-            FfiAllocator::C => {
-                unsafe { libc::malloc(layout.size()) }
-            },
+            FfiAllocator::Rust => unsafe { alloc::alloc(layout).cast() },
+            FfiAllocator::C => unsafe { libc::malloc(layout.size()) },
         };
 
         NonNull::new(ptr).ok_or(FfiError::AllocationFailed)
@@ -574,15 +563,19 @@ impl FfiAllocator {
     unsafe fn dealloc(self, layout: Layout, ptr: NonNull<c_void>) {
         match self {
             FfiAllocator::Rust => unsafe { alloc::dealloc(ptr.as_ptr().cast(), layout) },
-            FfiAllocator::C => unsafe {libc::free(ptr.as_ptr())},
+            FfiAllocator::C => unsafe { libc::free(ptr.as_ptr()) },
         }
     }
 }
 
 impl FfiStruct {
     fn new(layout: Layout, allocator: FfiAllocator) -> Result<Self, FfiError> {
-        assert_ne!(layout.size() , 0);
-        Ok(FfiStruct { ptr: unsafe { allocator.alloc(layout) }?, layout , allocator})
+        assert_ne!(layout.size(), 0);
+        Ok(FfiStruct {
+            ptr: unsafe { allocator.alloc(layout) }?,
+            layout,
+            allocator,
+        })
     }
 }
 
@@ -684,16 +677,22 @@ impl ForeignFunctionTable {
         allocator: FfiAllocator,
         kind: Atom,
         mut args: Value,
-        arena: &mut Arena
+        arena: &mut Arena,
     ) -> Result<Value, FfiError> {
-
-        fn allocate_primitive<T: Copy>(allocator: FfiAllocator, initial_value: T, arena: &mut Arena) -> Result<Value, FfiError> {
-            const { assert!(std::mem::size_of::<T>() != 0)};
+        fn allocate_primitive<T: Copy>(
+            allocator: FfiAllocator,
+            initial_value: T,
+            arena: &mut Arena,
+        ) -> Result<Value, FfiError> {
+            const { assert!(std::mem::size_of::<T>() != 0) };
             let ptr = unsafe { allocator.alloc(Layout::new::<T>()) }?;
             unsafe { ptr.cast::<T>().write(initial_value) };
-            Ok(Value::Number(fixnum!(Number, ptr.as_ptr().expose_provenance(), arena)))
+            Ok(Value::Number(fixnum!(
+                Number,
+                ptr.as_ptr().expose_provenance(),
+                arena
+            )))
         }
-
 
         match FfiType::from_atom(&kind) {
             FfiType::Void => Err(FfiError::InvalidFfiType),
@@ -705,48 +704,23 @@ impl ForeignFunctionTable {
                     _ => return Err(FfiError::ValueOutOfRange),
                 };
                 allocate_primitive::<bool>(allocator, init, arena)
-            },
-            FfiType::U8 => {
-                allocate_primitive::<u8>(allocator, args.as_int()?, arena)
-            },
-            FfiType::I8 => {
-                allocate_primitive::<i8>(allocator, args.as_int()?, arena)
-            },
-            FfiType::U16 => {
-                allocate_primitive::<u16>(allocator, args.as_int()?, arena)
-            },
-            FfiType::I16 => {
-                allocate_primitive::<i16>(allocator, args.as_int()?, arena)
-            },
-            FfiType::U32 => {
-                allocate_primitive::<u32>(allocator, args.as_int()?, arena)
-            },
-            FfiType::I32 => {
-
-                allocate_primitive::<i32>(allocator, args.as_int()?, arena)
-            },
-            FfiType::U64 => {
-
-                allocate_primitive::<u64>(allocator, args.as_int()?, arena)
-            },
-            FfiType::I64 => {
-                allocate_primitive::<i64>(allocator, args.as_int()?, arena)
-            },
-            FfiType::F32 => {
-                allocate_primitive::<f32>(allocator, args.as_float()? as f32, arena)
-            },
-            FfiType::F64 => {
-                allocate_primitive::<f64>(allocator, args.as_float()?, arena)
-            },
-            FfiType::Ptr => {
-                allocate_primitive::<*mut c_void>(allocator, args.as_ptr()?, arena)
-            },
+            }
+            FfiType::U8 => allocate_primitive::<u8>(allocator, args.as_int()?, arena),
+            FfiType::I8 => allocate_primitive::<i8>(allocator, args.as_int()?, arena),
+            FfiType::U16 => allocate_primitive::<u16>(allocator, args.as_int()?, arena),
+            FfiType::I16 => allocate_primitive::<i16>(allocator, args.as_int()?, arena),
+            FfiType::U32 => allocate_primitive::<u32>(allocator, args.as_int()?, arena),
+            FfiType::I32 => allocate_primitive::<i32>(allocator, args.as_int()?, arena),
+            FfiType::U64 => allocate_primitive::<u64>(allocator, args.as_int()?, arena),
+            FfiType::I64 => allocate_primitive::<i64>(allocator, args.as_int()?, arena),
+            FfiType::F32 => allocate_primitive::<f32>(allocator, args.as_float()? as f32, arena),
+            FfiType::F64 => allocate_primitive::<f64>(allocator, args.as_float()?, arena),
+            FfiType::Ptr => allocate_primitive::<*mut c_void>(allocator, args.as_ptr()?, arena),
             FfiType::CStr => Err(FfiError::InvalidFfiType),
             FfiType::Struct(_) => {
                 let Some(struct_impl) = self.structs.get(&*kind.as_str()) else {
-                    return Err(FfiError::InvalidStruct)
+                    return Err(FfiError::InvalidStruct);
                 };
-
 
                 let (_, args) = args.as_struct()?;
 
@@ -754,23 +728,22 @@ impl ForeignFunctionTable {
 
                 let ptr = ManuallyDrop::new(ffi_struct).ptr;
 
-                Ok(Value::Number(fixnum!(Number, ptr.as_ptr().expose_provenance(), arena)))
-            },
+                Ok(Value::Number(fixnum!(
+                    Number,
+                    ptr.as_ptr().expose_provenance(),
+                    arena
+                )))
+            }
         }
     }
-
 
     pub fn read_ptr(
         &mut self,
         kind: Atom,
         mut ptr: Value,
-        arena: &mut Arena
+        arena: &mut Arena,
     ) -> Result<Value, FfiError> {
-
-        unsafe fn read_int<T>(
-            ptr: NonNull<c_void>,
-            arena: &mut Arena,
-        ) -> Value
+        unsafe fn read_int<T>(ptr: NonNull<c_void>, arena: &mut Arena) -> Value
         where
             T: Copy + TryInto<i64> + MightNotFitInFixnum,
             Integer: From<T>,
@@ -782,59 +755,41 @@ impl ForeignFunctionTable {
         let ptr = ptr.as_ptr()?;
 
         let Some(ptr) = NonNull::new(ptr) else {
-            return Err(FfiError::ValueOutOfRange)
+            return Err(FfiError::ValueOutOfRange);
         };
 
         match FfiType::from_atom(&kind) {
             FfiType::Void => Err(FfiError::InvalidFfiType),
-            FfiType::Bool | FfiType::U8 => {
-                Ok(unsafe {read_int::<u8>(ptr, arena)})
-            },
-            FfiType::I8 => {
-                Ok(unsafe {read_int::<i8>(ptr, arena)})
-            },
-            FfiType::U16 => {
-                Ok(unsafe {read_int::<u16>(ptr, arena)})
-            },
-            FfiType::I16 => {
-                Ok(unsafe {read_int::<i16>(ptr, arena)})
-            },
-            FfiType::U32 => {
-                Ok(unsafe {read_int::<u32>(ptr, arena)})
-            },
-            FfiType::I32 => {
-                Ok(unsafe {read_int::<i32>(ptr, arena)})
-            },
-            FfiType::U64 => {
-
-                Ok(unsafe {read_int::<u64>(ptr, arena)})
-            },
-            FfiType::I64 => {
-                Ok(unsafe {read_int::<i64>(ptr, arena)})
-            },
-            FfiType::F32 => {
-                Ok(Value::Number(Number::Float((unsafe { ptr.cast::<f32>().read() } as f64) .into())))
-            },
-            FfiType::F64 => {
-                Ok(Value::Number(Number::Float(unsafe { ptr.cast::<f64>().read() }.into())))
-            },
+            FfiType::Bool | FfiType::U8 => Ok(unsafe { read_int::<u8>(ptr, arena) }),
+            FfiType::I8 => Ok(unsafe { read_int::<i8>(ptr, arena) }),
+            FfiType::U16 => Ok(unsafe { read_int::<u16>(ptr, arena) }),
+            FfiType::I16 => Ok(unsafe { read_int::<i16>(ptr, arena) }),
+            FfiType::U32 => Ok(unsafe { read_int::<u32>(ptr, arena) }),
+            FfiType::I32 => Ok(unsafe { read_int::<i32>(ptr, arena) }),
+            FfiType::U64 => Ok(unsafe { read_int::<u64>(ptr, arena) }),
+            FfiType::I64 => Ok(unsafe { read_int::<i64>(ptr, arena) }),
+            FfiType::F32 => Ok(Value::Number(Number::Float(
+                (unsafe { ptr.cast::<f32>().read() } as f64).into(),
+            ))),
+            FfiType::F64 => Ok(Value::Number(Number::Float(
+                unsafe { ptr.cast::<f64>().read() }.into(),
+            ))),
             FfiType::Ptr => {
                 let addr = unsafe { ptr.cast::<*mut c_void>().read() }.expose_provenance();
                 Ok(Value::Number(fixnum!(Number, addr, arena)))
-            },
-            FfiType::CStr => {
-                Ok(Value::CString(unsafe { CStr::from_ptr(ptr.as_ptr().cast()) }.to_owned()))
-            },
+            }
+            FfiType::CStr => Ok(Value::CString(
+                unsafe { CStr::from_ptr(ptr.as_ptr().cast()) }.to_owned(),
+            )),
             FfiType::Struct(_) => {
                 let Some(struct_impl) = self.structs.get(&*kind.as_str()) else {
-                    return Err(FfiError::InvalidStruct)
+                    return Err(FfiError::InvalidStruct);
                 };
 
                 struct_impl.read(ptr.as_ptr(), &kind.as_str(), &self.structs, arena)
-            },
+            }
         }
     }
-
 
     pub fn deallocate(
         &mut self,
@@ -842,68 +797,45 @@ impl ForeignFunctionTable {
         kind: Atom,
         mut ptr: Value,
     ) -> Result<(), FfiError> {
-
         fn deallocate_primitive<T: Copy>(allocator: FfiAllocator, ptr: NonNull<c_void>) {
-            const { assert!(std::mem::size_of::<T>() != 0)};
+            const { assert!(std::mem::size_of::<T>() != 0) };
             unsafe { allocator.dealloc(Layout::new::<T>(), ptr) };
         }
 
         let ptr = ptr.as_ptr()?;
 
         let Some(ptr) = NonNull::new(ptr) else {
-            return Err(FfiError::ValueOutOfRange)
+            return Err(FfiError::ValueOutOfRange);
         };
 
         match FfiType::from_atom(&kind) {
             FfiType::Void => return Err(FfiError::InvalidFfiType),
-            FfiType::Bool => {
-                deallocate_primitive::<bool>(allocator, ptr)
-            },
-            FfiType::U8 => {
-                deallocate_primitive::<u8>(allocator, ptr)
-            },
-            FfiType::I8 => {
-                deallocate_primitive::<i8>(allocator, ptr)
-            },
-            FfiType::U16 => {
-                deallocate_primitive::<u16>(allocator, ptr)
-            },
-            FfiType::I16 => {
-                deallocate_primitive::<i16>(allocator, ptr)
-            },
-            FfiType::U32 => {
-                deallocate_primitive::<u32>(allocator, ptr)
-            },
-            FfiType::I32 => {
-
-                deallocate_primitive::<i32>(allocator, ptr)
-            },
-            FfiType::U64 => {
-
-                deallocate_primitive::<u64>(allocator, ptr)
-            },
-            FfiType::I64 => {
-                deallocate_primitive::<i64>(allocator, ptr)
-            },
-            FfiType::F32 => {
-                deallocate_primitive::<f32>(allocator, ptr)
-            },
-            FfiType::F64 => {
-                deallocate_primitive::<f64>(allocator, ptr)
-            },
-            FfiType::Ptr => {
-                deallocate_primitive::<*mut c_void>(allocator, ptr)
-            },
+            FfiType::Bool => deallocate_primitive::<bool>(allocator, ptr),
+            FfiType::U8 => deallocate_primitive::<u8>(allocator, ptr),
+            FfiType::I8 => deallocate_primitive::<i8>(allocator, ptr),
+            FfiType::U16 => deallocate_primitive::<u16>(allocator, ptr),
+            FfiType::I16 => deallocate_primitive::<i16>(allocator, ptr),
+            FfiType::U32 => deallocate_primitive::<u32>(allocator, ptr),
+            FfiType::I32 => deallocate_primitive::<i32>(allocator, ptr),
+            FfiType::U64 => deallocate_primitive::<u64>(allocator, ptr),
+            FfiType::I64 => deallocate_primitive::<i64>(allocator, ptr),
+            FfiType::F32 => deallocate_primitive::<f32>(allocator, ptr),
+            FfiType::F64 => deallocate_primitive::<f64>(allocator, ptr),
+            FfiType::Ptr => deallocate_primitive::<*mut c_void>(allocator, ptr),
             FfiType::CStr => return Err(FfiError::InvalidFfiType),
             FfiType::Struct(_) => {
                 let Some(struct_impl) = self.structs.get(&*kind.as_str()) else {
-                    return Err(FfiError::InvalidStruct)
+                    return Err(FfiError::InvalidStruct);
                 };
 
                 let layout = struct_impl.layout()?;
 
-                drop(FfiStruct { ptr, layout, allocator})
-            },
+                drop(FfiStruct {
+                    ptr,
+                    layout,
+                    allocator,
+                })
+            }
         }
         Ok(())
     }
@@ -971,7 +903,7 @@ pub enum FfiError {
     InvalidFfiType,
     InvalidStruct,
     FunctionNotFound,
-    StructNotFound,
+    StructNotFound(Atom),
     ArgCountMismatch,
     AllocationFailed,
     // LayoutError should never occour

@@ -622,13 +622,29 @@ impl MachineState {
             FfiError::InvalidArgument => atom!("invalid_argument"),
             FfiError::InvalidStruct => atom!("invalid_struct"),
             FfiError::FunctionNotFound => atom!("function_not_found"),
-            FfiError::StructNotFound => atom!("struct_not_found"),
+            FfiError::StructNotFound(culprit) => {
+                let stub = functor!(
+                    atom!("ffi_error"),
+                    [
+                        atom_as_cell((atom!("struct_not_found"))),
+                        atom_as_cell(culprit)
+                    ]
+                );
+
+                return MachineError {
+                    stub,
+                    location: None,
+                };
+            }
             FfiError::ArgCountMismatch => atom!("mismatched_argument_count"),
             FfiError::AllocationFailed => atom!("allocation_failed"),
             FfiError::LayoutError => atom!("layout_error"),
             FfiError::UnsupportedAbi => atom!("unsupported_abi"),
         };
-        let stub = functor!(atom!("ffi_error"), [atom_as_cell(error_atom), cell(culprit)]);
+        let stub = functor!(
+            atom!("ffi_error"),
+            [atom_as_cell(error_atom), cell(culprit)]
+        );
 
         MachineError {
             stub,
