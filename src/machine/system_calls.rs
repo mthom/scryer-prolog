@@ -5173,15 +5173,29 @@ impl Machine {
     #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn define_foreign_struct(&mut self) -> CallResult {
+        fn stub_gen() -> MachineStub {
+            functor_stub(atom!("$define_foreign_struct"), 2)
+        }
+
         let struct_name_arg = self.deref_register(1);
         let fields_reg = self.deref_register(2);
         if let Some(struct_name) = self.machine_st.value_to_str_like(struct_name_arg) {
-            let stub_gen = || functor_stub(atom!("define_foreign_struct"), 2);
             let fields: Vec<Atom> = match self.machine_st.try_from_list(fields_reg, stub_gen) {
                 Ok(addrs) => {
                     let mut args = Vec::new();
                     for heap_cell in addrs {
-                        args.push(cell_as_atom_cell!(heap_cell).get_name());
+                        let arg_cell = self.machine_st.store(self.machine_st.deref(heap_cell));
+                        let Some(arg) = arg_cell.to_atom() else {
+                            let err = if arg_cell.is_var() {
+                                self.machine_st.instantiation_error()
+                            } else {
+                                self.machine_st.type_error(ValidType::Atom, heap_cell)
+                            };
+
+                            return Err(self.machine_st.error_form(err, stub_gen()));
+                        };
+
+                        args.push(arg);
                     }
                     args
                 }
