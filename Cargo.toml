@@ -11,7 +11,7 @@ keywords = ["prolog", "prolog-interpreter", "prolog-system"]
 categories = ["command-line-utilities"]
 build = "build/main.rs"
 # Remember to check CI
-rust-version = "1.87"
+rust-version = "1.85"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -25,6 +25,12 @@ tls = ["dep:native-tls"]
 http = ["dep:warp", "dep:reqwest"]
 crypto-full = []
 
+[lints.rust]
+unexpected_cfgs = { level = "deny", check-cfg = [
+    'cfg(rust_version, values("1.87.0"))',
+] }
+
+
 [build-dependencies]
 indexmap = "2.3.0"
 proc-macro2 = "1.0.86"
@@ -34,6 +40,7 @@ strum_macros = "0.26"
 syn = { version = "2.0.72", features = ['full', 'visit', 'extra-traits'] }
 to-syn-value = "0.1.1"
 to-syn-value_derive = "0.1.1"
+version_check = "0.9.5"
 walkdir = "2"
 
 [dependencies]

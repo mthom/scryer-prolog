@@ -14,8 +14,6 @@ use ordered_float::OrderedFloat;
 use std::fmt;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
-use std::io::PipeReader;
-use std::io::PipeWriter;
 use std::mem;
 use std::mem::ManuallyDrop;
 use std::net::TcpListener;
@@ -24,6 +22,8 @@ use std::process::Child;
 use std::ptr;
 use std::ptr::addr_of_mut;
 use std::ptr::NonNull;
+
+use crate::machine::streams::{PipeReader, PipeWriter};
 
 macro_rules! arena_alloc {
     ($e:expr, $arena:expr) => {{

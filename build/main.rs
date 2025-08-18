@@ -43,6 +43,10 @@ fn find_prolog_files(path_prefix: &str, current_dir: &Path) -> Vec<(String, Path
 }
 
 fn main() {
+    if version_check::is_min_version("1.87.0").unwrap_or(false) {
+        println!(r#"cargo:rustc-cfg=rust_version="1.87.0""#);
+    }
+
     let has_rustfmt = Command::new("rustfmt")
         .arg("--version")
         .stdin(Stdio::inherit())
