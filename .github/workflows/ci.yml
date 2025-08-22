@@ -34,8 +34,20 @@ jobs:
         run: cargo clippy --no-deps --all-targets
         if: ${{ !cancelled() }}
 
+  read-msrv:
+    runs-on: ubuntu-22.04
+    outputs: 
+      msrv: ${{ steps.read-declared-msrv.outputs.msrv }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read-declared-msrv
+        name: Read msrv from Cargo.toml rust_version field
+        run: echo "msrv=$(cargo metadata  --no-deps --format-version  1 | jq -r '.packages[] | select(.name = "scryer-prolog") | ."rust_version"')" >>  "$GITHUB_OUTPUT"
+          
+
   build-test:
     runs-on: ${{ matrix.os }}
+    needs: [read-msrv]
     strategy:
       fail-fast: false
       matrix:
@@ -49,7 +61,7 @@ jobs:
           # FIXME(issue #2138): run wasm tests, failing to run since https://github.com/mthom/scryer-prolog/pull/2137 removed wasm-pack
           - { os: ubuntu-22.04,   rust-version: nightly, target: 'wasm32-unknown-unknown',   publish: true, args: '--no-default-features' , test-args: '--no-run --no-default-features', use_swap: true }
           # Cargo.toml rust-version
-          - { os: ubuntu-22.04,   rust-version: "1.87",  target: 'x86_64-unknown-linux-gnu'}
+          - { os: ubuntu-22.04,   rust-version: "${{ needs.read-msrv.outputs.msrv }}" ,  target: 'x86_64-unknown-linux-gnu'}
           - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu'}
           - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu', miri: true, components: "miri"} 
     defaults:

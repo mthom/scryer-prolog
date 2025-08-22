@@ -23,8 +23,6 @@ use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::io;
-use std::io::PipeReader;
-use std::io::PipeWriter;
 use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem::ManuallyDrop;
 use std::net::{Shutdown, TcpStream};
@@ -39,6 +37,9 @@ use native_tls::TlsStream;
 
 #[cfg(feature = "http")]
 use warp::hyper;
+
+mod compat;
+pub use compat::*;
 
 #[derive(Debug, BitfieldSpecifier, Clone, Copy, PartialEq, Eq, Hash)]
 #[bits = 1]
@@ -1413,14 +1414,14 @@ impl Stream {
         ))
     }
 
-    pub(crate) fn from_pipe_writer(writer: io::PipeWriter, arena: &mut Arena) -> Stream {
+    pub(crate) fn from_pipe_writer(writer: PipeWriter, arena: &mut Arena) -> Stream {
         Stream::PipeWriter(arena_alloc!(
             ManuallyDrop::new(StreamLayout::new(CharReader::new(writer))),
             arena
         ))
     }
 
-    pub(crate) fn from_pipe_reader(reader: io::PipeReader, arena: &mut Arena) -> Stream {
+    pub(crate) fn from_pipe_reader(reader: PipeReader, arena: &mut Arena) -> Stream {
         Stream::PipeReader(arena_alloc!(
             ManuallyDrop::new(StreamLayout::new(CharReader::new(reader))),
             arena

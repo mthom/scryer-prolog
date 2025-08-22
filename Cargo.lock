@@ -2777,6 +2777,7 @@ dependencies = [
  "to-syn-value_derive",
  "tokio",
  "trycmd",
+ "version_check",
  "walkdir",
  "warp",
  "wasm-bindgen",

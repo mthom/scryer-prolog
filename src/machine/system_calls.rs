@@ -8446,13 +8446,13 @@ impl Machine {
             .collect::<Vec<_>>();
 
         let stdin_args = self.machine_st.try_from_list(stdin_r, stub_gen)?;
-        let stdin = self.handle_input_stream(stdin_args)?;
+        let stdin = self.handle_input_stream(&stdin_args)?;
 
         let stdout_args = self.machine_st.try_from_list(stdout_r, stub_gen)?;
-        let stdout = self.handle_output_stream(stdout_args)?;
+        let stdout = self.handle_output_stream(&stdout_args)?;
 
         let stderr_args = self.machine_st.try_from_list(stderr_r, stub_gen)?;
-        let stderr = self.handle_output_stream(stderr_args)?;
+        let stderr = self.handle_output_stream(&stderr_args)?;
 
         let env_args = self.machine_st.try_from_list(env_r, stub_gen)?;
 
@@ -8507,7 +8507,13 @@ impl Machine {
             .stderr(stderr);
 
         match command.spawn() {
-            Ok(child) => {
+            #[cfg_attr(rust_version = "1.87.0", expect(unused_mut))]
+            Ok(mut child) => {
+                #[cfg(not(rust_version = "1.87.0"))]
+                {
+                    self.anon_pipe_compat(&mut child, &stdin_args, &stdout_args, &stderr_args)?;
+                }
+
                 let child_process_alloc: TypedArenaPtr<Child> =
                     arena_alloc!(child, &mut self.machine_st.arena);
 
@@ -8530,32 +8536,94 @@ impl Machine {
         }
     }
 
-    fn handle_output_stream(&mut self, args: Vec<HeapCellValue>) -> Result<Stdio, MachineStub> {
+    #[cfg(not(rust_version = "1.87.0"))]
+    fn anon_pipe_compat(
+        &mut self,
+        child: &mut std::process::Child,
+        stdin_args: &[HeapCellValue],
+        stdout_args: &[HeapCellValue],
+        stderr_args: &[HeapCellValue],
+    ) -> CallResult {
+        if let Some(atom!("pipe")) = stdin_args[0].to_atom() {
+            let writer = child.stdin.take().expect("Should have captured stdin");
+
+            let stream = Stream::from_pipe_writer(writer, &mut self.machine_st.arena);
+
+            self.indices
+                .add_stream(stream, atom!("process_create"), 3)
+                .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+
+            unify!(self.machine_st, stdin_args[1], HeapCellValue::from(stream));
+        }
+
+        if let Some(atom!("pipe")) = stdout_args[0].to_atom() {
+            let writer = child.stdout.take().expect("Should have captured stdout");
+
+            let stream = Stream::from_pipe_reader(
+                PipeReader(PipeReaderInner::Stdout(writer)),
+                &mut self.machine_st.arena,
+            );
+
+            self.indices
+                .add_stream(stream, atom!("process_create"), 3)
+                .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+
+            unify!(self.machine_st, stdout_args[1], HeapCellValue::from(stream));
+        }
+
+        if let Some(atom!("pipe")) = stderr_args[0].to_atom() {
+            let writer = child.stderr.take().expect("Should have captured stderr");
+
+            let stream = Stream::from_pipe_reader(
+                PipeReader(PipeReaderInner::Stderr(writer)),
+                &mut self.machine_st.arena,
+            );
+
+            self.indices
+                .add_stream(stream, atom!("process_create"), 3)
+                .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+
+            unify!(self.machine_st, stderr_args[1], HeapCellValue::from(stream));
+        }
+
+        Ok(())
+    }
+
+    fn handle_output_stream(&mut self, args: &[HeapCellValue]) -> Result<Stdio, MachineStub> {
         Ok(match args[0].to_atom() {
             Some(atom!("std")) => Stdio::inherit(),
             Some(atom!("null")) => Stdio::null(),
             Some(atom!("pipe")) => {
-                let (reader, writer) = match std::io::pipe() {
-                    Ok(pipe_pair) => pipe_pair,
-                    Err(_) => {
-                        return Err(self.machine_st.open_permission_error(
-                            atom!("anonymous_pipe"),
-                            atom!("process_create"),
-                            3,
-                        ));
-                    }
-                };
+                #[cfg(rust_version = "1.87.0")]
+                #[allow(clippy::incompatible_msrv)]
+                {
+                    let (reader, writer) = match std::io::pipe() {
+                        Ok(pipe_pair) => pipe_pair,
+                        Err(_) => {
+                            return Err(self.machine_st.open_permission_error(
+                                atom!("anonymous_pipe"),
+                                atom!("process_create"),
+                                3,
+                            ));
+                        }
+                    };
 
-                let stream = Stream::from_pipe_reader(reader, &mut self.machine_st.arena);
+                    let stream = Stream::from_pipe_reader(reader, &mut self.machine_st.arena);
 
-                self.indices
-                    .add_stream(stream, atom!("process_create"), 3)
-                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+                    self.indices
+                        .add_stream(stream, atom!("process_create"), 3)
+                        .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
-                self.machine_st
-                    .bind(args[1].as_var().unwrap(), stream.into());
+                    self.machine_st
+                        .bind(args[1].as_var().unwrap(), stream.into());
 
-                Stdio::from(writer)
+                    Stdio::from(writer)
+                }
+
+                #[cfg(not(rust_version = "1.87.0"))]
+                {
+                    Stdio::piped()
+                }
             }
             Some(atom!("file")) => {
                 let path = self.machine_st.value_to_str_like(args[1]).unwrap();
@@ -8578,32 +8646,41 @@ impl Machine {
         })
     }
 
-    fn handle_input_stream(&mut self, args: Vec<HeapCellValue>) -> Result<Stdio, MachineStub> {
+    fn handle_input_stream(&mut self, args: &[HeapCellValue]) -> Result<Stdio, MachineStub> {
         Ok(match args[0].to_atom() {
             Some(atom!("std")) => Stdio::inherit(),
             Some(atom!("null")) => Stdio::null(),
             Some(atom!("pipe")) => {
-                let (reader, writer) = match std::io::pipe() {
-                    Ok(pipe_pair) => pipe_pair,
-                    Err(_) => {
-                        return Err(self.machine_st.open_permission_error(
-                            atom!("anonymous_pipe"),
-                            atom!("process_create"),
-                            3,
-                        ));
-                    }
-                };
+                #[cfg(rust_version = "1.87.0")]
+                #[allow(clippy::incompatible_msrv)]
+                {
+                    let (reader, writer) = match std::io::pipe() {
+                        Ok(pipe_pair) => pipe_pair,
+                        Err(_) => {
+                            return Err(self.machine_st.open_permission_error(
+                                atom!("anonymous_pipe"),
+                                atom!("process_create"),
+                                3,
+                            ));
+                        }
+                    };
 
-                let stream = Stream::from_pipe_writer(writer, &mut self.machine_st.arena);
+                    let stream = Stream::from_pipe_writer(writer, &mut self.machine_st.arena);
 
-                self.indices
-                    .add_stream(stream, atom!("process_create"), 3)
-                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+                    self.indices
+                        .add_stream(stream, atom!("process_create"), 3)
+                        .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
-                self.machine_st
-                    .bind(args[1].as_var().unwrap(), stream.into());
+                    self.machine_st
+                        .bind(args[1].as_var().unwrap(), stream.into());
 
-                Stdio::from(reader)
+                    Stdio::from(reader)
+                }
+
+                #[cfg(not(rust_version = "1.87.0"))]
+                {
+                    Stdio::piped()
+                }
             }
             Some(atom!("file")) => {
                 let path = self.machine_st.value_to_str_like(args[1]).unwrap();
