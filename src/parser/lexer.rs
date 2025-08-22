@@ -714,8 +714,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                     })
             })
             .or_else(|_| {
-                token
-                    .parse::<Integer>()
+                Integer::from_str_radix(token, radix)
                     .map(|n| Number::BigInt(arena_alloc!(n, &mut self.machine_st.arena)))
                     .map_err(|_| ParserError::ParseBigInt(self.line_num, self.col_num))
             })
