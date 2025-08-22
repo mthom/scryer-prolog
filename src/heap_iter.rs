@@ -445,24 +445,17 @@ impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists>
                    let cell = *cell;
                    let tail_idx = self.heap.scan_slice_to_str(vh).tail_idx;
 
-                   // forward the current PStrLoc cell if the zero
-                   // byte at the end of the string buffer
-                   // is marked
-                   let buf_bytes = self.heap[tail_idx - 1].into_bytes();
+                   if self.heap[tail_idx - 1].get_mark_bit() {
+                       self.read_cell_mut(h).set_forwarding_bit(true);
+                       self.stack.push(h);
 
-                   if buf_bytes[7] != 0u8 {
-                       let cell = self.read_cell_mut(h);
-                       cell.set_forwarding_bit(true);
+                       continue;
+                   } else {
+                       self.heap[tail_idx - 1].set_mark_bit(true);
                    }
 
-                   // now mark it as if were a HeapCellValue, even
-                   // though it's not! this is fine as long as its tag
-                   // is never inspected, which it isn't.
-
-                   self.push_if_unmarked(
-                       IterStackLoc::iterable_loc(tail_idx - 1, HeapOrStackTag::Heap),
-                   );
-                   self.stack.push(IterStackLoc::mark_loc(tail_idx, HeapOrStackTag::Heap));
+                   self.stack.push(IterStackLoc::iterable_loc(tail_idx - 1, HeapOrStackTag::Heap));
+                   self.stack.push(IterStackLoc::pending_mark_loc(tail_idx, HeapOrStackTag::Heap));
 
                    return Some(cell);
                }
@@ -1959,10 +1952,6 @@ mod tests {
                 unmark_cell_bits!(iter.next().unwrap()),
                 pstr_loc_as_cell!(heap_index!(3) + 2)
             );
-            assert_eq!(
-                unmark_cell_bits!(iter.next().unwrap()),
-                pstr_loc_as_cell!(heap_index!(3) + 2)
-            );
             assert_eq!(iter.next(), None);
         }
 
@@ -2177,8 +2166,14 @@ mod tests {
             );
 
             assert_eq!(iter.heap.slice_to_str(0, "a string".len()), "a string");
-            assert_eq!(iter.next().unwrap(), pstr_loc_as_cell!(0));
-            assert_eq!(iter.next().unwrap(), empty_list_as_cell!());
+            assert_eq!(
+                unmark_cell_bits!(iter.next().unwrap()),
+                pstr_loc_as_cell!(0)
+            );
+            assert_eq!(
+                unmark_cell_bits!(iter.next().unwrap()),
+                empty_list_as_cell!()
+            );
             assert_eq!(iter.next(), None);
         }
 
@@ -2550,10 +2545,6 @@ mod tests {
                 5,
             );
 
-            assert_eq!(
-                unmark_cell_bits!(iter.next().unwrap()),
-                pstr_loc_as_cell!(heap_index!(3) + 2)
-            );
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
                 pstr_loc_as_cell!(heap_index!(3) + 2)

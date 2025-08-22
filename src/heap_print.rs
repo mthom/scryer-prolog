@@ -904,15 +904,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                                         debug_assert!(cell.is_ref());
 
                                         let h = if cell.get_tag() == HeapCellValueTag::PStrLoc {
-                                            self.iter.focus().value()
+                                            self.state_stack
+                                                .push(TokenOrRedirect::Atom(atom!("...")));
+                                            return None;
                                         } else {
                                             cell.get_value()
                                         } as usize;
-
-                                        self.iter.push_stack(IterStackLoc::iterable_loc(
-                                            h,
-                                            HeapOrStackTag::Heap,
-                                        ));
 
                                         // as usual, the WAM's
                                         // optimization of the Lis tag
@@ -934,10 +931,17 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                                             }
                                         }
 
+                                        self.iter.push_stack(IterStackLoc::iterable_loc(
+                                            h,
+                                            HeapOrStackTag::Heap,
+                                        ));
+
                                         if let Some(cell) = self.iter.next() {
                                             orig_cell = cell;
                                             continue;
                                         }
+
+                                        return Some(cell);
                                     };
                                 }
                             }
