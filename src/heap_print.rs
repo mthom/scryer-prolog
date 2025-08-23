@@ -873,18 +873,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     var_opt => {
                         if is_cyclic && cell.is_compound(self.iter.heap) {
                             // self-referential variables are marked "cyclic".
-                            read_heap_cell!(cell,
-                                (HeapCellValueTag::Lis, vh) => {
-                                    if self.iter.heap[vh].get_forwarding_bit() {
-                                        self.iter.pop_stack();
-                                    }
-
-                                    if self.iter.heap[vh+1].get_forwarding_bit() {
-                                        self.iter.pop_stack();
-                                    }
-                                }
-                                _ => {}
-                            );
 
                             match var_opt {
                                 Some(var) => {
@@ -903,32 +891,23 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                                     } else {
                                         debug_assert!(cell.is_ref());
 
-                                        let h = if cell.get_tag() == HeapCellValueTag::PStrLoc {
-                                            self.state_stack
-                                                .push(TokenOrRedirect::Atom(atom!("...")));
-                                            return None;
-                                        } else {
-                                            cell.get_value()
-                                        } as usize;
+                                        let h = match cell.get_tag() {
+                                            HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc => {
+                                                self.iter.focus().value() as usize
+                                            }
+                                            _ => cell.get_value() as usize,
+                                        };
 
-                                        // as usual, the WAM's
-                                        // optimization of the Lis tag
-                                        // (conflating the location of
-                                        // the list and that of its
-                                        // first element) needs
-                                        // special consideration here
-                                        // lest we find ourselves in
-                                        // an infinite loop.
-                                        if cell.get_tag() == HeapCellValueTag::Lis {
-                                            if self.iter.heap[cell.get_value() as usize]
-                                                .get_forwarding_bit()
-                                            {
+                                        match cell.get_tag() {
+                                            HeapCellValueTag::Lis => {
                                                 self.state_stack
                                                     .push(TokenOrRedirect::Atom(atom!("...")));
                                                 return None;
-                                            } else {
+                                            }
+                                            HeapCellValueTag::PStrLoc => {
                                                 *max_depth -= 1;
                                             }
+                                            _ => {}
                                         }
 
                                         self.iter.push_stack(IterStackLoc::iterable_loc(

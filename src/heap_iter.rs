@@ -420,6 +420,12 @@ impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists>
                    let loc = IterStackLoc::iterable_loc(vh, HeapOrStackTag::Heap);
 
                    self.forward_if_referent_marked(loc);
+
+                   if self.read_cell(h).get_forwarding_bit() {
+                       self.stack.push(h);
+                       continue;
+                   }
+
                    self.push_if_unmarked(loc);
 
                    self.stack.push(IterStackLoc::pending_mark_loc(vh + 1, HeapOrStackTag::Heap));
@@ -2138,9 +2144,6 @@ mod tests {
                 list_loc_as_cell!(1)
             );
             assert_eq!(iter.next().unwrap(), cyclic_link);
-            assert_eq!(iter.next().unwrap(), cyclic_link);
-            assert_eq!(iter.next().unwrap(), cyclic_link);
-
             assert_eq!(iter.next(), None);
         }
 
