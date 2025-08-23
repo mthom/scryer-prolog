@@ -94,7 +94,7 @@ pub struct HeapStringScan<'a> {
 }
 
 // The heap_slice should be inside the heap
-unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan {
+unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan<'_> {
     let string_len = heap_slice
         .iter()
         .position(|b| *b == 0u8)
@@ -117,7 +117,7 @@ unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan {
 
 // Same as scan_slice_to_str but assumes that the slice is from the start of a string.
 // Can be used on strings out of the heap.
-unsafe fn scan_slice_to_str_from_start(heap_slice: &[u8]) -> HeapStringScan {
+unsafe fn scan_slice_to_str_from_start(heap_slice: &[u8]) -> HeapStringScan<'_> {
     let string_len = heap_slice
         .iter()
         .position(|b| *b == 0u8)
@@ -529,7 +529,7 @@ impl<'a> SizedHeap for HeapWriter<'a> {
         self.section.cell_len()
     }
 
-    fn scan_slice_to_str(&self, slice_loc: usize) -> HeapStringScan {
+    fn scan_slice_to_str(&self, slice_loc: usize) -> HeapStringScan<'_> {
         let HeapStringScan { string, tail_idx } = unsafe {
             let slice = std::slice::from_raw_parts(
                 self.section.heap_ptr.byte_add(slice_loc),
@@ -612,7 +612,7 @@ impl Heap {
         }
     }
 
-    pub fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter, usize> {
+    pub fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, usize> {
         let section;
         let len = heap_index!(num_cells);
 
@@ -1064,7 +1064,7 @@ impl SizedHeap for Heap {
         self.cell_len()
     }
 
-    fn scan_slice_to_str(&self, slice_loc: usize) -> HeapStringScan {
+    fn scan_slice_to_str(&self, slice_loc: usize) -> HeapStringScan<'_> {
         let HeapStringScan { string, tail_idx } = unsafe {
             let slice = std::slice::from_raw_parts(
                 self.inner.ptr.add(slice_loc),

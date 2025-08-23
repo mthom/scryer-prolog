@@ -19,7 +19,7 @@ use std::vec::Vec;
 pub fn eager_stackful_preorder_iter(
     heap: &mut Heap,
     value: HeapCellValue,
-) -> EagerStackfulPreOrderHeapIter {
+) -> EagerStackfulPreOrderHeapIter<'_> {
     EagerStackfulPreOrderHeapIter::new(heap, value)
 }
 
@@ -646,7 +646,7 @@ mod tests {
     pub(crate) fn stackless_preorder_iter(
         heap: &mut Heap,
         start: usize,
-    ) -> StacklessPreOrderHeapIter<IteratorUMP> {
+    ) -> StacklessPreOrderHeapIter<'_, IteratorUMP> {
         StacklessPreOrderHeapIter::<IteratorUMP>::new(heap, start)
     }
 
@@ -654,7 +654,7 @@ mod tests {
     pub(crate) fn stackless_post_order_iter(
         heap: &'_ mut Heap,
         start: usize,
-    ) -> RightistPostOrderHeapIter {
+    ) -> RightistPostOrderHeapIter<'_> {
         PostOrderIterator::new(stackless_preorder_iter(heap, start))
     }
 

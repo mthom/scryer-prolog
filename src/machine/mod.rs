@@ -220,7 +220,7 @@ pub(crate) fn get_structure_index(value: HeapCellValue) -> Option<CodeIndex> {
 
 impl Machine {
     #[inline]
-    fn prelude_view_and_machine_st(&mut self) -> (MachinePreludeView, &mut MachineState) {
+    fn prelude_view_and_machine_st(&mut self) -> (MachinePreludeView<'_>, &mut MachineState) {
         (
             MachinePreludeView {
                 indices: &mut self.indices,

@@ -136,7 +136,7 @@ impl IndexPtr {
     }
 }
 
-#[derive(Debug, Clone, Copy)]// , Ord, Hash, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy)] // , Ord, Hash, PartialOrd, Eq, PartialEq)]
 pub struct CodeIndex(CodeIndexOffset);
 
 #[cfg(target_pointer_width = "32")]

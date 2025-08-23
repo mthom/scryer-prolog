@@ -82,7 +82,7 @@ pub trait CopierTarget: IndexMut<usize, Output = HeapCellValue> {
     // returns the tail location of the pstr on success
     fn as_slice_from<'a>(&'a self, from: usize) -> Box<dyn Iterator<Item = u8> + 'a>;
     fn copy_pstr_to_threshold(&mut self, pstr_loc: usize) -> Result<usize, usize>;
-    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter, usize>;
+    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, usize>;
     fn copy_slice_to_end(&mut self, bounds: Range<usize>) -> Result<(), usize>;
 }
 

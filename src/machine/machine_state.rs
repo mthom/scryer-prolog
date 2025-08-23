@@ -352,7 +352,7 @@ impl<'a> CopierTarget for CopyTerm<'a> {
     }
 
     #[inline(always)]
-    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter, usize> {
+    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, usize> {
         self.state.heap.reserve(num_cells)
     }
 
@@ -478,7 +478,7 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
     }
 
     #[inline]
-    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter, usize> {
+    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, usize> {
         self.stub.reserve(num_cells)
     }
 

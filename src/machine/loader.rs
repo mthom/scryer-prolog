@@ -1361,7 +1361,7 @@ impl<'a> MachinePreludeView<'a> {
     pub(super) fn composite_op_dir(
         &self,
         compilation_target: &CompilationTarget,
-    ) -> CompositeOpDir {
+    ) -> CompositeOpDir<'_, '_> {
         match compilation_target {
             CompilationTarget::User => CompositeOpDir::new(&self.indices.op_dir, None),
             CompilationTarget::Module(ref module_name) => {

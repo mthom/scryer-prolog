@@ -178,7 +178,7 @@ impl<'a> CopierTarget for TermCopyingMockWAM<'a> {
     }
 
     #[inline(always)]
-    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter, usize> {
+    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, usize> {
         self.wam.machine_st.heap.reserve(num_cells)
     }
 

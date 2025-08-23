@@ -561,7 +561,7 @@ impl Machine {
     }
 
     /// Runs a query.
-    pub fn run_query(&mut self, query: impl Into<String>) -> QueryState {
+    pub fn run_query(&mut self, query: impl Into<String>) -> QueryState<'_> {
         let mut parser = Parser::new(
             Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
             &mut self.machine_st,

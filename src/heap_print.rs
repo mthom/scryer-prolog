@@ -233,7 +233,6 @@ enum TokenOrRedirect {
     OpenList(Rc<Cell<(bool, usize)>>),
     CloseList(Rc<Cell<(bool, usize)>>),
     HeadTailSeparator,
-    StackPop,
     CommaSeparatedCharList(CommaSeparatedCharList),
 }
 
@@ -1862,10 +1861,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 TokenOrRedirect::Space => push_char!(self, ' '),
                 TokenOrRedirect::LeftCurly => push_char!(self, '{'),
                 TokenOrRedirect::RightCurly => push_char!(self, '}'),
-                TokenOrRedirect::StackPop => {
-                    self.iter.pop_stack();
-                    self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-                }
                 TokenOrRedirect::CommaSeparatedCharList(char_list) => {
                     self.print_comma_separated_char_list(char_list);
                 }

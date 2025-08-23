@@ -5,8 +5,6 @@ use crate::machine::machine_errors::CycleSearchResult;
 use crate::machine::system_calls::BrentAlgState;
 use crate::types::*;
 
-use std::ops::Deref;
-
 #[derive(Clone, Copy)]
 pub struct HeapPStrIter<'a> {
     pub heap: &'a Heap,
@@ -206,55 +204,6 @@ impl<'a> Iterator for HeapPStrIter<'a> {
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         (self.stepper)(self)
-    }
-}
-
-pub struct PStrCharsIter<'a> {
-    pub iter: HeapPStrIter<'a>,
-    pub item: Option<PStrIteratee>,
-}
-
-impl<'a> Deref for PStrCharsIter<'a> {
-    type Target = HeapPStrIter<'a>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.iter
-    }
-}
-
-impl<'a> Iterator for PStrCharsIter<'a> {
-    type Item = char;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(item) = self.item {
-            match item {
-                PStrIteratee::Char { value, .. } => {
-                    self.item = self.iter.next();
-                    return Some(value);
-                }
-                PStrIteratee::PStrSlice {
-                    slice_loc,
-                    slice_len,
-                } => {
-                    let s = self.iter.heap.slice_to_str(slice_loc, slice_len);
-
-                    match s.chars().next() {
-                        Some(c) => {
-                            self.item = Some(PStrIteratee::PStrSlice {
-                                slice_loc: slice_loc + c.len_utf8(),
-                                slice_len: slice_len - c.len_utf8(),
-                            });
-                            return Some(c);
-                        }
-                        None => {
-                            self.item = self.iter.next();
-                        }
-                    }
-                }
-            }
-        }
-
-        None
     }
 }
 

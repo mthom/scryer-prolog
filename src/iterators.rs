@@ -305,14 +305,14 @@ impl<'a> Iterator for FactIterator<'a> {
     }
 }
 
-pub(crate) fn post_order_iter(term: &'_ Term) -> QueryIterator {
+pub(crate) fn post_order_iter(term: &Term) -> QueryIterator<'_> {
     QueryIterator::from_term(term)
 }
 
 pub(crate) fn breadth_first_iter(
-    term: &'_ Term,
+    term: &Term,
     iterable_root: RootIterationPolicy,
-) -> FactIterator {
+) -> FactIterator<'_> {
     FactIterator::new(term, iterable_root)
 }
 
@@ -336,7 +336,7 @@ pub(crate) struct ClauseIterator<'a> {
     remaining_chunks_on_stack: usize,
 }
 
-fn state_from_chunked_terms(chunk_vec: &'_ VecDeque<ChunkedTerms>) -> ClauseIteratorState {
+fn state_from_chunked_terms(chunk_vec: &VecDeque<ChunkedTerms>) -> ClauseIteratorState<'_> {
     if chunk_vec.len() == 1 {
         if let Some(ChunkedTerms::Branch(ref branches)) = chunk_vec.front() {
             return ClauseIteratorState::RemainingBranches(branches, 0);

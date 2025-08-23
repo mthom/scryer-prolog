@@ -133,7 +133,10 @@ impl BranchStack {
     }
 
     #[inline]
-    pub(crate) fn drain_branches(&mut self, depth: usize) -> std::vec::Drain<BranchOccurrences> {
+    pub(crate) fn drain_branches(
+        &mut self,
+        depth: usize,
+    ) -> std::vec::Drain<'_, BranchOccurrences> {
         let start_idx = self.len() - depth;
         self.drain(start_idx..)
     }
