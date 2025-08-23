@@ -204,12 +204,8 @@ impl NumberFocus {
 
 #[derive(Debug, Clone, Copy)]
 struct CommaSeparatedCharList {
-    // pstr: PartialString,
-    // offset: usize,
     pstr_loc: usize,
     max_depth: usize,
-    // end_cell: HeapCellValue,
-    // end_h: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -597,42 +593,36 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn enqueue_op(&mut self, mut max_depth: usize, name: Atom, spec: OpDesc) {
+    fn enqueue_op(&mut self, max_depth: usize, name: Atom, spec: OpDesc) {
         if spec.get_spec().is_postfix() {
             if self.max_depth_exhausted(max_depth) {
                 self.iter.pop_stack();
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-            } else if self.check_max_depth(&mut max_depth) {
-                self.iter.pop_stack();
 
-                self.state_stack.push(TokenOrRedirect::Op(name, spec));
-                self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-            } else {
-                let right_directed_op = DirectedOp::Right(name, spec);
-
-                self.state_stack.push(TokenOrRedirect::Op(name, spec));
-                self.state_stack.push(TokenOrRedirect::CompositeRedirect(
-                    max_depth,
-                    right_directed_op,
-                ));
+                return;
             }
+
+            let max_depth = max_depth.saturating_sub(1);
+            let right_directed_op = DirectedOp::Right(name, spec);
+
+            self.state_stack.push(TokenOrRedirect::Op(name, spec));
+            self.state_stack.push(TokenOrRedirect::CompositeRedirect(
+                max_depth,
+                right_directed_op,
+            ));
         } else if spec.get_spec().is_prefix() {
             if self.max_depth_exhausted(max_depth) {
                 self.iter.pop_stack();
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
                 return;
-            } else if self.check_max_depth(&mut max_depth) {
-                self.iter.pop_stack();
-
-                self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-                self.state_stack.push(TokenOrRedirect::Op(name, spec));
-            } else {
-                let op = DirectedOp::Left(name, spec);
-
-                self.state_stack
-                    .push(TokenOrRedirect::CompositeRedirect(max_depth, op));
-                self.state_stack.push(TokenOrRedirect::Op(name, spec));
             }
+
+            let max_depth = max_depth.saturating_sub(1);
+            let op = DirectedOp::Left(name, spec);
+
+            self.state_stack
+                .push(TokenOrRedirect::CompositeRedirect(max_depth, op));
+            self.state_stack.push(TokenOrRedirect::Op(name, spec));
         } else {
             if let "|" = &*name.as_str() {
                 self.format_bar_separator_op(max_depth, name, spec);
@@ -644,39 +634,23 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.iter.pop_stack();
 
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-            } else if self.check_max_depth(&mut max_depth) {
-                if matches!(spec.get_spec(), XFY) {
-                    let left_directed_op = DirectedOp::Left(name, spec);
-
-                    self.state_stack
-                        .push(TokenOrRedirect::CompositeRedirect(0, left_directed_op));
-
-                    self.state_stack.push(TokenOrRedirect::Op(name, spec));
-                    self.state_stack.push(TokenOrRedirect::StackPop);
-                } else {
-                    // is_yfx!
-                    let right_directed_op = DirectedOp::Right(name, spec);
-
-                    self.state_stack.push(TokenOrRedirect::StackPop);
-                    self.state_stack.push(TokenOrRedirect::Op(name, spec));
-                    self.state_stack
-                        .push(TokenOrRedirect::CompositeRedirect(0, right_directed_op));
-                }
-            } else {
-                let left_directed_op = DirectedOp::Left(name, spec);
-                let right_directed_op = DirectedOp::Right(name, spec);
-
-                self.state_stack.push(TokenOrRedirect::CompositeRedirect(
-                    max_depth,
-                    left_directed_op,
-                ));
-
-                self.state_stack.push(TokenOrRedirect::Op(name, spec));
-                self.state_stack.push(TokenOrRedirect::CompositeRedirect(
-                    max_depth,
-                    right_directed_op,
-                ));
+                return;
             }
+
+            let max_depth = max_depth.saturating_sub(1);
+            let left_directed_op = DirectedOp::Left(name, spec);
+            let right_directed_op = DirectedOp::Right(name, spec);
+
+            self.state_stack.push(TokenOrRedirect::CompositeRedirect(
+                max_depth,
+                left_directed_op,
+            ));
+
+            self.state_stack.push(TokenOrRedirect::Op(name, spec));
+            self.state_stack.push(TokenOrRedirect::CompositeRedirect(
+                max_depth,
+                right_directed_op,
+            ));
         }
     }
 
@@ -686,13 +660,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.iter.pop_stack();
             }
 
-            if arity > 0 {
-                self.state_stack.push(TokenOrRedirect::Close);
-                self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-                self.state_stack.push(TokenOrRedirect::Open);
-            }
-
-            self.state_stack.push(TokenOrRedirect::Atom(name));
+            self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
 
             return false;
         }
@@ -707,7 +675,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             }
 
             self.state_stack.pop();
-
             self.state_stack.push(TokenOrRedirect::Open);
         }
 
@@ -722,9 +689,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             self.iter.pop_stack();
 
             let ellipsis_atom = atom!("...");
-
-            self.state_stack.push(TokenOrRedirect::Atom(ellipsis_atom));
-            self.state_stack.push(TokenOrRedirect::BarAsOp);
             self.state_stack.push(TokenOrRedirect::Atom(ellipsis_atom));
 
             return;
@@ -1017,6 +981,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     }
 
     fn print_number(&mut self, max_depth: usize, n: NumberFocus, op: &Option<DirectedOp>) {
+        if self.max_depth_exhausted(max_depth) {
+            self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+            return;
+        }
+
         let (add_brackets, op_is_prefix) = if let Some(op) = op {
             (op.is_negative_sign() && !n.is_negative(), op.is_prefix())
         } else {
@@ -1301,7 +1270,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let end_h = heap_pstr_iter.focus();
         let end_cell = heap_pstr_iter.heap[end_h]; // heap_pstr_iter.focus;
 
-        if self.check_max_depth(&mut max_depth) {
+        if self.max_depth_exhausted(max_depth) {
             self.remove_list_children(focus.value() as usize);
             self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
             return;
@@ -1406,7 +1375,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         });
     }
 
-    fn push_list(&mut self, mut max_depth: usize) {
+    fn push_list(&mut self, max_depth: usize) {
         if self.max_depth_exhausted(max_depth) {
             self.iter.pop_stack();
             self.iter.pop_stack();
@@ -1414,22 +1383,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
 
             return;
-        } else if self.check_max_depth(&mut max_depth) {
-            self.iter.pop_stack();
-            self.iter.pop_stack();
-
-            let cell = Rc::new(Cell::new((true, 0)));
-
-            let switch = self.close_list(cell);
-
-            self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-            self.open_list(switch);
-
-            return;
         }
 
+        let max_depth = max_depth.saturating_sub(1);
         let cell = Rc::new(Cell::new((true, max_depth)));
-
         let switch = self.close_list(cell);
 
         self.state_stack
@@ -1715,17 +1672,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 });
             }
         };
-
-        if !addr.is_var()
-            && !addr.is_compound(self.iter.heap)
-            && self.max_depth_exhausted(max_depth)
-        {
-            if !(addr == atom_as_cell!(atom!("[]")) && self.at_cdr("")) {
-                self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-            }
-
-            return;
-        }
 
         read_heap_cell!(addr,
             (HeapCellValueTag::Atom, (name, arity)) => {
