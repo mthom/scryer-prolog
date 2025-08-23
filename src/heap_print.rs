@@ -849,10 +849,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         if let Some(mut orig_cell) = self.iter.next() {
             loop {
                 let is_cyclic = orig_cell.get_forwarding_bit();
-
-                let cell =
-                    heap_bound_store(self.iter.heap, heap_bound_deref(self.iter.heap, orig_cell));
-                let cell = unmark_cell_bits!(cell);
+                let derefed_cell = heap_bound_deref(self.iter.heap, orig_cell);
+                let cell = unmark_cell_bits!(heap_bound_store(self.iter.heap, derefed_cell));
 
                 match self.var_names.get(&cell).cloned() {
                     Some(var) if cell.is_var() => {
@@ -860,8 +858,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         // a name via heap_locs, append the name to
                         // the current output, and return None. None
                         // short-circuits handle_heap_term.
-                        // self.iter.pop_stack();
-
                         let var_str = var.borrow().to_string();
 
                         push_space_if_amb!(self, &var_str, {
@@ -872,8 +868,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     }
                     var_opt => {
                         if is_cyclic && cell.is_compound(self.iter.heap) {
-                            // self-referential variables are marked "cyclic".
-
+                            // self-referential variables are marked "cyclic"
                             match var_opt {
                                 Some(var) => {
                                     // If the term is bound to a named variable,
@@ -889,34 +884,61 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                                         // otherwise, contract it to an ellipsis.
                                         self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
                                     } else {
-                                        debug_assert!(cell.is_ref());
-
-                                        let h = match cell.get_tag() {
-                                            HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc => {
+                                        let h = read_heap_cell!(derefed_cell,
+                                            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                                                self.iter.heap[h].set_forwarding_bit(false);
+                                                h
+                                            }
+                                            (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc) => {
                                                 self.iter.focus().value() as usize
                                             }
-                                            _ => cell.get_value() as usize,
-                                        };
-
-                                        match cell.get_tag() {
-                                            HeapCellValueTag::Lis => {
-                                                self.state_stack
-                                                    .push(TokenOrRedirect::Atom(atom!("...")));
-                                                return None;
+                                            _ => {
+                                                cell.get_value() as usize
                                             }
-                                            HeapCellValueTag::PStrLoc => {
-                                                *max_depth -= 1;
+                                        );
+
+                                        let h = IterStackLoc::marked_loc(h, HeapOrStackTag::Heap);
+                                        self.iter.push_stack(h);
+
+                                        if let Some(next_cell) = self.iter.next() {
+                                            if next_cell.get_forwarding_bit() {
+                                                debug_assert_eq!(
+                                                    cell.get_value(),
+                                                    next_cell.get_value()
+                                                );
+
+                                                /*
+                                                 * next_cell is forwarded here only if, for lists,
+                                                 * X = [X|T]. in this case, self.iter has *not*
+                                                 * pushed X's arguments to its stack, but T is
+                                                 * at its top from the previous expansion of X.
+                                                 *
+                                                 * in this case, expand the iter stack rep to X =
+                                                 * [[X|T]|T] and continue, terminating recursion
+                                                 * when max_depth == 0.
+                                                 *
+                                                 * similar logic here for PStrLoc, which can only
+                                                 * recurse from its tail.
+                                                 */
+
+                                                read_heap_cell!(next_cell,
+                                                    (HeapCellValueTag::Lis, l) => {
+                                                        let tail_h = IterStackLoc::marked_loc(l+1, HeapOrStackTag::Heap);
+
+                                                        self.iter.push_stack(tail_h);
+                                                        self.iter.push_stack(h);
+
+                                                        return Some(unmark_cell_bits!(next_cell));
+                                                    }
+                                                    (HeapCellValueTag::PStrLoc) => {
+                                                        self.iter.push_stack(h);
+                                                        return Some(unmark_cell_bits!(next_cell));
+                                                    }
+                                                    _ => {}
+                                                );
                                             }
-                                            _ => {}
-                                        }
 
-                                        self.iter.push_stack(IterStackLoc::iterable_loc(
-                                            h,
-                                            HeapOrStackTag::Heap,
-                                        ));
-
-                                        if let Some(cell) = self.iter.next() {
-                                            orig_cell = cell;
+                                            orig_cell = next_cell;
                                             continue;
                                         }
 
@@ -933,7 +955,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 }
             }
         } else {
-            while self.iter.pop_stack().is_none() {}
+            while self.iter.pop_stack().is_some() {}
             None
         }
     }
@@ -1414,7 +1436,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             .push(TokenOrRedirect::FunctorRedirect(max_depth));
         self.state_stack.push(TokenOrRedirect::HeadTailSeparator); // bar
         self.state_stack
-            .push(TokenOrRedirect::FunctorRedirect(max_depth + 1));
+            .push(TokenOrRedirect::FunctorRedirect(max_depth));
 
         self.open_list(switch);
     }
@@ -1603,15 +1625,19 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
                 self.state_stack.push(TokenOrRedirect::Char(c));
             } else {
+                self.iter.pop_stack();
+
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
                 self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
             }
         } else if self.max_depth_exhausted(max_depth) {
+            self.iter.pop_stack();
+
             self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
             self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
         } else {
             self.state_stack
-                .push(TokenOrRedirect::FunctorRedirect(max_depth + 1));
+                .push(TokenOrRedirect::FunctorRedirect(max_depth));
             self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
         }
     }

@@ -28,7 +28,7 @@ pub fn eager_stackful_preorder_iter(
  * cyclic terms for the sake of skipping them at the second visit but
  * leaves them marked until it is dropped. This makes for, e.g., more
  * efficient ground/1 and term_variables/2 definitions.
- */
+*/
 
 pub struct EagerStackfulPreOrderHeapIter<'a> {
     start_value: HeapCellValue,
@@ -175,7 +175,7 @@ impl IterStackLoc {
     }
 
     #[inline]
-    fn mark_loc(h: usize, heap_or_stack: HeapOrStackTag) -> Self {
+    pub fn marked_loc(h: usize, heap_or_stack: HeapOrStackTag) -> Self {
         IterStackLoc::new()
             .with_tag(IterStackLocTag::Marked)
             .with_heap_or_stack(heap_or_stack)
@@ -183,7 +183,7 @@ impl IterStackLoc {
     }
 
     #[inline]
-    fn pending_mark_loc(h: usize, heap_or_stack: HeapOrStackTag) -> Self {
+    fn pending_marked_loc(h: usize, heap_or_stack: HeapOrStackTag) -> Self {
         IterStackLoc::new()
             .with_tag(IterStackLocTag::PendingMark)
             .with_heap_or_stack(heap_or_stack)
@@ -386,7 +386,7 @@ impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists>
         while let Some(h) = self.stack.pop() {
             if h.is_pending_mark() {
                 self.push_if_unmarked(h);
-                self.stack.push(IterStackLoc::mark_loc(
+                self.stack.push(IterStackLoc::marked_loc(
                     h.value() as usize,
                     h.heap_or_stack(),
                 ));
@@ -414,7 +414,7 @@ impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists>
                    let loc = IterStackLoc::iterable_loc(vh, HeapOrStackTag::Heap);
 
                    self.push_if_unmarked(loc);
-                   self.stack.push(IterStackLoc::mark_loc(vh, HeapOrStackTag::Heap));
+                   self.stack.push(IterStackLoc::marked_loc(vh, HeapOrStackTag::Heap));
                }
                (HeapCellValueTag::Lis, vh) => {
                    let loc = IterStackLoc::iterable_loc(vh, HeapOrStackTag::Heap);
@@ -428,8 +428,8 @@ impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists>
 
                    self.push_if_unmarked(loc);
 
-                   self.stack.push(IterStackLoc::pending_mark_loc(vh + 1, HeapOrStackTag::Heap));
-                   self.stack.push(IterStackLoc::mark_loc(vh, HeapOrStackTag::Heap));
+                   self.stack.push(IterStackLoc::pending_marked_loc(vh + 1, HeapOrStackTag::Heap));
+                   self.stack.push(IterStackLoc::marked_loc(vh, HeapOrStackTag::Heap));
 
                    return Some(self.read_cell(h));
                }
@@ -438,14 +438,14 @@ impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists>
 
                    self.forward_if_referent_marked(loc);
                    self.push_if_unmarked(loc);
-                   self.stack.push(IterStackLoc::mark_loc(vh, HeapOrStackTag::Heap));
+                   self.stack.push(IterStackLoc::marked_loc(vh, HeapOrStackTag::Heap));
                }
                (HeapCellValueTag::StackVar, vs) => {
                    let loc = IterStackLoc::iterable_loc(vs, HeapOrStackTag::Stack);
 
                    self.forward_if_referent_marked(loc);
                    self.push_if_unmarked(loc);
-                   self.stack.push(IterStackLoc::mark_loc(vs, HeapOrStackTag::Stack));
+                   self.stack.push(IterStackLoc::marked_loc(vs, HeapOrStackTag::Stack));
                }
                (HeapCellValueTag::PStrLoc, vh) => {
                    let cell = *cell;
@@ -461,7 +461,7 @@ impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists>
                    }
 
                    self.stack.push(IterStackLoc::iterable_loc(tail_idx - 1, HeapOrStackTag::Heap));
-                   self.stack.push(IterStackLoc::pending_mark_loc(tail_idx, HeapOrStackTag::Heap));
+                   self.stack.push(IterStackLoc::pending_marked_loc(tail_idx, HeapOrStackTag::Heap));
 
                    return Some(cell);
                }
@@ -469,14 +469,14 @@ impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists>
                    let l = h.value() as usize;
 
                    for l in (l + 2 .. l + arity + 1).rev() {
-                       self.stack.push(IterStackLoc::pending_mark_loc(l, HeapOrStackTag::Heap));
+                       self.stack.push(IterStackLoc::pending_marked_loc(l, HeapOrStackTag::Heap));
                    }
 
                    if arity > 0 {
                        let first_arg_loc = IterStackLoc::iterable_loc(l+1, HeapOrStackTag::Heap);
 
                        self.push_if_unmarked(first_arg_loc);
-                       self.stack.push(IterStackLoc::mark_loc(l+1, HeapOrStackTag::Heap));
+                       self.stack.push(IterStackLoc::marked_loc(l+1, HeapOrStackTag::Heap));
                        self.forward_if_referent_marked(first_arg_loc);
                    }
 

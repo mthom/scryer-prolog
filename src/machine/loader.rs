@@ -46,7 +46,7 @@ use std::rc::Rc;
  * loader fail later, all changes must be rolled back, restoring the
  * WAM to its prior state. Retraction records describe individual changes
  * made by the loader, and they may be used later.
- */
+*/
 
 #[derive(Debug)]
 pub(crate) enum RetractionRecord {
@@ -108,7 +108,7 @@ pub(crate) enum RetractionRecord {
  * "extent" of a code vector is its length prior to an attempted
  * module load. The only code vector of the WAM's IndexStore, "code",
  * is shared by all modules, including the default "user" module.
- */
+*/
 
 pub(super) struct RetractionInfo {
     orig_code_extent: usize,

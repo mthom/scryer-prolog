@@ -16,7 +16,7 @@ use to_syn_value_derive::ToDeriveInput;
  * of Instruction. They mimick most of the structure of the previous
  * Line instruction type. The strum crate is used to provide reflection
  * on each of the node types to the tree walker.
- */
+*/
 
 use std::any::*;
 use std::rc::Rc;

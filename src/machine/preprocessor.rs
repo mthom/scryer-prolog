@@ -246,7 +246,7 @@ fn setup_qualified_import(mut terms: Vec<Term>) -> Result<UseModuleExport, Compi
  * +    (mode declarations under the mode syntax, which currently have no effect)
  * -
  * ?
- */
+*/
 
 fn setup_meta_predicate<'a, LS: LoadState<'a>>(
     mut terms: Vec<Term>,

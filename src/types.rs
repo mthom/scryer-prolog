@@ -197,7 +197,7 @@ pub enum TrailRef {
     BlackboardOffset(Atom, HeapCellValue), // key atom, key value
 }
 
-#[allow(clippy::enum_variant_names)] // allow the common "Trailed" prefix
+#[allow(clippy::enum_variant_names)]// allow the common "Trailed" prefix
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[bits = 6]
 pub(crate) enum TrailEntryTag {

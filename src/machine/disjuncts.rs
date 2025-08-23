@@ -18,7 +18,7 @@ use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 
-#[derive(Debug, Clone)] //, PartialOrd, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]//, PartialOrd, PartialEq, Eq, Hash)]
 pub struct BranchNumber {
     branch_num: Rational,
     delta: Rational,

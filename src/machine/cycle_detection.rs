@@ -19,7 +19,7 @@ use crate::types::*;
  * Commonalities with the GC marking algorithm:
  * - The contents of forwarded cells are modified only when they are unforwarded
  * - Marked (but unforwarded!) cells immediately shift to the backward phase
- */
+*/
 
 #[derive(Debug)]
 pub(crate) struct CycleDetectingIter<'a, const STOP_AT_CYCLES: bool> {

@@ -1,6 +1,6 @@
 /* A simple macro to count the arguments in a variadic list
  * of token trees.
- */
+*/
 
 macro_rules! char_as_cell {
     ($c: expr) => {

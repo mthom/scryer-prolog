@@ -30,7 +30,7 @@ macro_rules! count {
  * in round parentheses for rustc to parse them. See the tests module
  * below for examples, especially those involving atom!
  * subexpressions.
- */
+*/
 
 macro_rules! functor {
     ($name:expr) => ({
