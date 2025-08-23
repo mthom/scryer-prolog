@@ -1468,6 +1468,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     }
 
     fn print_tcp_listener(&mut self, tcp_listener: &TcpListener, max_depth: usize) {
+        if self.max_depth_exhausted(max_depth) {
+            self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+            return;
+        }
+
         let (ip, port) = if let Ok(addr) = tcp_listener.local_addr() {
             (addr.ip(), addr.port())
         } else {
@@ -1531,6 +1536,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     }
 
     fn print_stream(&mut self, stream: Stream, max_depth: usize) {
+        if self.max_depth_exhausted(max_depth) {
+            self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+            return;
+        }
+
         if let Some(alias) = stream.options().get_alias() {
             self.print_impromptu_atom(alias);
         } else {
@@ -1704,8 +1714,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.print_number(max_depth, NumberFocus::Unfocused(Number::Fixnum(n)), &op);
             }
             (HeapCellValueTag::F64Offset, offset) => {
-                let f = self.arena.f64_tbl.get_entry(offset);
-                self.print_number(max_depth, NumberFocus::Unfocused(Number::Float(f)), &op);
+                if self.max_depth_exhausted(max_depth) {
+                    self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+                } else {
+                    let f = self.arena.f64_tbl.get_entry(offset);
+                    self.print_number(max_depth, NumberFocus::Unfocused(Number::Float(f)), &op);
+                }
             }
             (HeapCellValueTag::PStrLoc) => {
                 self.print_list_like(max_depth);
@@ -1719,12 +1733,16 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 }
             }
             (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
-                let h = self.iter.focus();
+                if self.max_depth_exhausted(max_depth) {
+                    self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+                } else {
+                    let h = self.iter.focus();
 
-                if let Some(offset_str) = self.offset_as_string(h) {
-                    push_space_if_amb!(self, &offset_str, {
-                        append_str!(self, offset_str.as_str());
-                    })
+                    if let Some(offset_str) = self.offset_as_string(h) {
+                        push_space_if_amb!(self, &offset_str, {
+                            append_str!(self, offset_str.as_str());
+                        })
+                    }
                 }
             }
             (HeapCellValueTag::Cons, c) => {
@@ -1742,7 +1760,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                        self.print_tcp_listener(&listener, max_depth);
                    }
                    (ArenaHeaderTag::Dropped, _value) => {
-                       self.print_impromptu_atom(atom!("$dropped_value"));
+                       if self.max_depth_exhausted(max_depth) {
+                           self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+                       } else {
+                           self.print_impromptu_atom(atom!("$dropped_value"));
+                       }
                    }
                    (ArenaHeaderTag::ChildProcess, process) => {
 
@@ -2087,7 +2109,7 @@ mod tests {
 
             let output = printer.print();
 
-            assert_eq!(output.result(), "[_1,_3,_5,_7,_9|...]");
+            assert_eq!(output.result(), "[_1,_3,_5,_7,...|...]");
         }
 
         all_cells_unmarked(&wam.machine_st.heap);
