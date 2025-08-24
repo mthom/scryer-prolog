@@ -107,27 +107,25 @@ fn get_prompt() -> &'static str {
     }
 }
 
-static mut RAW_READ: bool = false;
+thread_local! {
+    static RAW_READ: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
 
 pub struct RawReadGuard;
 
 impl RawReadGuard {
     pub fn new() -> RawReadGuard {
-        unsafe {
-            if RAW_READ {
-                panic!("Nested RawReadGuards");
-            }
-            RAW_READ = true;
+        if RAW_READ.get() {
+            panic!("Nested RawReadGuards");
         }
+        RAW_READ.set(true);
         RawReadGuard
     }
 }
 
 impl Drop for RawReadGuard {
     fn drop(&mut self) {
-        unsafe {
-            RAW_READ = false;
-        }
+        RAW_READ.set(false);
     }
 }
 
@@ -196,8 +194,7 @@ impl ReadlineStream {
 
     #[cfg(feature = "repl")]
     fn call_readline(&mut self) -> std::io::Result<usize> {
-        let raw = unsafe { RAW_READ };
-        let text = if raw {
+        let text = if RAW_READ.get() {
             let mut buffer = String::new();
             let stdin = std::io::stdin();
             match stdin.read_line(&mut buffer) {
