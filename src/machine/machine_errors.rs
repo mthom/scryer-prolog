@@ -603,6 +603,20 @@ impl MachineState {
         }
     }
 
+    pub(super) fn missing_feature_error(&self, feature: Atom) -> MachineError {
+        let stub = functor!(
+            atom!("resource_error"),
+            [functor(
+                (functor!(atom!("feature"), [atom_as_cell((feature))]))
+            )]
+        );
+
+        MachineError {
+            stub,
+            location: None,
+        }
+    }
+
     pub(super) fn unreachable_error(&self) -> MachineError {
         let stub = functor!(atom!("system_error"));
 
@@ -613,7 +627,7 @@ impl MachineState {
     }
 
     #[cfg(feature = "ffi")]
-    pub(super) fn ffi_error(&self, err: FfiError) -> MachineError {
+    pub(super) fn ffi_error(&self, err: FfiError, culprit: HeapCellValue) -> MachineError {
         let error_atom = match err {
             FfiError::ValueCast => atom!("value_cast"),
             FfiError::ValueOutOfRange => atom!("value_out_of_range"),
@@ -622,13 +636,29 @@ impl MachineState {
             FfiError::InvalidArgument => atom!("invalid_argument"),
             FfiError::InvalidStruct => atom!("invalid_struct"),
             FfiError::FunctionNotFound => atom!("function_not_found"),
-            FfiError::StructNotFound => atom!("struct_not_found"),
+            FfiError::StructNotFound(culprit) => {
+                let stub = functor!(
+                    atom!("ffi_error"),
+                    [
+                        atom_as_cell((atom!("struct_not_found"))),
+                        atom_as_cell(culprit)
+                    ]
+                );
+
+                return MachineError {
+                    stub,
+                    location: None,
+                };
+            }
             FfiError::ArgCountMismatch => atom!("mismatched_argument_count"),
             FfiError::AllocationFailed => atom!("allocation_failed"),
             FfiError::LayoutError => atom!("layout_error"),
             FfiError::UnsupportedAbi => atom!("unsupported_abi"),
         };
-        let stub = functor!(atom!("ffi_error"), [atom_as_cell(error_atom)]);
+        let stub = functor!(
+            atom!("ffi_error"),
+            [atom_as_cell(error_atom), cell(culprit)]
+        );
 
         MachineError {
             stub,
@@ -813,6 +843,7 @@ pub(crate) enum DomainErrorType {
     OperatorSpecifier,
     OperatorPriority,
     Directive,
+    Allocator,
 }
 
 impl DomainErrorType {
@@ -827,6 +858,7 @@ impl DomainErrorType {
             DomainErrorType::OperatorSpecifier => atom!("operator_specifier"),
             DomainErrorType::OperatorPriority => atom!("operator_priority"),
             DomainErrorType::Directive => atom!("directive"),
+            DomainErrorType::Allocator => atom!("allocator"),
         }
     }
 }

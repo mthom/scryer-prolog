@@ -609,6 +609,12 @@ enum SystemClauseType {
     ForeignCall,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$define_foreign_struct")))]
     DefineForeignStruct,
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$ffi_allocate")))]
+    FfiAllocate,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$ffi_read_ptr")))]
+    FfiReadPtr,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$ffi_deallocate")))]
+    FfiDeallocate,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$js_eval")))]
     JsEval,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$predicate_defined")))]
@@ -1806,6 +1812,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallLoadForeignLib |
                     &Instruction::CallForeignCall |
                     &Instruction::CallDefineForeignStruct |
+                    &Instruction::CallFfiAllocate |
+                    &Instruction::CallFfiReadPtr |
+                    &Instruction::CallFfiDeallocate |
                     &Instruction::CallJsEval |
                     &Instruction::CallPredicateDefined |
                     &Instruction::CallStripModule |
@@ -2064,6 +2073,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteLoadForeignLib |
                     &Instruction::ExecuteForeignCall |
                     &Instruction::ExecuteDefineForeignStruct |
+                    &Instruction::ExecuteFfiAllocate |
+                    &Instruction::ExecuteFfiReadPtr |
+                    &Instruction::ExecuteFfiDeallocate |
                     &Instruction::ExecuteJsEval |
                     &Instruction::ExecutePredicateDefined |
                     &Instruction::ExecuteStripModule |
