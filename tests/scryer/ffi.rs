@@ -284,8 +284,6 @@ fn ffi_cstr() {
     );
 }
 
-
-
 #[test]
 #[cfg_attr(miri, ignore = "ffi")]
 fn ffi_heap() {

@@ -134,7 +134,7 @@ pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStrea
             Ok(s) => s,
             Err(e) => {
                 println!("cargo::warning=parse error: {e} in file {path:?}");
-                syn::File{
+                syn::File {
                     shebang: None,
                     attrs: vec![],
                     items: vec![],
