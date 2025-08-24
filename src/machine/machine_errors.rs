@@ -603,6 +603,20 @@ impl MachineState {
         }
     }
 
+    pub(super) fn missing_feature_error(&self, feature: Atom) -> MachineError {
+        let stub = functor!(
+            atom!("resource_error"),
+            [functor(
+                (functor!(atom!("feature"), [atom_as_cell((feature))]))
+            )]
+        );
+
+        MachineError {
+            stub,
+            location: None,
+        }
+    }
+
     pub(super) fn unreachable_error(&self) -> MachineError {
         let stub = functor!(atom!("system_error"));
 
