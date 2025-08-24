@@ -177,6 +177,8 @@ array_type(ElemType, Len, ArrayType) :-
         assertz(is_array_type_defined(ArrayType))
     ).
 
+:- meta_predicate(with_locals(?, 0)).
+
 %% with_locals(+Locals, :Goal)
 %
 %  Allocate the Locals, evaluate the Goal and deallocate the Locals.
