@@ -706,7 +706,10 @@ impl MachineState {
                 DomainErrorType::FfiArgumentType,
                 atom_as_cell!(atom!("void")),
             ),
-            FfiError::CStrFieldType => todo!(),
+            FfiError::CStrFieldType => self.domain_error(
+                DomainErrorType::NonCStrFfiArgumentType,
+                atom_as_cell!(atom!("cstr")),
+            ),
             FfiError::NullPtr => self.domain_error(
                 DomainErrorType::NonNullPtr,
                 fixnum_as_cell!(Fixnum::build_with(0)),
@@ -900,6 +903,7 @@ pub(crate) enum DomainErrorType {
     FfiArgument,
     FfiArgumentType,
     FixedSizedInt,
+    NonCStrFfiArgumentType,
 }
 
 impl DomainErrorType {
@@ -923,6 +927,7 @@ impl DomainErrorType {
             DomainErrorType::FfiArgument => atom!("ffi_argument"),
             DomainErrorType::FfiArgumentType => atom!("ffi_argument_type"),
             DomainErrorType::FixedSizedInt => atom!("fixed_sized_int"),
+            DomainErrorType::NonCStrFfiArgumentType => atom!("non_cstr_ffi_argument_type"),
         }
     }
 }
