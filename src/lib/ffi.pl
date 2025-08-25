@@ -1,4 +1,4 @@
-:- module(ffi, [use_foreign_module/2, foreign_struct/2, with_locals/2, allocate/4, deallocate/3, read_ptr/3]).
+:- module(ffi, [use_foreign_module/2, foreign_struct/2, with_locals/2, allocate/4, deallocate/3, read_ptr/3, array_type/3]).
 
 /** Foreign Function Interface
 
