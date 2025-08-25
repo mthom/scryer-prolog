@@ -603,9 +603,10 @@ impl MachineState {
         }
     }
 
+    #[allow(dead_code)] // not used when all features are enabled
     pub(super) fn missing_feature_error(&self, feature: Atom) -> MachineError {
         let stub = functor!(
-            atom!("resource_error"),
+            atom!("representation_error"),
             [functor(
                 (functor!(atom!("feature"), [atom_as_cell((feature))]))
             )]
