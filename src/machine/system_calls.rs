@@ -4982,29 +4982,35 @@ impl Machine {
                                 };
                                 let return_value = cell_as_atom_cell!(self.machine_st.heap[s + 2]);
                                 functions.push(FunctionDefinition {
-                                    name: name.as_str().to_string(),
+                                    name,
                                     args,
                                     return_value: return_value.get_name(),
                                 });
                                 }
                                 _ => {
-                                    unreachable!()
-                                    }
+                                    let err = self.machine_st.unreachable_error();
+                                    return Err(self.machine_st.error_form(err, stub_gen()))
+                                }
                             )
                         }
                         if self
                             .foreign_function_table
                             .load_library(&library_name.as_str(), &functions)
-                            .is_ok()
+                            .is_err()
                         {
-                            return Ok(());
+                            self.machine_st.fail = true;
                         }
+
+                        Ok(())
                     }
-                    Err(e) => return Err(e),
-                };
+                    Err(e) => Err(e),
+                }
+            } else {
+                let err = self
+                    .machine_st
+                    .type_error(ValidType::InCharacter, library_name);
+                Err(self.machine_st.error_form(err, stub_gen()))
             }
-            self.machine_st.fail = true;
-            Ok(())
         }
 
         #[cfg(not(feature = "ffi"))]
@@ -5034,9 +5040,9 @@ impl Machine {
 
             if let Some(head) = iter.next() {
                 let head = self.machine_st.store(self.machine_st.deref(head));
-                if let Some(struct_name) = self.machine_st.value_to_str_like(head) {
+                if let Some(struct_name) = head.to_atom() {
                     Ok(Value::Struct(
-                        struct_name.as_str().to_string(),
+                        struct_name,
                         iter.map(|x| self.map_ffi_arg(x, stub_gen))
                             .collect::<Result<_, _>>()?,
                     ))
@@ -5052,17 +5058,15 @@ impl Machine {
                     Err(self.machine_st.error_form(err, src))
                 } else {
                     // first element of a struct needs to be the type
-                    Err(self.machine_st.error_form(
-                        self.machine_st.ffi_error(FfiError::ValueOutOfRange, head),
-                        stub_gen(),
-                    ))
+                    let err = self.machine_st.type_error(ValidType::Atom, head);
+                    Err(self.machine_st.error_form(err, stub_gen()))
                 }
             } else {
                 // empty list is an invalid struct repr
-                Err(self.machine_st.error_form(
-                    self.machine_st.ffi_error(FfiError::ValueOutOfRange, source),
-                    stub_gen(),
-                ))
+                let err = self
+                    .machine_st
+                    .domain_error(DomainErrorType::FfiStruct, source);
+                Err(self.machine_st.error_form(err, stub_gen()))
             }
         } else if self.machine_st.deref(source).is_var() {
             let err = self.machine_st.instantiation_error();
@@ -5075,10 +5079,10 @@ impl Machine {
 
             Err(self.machine_st.error_form(err, src))
         } else {
-            Err(self.machine_st.error_form(
-                self.machine_st.ffi_error(FfiError::InvalidArgument, source),
-                stub_gen(),
-            ))
+            let err = self
+                .machine_st
+                .domain_error(DomainErrorType::FfiArgument, source);
+            Err(self.machine_st.error_form(err, stub_gen()))
         }
     }
 
@@ -5090,10 +5094,10 @@ impl Machine {
 
         #[cfg(feature = "ffi")]
         {
-            let function_name_arg = self.deref_register(1);
+            let function_name_arg = self.machine_st.store(self.deref_register(1));
             let args_reg = self.deref_register(2);
             let return_value = self.deref_register(3);
-            if let Some(function_name) = self.machine_st.value_to_str_like(function_name_arg) {
+            if let Some(function_name) = function_name_arg.to_atom() {
                 match self.machine_st.try_from_list(args_reg, stub_gen) {
                     Ok(args) => {
                         let args = args
@@ -5102,25 +5106,25 @@ impl Machine {
                             .collect::<Result<Vec<_>, _>>()?;
 
                         match self.foreign_function_table.exec(
-                            &function_name.as_str(),
+                            function_name,
                             args,
                             &mut self.machine_st.arena,
                         ) {
-                            Ok(result) => {
-                                return self.unify_ffi_result(return_value, result);
-                            }
+                            Ok(result) => self.unify_ffi_result(return_value, result),
                             Err(e) => {
-                                let err = self.machine_st.ffi_error(e, function_name_arg);
-                                return Err(self.machine_st.error_form(err, stub_gen()));
+                                let err = self.machine_st.ffi_error(e);
+                                Err(self.machine_st.error_form(err, stub_gen()))
                             }
                         }
                     }
-                    Err(e) => return Err(e),
+                    Err(e) => Err(e),
                 }
+            } else {
+                let err = self
+                    .machine_st
+                    .type_error(ValidType::Atom, function_name_arg);
+                Err(self.machine_st.error_form(err, stub_gen()))
             }
-
-            self.machine_st.fail = true;
-            Ok(())
         }
 
         #[cfg(not(feature = "ffi"))]
@@ -5149,7 +5153,7 @@ impl Machine {
             },
             Value::Struct(name, args) => {
                 let struct_value =
-                    resource_error_call_result!(self.machine_st, self.build_struct(&name, args));
+                    resource_error_call_result!(self.machine_st, self.build_struct(name, args));
 
                 unify!(self.machine_st, return_value, struct_value);
             }
@@ -5166,8 +5170,8 @@ impl Machine {
     }
 
     #[cfg(feature = "ffi")]
-    fn build_struct(&mut self, name: &str, mut args: Vec<Value>) -> Result<HeapCellValue, usize> {
-        args.insert(0, Value::CString(CString::new(name).unwrap()));
+    fn build_struct(&mut self, name: Atom, mut args: Vec<Value>) -> Result<HeapCellValue, usize> {
+        args.insert(0, Value::CString(CString::new(&*name.as_str()).unwrap()));
 
         let cells: Vec<_> = args
             .into_iter()
@@ -5183,7 +5187,7 @@ impl Machine {
                         &self.machine_st.atom_tbl,
                         &cstr.into_string().unwrap()
                     )),
-                    Value::Struct(name, struct_args) => self.build_struct(&name, struct_args)?,
+                    Value::Struct(name, struct_args) => self.build_struct(name, struct_args)?,
                 })
             })
             .collect::<Result<_, usize>>()?;
@@ -5199,9 +5203,9 @@ impl Machine {
 
         #[cfg(feature = "ffi")]
         {
-            let struct_name_arg = self.deref_register(1);
+            let struct_name_arg = self.machine_st.store(self.deref_register(1));
             let fields_reg = self.deref_register(2);
-            if let Some(struct_name) = self.machine_st.value_to_str_like(struct_name_arg) {
+            if let Some(struct_name) = struct_name_arg.to_atom() {
                 let fields: Vec<Atom> = match self.machine_st.try_from_list(fields_reg, stub_gen) {
                     Ok(addrs) => {
                         let mut args = Vec::new();
@@ -5224,15 +5228,16 @@ impl Machine {
                     Err(e) => return Err(e),
                 };
                 self.foreign_function_table
-                    .define_struct(&struct_name.as_str(), fields)
+                    .define_struct(struct_name, fields)
                     .map_err(|err| {
-                        let ffi_error = self.machine_st.ffi_error(err, struct_name_arg);
+                        let ffi_error = self.machine_st.ffi_error(err);
                         self.machine_st.error_form(ffi_error, stub_gen())
                     })?;
-                return Ok(());
+                Ok(())
+            } else {
+                let err = self.machine_st.type_error(ValidType::Atom, struct_name_arg);
+                Err(self.machine_st.error_form(err, stub_gen()))
             }
-            self.machine_st.fail = true;
-            Ok(())
         }
 
         #[cfg(not(feature = "ffi"))]
@@ -5272,7 +5277,7 @@ impl Machine {
             ) {
                 Ok(value) => value,
                 Err(ffi_error) => {
-                    let machine_error = self.machine_st.ffi_error(ffi_error, ffi_type_arg);
+                    let machine_error = self.machine_st.ffi_error(ffi_error);
                     return Err(self.machine_st.error_form(machine_error, stub_gen()));
                 }
             };
@@ -5305,7 +5310,7 @@ impl Machine {
                 .foreign_function_table
                 .read_ptr(ffi_type, ptr, &mut self.machine_st.arena)
                 .map_err(|ffi_error| {
-                    let machine_error = self.machine_st.ffi_error(ffi_error, ffi_type_arg);
+                    let machine_error = self.machine_st.ffi_error(ffi_error);
                     self.machine_st.error_form(machine_error, stub_gen())
                 })?;
 
@@ -5346,7 +5351,7 @@ impl Machine {
             {
                 Ok(value) => value,
                 Err(ffi_error) => {
-                    let machine_error = self.machine_st.ffi_error(ffi_error, ffi_type_arg);
+                    let machine_error = self.machine_st.ffi_error(ffi_error);
                     return Err(self.machine_st.error_form(machine_error, stub_gen()));
                 }
             }
