@@ -232,7 +232,7 @@ impl ReadlineStream {
 
                 Ok(self.pending_input.get_ref().get_ref().len())
             }
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 
