@@ -2600,6 +2600,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn peek_byte(&mut self) -> CallResult {
+        let _guard = RawReadGuard::new();
         let stub_gen = || functor_stub(atom!("peek_byte"), 2);
 
         let mut stream = self.machine_st.get_stream_or_alias(
@@ -2690,6 +2691,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn peek_char(&mut self) -> CallResult {
+        let _guard = RawReadGuard::new();
         let stub_gen = || functor_stub(atom!("peek_char"), 2);
 
         let mut stream = self.machine_st.get_stream_or_alias(
@@ -2784,6 +2786,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn peek_code(&mut self) -> CallResult {
+        let _guard = RawReadGuard::new();
         let stub_gen = || functor_stub(atom!("peek_code"), 2);
 
         let mut stream = self.machine_st.get_stream_or_alias(
@@ -3437,6 +3440,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn get_byte(&mut self) -> CallResult {
+        let _guard = RawReadGuard::new();
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
             &self.indices,
@@ -3521,6 +3525,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn get_char(&mut self) -> CallResult {
+        let _guard = RawReadGuard::new();
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
             &self.indices,
@@ -3616,6 +3621,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn get_n_chars(&mut self) -> CallResult {
+        let _guard = RawReadGuard::new();
         let stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
             &self.indices,
@@ -3688,6 +3694,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn get_code(&mut self) -> CallResult {
+        let _guard = RawReadGuard::new();
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
             &self.indices,

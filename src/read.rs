@@ -107,6 +107,28 @@ fn get_prompt() -> &'static str {
     }
 }
 
+thread_local! {
+    static RAW_READ: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub struct RawReadGuard;
+
+impl RawReadGuard {
+    pub fn new() -> RawReadGuard {
+        if RAW_READ.get() {
+            panic!("Nested RawReadGuards");
+        }
+        RAW_READ.set(true);
+        RawReadGuard
+    }
+}
+
+impl Drop for RawReadGuard {
+    fn drop(&mut self) {
+        RAW_READ.set(false);
+    }
+}
+
 #[derive(Debug)]
 pub struct ReadlineStream {
     #[cfg(feature = "repl")]
@@ -172,7 +194,22 @@ impl ReadlineStream {
 
     #[cfg(feature = "repl")]
     fn call_readline(&mut self) -> std::io::Result<usize> {
-        match self.rl.readline(get_prompt()) {
+        let text = if RAW_READ.get() {
+            let mut buffer = String::new();
+            let stdin = std::io::stdin();
+            match stdin.read_line(&mut buffer) {
+                Ok(_) => Ok(buffer),
+                Err(e) => Err(e),
+            }
+        } else {
+            match self.rl.readline(get_prompt()) {
+                Ok(text) => Ok(text),
+                Err(ReadlineError::Eof) => Err(Error::from(ErrorKind::UnexpectedEof)),
+                Err(e) => Err(Error::new(ErrorKind::InvalidInput, e)),
+            }
+        };
+
+        match text {
             Ok(text) => {
                 self.pending_input.reset_buffer();
 
@@ -195,8 +232,7 @@ impl ReadlineStream {
 
                 Ok(self.pending_input.get_ref().get_ref().len())
             }
-            Err(ReadlineError::Eof) => Err(Error::from(ErrorKind::UnexpectedEof)),
-            Err(e) => Err(Error::new(ErrorKind::InvalidInput, e)),
+            Err(e) => Err(e),
         }
     }
 
