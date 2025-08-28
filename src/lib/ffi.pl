@@ -146,7 +146,6 @@ allocate(Allocator, Type, Args, Ptr) :-
 % For type cstr take read a nul-terminated utf-8 string starting at Ptr.
 %
 read_ptr(Type, Ptr, Value) :-
-    must_be(var, Value),
     must_be(atom, Type),
     must_be(integer, Ptr),
     '$ffi_read_ptr'(Type, Ptr, Value).
