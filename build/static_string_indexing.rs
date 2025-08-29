@@ -133,7 +133,12 @@ pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStrea
         let syntax = match syn::parse_file(&src) {
             Ok(s) => s,
             Err(e) => {
-                panic!("parse error: {e} in file {path:?}");
+                println!("cargo::warning=parse error: {e} in file {path:?}");
+                syn::File {
+                    shebang: None,
+                    attrs: vec![],
+                    items: vec![],
+                }
             }
         };
         Ok(syntax)

@@ -4959,170 +4959,226 @@ impl Machine {
         Ok(())
     }
 
-    #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn load_foreign_lib(&mut self) -> CallResult {
-        let library_name = self.deref_register(1);
-        let args_reg = self.deref_register(2);
-        if let Some(library_name) = self.machine_st.value_to_str_like(library_name) {
-            let stub_gen = || functor_stub(atom!("use_foreign_module"), 2);
-            match self.machine_st.try_from_list(args_reg, stub_gen) {
-                Ok(addrs) => {
-                    let mut functions = Vec::new();
-                    for heap_cell in addrs {
-                        read_heap_cell!(heap_cell,
-                            (HeapCellValueTag::Str, s) => {
-                                let name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
-                            let args: Vec<Atom> = match self.machine_st.try_from_list(self.machine_st.heap[s + 1], stub_gen) {
-                                Ok(addrs) => {
-                                let mut args = Vec::new();
-                                for heap_cell in addrs {
-                                    args.push(cell_as_atom_cell!(heap_cell).get_name());
-                                }
-                                args
-                                }
-                                Err(e) => return Err(e)
-                            };
-                            let return_value = cell_as_atom_cell!(self.machine_st.heap[s + 2]);
-                            functions.push(FunctionDefinition {
-                                name: name.as_str().to_string(),
-                                args,
-                                return_value: return_value.get_name(),
-                            });
-                            }
-                            _ => {
-                                unreachable!()
-                                }
-                        )
-                    }
-                    if self
-                        .foreign_function_table
-                        .load_library(&library_name.as_str(), &functions)
-                        .is_ok()
-                    {
-                        return Ok(());
-                    }
-                }
-                Err(e) => return Err(e),
-            };
+        fn stub_gen() -> MachineStub {
+            functor_stub(atom!("$load_foreign_lib"), 2)
         }
-        self.machine_st.fail = true;
-        Ok(())
+
+        #[cfg(feature = "ffi")]
+        {
+            let library_name = self.deref_register(1);
+            let args_reg = self.deref_register(2);
+            if let Some(library_name) = self.machine_st.value_to_str_like(library_name) {
+                match self.machine_st.try_from_list(args_reg, stub_gen) {
+                    Ok(addrs) => {
+                        let mut functions = Vec::new();
+                        for heap_cell in addrs {
+                            read_heap_cell!(heap_cell,
+                                (HeapCellValueTag::Str, s) => {
+                                    let name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
+                                let args: Vec<Atom> = match self.machine_st.try_from_list(self.machine_st.heap[s + 1], stub_gen) {
+                                    Ok(addrs) => {
+                                    let mut args = Vec::new();
+                                    for heap_cell in addrs {
+                                        args.push(cell_as_atom_cell!(heap_cell).get_name());
+                                    }
+                                    args
+                                    }
+                                    Err(e) => return Err(e)
+                                };
+                                let return_value = cell_as_atom_cell!(self.machine_st.heap[s + 2]);
+                                functions.push(FunctionDefinition {
+                                    name,
+                                    args,
+                                    return_value: return_value.get_name(),
+                                });
+                                }
+                                _ => {
+                                    let err = self.machine_st.unreachable_error();
+                                    return Err(self.machine_st.error_form(err, stub_gen()))
+                                }
+                            )
+                        }
+                        if self
+                            .foreign_function_table
+                            .load_library(&library_name.as_str(), &functions)
+                            .is_err()
+                        {
+                            self.machine_st.fail = true;
+                        }
+
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                }
+            } else {
+                let err = self
+                    .machine_st
+                    .type_error(ValidType::InCharacter, library_name);
+                Err(self.machine_st.error_form(err, stub_gen()))
+            }
+        }
+
+        #[cfg(not(feature = "ffi"))]
+        {
+            let err = self.machine_st.missing_feature_error(atom!("ffi"));
+            Err(self.machine_st.error_form(err, stub_gen()))
+        }
     }
 
     #[cfg(feature = "ffi")]
+    fn map_ffi_arg(
+        &mut self,
+        source: HeapCellValue,
+        stub_gen: impl Copy + Fn() -> MachineStub,
+    ) -> CallResult<Value> {
+        let source = self.machine_st.store(self.machine_st.deref(source));
+        if let Ok(number) = Number::try_from((source, &self.machine_st.arena.f64_tbl)) {
+            Ok(Value::Number(number))
+        } else if let Some(string) = self.machine_st.value_to_str_like(source) {
+            Ok(Value::CString(CString::new(&*string.as_str()).unwrap()))
+        } else if let Ok(args) = self.machine_st.try_from_list(source, stub_gen) {
+            // structs are lists represented as lists
+            // the head is a string with the struct type name
+            // the tail are the struct field values
+
+            let mut iter = args.into_iter();
+
+            if let Some(head) = iter.next() {
+                let head = self.machine_st.store(self.machine_st.deref(head));
+                if let Some(struct_name) = head.to_atom() {
+                    Ok(Value::Struct(
+                        struct_name,
+                        iter.map(|x| self.map_ffi_arg(x, stub_gen))
+                            .collect::<Result<_, _>>()?,
+                    ))
+                } else if head.is_var() {
+                    let err = self.machine_st.instantiation_error();
+
+                    let src = stub_gen();
+
+                    let culprit = functor!(atom!("-"), [atom_as_cell((atom!("var"))), cell(head)]);
+
+                    let src = functor!(atom!("."), [functor(culprit), list([functor(src)])]);
+
+                    Err(self.machine_st.error_form(err, src))
+                } else {
+                    // first element of a struct needs to be the type
+                    let err = self.machine_st.type_error(ValidType::Atom, head);
+                    Err(self.machine_st.error_form(err, stub_gen()))
+                }
+            } else {
+                // empty list is an invalid struct repr
+                let err = self
+                    .machine_st
+                    .domain_error(DomainErrorType::FfiStruct, source);
+                Err(self.machine_st.error_form(err, stub_gen()))
+            }
+        } else if self.machine_st.deref(source).is_var() {
+            let err = self.machine_st.instantiation_error();
+
+            let src = stub_gen();
+
+            let culprit = functor!(atom!("-"), [atom_as_cell((atom!("var"))), cell(source)]);
+
+            let src = functor!(atom!("."), [functor(culprit), list([functor(src)])]);
+
+            Err(self.machine_st.error_form(err, src))
+        } else {
+            let err = self
+                .machine_st
+                .domain_error(DomainErrorType::FfiArgument, source);
+            Err(self.machine_st.error_form(err, stub_gen()))
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn foreign_call(&mut self) -> CallResult {
         fn stub_gen() -> Vec<FunctorElement> {
-            functor_stub(atom!("foreign_call"), 3)
+            functor_stub(atom!("$foreign_call"), 3)
         }
 
-        fn map_arg(
-            machine_st: &mut MachineState,
-            source: HeapCellValue,
-        ) -> Result<crate::ffi::Value, FfiError> {
-            if let Ok(number) = Number::try_from((source, &machine_st.arena.f64_tbl)) {
-                Ok(Value::Number(number))
-            } else if let Some(string) = machine_st.value_to_str_like(source) {
-                Ok(Value::CString(CString::new(&*string.as_str()).unwrap()))
-            } else if let Ok(args) = machine_st.try_from_list(source, stub_gen) {
-                // structs are lists represented as lists
-                // the head is a string with the struct type name
-                // the tail are the struct field values
+        #[cfg(feature = "ffi")]
+        {
+            let function_name_arg = self.machine_st.store(self.deref_register(1));
+            let args_reg = self.deref_register(2);
+            let return_value = self.deref_register(3);
+            if let Some(function_name) = function_name_arg.to_atom() {
+                match self.machine_st.try_from_list(args_reg, stub_gen) {
+                    Ok(args) => {
+                        let args = args
+                            .into_iter()
+                            .map(|x| self.map_ffi_arg(x, stub_gen))
+                            .collect::<Result<Vec<_>, _>>()?;
 
-                let mut iter = args.into_iter();
-                if let Some(struct_name) = machine_st.value_to_str_like(iter.next().unwrap()) {
-                    Ok(Value::Struct(
-                        struct_name.as_str().to_string(),
-                        iter.map(|x| map_arg(machine_st, x))
-                            .collect::<Result<_, _>>()?,
-                    ))
-                } else {
-                    // empty list is an invalid struct repr
-                    Err(FfiError::InvalidStruct)
-                }
-            } else {
-                Err(FfiError::InvalidArgument)
-            }
-        }
-
-        let function_name = self.deref_register(1);
-        let args_reg = self.deref_register(2);
-        let return_value = self.deref_register(3);
-        if let Some(function_name) = self.machine_st.value_to_str_like(function_name) {
-            match self.machine_st.try_from_list(args_reg, stub_gen) {
-                Ok(args) => {
-                    let args = match args
-                        .into_iter()
-                        .map(|x| map_arg(&mut self.machine_st, x))
-                        .collect::<Result<Vec<_>, _>>()
-                    {
-                        Ok(args) => args,
-                        Err(err) => {
-                            let err = self.machine_st.ffi_error(err);
-                            return Err(self.machine_st.error_form(err, stub_gen()));
-                        }
-                    };
-
-                    match self.foreign_function_table.exec(
-                        &function_name.as_str(),
-                        args,
-                        &mut self.machine_st.arena,
-                    ) {
-                        Ok(result) => {
-                            match result {
-                                Value::Number(n) => match n {
-                                    Number::Float(OrderedFloat(n)) => {
-                                        let n = float_alloc!(n, self.machine_st.arena);
-                                        self.machine_st.unify_f64(n, return_value)
-                                    }
-                                    Number::Integer(typed_arena_ptr) => {
-                                        self.machine_st.unify_big_int(typed_arena_ptr, return_value)
-                                    }
-                                    Number::Rational(typed_arena_ptr) => {
-                                        self.machine_st
-                                            .unify_rational(typed_arena_ptr, return_value);
-                                    }
-                                    Number::Fixnum(fixnum) => {
-                                        self.machine_st.unify_fixnum(fixnum, return_value)
-                                    }
-                                },
-                                Value::Struct(name, args) => {
-                                    let struct_value = resource_error_call_result!(
-                                        self.machine_st,
-                                        self.build_struct(&name, args)
-                                    );
-
-                                    unify!(self.machine_st, return_value, struct_value);
-                                }
-                                Value::CString(cstr) => {
-                                    let str_cell = resource_error_call_result!(
-                                        self.machine_st,
-                                        self.machine_st.heap.allocate_cstr(cstr.to_str().unwrap())
-                                    );
-
-                                    unify!(self.machine_st, str_cell, return_value);
-                                }
+                        match self.foreign_function_table.exec(
+                            function_name,
+                            args,
+                            &mut self.machine_st.arena,
+                        ) {
+                            Ok(result) => self.unify_ffi_result(return_value, result),
+                            Err(e) => {
+                                let err = self.machine_st.ffi_error(e);
+                                Err(self.machine_st.error_form(err, stub_gen()))
                             }
-                            return Ok(());
-                        }
-                        Err(e) => {
-                            let err = self.machine_st.ffi_error(e);
-                            return Err(self.machine_st.error_form(err, stub_gen()));
                         }
                     }
+                    Err(e) => Err(e),
                 }
-                Err(e) => return Err(e),
+            } else {
+                let err = self
+                    .machine_st
+                    .type_error(ValidType::Atom, function_name_arg);
+                Err(self.machine_st.error_form(err, stub_gen()))
             }
         }
 
-        self.machine_st.fail = true;
+        #[cfg(not(feature = "ffi"))]
+        {
+            let err = self.machine_st.missing_feature_error(atom!("ffi"));
+            Err(self.machine_st.error_form(err, stub_gen()))
+        }
+    }
+
+    #[cfg(feature = "ffi")]
+    fn unify_ffi_result(&mut self, return_value: HeapCellValue, result: Value) -> CallResult {
+        match result {
+            Value::Number(n) => match n {
+                Number::Float(OrderedFloat(n)) => {
+                    let n = float_alloc!(n, self.machine_st.arena);
+                    self.machine_st.unify_f64(n, return_value)
+                }
+                Number::Integer(typed_arena_ptr) => {
+                    self.machine_st.unify_big_int(typed_arena_ptr, return_value)
+                }
+                Number::Rational(typed_arena_ptr) => {
+                    self.machine_st
+                        .unify_rational(typed_arena_ptr, return_value);
+                }
+                Number::Fixnum(fixnum) => self.machine_st.unify_fixnum(fixnum, return_value),
+            },
+            Value::Struct(name, args) => {
+                let struct_value =
+                    resource_error_call_result!(self.machine_st, self.build_struct(name, args));
+
+                unify!(self.machine_st, return_value, struct_value);
+            }
+            Value::CString(cstr) => {
+                let str_cell = resource_error_call_result!(
+                    self.machine_st,
+                    self.machine_st.heap.allocate_cstr(cstr.to_str().unwrap())
+                );
+
+                unify!(self.machine_st, str_cell, return_value);
+            }
+        }
         Ok(())
     }
 
     #[cfg(feature = "ffi")]
-    fn build_struct(&mut self, name: &str, mut args: Vec<Value>) -> Result<HeapCellValue, usize> {
-        args.insert(0, Value::CString(CString::new(name).unwrap()));
+    fn build_struct(&mut self, name: Atom, mut args: Vec<Value>) -> Result<HeapCellValue, usize> {
+        args.insert(0, Value::CString(CString::new(&*name.as_str()).unwrap()));
 
         let cells: Vec<_> = args
             .into_iter()
@@ -5138,7 +5194,7 @@ impl Machine {
                         &self.machine_st.atom_tbl,
                         &cstr.into_string().unwrap()
                     )),
-                    Value::Struct(name, struct_args) => self.build_struct(&name, struct_args)?,
+                    Value::Struct(name, struct_args) => self.build_struct(name, struct_args)?,
                 })
             })
             .collect::<Result<_, usize>>()?;
@@ -5146,33 +5202,174 @@ impl Machine {
         sized_iter_to_heap_list(&mut self.machine_st.heap, cells.len(), cells.into_iter())
     }
 
-    #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn define_foreign_struct(&mut self) -> CallResult {
-        let struct_name = self.deref_register(1);
-        let fields_reg = self.deref_register(2);
-        if let Some(struct_name) = self.machine_st.value_to_str_like(struct_name) {
-            let stub_gen = || functor_stub(atom!("define_foreign_struct"), 2);
-            let fields: Vec<Atom> = match self.machine_st.try_from_list(fields_reg, stub_gen) {
-                Ok(addrs) => {
-                    let mut args = Vec::new();
-                    for heap_cell in addrs {
-                        args.push(cell_as_atom_cell!(heap_cell).get_name());
-                    }
-                    args
-                }
-                Err(e) => return Err(e),
-            };
-            self.foreign_function_table
-                .define_struct(&struct_name.as_str(), fields)
-                .map_err(|err| {
-                    let ffi_error = self.machine_st.ffi_error(err);
-                    self.machine_st.error_form(ffi_error, stub_gen())
-                })?;
-            return Ok(());
+        fn stub_gen() -> MachineStub {
+            functor_stub(atom!("$define_foreign_struct"), 2)
         }
-        self.machine_st.fail = true;
-        Ok(())
+
+        #[cfg(feature = "ffi")]
+        {
+            let struct_name_arg = self.machine_st.store(self.deref_register(1));
+            let fields_reg = self.deref_register(2);
+            if let Some(struct_name) = struct_name_arg.to_atom() {
+                let fields: Vec<Atom> = match self.machine_st.try_from_list(fields_reg, stub_gen) {
+                    Ok(addrs) => {
+                        let mut args = Vec::new();
+                        for heap_cell in addrs {
+                            let arg_cell = self.machine_st.store(self.machine_st.deref(heap_cell));
+                            let Some(arg) = arg_cell.to_atom() else {
+                                let err = if arg_cell.is_var() {
+                                    self.machine_st.instantiation_error()
+                                } else {
+                                    self.machine_st.type_error(ValidType::Atom, heap_cell)
+                                };
+
+                                return Err(self.machine_st.error_form(err, stub_gen()));
+                            };
+
+                            args.push(arg);
+                        }
+                        args
+                    }
+                    Err(e) => return Err(e),
+                };
+                self.foreign_function_table
+                    .define_struct(struct_name, fields)
+                    .map_err(|err| {
+                        let ffi_error = self.machine_st.ffi_error(err);
+                        self.machine_st.error_form(ffi_error, stub_gen())
+                    })?;
+                Ok(())
+            } else {
+                let err = self.machine_st.type_error(ValidType::Atom, struct_name_arg);
+                Err(self.machine_st.error_form(err, stub_gen()))
+            }
+        }
+
+        #[cfg(not(feature = "ffi"))]
+        {
+            let err = self.machine_st.missing_feature_error(atom!("ffi"));
+            Err(self.machine_st.error_form(err, stub_gen()))
+        }
+    }
+
+    pub(crate) fn ffi_allocate(&mut self) -> CallResult {
+        fn stub_gen() -> MachineStub {
+            functor_stub(atom!("$ffi_allocate"), 4)
+        }
+
+        #[cfg(feature = "ffi")]
+        {
+            let allocator = self.deref_register(1);
+            let ffi_type_arg = self.deref_register(2);
+            let ffi_type = ffi_type_arg.to_atom().unwrap();
+            let args = self.deref_register(3);
+            let return_value = self.deref_register(4);
+
+            let allocator = FfiAllocator::try_from(allocator.to_atom().unwrap()).map_err(|_| {
+                let machine_error = self
+                    .machine_st
+                    .domain_error(DomainErrorType::Allocator, allocator);
+                self.machine_st.error_form(machine_error, stub_gen())
+            })?;
+
+            let args = self.map_ffi_arg(args, stub_gen)?;
+
+            let value = match self.foreign_function_table.allocate(
+                allocator,
+                ffi_type,
+                args,
+                &mut self.machine_st.arena,
+            ) {
+                Ok(value) => value,
+                Err(ffi_error) => {
+                    let machine_error = self.machine_st.ffi_error(ffi_error);
+                    return Err(self.machine_st.error_form(machine_error, stub_gen()));
+                }
+            };
+
+            self.unify_ffi_result(return_value, value)
+        }
+
+        #[cfg(not(feature = "ffi"))]
+        {
+            let err = self.machine_st.missing_feature_error(atom!("ffi"));
+            Err(self.machine_st.error_form(err, stub_gen()))
+        }
+    }
+
+    pub(crate) fn ffi_read_ptr(&mut self) -> CallResult {
+        fn stub_gen() -> MachineStub {
+            functor_stub(atom!("$ffi_read_ptr"), 3)
+        }
+
+        #[cfg(feature = "ffi")]
+        {
+            let ffi_type_arg = self.deref_register(1);
+            let ffi_type = ffi_type_arg.to_atom().unwrap();
+            let ptr = self.deref_register(2);
+            let return_value = self.deref_register(3);
+
+            let ptr = self.map_ffi_arg(ptr, stub_gen)?;
+
+            let value = self
+                .foreign_function_table
+                .read_ptr(ffi_type, ptr, &mut self.machine_st.arena)
+                .map_err(|ffi_error| {
+                    let machine_error = self.machine_st.ffi_error(ffi_error);
+                    self.machine_st.error_form(machine_error, stub_gen())
+                })?;
+
+            self.unify_ffi_result(return_value, value)
+        }
+
+        #[cfg(not(feature = "ffi"))]
+        {
+            let err = self.machine_st.missing_feature_error(atom!("ffi"));
+            Err(self.machine_st.error_form(err, stub_gen()))
+        }
+    }
+
+    pub(crate) fn ffi_deallocate(&mut self) -> CallResult {
+        fn stub_gen() -> MachineStub {
+            functor_stub(atom!("$ffi_deallocate"), 3)
+        }
+
+        #[cfg(feature = "ffi")]
+        {
+            let allocator = self.deref_register(1);
+            let ffi_type_arg = self.deref_register(2);
+            let ffi_type = ffi_type_arg.to_atom().unwrap();
+            let ptr = self.deref_register(3);
+
+            let allocator = FfiAllocator::try_from(allocator.to_atom().unwrap()).map_err(|_| {
+                let machine_error = self
+                    .machine_st
+                    .domain_error(DomainErrorType::Allocator, allocator);
+                self.machine_st.error_form(machine_error, stub_gen())
+            })?;
+
+            let ptr = self.map_ffi_arg(ptr, stub_gen)?;
+
+            match self
+                .foreign_function_table
+                .deallocate(allocator, ffi_type, ptr)
+            {
+                Ok(value) => value,
+                Err(ffi_error) => {
+                    let machine_error = self.machine_st.ffi_error(ffi_error);
+                    return Err(self.machine_st.error_form(machine_error, stub_gen()));
+                }
+            }
+            Ok(())
+        }
+
+        #[cfg(not(feature = "ffi"))]
+        {
+            let err = self.machine_st.missing_feature_error(atom!("ffi"));
+            Err(self.machine_st.error_form(err, stub_gen()))
+        }
     }
 
     #[cfg(not(target_arch = "wasm32"))]

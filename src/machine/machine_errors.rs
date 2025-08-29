@@ -3,7 +3,7 @@ use crate::atom_table::*;
 use crate::parser::ast::*;
 
 #[cfg(feature = "ffi")]
-use crate::ffi::FfiError;
+use crate::ffi::{self, FfiError};
 use crate::forms::*;
 use crate::functor_macro::*;
 use crate::machine::heap::*;
@@ -275,6 +275,30 @@ impl DomainError for MachineStub {
     }
 }
 
+#[cfg(feature = "ffi")]
+impl DomainError for ffi::Value {
+    fn domain_error(self, machine_st: &mut MachineState, error: DomainErrorType) -> MachineError {
+        use ffi::Value;
+
+        match self {
+            Value::Number(number) => number.domain_error(machine_st, error),
+            Value::CString(cstring) => {
+                let str = cstring.to_string_lossy().into_owned();
+                let stub = functor!(
+                    atom!("domain_error"),
+                    [atom_as_cell((error.as_atom())), string(str)]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                }
+            }
+            Value::Struct(atom, _values) => atom_as_cell!(atom).domain_error(machine_st, error),
+        }
+    }
+}
+
 #[inline(always)]
 pub(super) fn functor_stub(name: Atom, arity: usize) -> MachineStub {
     functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)])
@@ -416,6 +440,28 @@ impl MachineState {
                 let stub = functor!(
                     atom!("existence_error"),
                     [atom_as_cell((atom!("process"))), cell(culprit)]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                }
+            }
+            ExistenceError::FfiFunction(atom) => {
+                let stub = functor!(
+                    atom!("existence_error"),
+                    [atom_as_cell((atom!("ffi_function"))), atom_as_cell(atom)]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                }
+            }
+            ExistenceError::FfiStructType(atom) => {
+                let stub = functor!(
+                    atom!("existence_error"),
+                    [atom_as_cell((atom!("ffi_struct_type"))), atom_as_cell(atom)]
                 );
 
                 MachineError {
@@ -603,6 +649,21 @@ impl MachineState {
         }
     }
 
+    #[allow(dead_code)] // not used when all features are enabled
+    pub(super) fn missing_feature_error(&self, feature: Atom) -> MachineError {
+        let stub = functor!(
+            atom!("representation_error"),
+            [functor(
+                (functor!(atom!("feature"), [atom_as_cell((feature))]))
+            )]
+        );
+
+        MachineError {
+            stub,
+            location: None,
+        }
+    }
+
     pub(super) fn unreachable_error(&self) -> MachineError {
         let stub = functor!(atom!("system_error"));
 
@@ -613,26 +674,46 @@ impl MachineState {
     }
 
     #[cfg(feature = "ffi")]
-    pub(super) fn ffi_error(&self, err: FfiError) -> MachineError {
-        let error_atom = match err {
-            FfiError::ValueCast => atom!("value_cast"),
-            FfiError::ValueOutOfRange => atom!("value_out_of_range"),
-            FfiError::InvalidFfiType => atom!("invalid_ffi_type"),
-            FfiError::InvalidArgumentType => atom!("invalid_argument_type"),
-            FfiError::InvalidArgument => atom!("invalid_argument"),
-            FfiError::InvalidStruct => atom!("invalid_struct"),
-            FfiError::FunctionNotFound => atom!("function_not_found"),
-            FfiError::StructNotFound => atom!("struct_not_found"),
-            FfiError::ArgCountMismatch => atom!("mismatched_argument_count"),
-            FfiError::AllocationFailed => atom!("allocation_failed"),
-            FfiError::LayoutError => atom!("layout_error"),
-            FfiError::UnsupportedAbi => atom!("unsupported_abi"),
-        };
-        let stub = functor!(atom!("ffi_error"), [atom_as_cell(error_atom)]);
+    pub(super) fn ffi_error(&mut self, err: FfiError) -> MachineError {
+        match err {
+            FfiError::ValueCast(expected, actual) => {
+                let stub = functor!(
+                    atom!("domain_error"),
+                    [atom_as_cell(expected), atom_as_cell(actual)]
+                );
 
-        MachineError {
-            stub,
-            location: None,
+                MachineError {
+                    stub,
+                    location: None,
+                }
+            }
+            FfiError::ValueOutOfRange(domain, culprit) => self.domain_error(domain, culprit),
+            FfiError::FunctionNotFound(name) => {
+                self.existence_error(ExistenceError::FfiFunction(name))
+            }
+            FfiError::StructNotFound(name) => {
+                self.existence_error(ExistenceError::FfiStructType(name))
+            }
+            FfiError::ArgCountMismatch => self.unreachable_error(),
+            FfiError::AllocationFailed => MachineError {
+                stub: functor!(atom!("resource_error"), [atom_as_cell((atom!("heap")))]),
+                location: None,
+            },
+            FfiError::LayoutError => self.representation_error(RepFlag::FfiLayout),
+            FfiError::UnsupportedTypedef => self.representation_error(RepFlag::FfiLayout),
+            FfiError::UnsupportedAbi => self.representation_error(RepFlag::FfiAbi),
+            FfiError::VoidArgumentType => self.domain_error(
+                DomainErrorType::FfiArgumentType,
+                atom_as_cell!(atom!("void")),
+            ),
+            FfiError::CStrFieldType => self.domain_error(
+                DomainErrorType::NonCStrFfiArgumentType,
+                atom_as_cell!(atom!("cstr")),
+            ),
+            FfiError::NullPtr => self.domain_error(
+                DomainErrorType::NonNullPtr,
+                fixnum_as_cell!(Fixnum::build_with(0)),
+            ),
         }
     }
 
@@ -813,6 +894,16 @@ pub(crate) enum DomainErrorType {
     OperatorSpecifier,
     OperatorPriority,
     Directive,
+    Allocator,
+    FfiStruct,
+    ZeroOrOne,
+    NonNullPtr,
+    PtrLike,
+    F64,
+    FfiArgument,
+    FfiArgumentType,
+    FixedSizedInt,
+    NonCStrFfiArgumentType,
 }
 
 impl DomainErrorType {
@@ -827,6 +918,16 @@ impl DomainErrorType {
             DomainErrorType::OperatorSpecifier => atom!("operator_specifier"),
             DomainErrorType::OperatorPriority => atom!("operator_priority"),
             DomainErrorType::Directive => atom!("directive"),
+            DomainErrorType::Allocator => atom!("allocator"),
+            DomainErrorType::ZeroOrOne => atom!("zero_or_one"),
+            DomainErrorType::FfiStruct => atom!("ffi_struct"),
+            DomainErrorType::NonNullPtr => atom!("non_null_pointer"),
+            DomainErrorType::PtrLike => atom!("pointer_like"),
+            DomainErrorType::F64 => atom!("f64"),
+            DomainErrorType::FfiArgument => atom!("ffi_argument"),
+            DomainErrorType::FfiArgumentType => atom!("ffi_argument_type"),
+            DomainErrorType::FixedSizedInt => atom!("fixed_sized_int"),
+            DomainErrorType::NonCStrFfiArgumentType => atom!("non_cstr_ffi_argument_type"),
         }
     }
 }
@@ -841,6 +942,8 @@ pub(crate) enum RepFlag {
     //    MaxInteger,
     //    MinInteger,
     Term,
+    FfiLayout,
+    FfiAbi,
 }
 
 impl RepFlag {
@@ -852,7 +955,9 @@ impl RepFlag {
             RepFlag::MaxArity => atom!("max_arity"),
             RepFlag::Term => atom!("term"),
             //            RepFlag::MaxInteger => atom!("max_integer"),
-            //            RepFlag::MinInteger => atom!("min_integer")
+            //            RepFlag::MinInteger => atom!("min_integer"),
+            RepFlag::FfiLayout => atom!("ffi_layout"),
+            RepFlag::FfiAbi => atom!("ffi_abi"),
         }
     }
 }
@@ -1032,6 +1137,8 @@ pub enum ExistenceError {
     SourceSink(HeapCellValue),
     Stream(HeapCellValue),
     Process(HeapCellValue),
+    FfiFunction(Atom),
+    FfiStructType(Atom),
 }
 
 #[derive(Debug)]

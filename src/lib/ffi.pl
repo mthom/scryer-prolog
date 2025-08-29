@@ -1,4 +1,4 @@
-:- module(ffi, [use_foreign_module/2, foreign_struct/2]).
+:- module(ffi, [use_foreign_module/2, foreign_struct/2, with_locals/2, allocate/4, deallocate/3, read_ptr/3, array_type/3]).
 
 /** Foreign Function Interface
 
@@ -52,6 +52,9 @@ And a new window should pop up!
 
 :- use_module(library(lists)).
 :- use_module(library(error)).
+:- use_module(library(format)).
+:- use_module(library(dcgs)).
+:- use_module(library(iso_ext)).
 
 %% foreign_struct(+Name, +Elements).
 %
@@ -69,6 +72,21 @@ And a new window should pop up!
 foreign_struct(Name, Elements) :-
     '$define_foreign_struct'(Name, Elements).
 
+
+%% use_foreign_module(+LibName, +Predicates)
+%
+% - LibName the path to the shared library to load/bind
+% - Predicates list of function definitions
+%
+%   Each function definition is a functor of arity 2.
+%   The functor name is the name of the function to bind,
+%   the first argument is the list of arguments of the function,
+%   the second argument is the return type of the function.
+%
+%   This will define a predicate in the ffi module with the defined name,
+%   for void and bool return type functions the arity will match the length of the arguments list,
+%   for other return types there will be an additional out parameter.
+%
 use_foreign_module(LibName, Predicates) :-
     '$load_foreign_lib'(LibName, Predicates),
     maplist(assert_predicate, Predicates).
@@ -108,3 +126,93 @@ assert_predicate(PredicateDefinition) :-
     ),
     Predicate = (Head:-Body),
     assertz(ffi:Predicate).
+
+%% allocate(+Allocator, +Type, +Args, -Ptr)
+%
+% Using the Allocator allocate Type initialized with Args and 
+% unify Ptr with a pointer to that allocation.
+%
+allocate(Allocator, Type, Args, Ptr) :-
+    must_be(var, Ptr),
+    must_be(atom, Type),
+    must_be(atom, Allocator),
+    '$ffi_allocate'(Allocator, Type, Args, Ptr).
+
+
+%% read_ptr(+Type, +Ptr, -Value)
+%
+% Read a value of Type from the pointer Ptr and unify the read value with Value
+%
+% For type cstr take read a nul-terminated utf-8 string starting at Ptr.
+%
+read_ptr(Type, Ptr, Value) :-
+    must_be(atom, Type),
+    must_be(integer, Ptr),
+    '$ffi_read_ptr'(Type, Ptr, Value).
+
+%% deallocate(+Allocator, +Type, +Ptr)
+%
+% Deallocate the allocation at Ptr of Type allocated with Allocator
+%
+deallocate(Allocator, Type, Ptr) :-
+    must_be(atom, Allocator),
+    must_be(integer, Ptr),
+    '$ffi_deallocate'(Allocator, Type, Ptr).
+
+:- dynamic(is_array_type_defined/1).
+
+%% array_type(+ElemType, +Len, -ArrayType)
+%
+% unify the ffi type for an array of lenth Len with element type ElemType with ArrayType
+%
+array_type(ElemType, Len, ArrayType) :-
+    (Len =< 0 -> domain_error(greater_than_zero, Len, array_type/3); true),
+    phrase(format_("$[~a;~d]", [ElemType, Len]), ArrayTypeName),
+    atom_chars(ArrayType, ArrayTypeName),
+    (is_array_type_defined(ArrayType) -> true
+    ;   length(Fields, Len),
+        maplist(=(ElemType), Fields),
+        foreign_struct(ArrayType, Fields),
+        assertz(is_array_type_defined(ArrayType))
+    ).
+
+:- meta_predicate(with_locals(?, 0)).
+
+%% with_locals(+Locals, :Goal)
+%
+%  Allocate the Locals, evaluate the Goal and deallocate the Locals.
+%  The Locals will also be cleandup when Goal fails or throws an error.
+%
+%  Locals is a list of local variable definitions let(-Ptr, +Type, +Args).
+%  Ptr will be unified with the pointer to the local of Type initialized with Args.
+%
+with_locals(Locals, Goal) :-
+    verify_locals(Locals),
+    setup_call_cleanup(
+        allocate_locals(Locals),
+        Goal,
+        deallocate_locals(Locals)
+    ).
+
+verify_locals(Locals) :-
+    must_be(list, Locals),
+    ( maplist(verify_local, Locals) -> true
+    ; domain_error(locals_decl_list, Locals, [verify_locals/1])
+    ).
+
+verify_local(let(Var, Type, Init)) :-
+    must_be(var, Var),
+    must_be(atom, Type),
+    ground(Init).
+
+allocate_locals([]).
+allocate_locals([let(Var, Type, Init) | Ls]) :-
+    allocate(rust, Type, Init , Var),
+    (catch(allocate_locals(Ls), E, (deallocate_locals([let(Var, Type, Init)]), throw(E))) -> true
+    ; deallocate_locals([let(Var, Type, Init)]), false
+    ).
+
+deallocate_locals([]).
+deallocate_locals([let(Var, Type, _) | Ls]) :-
+    deallocate(rust, Type, Var),
+    deallocate_locals(Ls).

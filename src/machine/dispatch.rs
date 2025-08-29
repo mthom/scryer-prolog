@@ -4302,33 +4302,51 @@ impl Machine {
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallLoadForeignLib => {
-                        #[cfg(feature = "ffi")]
                         try_or_throw!(self.machine_st, self.load_foreign_lib());
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
                     &Instruction::ExecuteLoadForeignLib => {
-                        #[cfg(feature = "ffi")]
                         try_or_throw!(self.machine_st, self.load_foreign_lib());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallForeignCall => {
-                        #[cfg(feature = "ffi")]
                         try_or_throw!(self.machine_st, self.foreign_call());
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
                     &Instruction::ExecuteForeignCall => {
-                        #[cfg(feature = "ffi")]
                         try_or_throw!(self.machine_st, self.foreign_call());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallDefineForeignStruct => {
-                        #[cfg(feature = "ffi")]
                         try_or_throw!(self.machine_st, self.define_foreign_struct());
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
                     &Instruction::ExecuteDefineForeignStruct => {
-                        #[cfg(feature = "ffi")]
                         try_or_throw!(self.machine_st, self.define_foreign_struct());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
+                    &Instruction::CallFfiAllocate => {
+                        try_or_throw!(self.machine_st, self.ffi_allocate());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteFfiAllocate => {
+                        try_or_throw!(self.machine_st, self.ffi_allocate());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
+                    &Instruction::CallFfiReadPtr => {
+                        try_or_throw!(self.machine_st, self.ffi_read_ptr());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteFfiReadPtr => {
+                        try_or_throw!(self.machine_st, self.ffi_read_ptr());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
+                    &Instruction::CallFfiDeallocate => {
+                        try_or_throw!(self.machine_st, self.ffi_deallocate());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteFfiDeallocate => {
+                        try_or_throw!(self.machine_st, self.ffi_deallocate());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallJsEval => {

@@ -1,7 +1,6 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
-use crate::functor_macro::*;
 use crate::heap_iter::*;
 use crate::heap_print::*;
 use crate::machine::attributed_variables::*;
@@ -184,7 +183,7 @@ impl IndexMut<RegType> for MachineState {
     }
 }
 
-pub type CallResult = Result<(), Vec<FunctorElement>>;
+pub type CallResult<Ok = ()> = Result<Ok, MachineStub>;
 
 // size may be an upper bound.
 // true_size is calculated to compute the exact offset.
