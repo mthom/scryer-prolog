@@ -394,6 +394,10 @@ impl F64Table {
                 offset
             }
             F64Table::Concurrent(concurrent_tbl) => {
+                // FIXME: there is a race condition here when called on two Eq value's
+                // which breaks the invariant indirection_tbl is meant to enforce.
+                // Since this branch is never invoked, it does no harm, but that
+                // that will eventually change.
                 {
                     let indirection_tbl = concurrent_tbl.indirection_tbl.lock();
 
