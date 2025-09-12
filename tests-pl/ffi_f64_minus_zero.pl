@@ -12,7 +12,7 @@ test :-
     ffi:'signum'(A, SA),
     ffi:'signum'(B, SB),
     write((SA, SB)),
-    -1.0 is SA, % incorrect, based on https://www.swi-prolog.org/pldoc/man?function=max/2 -0.0 is less than 0.0 so A and B should be 0.0 for which signum should be 1
+    1.0 is SA,
     1.0 is SB.
 
 :- initialization(test).

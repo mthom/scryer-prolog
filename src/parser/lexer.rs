@@ -55,27 +55,9 @@ impl Token {
 }
 
 #[derive(Debug)]
-enum Number {
-    BigInt(TypedArenaPtr<Integer>),
-    Fixnum(Fixnum),
-    Float(F64Offset),
-}
-
-impl Number {
-    #[inline]
-    #[allow(clippy::wrong_self_convention)]
-    fn to_literal(self) -> Literal {
-        match self {
-            Number::BigInt(ibig) => Literal::Integer(ibig),
-            Number::Fixnum(fixnum) => Literal::Fixnum(fixnum),
-            Number::Float(f) => Literal::F64Offset(f),
-        }
-    }
-}
-
-#[derive(Debug)]
 enum NumberToken {
-    Number(Number),
+    Integer(GInteger),
+    Float(F64Offset, OrderedFloat<f64>),
     Partial(String),
 }
 
@@ -84,7 +66,9 @@ impl NumberToken {
     #[allow(clippy::wrong_self_convention)]
     fn to_token(self) -> Option<Token> {
         match self {
-            NumberToken::Number(number) => Some(Token::Literal(number.to_literal())),
+            NumberToken::Float(offset, fl) => Some(Token::Literal(Literal::F64(offset, fl))),
+            NumberToken::Integer(GInteger::BigInt(n)) => Some(Token::Literal(Literal::Integer(n))),
+            NumberToken::Integer(GInteger::Fixnum(n)) => Some(Token::Literal(Literal::Fixnum(n))),
             NumberToken::Partial(_) => None,
         }
     }
@@ -103,6 +87,22 @@ macro_rules! try_nt {
             }
         }
     }};
+}
+
+#[derive(Debug)]
+enum GInteger {
+    BigInt(TypedArenaPtr<Integer>),
+    Fixnum(Fixnum),
+}
+
+impl GInteger {
+    #[inline]
+    fn to_literal(self) -> Literal {
+        match self {
+            GInteger::BigInt(integer) => Literal::Integer(integer),
+            GInteger::Fixnum(fixnum) => Literal::Fixnum(fixnum),
+        }
+    }
 }
 
 pub(crate) struct Lexer<'a, R> {
@@ -523,7 +523,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             }
 
             self.parse_integer_by_radix(&token, 16)
-                .map(NumberToken::Number)
+                .map(NumberToken::Integer)
         } else {
             self.return_char(start);
             Err(ParserError::ParseBigInt(self.line_num, self.col_num))
@@ -554,7 +554,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             }
 
             self.parse_integer_by_radix(&token, 8)
-                .map(NumberToken::Number)
+                .map(NumberToken::Integer)
         } else {
             self.return_char(start);
             Err(ParserError::ParseBigInt(self.line_num, self.col_num))
@@ -585,7 +585,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             }
 
             self.parse_integer_by_radix(&token, 2)
-                .map(NumberToken::Number)
+                .map(NumberToken::Integer)
         } else {
             self.return_char(start);
             Err(ParserError::ParseBigInt(self.line_num, self.col_num))
@@ -680,10 +680,16 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         }
     }
 
-    fn vacate_with_float(&mut self, mut token: String) -> Result<Number, ParserError> {
+    fn vacate_with_float(
+        &mut self,
+        mut token: String,
+    ) -> Result<(F64Offset, OrderedFloat<f64>), ParserError> {
         self.return_char(token.pop().unwrap());
+
         let n = parse_float_lossy(&token)?;
-        Ok(Number::Float(float_alloc!(n, self.machine_st.arena)))
+        let offset = float_alloc!(n, self.machine_st.arena);
+
+        Ok((offset, OrderedFloat(n)))
     }
 
     fn skip_underscore_in_number(&mut self) -> Result<char, ParserError> {
@@ -704,24 +710,24 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         }
     }
 
-    fn parse_integer_by_radix(&mut self, token: &str, radix: u32) -> Result<Number, ParserError> {
+    fn parse_integer_by_radix(&mut self, token: &str, radix: u32) -> Result<GInteger, ParserError> {
         i64::from_str_radix(token, radix)
             .map(|n| {
                 Fixnum::build_with_checked(n)
-                    .map(Number::Fixnum)
+                    .map(GInteger::Fixnum)
                     .unwrap_or_else(|_| {
-                        Number::BigInt(arena_alloc!(Integer::from(n), &mut self.machine_st.arena))
+                        GInteger::BigInt(arena_alloc!(Integer::from(n), &mut self.machine_st.arena))
                     })
             })
             .or_else(|_| {
                 Integer::from_str_radix(token, radix)
-                    .map(|n| Number::BigInt(arena_alloc!(n, &mut self.machine_st.arena)))
+                    .map(|n| GInteger::BigInt(arena_alloc!(n, &mut self.machine_st.arena)))
                     .map_err(|_| ParserError::ParseBigInt(self.line_num, self.col_num))
             })
     }
 
     #[inline]
-    fn parse_integer(&mut self, token: &str) -> Result<Number, ParserError> {
+    fn parse_integer(&mut self, token: &str) -> Result<GInteger, ParserError> {
         self.parse_integer_by_radix(token, 10)
     }
 
@@ -743,7 +749,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
             if self.reader.peek_char().is_none() {
                 self.return_char('.');
-                self.parse_integer(&token).map(NumberToken::Number)
+                self.parse_integer(&token).map(NumberToken::Integer)
             } else if decimal_digit_char!(self.lookahead_char()?) {
                 token.push('.');
                 token.push(self.read_char()?);
@@ -761,12 +767,18 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                     token.push(c);
 
                     let c = match self.lookahead_char() {
-                        Err(_) => return self.vacate_with_float(token).map(NumberToken::Number),
+                        Err(_) => {
+                            return self
+                                .vacate_with_float(token)
+                                .map(|(offset, fl)| NumberToken::Float(offset, fl))
+                        }
                         Ok(c) => c,
                     };
 
                     if !sign_char!(c) && !decimal_digit_char!(c) {
-                        return self.vacate_with_float(token).map(NumberToken::Number);
+                        return self
+                            .vacate_with_float(token)
+                            .map(|(offset, fl)| NumberToken::Float(offset, fl));
                     }
 
                     if sign_char!(c) {
@@ -776,14 +788,18 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         let c = match self.lookahead_char() {
                             Err(_) => {
                                 self.return_char(token.pop().unwrap());
-                                return self.vacate_with_float(token).map(NumberToken::Number);
+                                return self
+                                    .vacate_with_float(token)
+                                    .map(|(offset, fl)| NumberToken::Float(offset, fl));
                             }
                             Ok(c) => c,
                         };
 
                         if !decimal_digit_char!(c) {
                             self.return_char(token.pop().unwrap());
-                            return self.vacate_with_float(token).map(NumberToken::Number);
+                            return self
+                                .vacate_with_float(token)
+                                .map(|(offset, fl)| NumberToken::Float(offset, fl));
                         }
                     }
 
@@ -805,30 +821,27 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         }
 
                         let n = parse_float_lossy(&token)?;
+                        let offset = float_alloc!(n, self.machine_st.arena);
 
-                        Ok(NumberToken::Number(Number::Float(float_alloc!(
-                            n,
-                            self.machine_st.arena
-                        ))))
+                        Ok(NumberToken::Float(offset, OrderedFloat(n)))
                     } else {
-                        return self.vacate_with_float(token).map(NumberToken::Number);
+                        self.vacate_with_float(token)
+                            .map(|(offset, fl)| NumberToken::Float(offset, fl))
                     }
                 } else {
                     let n = parse_float_lossy(&token)?;
-                    Ok(NumberToken::Number(Number::Float(float_alloc!(
-                        n,
-                        self.machine_st.arena
-                    ))))
+                    let offset = float_alloc!(n, self.machine_st.arena);
+                    Ok(NumberToken::Float(offset, OrderedFloat(n)))
                 }
             } else {
                 self.return_char('.');
-                self.parse_integer(&token).map(NumberToken::Number)
+                self.parse_integer(&token).map(NumberToken::Integer)
             }
         } else if token.starts_with('0') && token.len() == 1 {
             if c == 'x' {
                 self.hexadecimal_constant(c).or_else(|e| {
                     if let ParserError::ParseBigInt(..) = e {
-                        self.parse_integer(&token).map(NumberToken::Number)
+                        self.parse_integer(&token).map(NumberToken::Integer)
                     } else {
                         Err(e)
                     }
@@ -836,7 +849,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             } else if c == 'o' {
                 self.octal_constant(c).or_else(|e| {
                     if let ParserError::ParseBigInt(..) = e {
-                        self.parse_integer(&token).map(NumberToken::Number)
+                        self.parse_integer(&token).map(NumberToken::Integer)
                     } else {
                         Err(e)
                     }
@@ -844,7 +857,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             } else if c == 'b' {
                 self.binary_constant(c).or_else(|e| {
                     if let ParserError::ParseBigInt(..) = e {
-                        self.parse_integer(&token).map(NumberToken::Number)
+                        self.parse_integer(&token).map(NumberToken::Integer)
                     } else {
                         Err(e)
                     }
@@ -861,14 +874,16 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         self.skip_char(c);
                         self.return_char('\'');
 
-                        return Ok(NumberToken::Number(Number::Fixnum(Fixnum::build_with(0))));
+                        return Ok(NumberToken::Integer(GInteger::Fixnum(Fixnum::build_with(
+                            0,
+                        ))));
                     } else {
                         self.return_char('\\');
                     }
                 }
 
                 self.get_single_quoted_char()
-                    .map(|c| NumberToken::Number(Number::Fixnum(Fixnum::build_with(c))))
+                    .map(|c| NumberToken::Integer(GInteger::Fixnum(Fixnum::build_with(c))))
                     .or_else(|err| {
                         match err {
                             ParserError::UnexpectedChar('\'', ..) => {}
@@ -876,13 +891,13 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         }
 
                         self.return_char(c);
-                        self.parse_integer(&token).map(NumberToken::Number)
+                        self.parse_integer(&token).map(NumberToken::Integer)
                     })
             } else {
-                self.parse_integer(&token).map(NumberToken::Number)
+                self.parse_integer(&token).map(NumberToken::Integer)
             }
         } else {
-            self.parse_integer(&token).map(NumberToken::Number)
+            self.parse_integer(&token).map(NumberToken::Integer)
         }
     }
 
@@ -954,13 +969,12 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 Ok(n) => Ok(Token::Literal(n.to_literal())),
                 Err(_) => {
                     let n = parse_float_lossy(&token_string)?;
-                    Ok(Token::Literal(Literal::F64Offset(float_alloc!(
-                        n,
-                        self.machine_st.arena
-                    ))))
+                    let offset = float_alloc!(n, self.machine_st.arena);
+                    Ok(Token::Literal(Literal::F64(offset, OrderedFloat(n))))
                 }
             },
-            Ok(NumberToken::Number(n)) => Ok(Token::Literal(n.to_literal())),
+            Ok(NumberToken::Float(offset, n)) => Ok(Token::Literal(Literal::F64(offset, n))),
+            Ok(NumberToken::Integer(n)) => Ok(Token::Literal(n.to_literal())),
             Err(e) => Err(e),
         }
     }

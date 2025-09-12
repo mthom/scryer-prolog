@@ -1233,9 +1233,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let mut preprocessor = Preprocessor::new(settings);
         let clause = preprocessor.try_term_to_tl(self, term)?;
 
-        let f64_tbl = &LS::machine_st(&mut self.payload).arena.f64_tbl;
-
-        let mut cg = CodeGenerator::new(f64_tbl, settings);
+        let mut cg = CodeGenerator::new(settings);
         let clause_code = cg.compile_predicate(vec![clause])?;
 
         Ok(StandaloneCompileResult {
@@ -1264,9 +1262,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             clauses.push(preprocessor.try_term_to_tl(self, term)?);
         }
 
-        let f64_tbl = &LS::machine_st(&mut self.payload).arena.f64_tbl;
-
-        let mut cg = CodeGenerator::new(f64_tbl, settings);
+        let mut cg = CodeGenerator::new(settings);
         let mut code = cg.compile_predicate(clauses)?;
 
         if settings.is_extensible {

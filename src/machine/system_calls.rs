@@ -25,7 +25,6 @@ use crate::machine::partial_string::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::machine::{get_structure_index, Machine, VERIFY_ATTR_INTERRUPT_LOC};
-use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
@@ -1010,8 +1009,8 @@ impl MachineState {
                         Ok(Term::Literal(_, Literal::Rational(n))) => {
                             self.unify_rational(n, nx);
                         }
-                        Ok(Term::Literal(_, Literal::F64Offset(n))) => {
-                            self.unify_f64(n, nx);
+                        Ok(Term::Literal(_, Literal::F64(offset, _n))) => {
+                            self.unify_f64(offset, nx);
                         }
                         Ok(Term::Literal(_, Literal::Integer(n))) => {
                             self.unify_big_int(n, nx);

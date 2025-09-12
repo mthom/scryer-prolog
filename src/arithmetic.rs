@@ -138,7 +138,6 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
 #[derive(Debug)]
 pub(crate) struct ArithmeticEvaluator<'a> {
     marker: &'a mut DebrayAllocator,
-    f64_tbl: &'a F64Table,
     interm: Vec<ArithmeticTerm>,
     interm_c: usize,
 }
@@ -157,16 +156,11 @@ impl<'a> ArithmeticTermIter<'a> for &'a Term {
     }
 }
 
-fn push_literal(
-    f64_tbl: &F64Table,
-    interm: &mut Vec<ArithmeticTerm>,
-    c: &Literal,
-) -> Result<(), ArithmeticError> {
+fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), ArithmeticError> {
     match c {
         Literal::Fixnum(n) => interm.push(ArithmeticTerm::Number(Number::Fixnum(*n))),
         Literal::Integer(n) => interm.push(ArithmeticTerm::Number(Number::Integer(*n))),
-        &Literal::F64Offset(offset) => {
-            let n = f64_tbl.get_entry(offset);
+        &Literal::F64(_offset, n) => {
             interm.push(ArithmeticTerm::Number(Number::Float(n)));
         }
         Literal::Rational(n) => interm.push(ArithmeticTerm::Number(Number::Rational(*n))),
@@ -186,14 +180,9 @@ fn push_literal(
 }
 
 impl<'a> ArithmeticEvaluator<'a> {
-    pub(crate) fn new(
-        marker: &'a mut DebrayAllocator,
-        f64_tbl: &'a F64Table,
-        target_int: usize,
-    ) -> Self {
+    pub(crate) fn new(marker: &'a mut DebrayAllocator, target_int: usize) -> Self {
         ArithmeticEvaluator {
             marker,
-            f64_tbl,
             interm: Vec::new(),
             interm_c: target_int,
         }
@@ -331,7 +320,7 @@ impl<'a> ArithmeticEvaluator<'a> {
 
         for term_ref in src.iter()? {
             match term_ref? {
-                ArithTermRef::Literal(c) => push_literal(self.f64_tbl, &mut self.interm, &c)?,
+                ArithTermRef::Literal(c) => push_literal(&mut self.interm, &c)?,
                 ArithTermRef::Var(lvl, cell, name) => {
                     let var_num = name.to_var_num().unwrap();
 

@@ -22,6 +22,7 @@ use dashu::Integer;
 use dashu::Rational;
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
+use ordered_float::OrderedFloat;
 use scryer_modular_bitfield::error::OutOfBounds;
 use scryer_modular_bitfield::prelude::*;
 
@@ -706,7 +707,7 @@ pub enum Literal {
     Fixnum(Fixnum),
     Integer(TypedArenaPtr<Integer>),
     Rational(TypedArenaPtr<Rational>),
-    F64Offset(F64Offset),
+    F64(F64Offset, OrderedFloat<f64>),
 }
 
 /*

@@ -1,5 +1,4 @@
 use crate::machine::Number;
-use crate::offset_table::OffsetTable;
 use crate::Machine;
 use ordered_float::OrderedFloat;
 use puruspe::beta::*;

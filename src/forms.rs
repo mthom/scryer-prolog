@@ -6,7 +6,6 @@ use crate::machine::disjuncts::VarData;
 use crate::machine::loader::PredicateQueue;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
-use crate::offset_table::OffsetTable;
 use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
 use crate::parser::parser::CompositeOpDesc;

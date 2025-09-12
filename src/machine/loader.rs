@@ -1413,7 +1413,7 @@ impl MachineState {
                     }
                 }
                 (HeapCellValueTag::Cons | HeapCellValueTag::Fixnum | HeapCellValueTag::F64Offset) => {
-                    term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
+                    term_stack.push(Term::Literal(Cell::default(), Literal::try_from((addr, &self.arena.f64_tbl)).unwrap()));
                 }
                 (HeapCellValueTag::StackVar, h) => {
                     term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("s_{h}"))));

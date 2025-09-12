@@ -313,15 +313,15 @@ impl From<Literal> for HeapCellValue {
             Literal::Rational(bigint_ptr) => {
                 typed_arena_ptr_as_cell!(bigint_ptr)
             }
-            Literal::F64Offset(f) => HeapCellValue::from(f),
+            Literal::F64(offset, _n) => HeapCellValue::from(offset),
         }
     }
 }
 
-impl TryFrom<HeapCellValue> for Literal {
+impl TryFrom<(HeapCellValue, &'_ F64Table)> for Literal {
     type Error = ();
 
-    fn try_from(value: HeapCellValue) -> Result<Literal, ()> {
+    fn try_from((value, f64_tbl): (HeapCellValue, &F64Table)) -> Result<Literal, ()> {
         read_heap_cell!(value,
             (HeapCellValueTag::Atom, (name, arity)) => {
                 if arity == 0 {
@@ -333,8 +333,8 @@ impl TryFrom<HeapCellValue> for Literal {
             (HeapCellValueTag::Fixnum, n) => {
                 Ok(Literal::Fixnum(n))
             }
-            (HeapCellValueTag::F64Offset, f) => {
-                Ok(Literal::F64Offset(f))
+            (HeapCellValueTag::F64Offset, offset) => {
+                Ok(Literal::F64(offset, f64_tbl.get_entry(offset)))
             }
             (HeapCellValueTag::CodeIndexOffset, idx) => {
                 Ok(Literal::CodeIndexOffset(idx))

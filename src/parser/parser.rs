@@ -1,9 +1,10 @@
 use dashu::Integer;
 use dashu::Rational;
+use ordered_float::OrderedFloat;
 
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::offset_table::OffsetTable;
+use crate::offset_table::F64Offset;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::lexer::*;
@@ -911,7 +912,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
     fn negate_number<N, Negator, ToLiteral>(&mut self, n: N, negator: Negator, constr: ToLiteral)
     where
         Negator: Fn(N, &mut Arena) -> N,
-        ToLiteral: Fn(N, &mut Arena) -> Literal,
+        ToLiteral: Fn(N) -> Literal,
     {
         if let Some(desc) = self.stack.last().cloned() {
             if let Some(term) = self.terms.last().cloned() {
@@ -924,7 +925,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         self.terms.pop();
 
                         let arena = &mut self.lexer.machine_st.arena;
-                        let literal = constr(negator(n, arena), arena);
+                        let literal = constr(negator(n, arena));
 
                         self.shift(Token::Literal(literal), 0, TERM);
 
@@ -935,7 +936,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             }
         }
 
-        let literal = constr(n, &mut self.lexer.machine_st.arena);
+        let literal = constr(n);
         self.shift(Token::Literal(literal), 0, TERM);
     }
 
@@ -952,42 +953,36 @@ impl<'a, R: CharRead> Parser<'a, R> {
             arena_alloc!(data, arena)
         }
 
+        fn negate_f64(
+            (_offset, n): (F64Offset, OrderedFloat<f64>),
+            arena: &mut Arena,
+        ) -> (F64Offset, OrderedFloat<f64>) {
+            let offset = arena.f64_tbl.build_with(-n);
+            (offset, -n)
+        }
+
         match token {
             Token::String(string) => {
                 self.shift(Token::String(string), 0, TERM);
             }
             Token::Literal(Literal::Integer(n)) => {
-                self.negate_number(n, negate_int_rc, |n, _| Literal::Integer(n))
+                self.negate_number(n, negate_int_rc, Literal::Integer)
             }
             Token::Literal(Literal::Rational(n)) => {
-                self.negate_number(n, negate_rat_rc, |r, _| Literal::Rational(r))
+                self.negate_number(n, negate_rat_rc, Literal::Rational)
             }
-            Token::Literal(Literal::F64Offset(n))
-                if self
-                    .lexer
-                    .machine_st
-                    .arena
-                    .f64_tbl
-                    .get_entry(n)
-                    .is_infinite() =>
-            {
+            Token::Literal(Literal::F64(_offset, n)) if n.is_infinite() => {
                 return Err(ParserError::InfiniteFloat(
                     self.lexer.line_num,
                     self.lexer.col_num,
                 ));
             }
-            Token::Literal(Literal::F64Offset(n)) => {
-                let n = self.lexer.machine_st.arena.f64_tbl.get_entry(n);
-
-                self.negate_number(
-                    n,
-                    |n, _| -n,
-                    |n, arena| Literal::F64Offset(arena.f64_tbl.build_with(n)),
-                )
+            Token::Literal(Literal::F64(offset, n)) => {
+                self.negate_number((offset, n), negate_f64, |(offset, n)| {
+                    Literal::F64(offset, n)
+                })
             }
-            Token::Literal(Literal::Fixnum(n)) => {
-                self.negate_number(n, |n, _| -n, |n, _| Literal::Fixnum(n))
-            }
+            Token::Literal(Literal::Fixnum(n)) => self.negate_number(n, |n, _| -n, Literal::Fixnum),
             Token::Literal(c) => {
                 if let Literal::Atom(name) = c {
                     if !self.shift_op(name, op_dir)? {

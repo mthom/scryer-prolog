@@ -83,7 +83,7 @@ fn ffi_f64_minus_zero() {
     load_module_test_with_input(
         "tests-pl/ffi_f64_minus_zero.pl",
         format!("LIB={dynlib_path:?}."),
-        "-1.0,1.0",
+        "1.0,1.0",
     );
 }
 
