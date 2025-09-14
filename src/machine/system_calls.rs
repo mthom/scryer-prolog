@@ -6739,7 +6739,10 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn read_query_term(&mut self) -> CallResult {
-        self.user_input.reset();
+        match self.user_input {
+            Stream::Byte(_) | Stream::Readline(_) => self.user_input.reset(),
+            _ => true,
+        };
 
         set_prompt(true);
         // let result = self.machine_st.read_term(self.user_input, &mut self.indices);
@@ -6751,7 +6754,10 @@ impl Machine {
         match result {
             Ok(()) => Ok(()),
             Err(e) => {
-                self.user_input.reset();
+                match self.user_input {
+                    Stream::Byte(_) | Stream::Readline(_) => self.user_input.reset(),
+                    _ => true
+                };
                 Err(e)
             }
         }
