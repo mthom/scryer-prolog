@@ -755,30 +755,24 @@ impl MachineState {
             );
         }
 
-        #[cfg(feature = "http")]
-        if let Stream::HttpRead(_) = stream {
-            return self.read_term(
-                stream,
-                indices,
-                MachineState::read_term_from_user_input_eof_handler,
-            );
-        }
-
-        if let Stream::InputFile(_) = stream {
-            return self.read_term(
-                stream,
-                indices,
-                MachineState::read_term_from_user_input_eof_handler,
-            );
-        }
-
-        if let Stream::NamedTcp(_) = stream {
-            return self.read_term(
-                stream,
-                indices,
-                MachineState::read_term_from_user_input_eof_handler,
-            );
-        }
+        match stream {
+            #[cfg(feature = "http")]
+            Stream::HttpRead(_) => {
+                return self.read_term(
+                    stream,
+                    indices,
+                    MachineState::read_term_from_user_input_eof_handler,
+                )
+            }
+            Stream::InputFile(_) | Stream::NamedTcp(_) => {
+                return self.read_term(
+                    stream,
+                    indices,
+                    MachineState::read_term_from_user_input_eof_handler,
+                )
+            }
+            _ => true,
+        };
 
         if let Stream::Byte(_) = stream {
             return self.read_term(
