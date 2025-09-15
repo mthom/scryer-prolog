@@ -766,7 +766,16 @@ impl MachineState {
                 indices,
                 MachineState::read_term_from_user_input_eof_handler,
             ),
-            _ => Err(functor_stub(atom!("read_term_from_user_input"), 3)),
+            _ => {
+                let stub = functor_stub(atom!("read_term_from_user_input"), 3);
+                let err = self.permission_error(
+                    Permission::InputStream,
+                    atom!("stream"),
+                    atom_as_cell!(atom!("user_input")),
+                );
+
+                Err(self.error_form(err, stub))
+            }
         }
     }
 
