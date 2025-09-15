@@ -752,6 +752,12 @@ impl MachineState {
                 indices,
                 MachineState::read_term_from_user_input_eof_handler,
             ),
+            #[cfg(feature = "tls")]
+            Stream::NamedTls(_) => self.read_term(
+                stream,
+                indices,
+                MachineState::read_term_from_user_input_eof_handler,
+            ),
             Stream::Readline(ptr) => {
                 let readline = unsafe { ptr.as_ptr().as_mut() }.unwrap();
                 readline.set_atoms_for_completion(&self.atom_tbl);
@@ -761,7 +767,13 @@ impl MachineState {
                     MachineState::read_term_from_user_input_eof_handler,
                 )
             }
-            Stream::Byte(_) | Stream::InputFile(_) | Stream::NamedTcp(_) => self.read_term(
+            Stream::Byte(_)
+            | Stream::InputChannel(_)
+            | Stream::InputFile(_)
+            | Stream::NamedTcp(_)
+            | Stream::Null(_)
+            | Stream::PipeReader(_)
+            | Stream::StaticString(_) => self.read_term(
                 stream,
                 indices,
                 MachineState::read_term_from_user_input_eof_handler,
