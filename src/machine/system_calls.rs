@@ -744,11 +744,9 @@ impl MachineState {
         }
 
         let target_n = self.store(self.deref(self.registers[1]));
-        self.unify_fixnum(
-            /* FIXME this is not safe */
-            unsafe { Fixnum::build_with_unchecked(brent_st.num_steps() as i64) },
-            target_n,
-        );
+        let num_steps = fixnum!(GInteger, brent_st.num_steps() as i64, &mut self.arena);
+
+        self.unify_ginteger(num_steps, target_n);
 
         if !self.fail {
             unify!(self, self.registers[4], self.heap[prev_hare]);

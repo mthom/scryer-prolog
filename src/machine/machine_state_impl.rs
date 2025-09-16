@@ -278,6 +278,11 @@ impl MachineState {
         unifier.unify_fixnum(n1, value);
     }
 
+    pub fn unify_ginteger(&mut self, n1: GInteger, value: HeapCellValue) {
+        let mut unifier = DefaultUnifier::from(self);
+        unifier.unify_ginteger(n1, value);
+    }
+
     pub fn unify_big_int(&mut self, n1: TypedArenaPtr<Integer>, value: HeapCellValue) {
         let mut unifier = DefaultUnifier::from(self);
         unifier.unify_big_integer(n1, value);

@@ -241,6 +241,22 @@ macro_rules! is_fy {
     };
 }
 
+#[derive(Debug)]
+pub enum GInteger {
+    Integer(TypedArenaPtr<Integer>),
+    Fixnum(Fixnum),
+}
+
+impl GInteger {
+    #[inline]
+    pub fn to_literal(self) -> Literal {
+        match self {
+            GInteger::Integer(integer) => Literal::Integer(integer),
+            GInteger::Fixnum(fixnum) => Literal::Fixnum(fixnum),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RegType {
     Perm(usize),

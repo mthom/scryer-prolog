@@ -150,6 +150,13 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
         );
     }
 
+    fn unify_ginteger(&mut self, n: GInteger, value: HeapCellValue) {
+        match n {
+            GInteger::Integer(integer) => self.unify_big_int(integer, value),
+            GInteger::Fixnum(fixnum) => self.unify_fixnum(fixnum, value),
+        }
+    }
+
     fn unify_atom(&mut self, atom: Atom, value: HeapCellValue) {
         read_heap_cell!(value,
             (HeapCellValueTag::Atom, (name, arity)) => {

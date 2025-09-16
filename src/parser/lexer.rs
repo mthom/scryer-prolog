@@ -1,4 +1,3 @@
-use crate::arena::*;
 use crate::atom_table::*;
 pub use crate::machine::machine_state::*;
 use crate::offset_table::*;
@@ -67,7 +66,7 @@ impl NumberToken {
     fn to_token(self) -> Option<Token> {
         match self {
             NumberToken::Float(offset, fl) => Some(Token::Literal(Literal::F64(offset, fl))),
-            NumberToken::Integer(GInteger::BigInt(n)) => Some(Token::Literal(Literal::Integer(n))),
+            NumberToken::Integer(GInteger::Integer(n)) => Some(Token::Literal(Literal::Integer(n))),
             NumberToken::Integer(GInteger::Fixnum(n)) => Some(Token::Literal(Literal::Fixnum(n))),
             NumberToken::Partial(_) => None,
         }
@@ -87,22 +86,6 @@ macro_rules! try_nt {
             }
         }
     }};
-}
-
-#[derive(Debug)]
-enum GInteger {
-    BigInt(TypedArenaPtr<Integer>),
-    Fixnum(Fixnum),
-}
-
-impl GInteger {
-    #[inline]
-    fn to_literal(self) -> Literal {
-        match self {
-            GInteger::BigInt(integer) => Literal::Integer(integer),
-            GInteger::Fixnum(fixnum) => Literal::Fixnum(fixnum),
-        }
-    }
 }
 
 pub(crate) struct Lexer<'a, R> {
@@ -716,12 +699,15 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 Fixnum::build_with_checked(n)
                     .map(GInteger::Fixnum)
                     .unwrap_or_else(|_| {
-                        GInteger::BigInt(arena_alloc!(Integer::from(n), &mut self.machine_st.arena))
+                        GInteger::Integer(arena_alloc!(
+                            Integer::from(n),
+                            &mut self.machine_st.arena
+                        ))
                     })
             })
             .or_else(|_| {
                 Integer::from_str_radix(token, radix)
-                    .map(|n| GInteger::BigInt(arena_alloc!(n, &mut self.machine_st.arena)))
+                    .map(|n| GInteger::Integer(arena_alloc!(n, &mut self.machine_st.arena)))
                     .map_err(|_| ParserError::ParseBigInt(self.line_num, self.col_num))
             })
     }
