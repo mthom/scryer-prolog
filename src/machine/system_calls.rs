@@ -719,7 +719,7 @@ impl MachineState {
         let mut hare = orig_hare;
         let mut tortoise = hare;
 
-        for _ in 1..lam {
+        for _ in 0..lam {
             hare = step(&self.heap, self.heap[hare]);
         }
 
@@ -742,8 +742,6 @@ impl MachineState {
         while prev_hare != brent_st.hare {
             brent_st.cycle_step(&self.heap);
         }
-
-        // self.heap.pop_cell();
 
         let target_n = self.store(self.deref(self.registers[1]));
         self.unify_fixnum(
