@@ -593,26 +593,30 @@ impl MachineState {
                                     self.pdl.push(char_as_cell!(c));
                                     self.pdl.push(heap_loc_as_cell!(l2));
                                 }
-                                (HeapCellValueTag::Str, s) => {
-                                    if tabu_list.contains(&(l1, s)) {
+                                (HeapCellValueTag::Str, s2) => {
+                                    if tabu_list.contains(&(l1, s2)) {
                                         continue;
                                     }
 
-                                    let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                                    tabu_list.insert((l1, s2));
+
+                                    let (n2, a2) = cell_as_atom_cell!(self.heap[s2])
                                         .get_name_and_arity();
 
-                                    if name == atom!(".") && arity == 2 {
-                                        tabu_list.insert((l1, s));
+                                    match (2, atom!(".")).cmp(&(a2,n2)) {
+                                        Ordering::Equal => {
+                                            let (c, succ_cell) = self.heap.last_str_char_and_tail(l1);
 
-                                        let (c, succ_cell) = self.heap.last_str_char_and_tail(l1);
+                                            self.pdl.push(heap_loc_as_cell!(s2+2));
+                                            self.pdl.push(succ_cell);
 
-                                        self.pdl.push(heap_loc_as_cell!(s+2));
-                                        self.pdl.push(succ_cell);
-
-                                        self.pdl.push(heap_loc_as_cell!(s+1));
-                                        self.pdl.push(char_as_cell!(c));
-                                    } else {
-                                        self.fail = true;
+                                            self.pdl.push(heap_loc_as_cell!(s2+1));
+                                            self.pdl.push(char_as_cell!(c));
+                                        }
+                                        ordering => {
+                                            self.pdl.clear();
+                                            return Some(ordering);
+                                        }
                                     }
                                 }
                                 _ => {
@@ -673,19 +677,23 @@ impl MachineState {
                                     }
                                 }
                                 (HeapCellValueTag::PStrLoc, l2) => {
-                                    let (name, arity) = cell_as_atom_cell!(self.heap[s1])
+                                    let (n1, a1) = cell_as_atom_cell!(self.heap[s1])
                                         .get_name_and_arity();
 
-                                    if name == atom!(".") && arity == 2 {
-                                        let (c, succ_cell) = self.heap.last_str_char_and_tail(l2);
+                                    match (a1,n1).cmp(&(2, atom!("."))) {
+                                        Ordering::Equal => {
+                                            let (c, succ_cell) = self.heap.last_str_char_and_tail(l2);
 
-                                        self.pdl.push(succ_cell);
-                                        self.pdl.push(heap_loc_as_cell!(s1+2));
+                                            self.pdl.push(succ_cell);
+                                            self.pdl.push(heap_loc_as_cell!(s1+2));
 
-                                        self.pdl.push(char_as_cell!(c));
-                                        self.pdl.push(heap_loc_as_cell!(s1+1));
-                                    } else {
-                                        self.fail = true;
+                                            self.pdl.push(char_as_cell!(c));
+                                            self.pdl.push(heap_loc_as_cell!(s1+1));
+                                        }
+                                        ordering => {
+                                            self.pdl.clear();
+                                            return Some(ordering);
+                                        }
                                     }
                                 }
                                 _ => {
