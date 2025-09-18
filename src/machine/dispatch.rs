@@ -2802,6 +2802,28 @@ impl Machine {
                         let mut h = 0;
                         let mut string_cursor = string.as_str();
 
+                        if self.machine_st.heap[0].is_stack_var() {
+                            let cell = self
+                                .machine_st
+                                .store(self.machine_st.deref(self.machine_st.heap[0]));
+
+                            if let Some(r) = cell.as_var() {
+                                let target_cell = backtrack_on_resource_error!(
+                                    self.machine_st,
+                                    self.machine_st.heap.allocate_pstr(string_cursor)
+                                );
+
+                                self.machine_st.bind(r, target_cell);
+                                self.machine_st.mode = MachineMode::Write;
+
+                                debug_assert!(!self.machine_st.fail);
+
+                                continue;
+                            }
+
+                            self.machine_st.heap[0] = cell;
+                        }
+
                         while let Some(c) = string_cursor.chars().next() {
                             read_heap_cell!(self.machine_st.heap[h],
                                 (HeapCellValueTag::PStrLoc, pstr_loc) => {
@@ -2910,22 +2932,6 @@ impl Machine {
                                     } else {
                                         h = v;
                                     }
-                                }
-                                (HeapCellValueTag::StackVar, s) => {
-                                    debug_assert_eq!(h, 0);
-
-                                    let target_cell = backtrack_on_resource_error!(
-                                        self.machine_st,
-                                        self.machine_st.heap.allocate_pstr(string_cursor)
-                                    );
-
-                                    self.machine_st.bind(
-                                        Ref::stack_cell(s),
-                                        target_cell,
-                                    );
-
-                                    self.machine_st.mode = MachineMode::Write;
-                                    break;
                                 }
                                 _ => {
                                     self.machine_st.fail = true;
