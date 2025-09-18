@@ -745,25 +745,50 @@ impl MachineState {
         stream: Stream,
         indices: &mut IndexStore,
     ) -> CallResult {
-        if let Stream::Readline(ptr) = stream {
-            let readline = unsafe { ptr.as_ptr().as_mut() }.unwrap();
-            readline.set_atoms_for_completion(&self.atom_tbl);
-            return self.read_term(
+        match stream {
+            #[cfg(feature = "http")]
+            Stream::HttpRead(_) => self.read_term(
                 stream,
                 indices,
                 MachineState::read_term_from_user_input_eof_handler,
-            );
-        }
-
-        if let Stream::Byte(_) = stream {
-            return self.read_term(
+            ),
+            #[cfg(feature = "tls")]
+            Stream::NamedTls(_) => self.read_term(
                 stream,
                 indices,
                 MachineState::read_term_from_user_input_eof_handler,
-            );
-        }
+            ),
+            Stream::Readline(ptr) => {
+                let readline = unsafe { ptr.as_ptr().as_mut() }.unwrap();
+                readline.set_atoms_for_completion(&self.atom_tbl);
+                self.read_term(
+                    stream,
+                    indices,
+                    MachineState::read_term_from_user_input_eof_handler,
+                )
+            }
+            Stream::Byte(_)
+            | Stream::InputChannel(_)
+            | Stream::InputFile(_)
+            | Stream::NamedTcp(_)
+            | Stream::Null(_)
+            | Stream::PipeReader(_)
+            | Stream::StaticString(_) => self.read_term(
+                stream,
+                indices,
+                MachineState::read_term_from_user_input_eof_handler,
+            ),
+            _ => {
+                let stub = functor_stub(atom!("read_term_from_user_input"), 3);
+                let err = self.permission_error(
+                    Permission::InputStream,
+                    atom!("stream"),
+                    atom_as_cell!(atom!("user_input")),
+                );
 
-        unreachable!("Stream must be a Stream::Readline(_)")
+                Err(self.error_form(err, stub))
+            }
+        }
     }
 
     pub fn read_term_eof_handler(&mut self, mut stream: Stream) -> Result<OnEOF, MachineStub> {
