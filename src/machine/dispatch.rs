@@ -2817,6 +2817,7 @@ impl Machine {
                                 self.machine_st.mode = MachineMode::Write;
 
                                 debug_assert!(!self.machine_st.fail);
+                                self.machine_st.p += 1;
 
                                 continue;
                             }
