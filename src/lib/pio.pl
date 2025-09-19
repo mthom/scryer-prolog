@@ -12,7 +12,8 @@
                 phrase_from_stream/2,
                 phrase_to_file/2,
                 phrase_to_file/3,
-                phrase_to_stream/2
+                phrase_to_stream/2,
+                ...@ //0
                ]).
 
 :- use_module(library(dcgs)).
@@ -235,3 +236,22 @@ phrase_to_file(GRBody, File, Options) :-
         setup_call_cleanup(open(File, write, Stream, Options),
                            phrase_to_stream(GRBody, Stream),
                            close(Stream)).
+
+%% ...@ //0
+%
+%  Any sequence, like ... //0, at the end only.
+
+% Source: https://github.com/mthom/scryer-prolog/discussions/3080#discussioncomment-14387382
+
+...@(S0,S) :-
+    (  S \== [] -> representation_error(ending_nonterminal)
+    ;  '$skip_max_list'(_, _, S0,S1),
+       (  nonvar(S1) -> ...(S1,S)
+       ;  '$unattributed_var'(S1) -> ...(S1,S)
+       ;  freeze:get_atts(S1, frozen(Goal)),
+          nonvar(Goal),
+          Goal = user:render_step(_,_,_,_) ->
+          true % for JJ
+       ;  ...(S1,S) % does this ever happen?
+       )
+    ).
