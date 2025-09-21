@@ -1988,7 +1988,7 @@ impl Machine {
     pub(crate) fn directory_files(&mut self) -> CallResult {
         if let Some(dir) = self
             .machine_st
-            .value_to_str_like(self.machine_st.registers[1])
+            .value_to_str_like(self.deref_register(1))
         {
             let str = dir.as_str();
             let path = std::path::Path::new(&*str);
@@ -2041,7 +2041,7 @@ impl Machine {
     pub(crate) fn file_size(&mut self) {
         if let Some(file) = self
             .machine_st
-            .value_to_str_like(self.machine_st.registers[1])
+            .value_to_str_like(self.deref_register(1))
         {
             let len = Number::arena_from(
                 fs::metadata(&*file.as_str()).unwrap().len(),
@@ -2066,7 +2066,7 @@ impl Machine {
     pub(crate) fn file_exists(&mut self) {
         if let Some(file) = self
             .machine_st
-            .value_to_str_like(self.machine_st.registers[1])
+            .value_to_str_like(self.deref_register(1))
         {
             let file_str = file.as_str();
 
@@ -2084,7 +2084,7 @@ impl Machine {
     pub(crate) fn directory_exists(&mut self) {
         if let Some(dir) = self
             .machine_st
-            .value_to_str_like(self.machine_st.registers[1])
+            .value_to_str_like(self.deref_register(1))
         {
             let dir_str = dir.as_str();
 
@@ -2102,7 +2102,7 @@ impl Machine {
     pub(crate) fn file_time(&mut self) {
         if let Some(file) = self
             .machine_st
-            .value_to_str_like(self.machine_st.registers[1])
+            .value_to_str_like(self.deref_register(1))
         {
             let which = cell_as_atom!(self.deref_register(2));
 
@@ -2141,7 +2141,7 @@ impl Machine {
     pub(crate) fn make_directory(&mut self) {
         if let Some(dir) = self
             .machine_st
-            .value_to_str_like(self.machine_st.registers[1])
+            .value_to_str_like(self.deref_register(1))
         {
             match fs::create_dir(&*dir.as_str()) {
                 Ok(_) => {}
@@ -2158,7 +2158,7 @@ impl Machine {
     pub(crate) fn make_directory_path(&mut self) {
         if let Some(dir) = self
             .machine_st
-            .value_to_str_like(self.machine_st.registers[1])
+            .value_to_str_like(self.deref_register(1))
         {
             match fs::create_dir_all(&*dir.as_str()) {
                 Ok(_) => {}
@@ -2175,7 +2175,7 @@ impl Machine {
     pub(crate) fn delete_file(&mut self) {
         if let Some(file) = self
             .machine_st
-            .value_to_str_like(self.machine_st.registers[1])
+            .value_to_str_like(self.deref_register(1))
         {
             match fs::remove_file(&*file.as_str()) {
                 Ok(_) => {}
@@ -2190,11 +2190,11 @@ impl Machine {
     pub(crate) fn rename_file(&mut self) {
         if let Some(file) = self
             .machine_st
-            .value_to_str_like(self.machine_st.registers[1])
+            .value_to_str_like(self.deref_register(1))
         {
             if let Some(renamed) = self
                 .machine_st
-                .value_to_str_like(self.machine_st.registers[2])
+                .value_to_str_like(self.deref_register(2))
             {
                 if fs::rename(&*file.as_str(), &*renamed.as_str()).is_ok() {
                     return;
@@ -2209,11 +2209,11 @@ impl Machine {
     pub(crate) fn file_copy(&mut self) {
         if let Some(file) = self
             .machine_st
-            .value_to_str_like(self.machine_st.registers[1])
+            .value_to_str_like(self.deref_register(1))
         {
             if let Some(copied) = self
                 .machine_st
-                .value_to_str_like(self.machine_st.registers[2])
+                .value_to_str_like(self.deref_register(2))
             {
                 if fs::copy(&*file.as_str(), &*copied.as_str()).is_ok() {
                     return;
@@ -2228,7 +2228,7 @@ impl Machine {
     pub(crate) fn delete_directory(&mut self) {
         if let Some(dir) = self
             .machine_st
-            .value_to_str_like(self.machine_st.registers[1])
+            .value_to_str_like(self.deref_register(1))
         {
             match fs::remove_dir(&*dir.as_str()) {
                 Ok(_) => {}
@@ -2285,7 +2285,7 @@ impl Machine {
     pub(crate) fn path_canonical(&mut self) -> CallResult {
         if let Some(path) = self
             .machine_st
-            .value_to_str_like(self.machine_st.registers[1])
+            .value_to_str_like(self.deref_register(1))
         {
             if let Ok(canonical) = fs::canonicalize(&*path.as_str()) {
                 let cs = match canonical.to_str() {
