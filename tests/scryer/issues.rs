@@ -119,7 +119,10 @@ fn issue_make_directory() {
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn issue_make_directory_path() {
-    load_module_test("tests-pl/issue_make_directory_path.pl", "directory_path_made");
+    load_module_test(
+        "tests-pl/issue_make_directory_path.pl",
+        "directory_path_made",
+    );
 }
 
 #[serial]
