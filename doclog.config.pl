@@ -7,8 +7,10 @@ learn_pages_source_folder("learn").
 learn_pages_categories(["First steps", "Tutorials"]).
 learn_pages([
 		   page("Let's play Brisca", "Tutorials", "lets-play-brisca.dj"),
-		   page("Test page", "First steps", "test-page.dj")
+		   page("Test page", "First steps", "test-page.dj"),
+		   page("reif_examples", "Tutorials", "reif_examples/reif_examples.dj")
 ]).
 copy_file("logo/scryer.png", "scryer.png").
 copy_file("learn/Spanish_deck_Fournier.jpg", "learn/Spanish_deck_Fournier.jpg").
 copy_file("learn/brisca-interactive.png", "learn/brisca-interactive.png").
+ 
