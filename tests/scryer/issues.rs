@@ -52,6 +52,93 @@ fn issue2725_dcg_without_module() {
     load_module_test("tests-pl/issue2725.pl", "");
 }
 
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue_delete_directory() {
+    load_module_test("tests-pl/issue_delete_directory.pl", "directory_deleted");
+}
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue_delete_file() {
+    load_module_test("tests-pl/issue_delete_file.pl", "file_deleted");
+}
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue_directory_exists() {
+    load_module_test("tests-pl/issue_directory_exists.pl", "");
+}
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue_directory_files() {
+    load_module_test("tests-pl/issue_directory_files.pl", "1");
+}
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue_file_copy() {
+    load_module_test("tests-pl/issue_file_copy.pl", "file_copied");
+}
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue_file_exists() {
+    load_module_test("tests-pl/issue_file_exists.pl", "");
+}
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue_file_size() {
+    load_module_test("tests-pl/issue_file_size.pl", "");
+}
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue_file_time() {
+    load_module_test("tests-pl/issue_file_time.pl", "");
+}
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue_make_directory() {
+    load_module_test("tests-pl/issue_make_directory.pl", "directory_made");
+}
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue_make_directory_path() {
+    load_module_test(
+        "tests-pl/issue_make_directory_path.pl",
+        "directory_path_made",
+    );
+}
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue_path_canonical() {
+    load_module_test("tests-pl/issue_path_canonical.pl", "path_canonicalized");
+}
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue_rename_file() {
+    load_module_test("tests-pl/issue_rename_file.pl", "file_renamed");
+}
+
 #[test]
 #[cfg(feature = "http")]
 #[cfg(not(target_arch = "wasm32"))]
