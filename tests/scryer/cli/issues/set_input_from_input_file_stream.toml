@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "-g", "consult('set_input_from_top-level.pl').", "-g", "halt."]

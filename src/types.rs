@@ -125,9 +125,9 @@ pub(crate) enum RefTag {
 pub struct Ref {
     val: B56,
     #[allow(unused)]
-    m: bool,
-    #[allow(unused)]
     f: bool,
+    #[allow(unused)]
+    m: bool,
     tag: RefTag,
 }
 
