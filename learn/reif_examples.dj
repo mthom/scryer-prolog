@@ -1,83 +1,102 @@
 # reif Cookbook
-This tutorial shows some examples of using the predicates in [reif](/reif). 
+
+This tutorial shows some examples of using the predicates in [reif](/reif.html). 
 Load lambda, dif, clpz, and reif into your toplevel to evaluate the examples in your toplevel.
 
 If you have an improvement (such as a better example or an explanation) to this tutorial, please [submit a PR](https://github.com/mthom/scryer-prolog/pulls) or 
 [github issue](https://github.com/mthom/scryer-prolog/issues).
 
 ## Introduction and meta_predicate Review
+
 Review the summary at 25:45 [Power of Prolog meta_predicate declarations](https://www.youtube.com/watch?v=m3cbgebcKng). You will need some understanding of meta_predicate declarations.
 
-The meta-predicate declarations in reif.pl typically  additional arguments are required for a supplied predicate as an argument;  the last additional argument will be a reified binary value.  
+Typically, reif predicates provided as arguments typically require the last additional argument will be a reified binary value.  
 
  In this case, the first argument of tfilter is required to be a predicate taking two additional arguments.
 
-```prolog
+```
 :- meta_predicate(tfilter(2, ?, ?)).
-'''
+```
 
 You will probably need to inspect reif.pl to fully understand how to use the module, and to learn
 some prolog skills you may not already have.
 
 There is some code that you may find confusing, which shows a predicate expecting 2 arguments, but only one is provided:
-```prolog
+
+```
    if_(call(C_2, E), Fs0 = [E|Fs], Fs0 = Fs),
-'''
+```
 Fortunatley, you don't need to understand that mechanism to use the reif module.  Below there examples of how to use if_.   
 
 
 Also, don't be confused when something like this works:
-```prolog
+```
 ?- call( tfilter,=(3),[3],X).
    X = [3].
 ?- 
-'''
+```
 but this breaks.
 
-```prolog
+```
 ?- call( tfilter,#>(3),[3],X).
    error(existence_error(procedure,(#>)/3),(#>)/3).
 ?- 
-'''
+```
 What is happening is that reif has provided =/3, and that is what is being used in tfilter (not the usual =/2).   
 
 But (in my system at the time of writing) #>/2 exists, but there is no #>/3.  
 A workaround is to define a three-arity predicate to do the comparison (it could be #>/3, but I choose pound_gt):
-```prolog
+
+```
 pound_gt(X,Y,true):- X #>Y,!.
 pound_gt(_,_,false).
 
 ?- tfilter(pound_gt(3),[1,3],T).
    T = [1].
 ?- 
-'''
+```
+
 pound_gt is not very robust, using "!" for example.  If you are writing predicates to use with reif,   look at the implementation =/3 in reif.  
+
+You might wonder if you can write a predicate to relate a predicate with a reified value as the last parameter.
+
+```
+unreif_reif(P1, P2).
+```
+
+so that P1(A1, A2, ...AN) holds when P2(A1, A2, ..., AN, T) holds and T is the reified value of P1(A1...AN).  
+
+[Probably not](https://github.com/mthom/scryer-prolog/discussions/2557), but you can probably learn something about writing reified versions of predicates by reading that discussion.
+
+You can look at predicates like dif/3  or =/3 in [reif](/reif.html) to get ideas about writing predicates that include a reifed boolean value.
+```
 
 ## memberd_t/3
 
 Query holds if a single item 'c' is a member of a list.
 
-```prolog
+```
 ?- memberd_t('c',"branch free",true).  
    true.
-'''
+```
 Query holds if single item is excluded from a list.  Exclusion or inclusion is determined by the third argument.
 
-```prolog
+```
 ?- memberd_t('c',"branch free",false). 
    true.
-'''
+```
 
 Query holds, and X is true if and only if a single item is included in the list.  Note single quotes are normally not needed around atoms like 'c'.
 
-```prolog
+```
 ?- memberd_t(c,"branch free",X).
    X = true.
 ?- 
-'''
+```
+
 Query holds for Y in a member of the list and X is false or Y is not a member of the list and X is true.
 
-```prolog
+```
 ?- memberd_t(Y,[1,2,3],X).
    Y = 1, X = true
 ;  Y = 2, X = true
@@ -85,9 +104,10 @@ Query holds for Y in a member of the list and X is false or Y is not a member of
 ;  X = false, dif:dif(1,Y), dif:dif(2,Y), dif:dif(3,Y).
 ?- 
 ```
+
 Lists of length 2, where A is a member of exactly one of those lists.
 
-```prolog
+```
 length(L1,2),length(L2,2),memberd_t(A,L1,X), memberd_t(A,L2,Y), dif(X,Y).
    L1 = [A,_C], L2 = [_A,_B], X = true, Y = false, dif:dif(_A,A), dif:dif(_B,A)
 ;  L1 = [_A,A], L2 = [_B,_C], X = true, Y = false, dif:dif(_A,A), dif:dif(_B,A), dif:dif(_C,A)
@@ -95,8 +115,9 @@ length(L1,2),length(L2,2),memberd_t(A,L1,X), memberd_t(A,L2,Y), dif(X,Y).
 ;  L1 = [_A,_B], L2 = [_C,A], X = false, Y = true, dif:dif(_A,A), dif:dif(_B,A), dif:dif(_C,A)
 ;  false.
 ?-  
-'''
-## (=)(A,B,T).
+```
+
+##  (=)(A,B,T).
 
 reif introdces =/3, which holds if and only if the first two arguments are equal, and the third argument T is true or the first two arguments are not equal the the third argument is false.   T is the 'reified' truth value of A.  
 
@@ -109,7 +130,7 @@ reif introdces =/3, which holds if and only if the first two arguments are equal
    true.
 ?- 
 
-'''
+```
 
 You may find it useful to write predicates where the last argument is a boolean variable containing the result of whether some relation holds, for use with other reif predicates.    
 
@@ -122,7 +143,7 @@ if T then calls the predicate Then_0
 otherwise, calls the predicate Else 0.  
 
 It is worth looking at the source.
-```prolog
+```
 if_(If_1, Then_0, Else_0) :-
     call(If_1, T),
     (  T == true  -> call(Then_0)
@@ -130,25 +151,27 @@ if_(If_1, Then_0, Else_0) :-
     ;  nonvar(T) -> throw(error(type_error(boolean, T), _))
     ;  throw(error(instantiation_error, _))
     ).
-'''
-```prolog
+```
+
+```
 ?- if_( (X=3),(Y=4),(Z=5)), (X=4;X=3).
    X = 3, Y = 4
 ;  X = 4, Z = 5
 ;  false.
 ?- 
-'''
+```
+
 In the above example, only Y or Z are instantiated variables, but not both.
 
 Example with a differrent comparison predicate.  
 
-```prolog
+```
 greater_than_two(Y,T) :-  Y #> 2 ,T=true.
 greater_than_two(Y,T) :-  Y #< 2 ,T=false.
 ?- if_(greater_than_two(3),X="works", X="fails").
    X = "works".
 ?- 
-'''
+```
 
 ## tfilter/3
 
@@ -157,99 +180,134 @@ tfilter/3 is a predicate for filtering lists.
 Again, worth reading the source, because it shows some prolog technique that 
 may be new to you (unless you are a prolog expert already).
 
-```prolog
+```
 :- meta_predicate(tfilter(2, ?, ?)).
 tfilter(_, [], []).
 tfilter(C_2, [E|Es], Fs0) :-
    if_(call(C_2, E), Fs0 = [E|Fs], Fs0 = Fs),
    tfilter(C_2, Es, Fs).
 ```
+
 The meta_predicate directive is important.  It specifies the first parameter to tfilter is a predicate needing two more arguments.  The first required argument is the value to be compared from the list, and the second is the reified result of the comparison (true, or false).
 
-If your prolog system has #</3:
+If your prolog system has 
 
-```prolog
+```
+#</3
+```
+
+
+```
 ?- tfilter(#<(10),[1,10,20],Xs).
    Xs = [20].
-'''
-Oddly, scryer prolog 0.9.4-614 has #</3 but not #>3:
-```prolog
+```
+
+Oddly, scryer prolog 0.9.4-614 has 
+
+```
+#</3
+```
+
+ but not 
+
+ ```
+ #>3
+ ```:
+
+```
 ?- tfilter(#>(10),[1,20,20], Xs).
    error(existence_error(procedure,(#>)/3),(#>)/3).
 ?- 
 
-'''
+```
 
 Relating a list, to a list without a certain element:
-```prolog
+```
 ?- tfilter(dif(10),[1,2,3,X],Es).
    X = 10, Es = [1,2,3]
 ;  Es = [1,2,3,X], dif:dif(10,X).
-?- '''
+?- 
+```
 
 See which predicates produce a non-empty list with tfilter.
 
-```prolog
+```
 ?- (X= =(3); X= #<(4); X= =(100) ), tfilter(X,[1,2,3,4,6],Y), Y\=[].
    X = =(3), Y = [3]
 ;  X = #<(4), Y = [6]
 ;  false.
-?- '''
-
+?- 
+```
 
 ## tmember/2
-Just like tfilter, tmembers first argument is a paritally applied 2-arity predicate.
-- meta_predicate(tmember(2, ?)).
 
-```prolog
+Just like tfilter, tmember's first argument is a paritally applied 2-arity predicate:
+
+```
+:- meta_predicate(tmember(2, ?)).
+```
+
+```
 ?- tmember(=(3),[1,2,3,4,6]).
    true.
 ?- 
 
-'''
+```
+
 
 It can be used to test for existance of an element for which the supplied predicate holds.
-```prolog
+
+```
 ?- tmember(#<(1),[1,2,3,4,6]).
    true.
 ?- tmember(#<(12),[1,2,3,4,6]).
    false.
 ?- 
-'''
- ## tmember/3
 
-tmember_t can be used to test the existance  or non-existance of an element  of the list, for which a predicate holds.
+```
 
-```prolog
+
+## tmember_t
+ 
+ tmembert can be used to test the existance  or non-existance of an element  of the list, 
+ for which a predicate holds.
+
+
+```
 ?- tmember_t(#<(1),[1,2,3,4,6],T).
    T = true.
 ?- tmember_t(#<(100),[1,2,3,4,6],T).
    T = false.
 ?- 
 
-'''
+```
 
  ## tpartition/4
-Partition a list based on a partially applied 2-arity predicate.
 
- ```prolog
+Partition a list based on a predicate requiring two more arguments.   
+
+ ```
  :- meta_predicate(tpartition(2, ?, ?, ?)).
- '''
- Partition  a list based on larger than 4
- ```prolog
+ ```
+ Partition  a list based on larger than 4:
+
+ ```
 ?- tpartition(#<(4),[1,2,3,4,5,6,3,4,5],A,B).
    A = [5,6,5], B = [1,2,3,4,3,4].
 ?- 
-'''
+```
+
 Find Z, for which #<(Z) partions [1,2,4,5] into [4,5], and [1,2]:
-```prolog
+
+```
 ?- tpartition(#<(Z),[1,2,4,5],[4,5],[1,2]), indomain(Z).
    Z = 2
 ;  Z = 3
 ;  false.
 ?- 
 
-'''
+```
+
 ## if_/3
 
 [if_/3](https://www.metalevel.at/prolog/metapredicates) "correctly commits to one of two alternatives when admissable …".
@@ -258,42 +316,46 @@ The first argument is a  predicate requiring one more argument, which is the rei
 
 The prolog system provides some help here.  The prolog system uses =/3 in this example, because =/3 wouldn't match.
 
-```prolog
+```
 ?- if_(X=8, Z=3, M=4).
-'''
+```
+
 or 
-```prolog
+
+```
 ?- if_(X#<8, Z=3, M=4).
    M = 4, clpz:(X in 8..sup), clpz:(X+1#=_A), clpz:(_A in 9..sup)
 ;  Z = 3, clpz:(X in inf..7), clpz:(X+1#=_A), clpz:(_A in inf..8).
 ?- 
-'''
+```
 
 
 Attemtping to use a 0-ary predicate fails:
-```prolog
+
+```
 ?- Y=true, if_(Y, Z=3, M=4).
    error(existence_error(procedure,true/1),true/1).
 ?- 
-'''
+```
 Which  you can easily work around with:
-```prolog
+
+```
 ?- Y=true,if_(Y=true, Z=3, M=4).
    Y = true, Z = 3.
 ?- 
-'''
+```
 
 ## cond_t/3
 
 Seems to be an if construct without an else.
 
-```prolog
+```
 ?- cond_t(A=B,format("A is B",[]), true),A=west,B=west.
 A is B   A = west, B = west
 ;  false.
 ```
 
-```prolog
+```
 ?- cond_t(A=B,format("A is not B",[]), false),A=wild,B=one.
 A is not B   A = wild, B = one.
 ```
