@@ -893,8 +893,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
                                                         return Some(unmark_cell_bits!(next_cell));
                                                     }
-                                                    (HeapCellValueTag::PStrLoc) => {
-                                                        self.iter.push_stack(h);
+                                                    (HeapCellValueTag::PStrLoc, l) => {
+                                                        let tail_idx = self.iter.heap.scan_slice_to_str(l).tail_idx;
+                                                        self.iter.push_stack(IterStackLoc::marked_loc(tail_idx, HeapOrStackTag::Heap));
                                                         return Some(unmark_cell_bits!(next_cell));
                                                     }
                                                     _ => {}
