@@ -6,35 +6,59 @@ Load lambda, dif, clpz, and reif into your toplevel to evaluate the examples in 
 If you have an improvement (such as a better example or an explanation) to this tutorial, please [submit a PR](https://github.com/mthom/scryer-prolog/pulls) or 
 [github issue](https://github.com/mthom/scryer-prolog/issues).
 
-## Introduction and meta_predicate Review
+## Introduction
 
-Review the summary at 25:45 [Power of Prolog meta_predicate declarations](https://www.youtube.com/watch?v=m3cbgebcKng). You will need some understanding of meta_predicate declarations.
+reif predicates will have as an argument a predicate requiring at least one additional argument.  That predicate's last argument will be the reified value of the predicate.  
 
-Typically, reif predicates provided as arguments typically require the last additional argument will be a reified binary value.  
+For example,  the  argument to tfilter is a predicate taking two additional arguments.   Inspecting the source, you see the parameters  for the first argument 
+is named C_2;  the naming of parameters ending in _N is used to convey the paremeter will be a predicate taking N additional arguments (in reif, the last of which is expected
+to be a reifed boolean value).   
 
- In this case, the first argument of tfilter is required to be a predicate taking two additional arguments.
 
 ```
 :- meta_predicate(tfilter(2, ?, ?)).
+
+tfilter(_, [], []).
+tfilter(C_2, [E|Es], Fs0) :-
+   …
 ```
 
-You will probably need to inspect reif.pl to fully understand how to use the module, and to learn
-some prolog skills you may not already have.
+C_2 can be a partial goal requring two more arguments, or a 2-ary predicate.  In either case the last argument is the reified
+truth value.
+For example, using dif/3 from reif, and applying one argument 3, gives a partially applied goal X_2 requiring two more arguments.
+
+```
+?- X_2=dif(3), call(X_2,9,T).
+   X_2 = dif(3), T = true.
+?- 
+```
+or more succinctly:
+
+```
+?-  call(dif(3),9,T).
+   T = true.
+?- 
+```
+
+You will probably need to inspect reif.pl to fully understand how to use the module .  By studying the implementation of predicates, you may also learn
+some new prolog skills
 
 There is some code that you may find confusing, which shows a predicate expecting 2 arguments, but only one is provided:
 
 ```
    if_(call(C_2, E), Fs0 = [E|Fs], Fs0 = Fs),
 ```
-Fortunatley, you don't need to understand that mechanism to use the reif module.  Below there examples of how to use if_.   
+Fortunatley, you don't need to understand that mechanism to use the reif module. The C_2 parameter name gives you enough information about the predicate
+you must supply  as an argument.
 
+You may be surprised when something like this works:
 
-Also, don't be confused when something like this works:
 ```
 ?- call( tfilter,=(3),[3],X).
    X = [3].
 ?- 
 ```
+
 but this breaks.
 
 ```
@@ -42,6 +66,7 @@ but this breaks.
    error(existence_error(procedure,(#>)/3),(#>)/3).
 ?- 
 ```
+
 What is happening is that reif has provided =/3, and that is what is being used in tfilter (not the usual =/2).   
 
 But (in my system at the time of writing) #>/2 exists, but there is no #>/3.  
@@ -69,7 +94,6 @@ so that P1(A1, A2, ...AN) holds when P2(A1, A2, ..., AN, T) holds and T is the r
 [Probably not](https://github.com/mthom/scryer-prolog/discussions/2557), but you can probably learn something about writing reified versions of predicates by reading that discussion.
 
 You can look at predicates like dif/3  or =/3 in [reif](/reif.html) to get ideas about writing predicates that include a reifed boolean value.
-```
 
 ## memberd_t/3
 
@@ -134,24 +158,11 @@ reif introdces =/3, which holds if and only if the first two arguments are equal
 
 You may find it useful to write predicates where the last argument is a boolean variable containing the result of whether some relation holds, for use with other reif predicates.    
 
-
-
 ## if_/3
 
 if_1 calls predicate If_1,  adding on the last argument the predicate expects, which is a boolean value, T.
 if T then calls the predicate Then_0 
 otherwise, calls the predicate Else 0.  
-
-It is worth looking at the source.
-```
-if_(If_1, Then_0, Else_0) :-
-    call(If_1, T),
-    (  T == true  -> call(Then_0)
-    ;  T == false -> call(Else_0)
-    ;  nonvar(T) -> throw(error(type_error(boolean, T), _))
-    ;  throw(error(instantiation_error, _))
-    ).
-```
 
 ```
 ?- if_( (X=3),(Y=4),(Z=5)), (X=4;X=3).
@@ -166,8 +177,8 @@ In the above example, only Y or Z are instantiated variables, but not both.
 Example with a differrent comparison predicate.  
 
 ```
-greater_than_two(Y,T) :-  Y #> 2 ,T=true.
-greater_than_two(Y,T) :-  Y #< 2 ,T=false.
+greater_than_two(Y,true) :-  Y #> 2.
+greater_than_two(Y,false) :-  Y #=< 2.
 ?- if_(greater_than_two(3),X="works", X="fails").
    X = "works".
 ?- 
@@ -311,6 +322,8 @@ Find Z, for which #<(Z) partions [1,2,4,5] into [4,5], and [1,2]:
 ## if_/3
 
 [if_/3](https://www.metalevel.at/prolog/metapredicates) "correctly commits to one of two alternatives when admissable …".
+
+
 
 The first argument is a  predicate requiring one more argument, which is the reified truth value of a comparsion . 
 
