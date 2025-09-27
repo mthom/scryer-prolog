@@ -447,10 +447,26 @@ impl MachineState {
                     location: None,
                 }
             }
-            ExistenceError::FfiFunction(atom) => {
+            ExistenceError::FfiFunction(name, arity) => {
+                let culprit = functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)]);
                 let stub = functor!(
                     atom!("existence_error"),
-                    [atom_as_cell((atom!("ffi_function"))), atom_as_cell(atom)]
+                    [atom_as_cell((atom!("ffi_function"))), functor(culprit)]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                }
+            }
+            ExistenceError::FfiStructConstructor(name, arity) => {
+                let culprit = functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)]);
+                let stub = functor!(
+                    atom!("existence_error"),
+                    [
+                        atom_as_cell((atom!("ffi_struct_constructor"))),
+                        functor(culprit)
+                    ]
                 );
 
                 MachineError {
@@ -688,13 +704,25 @@ impl MachineState {
                 }
             }
             FfiError::ValueOutOfRange(domain, culprit) => self.domain_error(domain, culprit),
-            FfiError::FunctionNotFound(name) => {
-                self.existence_error(ExistenceError::FfiFunction(name))
+            FfiError::FunctionNotFound(name, arity) => {
+                self.existence_error(ExistenceError::FfiFunction(name, arity))
             }
             FfiError::StructNotFound(name) => {
                 self.existence_error(ExistenceError::FfiStructType(name))
             }
-            FfiError::ArgCountMismatch => self.unreachable_error(),
+            FfiError::ArgCountMismatch {
+                name,
+                kind,
+                expected: _,
+                got,
+            } => match kind {
+                ffi::ArgCountMismatchKind::Function => {
+                    self.existence_error(ExistenceError::FfiFunction(name, got))
+                }
+                ffi::ArgCountMismatchKind::Struct => {
+                    self.existence_error(ExistenceError::FfiStructConstructor(name, got))
+                }
+            },
             FfiError::AllocationFailed => MachineError {
                 stub: functor!(atom!("resource_error"), [atom_as_cell((atom!("heap")))]),
                 location: None,
@@ -1137,7 +1165,8 @@ pub enum ExistenceError {
     SourceSink(HeapCellValue),
     Stream(HeapCellValue),
     Process(HeapCellValue),
-    FfiFunction(Atom),
+    FfiFunction(Atom, usize),
+    FfiStructConstructor(Atom, usize),
     FfiStructType(Atom),
 }
 

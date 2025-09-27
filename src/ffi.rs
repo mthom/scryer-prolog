@@ -180,10 +180,17 @@ impl StructImpl {
 
     fn build(
         &self,
+        name: Atom,
         structs_table: &HashMap<Atom, StructImpl>,
         struct_args: &mut [Value],
     ) -> Result<FfiStruct, FfiError> {
-        let args = ArgValue::build_args(struct_args, &self.fields, structs_table)?;
+        let args = ArgValue::build_args(
+            name,
+            ArgCountMismatchKind::Struct,
+            struct_args,
+            &self.fields,
+            structs_table,
+        )?;
 
         let alloc = FfiStruct::new(self.layout()?, FfiAllocator::Rust)?;
 
@@ -490,19 +497,30 @@ impl<'val> ArgValue<'val> {
                     return Err(FfiError::StructNotFound(*arg_type_name));
                 };
 
-                Ok(Self::Struct(struct_type.build(structs_table, args)?))
+                Ok(Self::Struct(struct_type.build(
+                    *arg_type_name,
+                    structs_table,
+                    args,
+                )?))
             }
             FfiType::Void => Err(FfiError::VoidArgumentType),
         }
     }
 
     fn build_args(
+        name: Atom,
+        kind: ArgCountMismatchKind,
         args: &'val mut [Value],
         types: &[FfiType],
         structs_table: &HashMap<Atom, StructImpl>,
     ) -> Result<Vec<Self>, FfiError> {
         if types.len() != args.len() {
-            return Err(FfiError::ArgCountMismatch);
+            return Err(FfiError::ArgCountMismatch {
+                name,
+                kind,
+                expected: types.len(),
+                got: args.len(),
+            });
         }
 
         args.iter_mut()
@@ -659,9 +677,15 @@ impl ForeignFunctionTable {
         let fn_impl = self
             .table
             .get(&fn_name)
-            .ok_or(FfiError::FunctionNotFound(fn_name))?;
+            .ok_or(FfiError::FunctionNotFound(fn_name, args.len()))?;
 
-        let args = ArgValue::build_args(&mut args, &fn_impl.args, &self.structs)?;
+        let args = ArgValue::build_args(
+            fn_name,
+            ArgCountMismatchKind::Function,
+            &mut args,
+            &fn_impl.args,
+            &self.structs,
+        )?;
 
         let args = PointerArgs::new(&args);
 
@@ -720,7 +744,7 @@ impl ForeignFunctionTable {
 
                 let (_, args) = args.as_struct()?;
 
-                let ffi_struct = struct_impl.build(&self.structs, args)?;
+                let ffi_struct = struct_impl.build(kind, &self.structs, args)?;
 
                 let ptr = ManuallyDrop::new(ffi_struct).ptr;
 
@@ -906,9 +930,14 @@ pub enum FfiError {
     ValueCast(Atom, Atom),
     ValueOutOfRange(DomainErrorType, Value),
     VoidArgumentType,
-    FunctionNotFound(Atom),
+    FunctionNotFound(Atom, usize),
     StructNotFound(Atom),
-    ArgCountMismatch,
+    ArgCountMismatch {
+        name: Atom, // ffi function or struct
+        kind: ArgCountMismatchKind,
+        expected: usize,
+        got: usize,
+    },
     AllocationFailed,
     // LayoutError should never occour
     LayoutError,
@@ -916,6 +945,12 @@ pub enum FfiError {
     UnsupportedAbi,
     CStrFieldType,
     NullPtr,
+}
+
+#[derive(Debug)]
+pub(crate) enum ArgCountMismatchKind {
+    Function,
+    Struct,
 }
 
 impl std::fmt::Display for FfiError {
