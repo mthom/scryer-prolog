@@ -733,7 +733,7 @@ impl ForeignFunctionTable {
         match FfiType::from_atom(&kind) {
             FfiType::Void => Err(FfiError::VoidArgumentType),
             FfiType::Bool => {
-                let val = args.as_int::<u8>()?;
+                let val = args.as_int::<i8>()?;
                 let init = match val {
                     0 => false,
                     1 => true,
@@ -796,8 +796,8 @@ impl ForeignFunctionTable {
 
         match FfiType::from_atom(&kind) {
             FfiType::Void => Err(FfiError::VoidArgumentType),
-            FfiType::Bool | FfiType::U8 => Ok(unsafe { read_int::<u8>(ptr, arena) }),
-            FfiType::I8 => Ok(unsafe { read_int::<i8>(ptr, arena) }),
+            FfiType::U8 => Ok(unsafe { read_int::<u8>(ptr, arena) }),
+            FfiType::Bool | FfiType::I8 => Ok(unsafe { read_int::<i8>(ptr, arena) }),
             FfiType::U16 => Ok(unsafe { read_int::<u16>(ptr, arena) }),
             FfiType::I16 => Ok(unsafe { read_int::<i16>(ptr, arena) }),
             FfiType::U32 => Ok(unsafe { read_int::<u32>(ptr, arena) }),
