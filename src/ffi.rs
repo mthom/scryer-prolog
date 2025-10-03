@@ -399,9 +399,49 @@ enum FfiType {
     Struct(Atom),
 }
 
+trait ToFfiType {
+    const TYPE: FfiType;
+}
+
+macro_rules! impl_to_ffi_type {
+    ($($t:ty => $v:ident);*$(;)?) => {
+        $(
+            impl ToFfiType for $t {
+                const TYPE: FfiType = FfiType::$v;
+            }
+        )*
+    };
+}
+
+impl_to_ffi_type!(
+    u8 => U8;
+    i8 => I8;
+    u16 => U16;
+    i16 => I16;
+    u32 => U32;
+    i32 => I32;
+    u64 => U64;
+    i64 => I64;
+    f32 => F32;
+    f64 => F64;
+);
+
 impl FfiType {
     fn from_atom(atom: &Atom) -> Self {
         match atom {
+            atom!("char") => <core::ffi::c_char as ToFfiType>::TYPE,
+            atom!("uchar") => <core::ffi::c_uchar as ToFfiType>::TYPE,
+            atom!("schar") => <core::ffi::c_schar as ToFfiType>::TYPE,
+            atom!("short") => <core::ffi::c_short as ToFfiType>::TYPE,
+            atom!("ushort") => <core::ffi::c_ushort as ToFfiType>::TYPE,
+            atom!("int") => <core::ffi::c_int as ToFfiType>::TYPE,
+            atom!("uint") => <core::ffi::c_uint as ToFfiType>::TYPE,
+            atom!("long") => <core::ffi::c_long as ToFfiType>::TYPE,
+            atom!("ulong") => <core::ffi::c_ulong as ToFfiType>::TYPE,
+            atom!("longlong") => <core::ffi::c_longlong as ToFfiType>::TYPE,
+            atom!("ulonglong") => <core::ffi::c_ulonglong as ToFfiType>::TYPE,
+            atom!("float") => <core::ffi::c_float as ToFfiType>::TYPE,
+            atom!("double") => <core::ffi::c_double as ToFfiType>::TYPE,
             atom!("sint64") | atom!("i64") => Self::I64,
             atom!("sint32") | atom!("i32") => Self::I32,
             atom!("sint16") | atom!("i16") => Self::I16,
@@ -693,7 +733,7 @@ impl ForeignFunctionTable {
         match FfiType::from_atom(&kind) {
             FfiType::Void => Err(FfiError::VoidArgumentType),
             FfiType::Bool => {
-                let val = args.as_int::<u8>()?;
+                let val = args.as_int::<i8>()?;
                 let init = match val {
                     0 => false,
                     1 => true,
@@ -756,8 +796,8 @@ impl ForeignFunctionTable {
 
         match FfiType::from_atom(&kind) {
             FfiType::Void => Err(FfiError::VoidArgumentType),
-            FfiType::Bool | FfiType::U8 => Ok(unsafe { read_int::<u8>(ptr, arena) }),
-            FfiType::I8 => Ok(unsafe { read_int::<i8>(ptr, arena) }),
+            FfiType::U8 => Ok(unsafe { read_int::<u8>(ptr, arena) }),
+            FfiType::Bool | FfiType::I8 => Ok(unsafe { read_int::<i8>(ptr, arena) }),
             FfiType::U16 => Ok(unsafe { read_int::<u16>(ptr, arena) }),
             FfiType::I16 => Ok(unsafe { read_int::<i16>(ptr, arena) }),
             FfiType::U32 => Ok(unsafe { read_int::<u32>(ptr, arena) }),

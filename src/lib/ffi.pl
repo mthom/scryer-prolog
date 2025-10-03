@@ -11,34 +11,70 @@ The main predicate is `use_foreign_module/2`. It takes a library name (which dep
 operating system could be a `.so`, `.dylib` or `.dll` file). and a list of functions. Each
 function is defined by its name, a list of the type of the arguments, and the return argument.
 
-Types available are: `sint8`/`i8`, `uint8`/`u8`, `sint16`/`i16`, `uint16`/`u16`, `sint32`/`i32`, `uint32`/`u32`, `sint64`/`i64`,
-`uint64`/`u64`, `f32`, `f64`, `cstr`, `void`, `bool`, `ptr` and custom structs, which can be defined
-with `foreign_struct/2`.
-
-After that, each function on the lists maps to a predicate created in the ffi module which
-are used to call the native code.
-The predicate takes the functor name after the function name. Then, the arguments are the input
-arguments followed by a return argument. However, functions with return type `void` or `bool`
-don't have that return argument. Predicates with `void` always succeed and `bool` predicates depend
-on the return value on the native side.
+For each function in the list a predicate of the same name is generated in the ffi module which
+can then be used to call the native code.
+The predicates arguments are the input arguments of the foreign function and depending on the return type an extra argument for the return value. 
+Functions with return type `void` or `bool` don't have this extra argument. 
+Predicates for functions with return type `void` always succeed.
+Predicates for functions with retun type `bool` succeed iff the return value is 1.
 
 ```
 ffi:FUNCTION_NAME(+InputArg1, ..., +InputArgN, -ReturnArg). % for all return types except void and bool
 ffi:FUNCTION_NAME(+InputArg1, ..., +InputArgN). % for void and bool
 ```
 
-## Notes regarding cstr
+## Available types are
+
+### Basic C Types
+
+[C Types Reference](https://en.cppreference.com/w/c/language/types.html)
+
+- `void`, 
+- `char`, `uchar`, `schar`
+- `short`, `ushort`
+- `int`, `uint`
+- `long`, `ulong`,
+- `longlong`, `ulonglong`,
+- `float`, `double`
+
+### Fixed Width Integer Types
+
+[C Fixed With Integer Types Reference](https://en.cppreference.com/w/c/types/integer.html)
+
+- `sint8`/`i8`, `uint8`/`u8`, 
+- `sint16`/`i16`, `uint16`/`u16`, 
+- `sint32`/`i32`, `uint32`/`u32`, 
+- `sint64`/`i64`, `uint64`/`u64`, 
+
+### Fixed Width Floating-Point Types
+
+[C++ Fixed Width Floating-Point Types Reference](https://en.cppreference.com/w/cpp/types/floating-point.html)
+
+- `f32`, `f64` 
+
+### Other Types
+
+- `cstr`, 
+- `ptr`,
+- `bool` and, 
+- custom structs, which can be defined with `foreign_struct/2`.
+
+### Notes regarding bool
+
+- Not necessarily compatible with the fundamental C type bool.
+- Same as `i8` but only values 0 and 1 are valid values.
+
+### Notes regarding cstr
 
 - When using `cstr` as an argument type the string will be deallocated once the function returns.
 - When using `cstr` as a return type the string will be copied and won't be deallocated.
-
 
 ## Example
 
 For example, let's see how to define a function from the [raylib](https://www.raylib.com/) library.
 
 ```
-?- use_foreign_module("./libraylib.so", ['InitWindow'([sint32, sint32, cstr], void)]).
+?- use_foreign_module("./libraylib.so", ['InitWindow'([int, int, cstr], void)]).
 ```
 
 This creates a `'InitWindow'` predicate under the ffi module. Now, we can call it:
@@ -143,7 +179,7 @@ allocate(Allocator, Type, Args, Ptr) :-
 %
 % Read a value of Type from the pointer Ptr and unify the read value with Value
 %
-% For type cstr take read a nul-terminated utf-8 string starting at Ptr.
+% For type cstr read a nul-terminated utf-8 string starting at Ptr.
 %
 read_ptr(Type, Ptr, Value) :-
     must_be(atom, Type),
@@ -163,7 +199,7 @@ deallocate(Allocator, Type, Ptr) :-
 
 %% array_type(+ElemType, +Len, -ArrayType)
 %
-% unify the ffi type for an array of lenth Len with element type ElemType with ArrayType
+% unify the ffi type for an array of length Len with element type ElemType with ArrayType
 %
 array_type(ElemType, Len, ArrayType) :-
     (Len =< 0 -> domain_error(greater_than_zero, Len, array_type/3); true),
@@ -183,7 +219,7 @@ array_type(ElemType, Len, ArrayType) :-
 %  Allocate the Locals, evaluate the Goal and deallocate the Locals.
 %  The Locals will also be cleandup when Goal fails or throws an error.
 %
-%  Locals is a list of local variable definitions let(-Ptr, +Type, +Args).
+%  Locals is a list of local variable definitions `let(-Ptr, +Type, +Args)`.
 %  Ptr will be unified with the pointer to the local of Type initialized with Args.
 %
 with_locals(Locals, Goal) :-
