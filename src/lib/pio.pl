@@ -250,8 +250,9 @@ phrase_to_file(GRBody, File, Options) :-
        ;  '$unattributed_var'(S1) -> ...(S1,S)
        ;  freeze:get_atts(S1, frozen(Goal)),
           nonvar(Goal),
-          Goal = user:render_step(_,_,_,_) ->
-          true % for JJ
+          Goal = pio:render_step(_,_,_,_) ->
+          % for JJ
+          freeze:put_atts(S1, -frozen(Goal))
        ;  ...(S1,S) % does this ever happen?
        )
     ).
