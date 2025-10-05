@@ -316,6 +316,7 @@ Oddly, scryer prolog 0.9.4-614 has
 ```
 
 Relating a list, to a list without a certain element:
+
 ```  prolog
 ?- tfilter(dif(10),[1,2,3,X],Es).
    X = 10, Es = [1,2,3]
