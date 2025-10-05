@@ -8,13 +8,86 @@ If you have an improvement (such as a better example or an explanation) to this 
 
 ## Introduction
 
-reif predicates will have as an argument a predicate requiring at least one additional argument.  That predicate's last argument will be the reified value of the predicate.  
+Here are predicates exported by reif.
+```
+:- module(reif, [if_/3, (=)/3, (',')/3, (;)/3, cond_t/3, dif/3,
+		         memberd_t/3, tfilter/3, tmember/2, tmember_t/3,
+		         tpartition/4]).
+```
 
-For example,  the  argument to tfilter is a predicate taking two additional arguments.   Inspecting the source, you see the parameters  for the first argument 
-is named C_2;  the naming of parameters ending in _N is used to convey the paremeter will be a predicate taking N additional arguments (in reif, the last of which is expected
-to be a reifed boolean value).   
+The last argument of (=)/3, (,)/3, (;)/3, dif/3, or the predicates with principal functor ending in "_t" is the reified boolean value of the predicate.  The _t 
+suffix of a  functor name for a predicate  expecting a reified boolean value is a convention, as is naming the corresponding argument or parameter T.  
+You may wish to follow that convention when writing your own predictes.  
+
+### What is a reified boolean value?  
+
+In prolog it means representing the truth of some expression or relation as a boolean value.  Unlike many languages, the 
+truthyness of a term like 'A < 10' can not be directly bound to a variable with an assignment.   This is because terms have a different meaning in prolog
+that you should already be familiar with.
+
+```
+?- A is 112, C= (A<10).  
+   A = 112, C = (112<10).
+?- 
+```
+To make C bound to a boolean value with the built in (->):
+
+```
+?- A is 2, ( A#<10 -> C=true;C=false), C, format("~s",["C holds"]).
+C holds   A = 2, C = true.
+?- A is 2000, ( A#<10 -> C=true;C=false), C, format("~s",["C holds"]).
+   false.
+?- 
+```
+ 
+ _if from reif provides a better way to do the same.  
+```
+?- A #= 2,if_(A#<103,C=true,C=false),C,format("~s",["C Holds"]).
+C Holds   A = 2, C = true.
+?- 
+```
+
+true holds (and false  doesn't), even  when bound to variables:
+
+```
+?- X=true,X, format("foo",[]).
+foo   X = true.
+?- X=false,X, format("foo",[]).
+   false.
+?- 
+```
+  
+oddly, there is no build in < notation in prolog for boolean values.
+```
+?- false < true, true.
+   error(type_error(evaluable,false/0),(is)/2).
+?- 
+```
 
 
+Note that other Prolog modules may express a reified boolean value as 0 or 1 or choose some other representation instead of false and true.  
+
+
+### Naming Conventions in reif
+
+We will use tmember_t to demonstrate an example.   T is bound to true when a condition holds, and false  when it doesn't. 
+
+```
+?- tmember_t(#<(1),[1,2,3,4,6],T).
+   T = true.
+?- tmember_t(#<(100),[1,2,3,4,6],T).
+   T = false.
+?- 
+```
+
+The prefix of "t_"  (tmember/2,tmember_t/3, tfilter, tpartition/4)  in a predicate name indicates the first 
+argument will be a predicate that takes as as an argument a predicate  (or partially applied predicate) taking additonal arguments, the last of which will
+be a reified boolean value for whether the query holds.  
+
+The naming convention for the parameters which are predicates is C_N, where C may convey some meaning about the arguments purpose, and the 
+N indicates how many additional arguments are required by the  predicate.
+
+It is necessary useful to inspect the source of reif so you can see the information conveyed in the predicate and parameter names.
 ```
 :- meta_predicate(tfilter(2, ?, ?)).
 
@@ -22,9 +95,9 @@ tfilter(_, [], []).
 tfilter(C_2, [E|Es], Fs0) :-
    …
 ```
+C_2 can be a partial goal requring two more arguments, or a 2-ary predicate.  In either case the parameter of C_2 is the reified
+truth value. 
 
-C_2 can be a partial goal requring two more arguments, or a 2-ary predicate.  In either case the last argument is the reified
-truth value.
 For example, using dif/3 from reif, and applying one argument 3, gives a partially applied goal X_2 requiring two more arguments.
 
 ```
@@ -51,6 +124,8 @@ There is some code that you may find confusing, which shows a predicate expectin
 Fortunatley, you don't need to understand that mechanism to use the reif module. The C_2 parameter name gives you enough information about the predicate
 you must supply  as an argument.
 
+### Surprises
+
 You may be surprised when something like this works:
 
 ```
@@ -70,7 +145,7 @@ but this breaks.
 What is happening is that reif has provided =/3, and that is what is being used in tfilter (not the usual =/2).   
 
 But (in my system at the time of writing) #>/2 exists, but there is no #>/3.  
-A workaround is to define a three-arity predicate to do the comparison (it could be #>/3, but I choose pound_gt):
+A workaround is to define a three-arity predicate to do the comparison (it could be #>/3, but I choose pound_gt_t):
 
 ```
 pound_gt(X,Y,true):- X #>Y,!.
@@ -100,13 +175,13 @@ You can look at predicates like dif/3  or =/3 in [reif](/reif.html) to get ideas
 Query holds if a single item 'c' is a member of a list.
 
 ```
-?- memberd_t('c',"branch free",true).  
+?- memberd_t(c,"branch free",true).  
    true.
 ```
 Query holds if single item is excluded from a list.  Exclusion or inclusion is determined by the third argument.
 
 ```
-?- memberd_t('c',"branch free",false). 
+?- memberd_t(c,"branch free",false). 
    true.
 ```
 
