@@ -23,7 +23,7 @@ Here are predicates exported by reif:
 In prolog it means representing the truth of some expression or relation as a boolean value.  Unlike many languages, the 
 truthyness of a term like 'A < 10' can not be directly bound to a variable with an assignment.   This is because terms have a different meaning in prolog
 that you should already be familiar with.
-1111
+
 ``` prolog
 ?- A is 112, C= (A<10).  
    A = 112, C = (112<10).
@@ -57,14 +57,15 @@ foo   X = true.
 ?- 
 ```
   
-oddly, there is no build in < notation in prolog for boolean values.
+Oddly, there is no build in < operator in prolog for boolean values:
+
 ``` prolog
 ?- false < true, true.
    error(type_error(evaluable,false/0),(is)/2).
 ?- 
 ```
 
-Note that other Prolog modules may express a reified boolean value as 0 or 1 or choose some other representation instead of false and true.  
+Note that other Prolog modules (like clp(z)) may express a reified boolean value as 0 or 1 or choose some other representation instead of false and true.  
 
 
 ### Naming Conventions in reif
@@ -151,7 +152,7 @@ but this breaks.
 What is happening is that reif has provided (=)/3, and that is what is being used in tfilter (not the usual (=)/2).   
 
 But (in my system at the time of writing) (#>)/2 exists, but there is no (#>)/3.  
-A workaround is to define a three-arity predicate to do the comparison (it could be (#>)/3, but I choose pound_gt_t):
+A workaround is to define a three-arity predicate to do the comparison (it could be (#>)/3, but I choose pound\_gt\_t):
 
 ``` prolog
 pound_gt_t(X,Y,T) :- if_(Y #< X, T=true, T=false).
@@ -190,40 +191,42 @@ Query holds if single item is excluded from a list.  Exclusion or inclusion is d
    true.
 ```
 
-Query holds, and X is true if and only if a single item is included in the list.  Note single quotes are normally not needed around atoms like 'c'.
+Query holds, and T is true if and only if a single item is included in the list.  
 
 ```   prolog
-?- memberd_t(c,"branch free",X).
-   X = true.
+?- memberd_t(c,"branch free",T).
+   T = true.
 ?- 
 ```
 
-Query holds for Y in a member of the list and X is false or Y is not a member of the list and X is true.
+Query holds for Y in a member of the list and T is false or Y is not a member of the list and T is true.
 
 ```   prolog
-?- memberd_t(Y,[1,2,3],X).
-   Y = 1, X = true
-;  Y = 2, X = true
-;  Y = 3, X = true
-;  X = false, dif:dif(1,Y), dif:dif(2,Y), dif:dif(3,Y).
+?- memberd_t(Y,[1,2,3],T).
+   Y = 1, T = true
+;  Y = 2, T = true
+;  Y = 3, T = true
+;  T = false, dif:dif(1,Y), dif:dif(2,Y), dif:dif(3,Y).
 ?- 
+
 ```
 
 Lists of length 2, where A is a member of exactly one of those lists.
 
 ```   prolog
-length(L1,2),length(L2,2),memberd_t(A,L1,X), memberd_t(A,L2,Y), dif(X,Y).
-   L1 = [A,_C], L2 = [_A,_B], X = true, Y = false, dif:dif(_A,A), dif:dif(_B,A)
-;  L1 = [_A,A], L2 = [_B,_C], X = true, Y = false, dif:dif(_A,A), dif:dif(_B,A), dif:dif(_C,A)
-;  L1 = [_A,_B], L2 = [A,_C], X = false, Y = true, dif:dif(_A,A), dif:dif(_B,A)
-;  L1 = [_A,_B], L2 = [_C,A], X = false, Y = true, dif:dif(_A,A), dif:dif(_B,A), dif:dif(_C,A)
+?- length(L1,2),length(L2,2),memberd_t(A,L1,TX), memberd_t(A,L2,TY), dif(TX,TY).
+   L1 = [A,_C], L2 = [_A,_B], TX = true, TY = false, dif:dif(_A,A), dif:dif(_B,A)
+;  L1 = [_A,A], L2 = [_B,_C], TX = true, TY = false, dif:dif(_A,A), dif:dif(_B,A), dif:dif(_C,A)
+;  L1 = [_A,_B], L2 = [A,_C], TX = false, TY = true, dif:dif(_A,A), dif:dif(_B,A)
+;  L1 = [_A,_B], L2 = [_C,A], TX = false, TY = true, dif:dif(_A,A), dif:dif(_B,A), dif:dif(_C,A)
 ;  false.
-?-  
+?- 
 ```
 
 ##  (=)(A,B,T).
 
-reif introdces =/3, which holds if and only if the first two arguments are equal, and the third argument T is true or the first two arguments are not equal the the third argument is false.   T is the 'reified' truth value of A.  
+reif introdces (=)/3, which holds if and only if the first two arguments are equal, and the third argument T is true or the first two arguments are not equal the the third argument is false.   
+T is the reified truth value of =(A,B).  
 
 ``` prolog
 ?- (reif:(=)(1,2,false).
@@ -345,13 +348,7 @@ It can be used to test for existance of an element for which the supplied predic
    false.
 ?- 
 ```
-
-
-
- 
 ## tmember_t
-
- 
 
  tmember_t can be used to test the existance  or non-existance of an element  of the list, 
  for which a predicate holds.
@@ -365,7 +362,7 @@ It can be used to test for existance of an element for which the supplied predic
 
 ```
  
-## tparttition/4
+## tpartition/4
 
 Partition a list based on a predicate requiring two more arguments.   
 
@@ -395,14 +392,14 @@ Find Z, for which #<(Z) partions [1,2,4,5] into [4,5], and [1,2]:
 
 [if_/3](https://www.metalevel.at/prolog/metapredicates) "correctly commits to one of two alternatives when admissable …".
 
-
-
 The first argument is a  predicate requiring one more argument, which is the reified truth value of a comparsion . 
 
-The prolog system provides some help here.  The prolog system uses =/3 in this example, because =/3 wouldn't match.
+The prolog system provides some help here.  The prolog system uses (=)/3 in this example, because (=)/3 wouldn't match.
 
 ```   prolog
-?- if_(X=8, Z=3, M=4).
+?- if_(X=8, Z=3,M=4).
+   X = 8, Z = 3
+;  M = 4, dif:dif(X,8).
 ```
 
 or 
