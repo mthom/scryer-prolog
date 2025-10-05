@@ -223,10 +223,12 @@ Lists of length 2, where A is a member of exactly one of those lists.
 ?- 
 ```
 
-##  (=)(A,B,T).
+##  (=)/3  
 
-reif introdces (=)/3, which holds if and only if the first two arguments are equal, and the third argument T is true or the first two arguments are not equal the the third argument is false.   
-T is the reified truth value of =(A,B).  
+reif introdces (=)/3, which holds if and only if the first two arguments
+ X and Y are equal, and the third argument T is true or X and Y not equal and T is false.   
+
+T is the reified truth value of =(X,Y).  
 
 ``` prolog
 ?- (reif:(=)(1,2,false).
@@ -243,9 +245,8 @@ You may find it useful to write predicates where the last argument is a boolean 
 
 ## if_/3
 
-if_1 calls predicate If_1,  adding on the last argument the predicate expects, which is a boolean value, T.
-if T then calls the predicate Then_0 
-otherwise, calls the predicate Else 0.  
+The first argument to if_/3 is a predicate expecting one argument, which is a boolean value T.  Read the definition in reif.pl for the meaning of the 
+remaining arguments.
 
 ```   prolog
 ?- if_( (X=3),(Y=4),(Z=5)), (X=4;X=3).
@@ -260,11 +261,10 @@ In the above example, only Y or Z are instantiated variables, but not both.
 Example with a differrent comparison predicate.  
 
 ```   prolog
-greater_than_two(Y,true) :-  Y #> 2.
-greater_than_two(Y,false) :-  Y #=< 2.
+greater_than_two(Y, true) :- Y #> 2.
+
 ?- if_(greater_than_two(3),X="works", X="fails").
    X = "works".
-?- 
 ```
 
 ## tfilter/3
@@ -282,7 +282,6 @@ tfilter(C_2, [E|Es], Fs0) :-
    tfilter(C_2, Es, Fs).
 ```
 
-The meta_predicate directive is important.  It specifies the first parameter to tfilter is a predicate needing two more arguments.  The first required argument is the value to be compared from the list, and the second is the reified result of the comparison (true, or false).
 
 If your prolog system has 
 
@@ -397,7 +396,7 @@ Find Z, for which #<(Z) partions [1,2,4,5] into [4,5], and [1,2]:
 
 The first argument is a  predicate requiring one more argument, which is the reified truth value of a comparsion . 
 
-The prolog system provides some help here.  The prolog system uses (=)/3 in this example, because (=)/3 wouldn't match.
+The prolog system provides some help here.  The prolog system uses (=)/3 in this example for the comparison X=8.  
 
 ```   prolog
 ?- if_(X=8, Z=3,M=4).
