@@ -306,7 +306,7 @@ Oddly, scryer prolog 0.9.4-614 has
 
  ```   prolog
  (#>)3
- ```:
+ ```
 
 ```   prolog
 ?- tfilter(#>(10),[1,20,20], Xs).
@@ -364,14 +364,16 @@ It can be used to test for existance of an element for which the supplied predic
  
 ## tpartition/4
 
-Partition a list based on a predicate requiring two more arguments.   
+Partition a list based on a predicate requiring two more arguments:
 
- ```   prolog
- :- meta_predicate(tpartition(2, ?, ?, ?)).
- ```
+
+``` prolog
+:- meta_predicate(tpartition(2, ?, ?, ?)). 
+```
+
  Partition  a list based on larger than 4:
 
- ```   prolog
+``` prolog
 ?- tpartition(#<(4),[1,2,3,4,5,6,3,4,5],A,B).
    A = [5,6,5], B = [1,2,3,4,3,4].
 ?- 
