@@ -394,7 +394,7 @@ Find Z, for which #<(Z) partions [1,2,4,5] into [4,5], and [1,2]:
 
 [if_/3](https://www.metalevel.at/prolog/metapredicates) "correctly commits to one of two alternatives when admissable …".
 
-The first argument is a  predicate requiring one more argument, which is the reified truth value of a comparsion . 
+The first argument is a  predicate requiring one more argument, which is the reified truth value of a comparison. 
 
 The prolog system provides some help here.  The prolog system uses (=)/3 in this example for the comparison X=8.  
 
