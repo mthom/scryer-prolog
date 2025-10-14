@@ -118,8 +118,8 @@ impl<'a> EagerStackfulPreOrderHeapIter<'a> {
                 (HeapCellValueTag::PStrLoc, h) => {
                     let tail_idx = self.heap.scan_slice_to_str(h).tail_idx;
 
-                    self.heap[tail_idx].set_mark_bit(self.mark_phase);
                     self.iter_stack.push(self.heap[tail_idx]);
+                    self.heap[tail_idx].set_mark_bit(self.mark_phase);
                 }
                 _ => {
                 }
