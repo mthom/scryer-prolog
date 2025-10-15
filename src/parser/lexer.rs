@@ -482,96 +482,123 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         }
     }
 
-    fn hexadecimal_constant(&mut self, start: char) -> Result<NumberToken, ParserError> {
+    fn hexadecimal_constant(&mut self, start: char) -> Result<Option<NumberToken>, ParserError> {
         self.skip_char(start);
         let mut c = self.lookahead_char()?;
 
         if hexadecimal_digit_char!(c) {
             let mut token = String::with_capacity(16);
 
-            loop {
-                if hexadecimal_digit_char!(c) {
+            while hexadecimal_digit_char!(c) {
+                self.skip_char(c);
+                token.push(c);
+
+                // Skip underline and layout
+                c = match self.lookahead_char() {
+                    Ok(x) => x,
+                    Err(e) if e.is_unexpected_eof() => break,
+                    Err(e) => return Err(e),
+                };
+                if c == '_' {
                     self.skip_char(c);
-                    token.push(c);
+                    self.scan_for_layout()?;
                     c = match self.lookahead_char() {
-                        Ok(c) => c,
-                        Err(e) if e.is_unexpected_eof() => {
-                            break;
-                        }
+                        Ok(x) => x,
+                        Err(e) if e.is_unexpected_eof() => break,
                         Err(e) => return Err(e),
                     };
-                } else {
-                    break;
+
+                    if !hexadecimal_digit_char!(c) {
+                        return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                    }
                 }
             }
 
             self.parse_integer_by_radix(&token, 16)
-                .map(NumberToken::Integer)
+                .map(|x| Some(NumberToken::Integer(x)))
         } else {
             self.return_char(start);
-            Err(ParserError::ParseBigInt(self.line_num, self.col_num))
+            Ok(None)
         }
     }
 
-    fn octal_constant(&mut self, start: char) -> Result<NumberToken, ParserError> {
+    fn octal_constant(&mut self, start: char) -> Result<Option<NumberToken>, ParserError> {
         self.skip_char(start);
         let mut c = self.lookahead_char()?;
 
         if octal_digit_char!(c) {
             let mut token = String::with_capacity(16);
 
-            loop {
-                if octal_digit_char!(c) {
+            while octal_digit_char!(c) {
+                self.skip_char(c);
+                token.push(c);
+
+                // Skip underline and layout
+                c = match self.lookahead_char() {
+                    Ok(x) => x,
+                    Err(e) if e.is_unexpected_eof() => break,
+                    Err(e) => return Err(e),
+                };
+                if c == '_' {
                     self.skip_char(c);
-                    token.push(c);
+                    self.scan_for_layout()?;
                     c = match self.lookahead_char() {
-                        Ok(c) => c,
-                        Err(e) if e.is_unexpected_eof() => {
-                            break;
-                        }
+                        Ok(x) => x,
+                        Err(e) if e.is_unexpected_eof() => break,
                         Err(e) => return Err(e),
                     };
-                } else {
-                    break;
+
+                    if !octal_digit_char!(c) {
+                        return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                    }
                 }
             }
 
             self.parse_integer_by_radix(&token, 8)
-                .map(NumberToken::Integer)
+                .map(|x| Some(NumberToken::Integer(x)))
         } else {
             self.return_char(start);
-            Err(ParserError::ParseBigInt(self.line_num, self.col_num))
+            Ok(None)
         }
     }
 
-    fn binary_constant(&mut self, start: char) -> Result<NumberToken, ParserError> {
+    fn binary_constant(&mut self, start: char) -> Result<Option<NumberToken>, ParserError> {
         self.skip_char(start);
         let mut c = self.lookahead_char()?;
 
         if binary_digit_char!(c) {
             let mut token = String::with_capacity(16);
 
-            loop {
-                if binary_digit_char!(c) {
+            while binary_digit_char!(c) {
+                self.skip_char(c);
+                token.push(c);
+
+                // Skip underline and layout
+                c = match self.lookahead_char() {
+                    Ok(x) => x,
+                    Err(e) if e.is_unexpected_eof() => break,
+                    Err(e) => return Err(e),
+                };
+                if c == '_' {
                     self.skip_char(c);
-                    token.push(c);
+                    self.scan_for_layout()?;
                     c = match self.lookahead_char() {
-                        Ok(c) => c,
-                        Err(e) if e.is_unexpected_eof() => {
-                            break;
-                        }
+                        Ok(x) => x,
+                        Err(e) if e.is_unexpected_eof() => break,
                         Err(e) => return Err(e),
                     };
-                } else {
-                    break;
+
+                    if !binary_digit_char!(c) {
+                        return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                    }
                 }
             }
 
             self.parse_integer_by_radix(&token, 2)
-                .map(NumberToken::Integer)
+                .map(|x| Some(NumberToken::Integer(x)))
         } else {
             self.return_char(start);
-            Err(ParserError::ParseBigInt(self.line_num, self.col_num))
+            Ok(None)
         }
     }
 
@@ -825,28 +852,19 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             }
         } else if token.starts_with('0') && token.len() == 1 {
             if c == 'x' {
-                self.hexadecimal_constant(c).or_else(|e| {
-                    if let ParserError::ParseBigInt(..) = e {
-                        self.parse_integer(&token).map(NumberToken::Integer)
-                    } else {
-                        Err(e)
-                    }
+                self.hexadecimal_constant(c).and_then(|x| match x {
+                    Some(x) => Ok(x),
+                    None => self.parse_integer(&token).map(NumberToken::Integer),
                 })
             } else if c == 'o' {
-                self.octal_constant(c).or_else(|e| {
-                    if let ParserError::ParseBigInt(..) = e {
-                        self.parse_integer(&token).map(NumberToken::Integer)
-                    } else {
-                        Err(e)
-                    }
+                self.octal_constant(c).and_then(|x| match x {
+                    Some(x) => Ok(x),
+                    None => self.parse_integer(&token).map(NumberToken::Integer),
                 })
             } else if c == 'b' {
-                self.binary_constant(c).or_else(|e| {
-                    if let ParserError::ParseBigInt(..) = e {
-                        self.parse_integer(&token).map(NumberToken::Integer)
-                    } else {
-                        Err(e)
-                    }
+                self.binary_constant(c).and_then(|x| match x {
+                    Some(x) => Ok(x),
+                    None => self.parse_integer(&token).map(NumberToken::Integer),
                 })
             } else if single_quote_char!(c) {
                 self.skip_char(c);
