@@ -502,11 +502,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 if c == '_' {
                     self.skip_char(c);
                     self.scan_for_layout()?;
-                    c = match self.lookahead_char() {
-                        Ok(x) => x,
-                        Err(e) if e.is_unexpected_eof() => break,
-                        Err(e) => return Err(e),
-                    };
+                    c = self.lookahead_char()?;
 
                     if !hexadecimal_digit_char!(c) {
                         return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
@@ -542,11 +538,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 if c == '_' {
                     self.skip_char(c);
                     self.scan_for_layout()?;
-                    c = match self.lookahead_char() {
-                        Ok(x) => x,
-                        Err(e) if e.is_unexpected_eof() => break,
-                        Err(e) => return Err(e),
-                    };
+                    c = self.lookahead_char()?;
 
                     if !octal_digit_char!(c) {
                         return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
@@ -582,12 +574,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 if c == '_' {
                     self.skip_char(c);
                     self.scan_for_layout()?;
-                    c = match self.lookahead_char() {
-                        Ok(x) => x,
-                        Err(e) if e.is_unexpected_eof() => break,
-                        Err(e) => return Err(e),
-                    };
-
+                    c = self.lookahead_char()?;
                     if !binary_digit_char!(c) {
                         return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
                     }
@@ -702,24 +689,6 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         Ok((offset, OrderedFloat(n)))
     }
 
-    fn skip_underscore_in_number(&mut self) -> Result<char, ParserError> {
-        let mut c = self.lookahead_char()?;
-
-        if c == '_' {
-            self.skip_char(c);
-            self.scan_for_layout()?;
-            c = self.lookahead_char()?;
-
-            if decimal_digit_char!(c) {
-                Ok(c)
-            } else {
-                Err(ParserError::ParseBigInt(self.line_num, self.col_num))
-            }
-        } else {
-            Ok(c)
-        }
-    }
-
     fn parse_integer_by_radix(&mut self, token: &str, radix: u32) -> Result<GInteger, ParserError> {
         i64::from_str_radix(token, radix)
             .map(|n| {
@@ -747,14 +716,22 @@ impl<'a, R: CharRead> Lexer<'a, R> {
     fn number_token(&mut self, leading_c: char) -> Result<NumberToken, ParserError> {
         let mut token = String::with_capacity(16);
 
-        self.skip_char(leading_c);
-        token.push(leading_c);
-        let mut c = try_nt!(token, self.skip_underscore_in_number());
+        let mut c = leading_c;
 
         while decimal_digit_char!(c) {
             token.push(c);
             self.skip_char(c);
-            c = try_nt!(token, self.skip_underscore_in_number());
+
+            c = try_nt!(token, self.lookahead_char());
+            if c == '_' {
+                self.skip_char(c);
+                self.scan_for_layout()?;
+                c = self.lookahead_char()?;
+
+                if !decimal_digit_char!(c) {
+                    return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                }
+            }
         }
 
         if decimal_point_char!(c) {
