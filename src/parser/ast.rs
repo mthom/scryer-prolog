@@ -412,6 +412,7 @@ pub fn default_op_dir() -> OpDir {
 
     op_dir.insert((atom!(":-"), Fixity::In), OpDesc::build_with(1200, XFX));
     op_dir.insert((atom!(":-"), Fixity::Pre), OpDesc::build_with(1200, FX));
+    op_dir.insert((atom!("?-"), Fixity::In), OpDesc::build_with(1200, XFX));
     op_dir.insert((atom!("?-"), Fixity::Pre), OpDesc::build_with(1200, FX));
     op_dir.insert((atom!(","), Fixity::In), OpDesc::build_with(1000, XFY));
 
