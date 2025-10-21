@@ -215,6 +215,8 @@ load_loop(Stream, Evacuable) :-
        instantiation_error(load/1)
     ;  Term = (?- _Query) ->
        devour_answer_descriptions(Stream, Evacuable)
+    ;  Term = (_ ?- _Answer) ->
+       load_loop(Stream, Evacuable)
     ;  LineNum is LinesRead + 1,
        warn_about_singletons(Singletons, LineNum),
        compile_term(Term, Evacuable),
