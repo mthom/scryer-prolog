@@ -757,7 +757,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         self.stack.push(TokenDesc {
             tt: TokenType::Term,
             priority: 0,
-            spec: TERM,
+            spec: LIST_TERM,
             unfold_bounds: 0,
         });
 
@@ -1044,33 +1044,84 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 }
             }
             Token::HeadTailSeparator => {
-                /* '|' as an operator must have priority > 1000 and can only be infix.
-                 * See: http://www.complang.tuwien.ac.at/ulrich/iso-prolog/dtc2#Res_A78
-                 */
-                let (priority, spec) = get_op_desc(atom!("|"), op_dir)
-                    .map(|CompositeOpDesc { inf, spec, .. }| (inf, spec))
-                    .unwrap_or((1000, DELIMITER));
+                // Check if next token is also HeadTailSeparator (i.e., "| |" with space)
+                // This allows both "||" and "| |" syntax per spec
+                if matches!(self.tokens.last(), Some(Token::HeadTailSeparator)) {
+                    // Pop the second | and treat as DoubleBar
+                    self.tokens.pop();
 
-                let old_stack_len = self.stack.len();
+                    // Handle as DoubleBar - check validation constraints
+                    if let Some(last_stack) = self.stack.last() {
+                        if last_stack.tt == TokenType::Term && last_stack.spec == BTERM {
+                            return Err(ParserError::IncompleteReduction(
+                                self.lexer.line_num,
+                                self.lexer.col_num,
+                            ));
+                        }
+                        if last_stack.tt == TokenType::Term && last_stack.spec == LIST_TERM {
+                            return Err(ParserError::IncompleteReduction(
+                                self.lexer.line_num,
+                                self.lexer.col_num,
+                            ));
+                        }
+                    }
 
-                self.reduce_op(priority);
+                    let is_valid = if let Some(last_term) = self.terms.last() {
+                        match last_term {
+                            Term::CompleteString(_, _) => true,
+                            Term::PartialString(_, _, _) => true,
+                            _ => false,
+                        }
+                    } else {
+                        false
+                    };
 
-                let new_stack_len = self.stack.len();
+                    if !is_valid {
+                        return Err(ParserError::IncompleteReduction(
+                            self.lexer.line_num,
+                            self.lexer.col_num,
+                        ));
+                    }
 
-                if let Some(term_desc) = self.stack.last_mut() {
-                    term_desc.unfold_bounds = old_stack_len - new_stack_len;
+                    self.reduce_op(1);
+                    self.shift(Token::DoubleBar, 1, XFY as u32);
+                } else {
+                    // Handle as regular HeadTailSeparator
+                    /* '|' as an operator must have priority > 1000 and can only be infix.
+                     * See: http://www.complang.tuwien.ac.at/ulrich/iso-prolog/dtc2#Res_A78
+                     */
+                    let (priority, spec) = get_op_desc(atom!("|"), op_dir)
+                        .map(|CompositeOpDesc { inf, spec, .. }| (inf, spec))
+                        .unwrap_or((1000, DELIMITER));
+
+                    let old_stack_len = self.stack.len();
+
+                    self.reduce_op(priority);
+
+                    let new_stack_len = self.stack.len();
+
+                    if let Some(term_desc) = self.stack.last_mut() {
+                        term_desc.unfold_bounds = old_stack_len - new_stack_len;
+                    }
+
+                    self.shift(Token::HeadTailSeparator, priority, spec);
                 }
-
-                self.shift(Token::HeadTailSeparator, priority, spec);
             }
             Token::DoubleBar => {
                 // Double bar operator only valid after string literals
                 // NOT valid after parenthesized expressions or variables
 
-                // Check that the last stack element is not from brackets
+                // Check that the last stack element is not from brackets or list syntax
                 if let Some(last_stack) = self.stack.last() {
                     if last_stack.tt == TokenType::Term && last_stack.spec == BTERM {
                         // Term came from parentheses like ("a"), reject it
+                        return Err(ParserError::IncompleteReduction(
+                            self.lexer.line_num,
+                            self.lexer.col_num,
+                        ));
+                    }
+                    if last_stack.tt == TokenType::Term && last_stack.spec == LIST_TERM {
+                        // Term came from list syntax like [a,b,c], reject it
                         return Err(ParserError::IncompleteReduction(
                             self.lexer.line_num,
                             self.lexer.col_num,
