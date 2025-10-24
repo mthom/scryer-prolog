@@ -314,23 +314,6 @@ impl<'a, R: CharRead> Parser<'a, R> {
         }
     }
 
-    fn replace_list_tail(&self, list: Term, new_tail: Term) -> Term {
-        match list {
-            Term::Cons(cell, head, tail) => {
-                match *tail {
-                    Term::Literal(_, Literal::Atom(atom)) if atom == atom!("[]") => {
-                        Term::Cons(cell, head, Box::new(new_tail))
-                    }
-                    _ => {
-                        let replaced_tail = self.replace_list_tail(*tail, new_tail);
-                        Term::Cons(cell, head, Box::new(replaced_tail))
-                    }
-                }
-            }
-            _ => list,
-        }
-    }
-
     fn get_term_name(&mut self, td: TokenDesc) -> Option<Atom> {
         match td.tt {
             TokenType::HeadTailSeparator => Some(atom!("|")),
@@ -354,20 +337,17 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 if let Some(arg1) = self.terms.pop() {
                     let term = if name == atom!("||") {
                         match arg1 {
-                            Term::CompleteString(_, s) => {
+                            Term::CompleteString(_, s) | Term::PartialString(_, s, _) => {
                                 if s.is_empty() {
+                                    // Empty string collapses: ""||K => K
                                     arg2
                                 } else {
+                                    // Create/extend partial string: "abc"||K => [a,b,c|K]
                                     Term::PartialString(Cell::default(), s, Box::new(arg2))
                                 }
                             }
-                            Term::Cons(_, _, _) => {
-                                self.replace_list_tail(arg1, arg2)
-                            }
-                            Term::Literal(_, Literal::Atom(atom)) if atom == atom!("[]") => {
-                                arg2
-                            }
                             _ => {
+                                // Should never reach here due to validation, but handle gracefully
                                 Term::Clause(Cell::default(), name, vec![arg1, arg2])
                             }
                         }
@@ -1098,12 +1078,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     }
                 }
 
-                // Check that the last term is a string or code list
+                // Check that the last term is a string literal (CompleteString or PartialString)
+                // NOT arbitrary lists like [1,2,3] or variables
                 let is_valid = if let Some(last_term) = self.terms.last() {
                     match last_term {
                         Term::CompleteString(_, _) => true,
-                        Term::Cons(_, _, _) => true,
-                        Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true,
+                        Term::PartialString(_, _, _) => true,
                         _ => false,
                     }
                 } else {
