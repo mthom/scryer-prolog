@@ -64,6 +64,57 @@ test("multi-line double bar complex", (
     L = [a,b,c]
 )).
 
+test("spaced double bar syntax", (
+    L = "abc" | | K,
+    L = [a,b,c|K]
+)).
+
+test("spaced double bar chain", (
+    L = "a" | | "b" | | "c",
+    L = [a,b,c]
+)).
+
+test("block comment between bars", (
+    L = "a" | /* comment */ | "b",
+    L = [a,b]
+)).
+
+test("line comment between bars", (
+    L = "a" | % line comment
+        | "b",
+    L = [a,b]
+)).
+
+test("block comment in spaced bar with tail", (
+    L = "abc" |/* comment */| K,
+    L = [a,b,c|K]
+)).
+
+test("comment before double bar", (
+    L = "a" /* before */ || "b",
+    L = [a,b]
+)).
+
+test("comment after double bar", (
+    L = "a" || /* after */ "b",
+    L = [a,b]
+)).
+
+test("comment before spaced bars", (
+    L = "a" /* before */ | | "b",
+    L = [a,b]
+)).
+
+test("comment after spaced bars", (
+    L = "a" | | /* after */ "b",
+    L = [a,b]
+)).
+
+test("multiple comments around bars", (
+    L = "a" /* before */ | /* between */ | /* after */ "b",
+    L = [a,b]
+)).
+
 % Note: These invalid cases are tested at parse time, not runtime
 % They cannot be included as test/2 predicates because they fail at read_term
 % The parser correctly rejects them with syntax_error(incomplete_reduction)
@@ -71,5 +122,6 @@ test("multi-line double bar complex", (
 % Invalid cases (verified separately):
 % - [1,2,3]||K => syntax_error
 % - [_]||Rs => syntax_error
+% - [a,b,c]||S => syntax_error
 % - K||[] => syntax_error
 % - ("a")||[] => syntax_error
