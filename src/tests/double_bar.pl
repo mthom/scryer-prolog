@@ -63,3 +63,13 @@ test("multi-line double bar complex", (
         "c",
     L = [a,b,c]
 )).
+
+% Note: These invalid cases are tested at parse time, not runtime
+% They cannot be included as test/2 predicates because they fail at read_term
+% The parser correctly rejects them with syntax_error(incomplete_reduction)
+%
+% Invalid cases (verified separately):
+% - [1,2,3]||K => syntax_error
+% - [_]||Rs => syntax_error
+% - K||[] => syntax_error
+% - ("a")||[] => syntax_error

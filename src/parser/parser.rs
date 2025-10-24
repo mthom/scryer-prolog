@@ -348,10 +348,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
         {
             let term = if name == atom!("||") {
                 match arg1 {
-                    Term::CompleteString(_, s) => {
+                    Term::CompleteString(_, s) | Term::PartialString(_, s, _) => {
                         if s.is_empty() {
+                            // Empty string collapses: ""||K => K
                             arg2
                         } else {
+                            // Create/extend partial string: "abc"||K => [a,b,c|K]
                             Term::PartialString(Cell::default(), s, Box::new(arg2))
                         }
                     }
@@ -359,7 +361,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         self.replace_list_tail(&mut arg1, arg2);
                         arg1
                     }
-                    Term::Literal(_, Literal::Atom(atom)) if atom == atom!("[]") => arg2,
+                    Term::Literal(_, Literal::Atom(atom!("[]"))) => arg2,
                     _ => Term::Clause(Cell::default(), name, vec![arg1, arg2]),
                 }
             } else {
@@ -1057,12 +1059,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     }
                 }
 
-                // Check that the last term is a string or code list
+                // Check that the last term is a string literal (CompleteString or PartialString)
+                // NOT arbitrary lists like [1,2,3] or variables
                 let is_valid = if let Some(last_term) = self.terms.last() {
                     match last_term {
                         Term::CompleteString(_, _) => true,
-                        Term::Cons(_, _, _) => true,
-                        Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true,
+                        Term::PartialString(_, _, _) => true,
                         _ => false,
                     }
                 } else {
