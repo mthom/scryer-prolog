@@ -489,14 +489,35 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         if hexadecimal_digit_char!(c) {
             let mut token = String::with_capacity(16);
 
-            self.skip_char(c);
-            token.push(c);
-            c = try_nt!(token, self.skip_underscore_in_hexadecimal());
+            loop {
+                if hexadecimal_digit_char!(c) {
+                    self.skip_char(c);
+                    token.push(c);
+                    c = match self.lookahead_char() {
+                        Ok(c) => c,
+                        Err(e) if e.is_unexpected_eof() => {
+                            break;
+                        }
+                        Err(e) => return Err(e),
+                    };
 
-            while hexadecimal_digit_char!(c) {
-                token.push(c);
-                self.skip_char(c);
-                c = try_nt!(token, self.skip_underscore_in_hexadecimal());
+                    // Check for digit separator
+                    if c == '_' {
+                        self.skip_char(c);
+                        self.scan_for_layout()?;
+                        c = self.lookahead_char()?;
+
+                        if !hexadecimal_digit_char!(c) {
+                            return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                        }
+                    } else {
+                        if !hexadecimal_digit_char!(c) {
+                            break;
+                        }
+                    }
+                } else {
+                    break;
+                }
             }
 
             self.parse_integer_by_radix(&token, 16)
@@ -514,14 +535,35 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         if octal_digit_char!(c) {
             let mut token = String::with_capacity(16);
 
-            self.skip_char(c);
-            token.push(c);
-            c = try_nt!(token, self.skip_underscore_in_octal());
+            loop {
+                if octal_digit_char!(c) {
+                    self.skip_char(c);
+                    token.push(c);
+                    c = match self.lookahead_char() {
+                        Ok(c) => c,
+                        Err(e) if e.is_unexpected_eof() => {
+                            break;
+                        }
+                        Err(e) => return Err(e),
+                    };
 
-            while octal_digit_char!(c) {
-                token.push(c);
-                self.skip_char(c);
-                c = try_nt!(token, self.skip_underscore_in_octal());
+                    // Check for digit separator
+                    if c == '_' {
+                        self.skip_char(c);
+                        self.scan_for_layout()?;
+                        c = self.lookahead_char()?;
+
+                        if !octal_digit_char!(c) {
+                            return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                        }
+                    } else {
+                        if !octal_digit_char!(c) {
+                            break;
+                        }
+                    }
+                } else {
+                    break;
+                }
             }
 
             self.parse_integer_by_radix(&token, 8)
@@ -539,14 +581,35 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         if binary_digit_char!(c) {
             let mut token = String::with_capacity(16);
 
-            self.skip_char(c);
-            token.push(c);
-            c = try_nt!(token, self.skip_underscore_in_binary());
+            loop {
+                if binary_digit_char!(c) {
+                    self.skip_char(c);
+                    token.push(c);
+                    c = match self.lookahead_char() {
+                        Ok(c) => c,
+                        Err(e) if e.is_unexpected_eof() => {
+                            break;
+                        }
+                        Err(e) => return Err(e),
+                    };
 
-            while binary_digit_char!(c) {
-                token.push(c);
-                self.skip_char(c);
-                c = try_nt!(token, self.skip_underscore_in_binary());
+                    // Check for digit separator
+                    if c == '_' {
+                        self.skip_char(c);
+                        self.scan_for_layout()?;
+                        c = self.lookahead_char()?;
+
+                        if !binary_digit_char!(c) {
+                            return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                        }
+                    } else {
+                        if !binary_digit_char!(c) {
+                            break;
+                        }
+                    }
+                } else {
+                    break;
+                }
             }
 
             self.parse_integer_by_radix(&token, 2)
@@ -666,60 +729,6 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             c = self.lookahead_char()?;
 
             if decimal_digit_char!(c) {
-                Ok(c)
-            } else {
-                Err(ParserError::ParseBigInt(self.line_num, self.col_num))
-            }
-        } else {
-            Ok(c)
-        }
-    }
-
-    fn skip_underscore_in_hexadecimal(&mut self) -> Result<char, ParserError> {
-        let mut c = self.lookahead_char()?;
-
-        if c == '_' {
-            self.skip_char(c);
-            self.scan_for_layout()?;
-            c = self.lookahead_char()?;
-
-            if hexadecimal_digit_char!(c) {
-                Ok(c)
-            } else {
-                Err(ParserError::ParseBigInt(self.line_num, self.col_num))
-            }
-        } else {
-            Ok(c)
-        }
-    }
-
-    fn skip_underscore_in_octal(&mut self) -> Result<char, ParserError> {
-        let mut c = self.lookahead_char()?;
-
-        if c == '_' {
-            self.skip_char(c);
-            self.scan_for_layout()?;
-            c = self.lookahead_char()?;
-
-            if octal_digit_char!(c) {
-                Ok(c)
-            } else {
-                Err(ParserError::ParseBigInt(self.line_num, self.col_num))
-            }
-        } else {
-            Ok(c)
-        }
-    }
-
-    fn skip_underscore_in_binary(&mut self) -> Result<char, ParserError> {
-        let mut c = self.lookahead_char()?;
-
-        if c == '_' {
-            self.skip_char(c);
-            self.scan_for_layout()?;
-            c = self.lookahead_char()?;
-
-            if binary_digit_char!(c) {
                 Ok(c)
             } else {
                 Err(ParserError::ParseBigInt(self.line_num, self.col_num))
