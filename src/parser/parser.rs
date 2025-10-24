@@ -22,6 +22,7 @@ enum TokenType {
     OpenList,          // '['
     OpenCurly,         // '{'
     HeadTailSeparator, // '|'
+    DoubleBar,         // '||'
     Comma,             // ','
     Close,
     CloseList,  // ']'
@@ -44,6 +45,7 @@ impl TokenType {
         matches!(
             self,
             TokenType::HeadTailSeparator
+                | TokenType::DoubleBar
                 | TokenType::OpenCT
                 | TokenType::Open
                 | TokenType::Close
@@ -312,9 +314,27 @@ impl<'a, R: CharRead> Parser<'a, R> {
         }
     }
 
+    fn replace_list_tail(&self, list: Term, new_tail: Term) -> Term {
+        match list {
+            Term::Cons(cell, head, tail) => {
+                match *tail {
+                    Term::Literal(_, Literal::Atom(atom)) if atom == atom!("[]") => {
+                        Term::Cons(cell, head, Box::new(new_tail))
+                    }
+                    _ => {
+                        let replaced_tail = self.replace_list_tail(*tail, new_tail);
+                        Term::Cons(cell, head, Box::new(replaced_tail))
+                    }
+                }
+            }
+            _ => list,
+        }
+    }
+
     fn get_term_name(&mut self, td: TokenDesc) -> Option<Atom> {
         match td.tt {
             TokenType::HeadTailSeparator => Some(atom!("|")),
+            TokenType::DoubleBar => Some(atom!("||")),
             TokenType::Comma => Some(atom!(",")),
             TokenType::Term => match self.terms.pop() {
                 Some(Term::Literal(_, Literal::Atom(atom))) => Some(atom),
@@ -332,7 +352,28 @@ impl<'a, R: CharRead> Parser<'a, R> {
         if let Some(arg2) = self.terms.pop() {
             if let Some(name) = self.get_term_name(td) {
                 if let Some(arg1) = self.terms.pop() {
-                    let term = Term::Clause(Cell::default(), name, vec![arg1, arg2]);
+                    let term = if name == atom!("||") {
+                        match arg1 {
+                            Term::CompleteString(_, s) => {
+                                if s.is_empty() {
+                                    arg2
+                                } else {
+                                    Term::PartialString(Cell::default(), s, Box::new(arg2))
+                                }
+                            }
+                            Term::Cons(_, _, _) => {
+                                self.replace_list_tail(arg1, arg2)
+                            }
+                            Term::Literal(_, Literal::Atom(atom)) if atom == atom!("[]") => {
+                                arg2
+                            }
+                            _ => {
+                                Term::Clause(Cell::default(), name, vec![arg1, arg2])
+                            }
+                        }
+                    } else {
+                        Term::Clause(Cell::default(), name, vec![arg1, arg2])
+                    };
 
                     self.terms.push(term);
                     self.stack.push(TokenDesc {
@@ -422,6 +463,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::Close => TokenType::Close,
             Token::OpenCT => TokenType::OpenCT,
             Token::HeadTailSeparator => TokenType::HeadTailSeparator,
+            Token::DoubleBar => TokenType::DoubleBar,
             Token::OpenList => TokenType::OpenList,
             Token::CloseList => TokenType::CloseList,
             Token::OpenCurly => TokenType::OpenCurly,
@@ -1041,6 +1083,43 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
                 self.shift(Token::HeadTailSeparator, priority, spec);
             }
+            Token::DoubleBar => {
+                // Double bar operator only valid after string literals
+                // NOT valid after parenthesized expressions or variables
+
+                // Check that the last stack element is not from brackets
+                if let Some(last_stack) = self.stack.last() {
+                    if last_stack.tt == TokenType::Term && last_stack.spec == BTERM {
+                        // Term came from parentheses like ("a"), reject it
+                        return Err(ParserError::IncompleteReduction(
+                            self.lexer.line_num,
+                            self.lexer.col_num,
+                        ));
+                    }
+                }
+
+                // Check that the last term is a string or code list
+                let is_valid = if let Some(last_term) = self.terms.last() {
+                    match last_term {
+                        Term::CompleteString(_, _) => true,
+                        Term::Cons(_, _, _) => true,
+                        Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true,
+                        _ => false,
+                    }
+                } else {
+                    false
+                };
+
+                if !is_valid {
+                    return Err(ParserError::IncompleteReduction(
+                        self.lexer.line_num,
+                        self.lexer.col_num,
+                    ));
+                }
+
+                self.reduce_op(1);
+                self.shift(Token::DoubleBar, 1, XFY as u32);
+            }
             Token::Comma => {
                 self.reduce_op(1000);
                 self.shift(Token::Comma, 1000, XFY as u32);
@@ -1051,6 +1130,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 | Some(TokenType::OpenList)
                 | Some(TokenType::OpenCurly)
                 | Some(TokenType::HeadTailSeparator)
+                | Some(TokenType::DoubleBar)
                 | Some(TokenType::Comma) => {
                     return Err(ParserError::IncompleteReduction(
                         self.lexer.line_num,
