@@ -411,17 +411,29 @@ chars_to_stream(Chars, Stream) :-
         chars_to_stream(Chars, Stream, []).
 
 %% chars_to_stream(+Chars, -Stream, +Options) :-
-% Creates a character stream from a list of characters.
+% Creates a stream from a list of characters or bytes.
 %
-% Chars is the list of characters to write to the stream.
+% Chars is the list of characters (or bytes for binary streams) to write to the stream.
 % Stream is the created character stream (a memory stream).
-% Options are currently ignored.
+% Options may include:
+%   - type(text) (default): Chars must be a list of characters
+%   - type(binary): Chars may be either a list of characters (converted to UTF-8 bytes)
+%                   or a list of bytes (0-255)
+%   - reposition(Bool): Whether the stream can be repositioned (default: false)
+%   - alias(Atom): An alias for the stream
+%   - eof_action(Action): Action to take at end of file (default: eof_code)
 %
-% Example:
+% Examples:
 %
 % ```
 % ?- chars_to_stream("hello", Stream, []).
 %    Stream = stream('$memory_stream'(2048)).
+%
+% ?- chars_to_stream("💜", S, [type(binary)]), get_byte(S, B1).
+%    S = stream('$memory_stream'(2048)), B1 = 240.
+%
+% ?- chars_to_stream([97,98,99], S, [type(binary)]), get_byte(S, B).
+%    S = stream('$memory_stream'(2048)), B = 97.
 % ```
 
 chars_to_stream(Chars, Stream, StreamOpts) :-
@@ -430,7 +442,11 @@ chars_to_stream(Chars, Stream, StreamOpts) :-
         '$memory_stream'(Stream),
         '$set_stream_options'(Stream, Alias ,EOFAction, Reposition, Type),
         (   Type=binary
-        ->  maplist(put_byte(Stream), Chars)
+        ->  (   is_char_list(Chars)
+            ->  chars_utf8bytes(Chars, Bytes),
+                maplist(put_byte(Stream), Bytes)
+            ;   maplist(put_byte(Stream), Chars)
+            )
         ;   maplist(put_char(Stream), Chars)
         ).
 

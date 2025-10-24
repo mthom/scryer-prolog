@@ -2,7 +2,7 @@
    Internal utilities supporting charsio:chars_to_stream/3.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-:- module(memory_stream_utils, [parse_stream_options_list/2, validate_chars/2]).
+:- module(memory_stream_utils, [parse_stream_options_list/2, validate_chars/2, is_char_list/1]).
 
 :- use_module(library(lists)).
 :- use_module(library(error)).
@@ -70,8 +70,19 @@ valid_byte_(Byte) :-
         Byte >= 0,
         Byte < 256.
 
+is_char_list(Chars) :-
+        must_be(list, Chars),
+        (   Chars = [] -> true
+        ;   Chars = [H|_],
+            atom(H)
+        ).
+
 validate_chars_(Chars, binary) :-
-        maplist(valid_byte_, Chars).
+        must_be(list, Chars),
+        (   is_char_list(Chars)
+        ->  true
+        ;   maplist(valid_byte_, Chars)
+        ).
 
 validate_chars_(Chars, text) :-
         must_be(chars, Chars).

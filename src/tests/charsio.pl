@@ -74,6 +74,29 @@ test("can read/write bytes",
       get_byte(Stream, C)
       )).
 
+test("can convert Unicode chars to UTF-8 bytes",
+     (
+      chars_to_stream("💜", Stream, [type(binary)]),
+      get_byte(Stream, B1),
+      get_byte(Stream, B2),
+      get_byte(Stream, B3),
+      get_byte(Stream, B4),
+      B1 = 240,
+      B2 = 159,
+      B3 = 146,
+      B4 = 156
+      )).
+
+test("can convert mixed ASCII and Unicode to UTF-8 bytes",
+     (
+      chars_to_stream("a💜b", Stream, [type(binary)]),
+      get_byte(Stream, 97),
+      get_byte(Stream, 240),
+      get_byte(Stream, 159),
+      get_byte(Stream, 146),
+      get_byte(Stream, 156),
+      get_byte(Stream, 98)
+      )).
 
 
 % ?- test_framework:main(charsio_tests). 
