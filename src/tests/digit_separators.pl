@@ -91,3 +91,49 @@ test("hexadecimal case insensitive", (
     X2 = 0xab_cd,
     X1 =:= X2
 )).
+
+% Tests for number_chars/2 with different number bases
+test("number_chars with hex", (
+    number_chars(N, "0xa"),
+    N =:= 10
+)).
+
+test("number_chars with hex and separator", (
+    number_chars(N, "0xDE_AD"),
+    N =:= 57005
+)).
+
+test("number_chars with octal", (
+    number_chars(N, "0o76"),
+    N =:= 62
+)).
+
+test("number_chars with octal and separator", (
+    number_chars(N, "0o7_6"),
+    N =:= 62
+)).
+
+test("number_chars with binary", (
+    number_chars(N, "0b1011"),
+    N =:= 11
+)).
+
+test("number_chars with binary and separator", (
+    number_chars(N, "0b10_11"),
+    N =:= 11
+)).
+
+test("number_chars with decimal separator", (
+    number_chars(N, "1_000"),
+    N =:= 1000
+)).
+
+% TODO: This should fail (float digit separators are undecided - options 9-11)
+% Currently it succeeds but per UWN it should be rejected for consistency
+% test("number_chars rejects float with separator", (
+%     catch(
+%         (number_chars(_, "1_0.0"), fail),
+%         error(syntax_error(_), _),
+%         true
+%     )
+% )).
