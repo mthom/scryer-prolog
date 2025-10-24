@@ -128,12 +128,29 @@ test("number_chars with decimal separator", (
     N =:= 1000
 )).
 
-% TODO: This should fail (float digit separators are undecided - options 9-11)
-% Currently it succeeds but per UWN it should be rejected for consistency
-% test("number_chars rejects float with separator", (
-%     catch(
-%         (number_chars(_, "1_0.0"), fail),
-%         error(syntax_error(_), _),
-%         true
-%     )
-% )).
+% Option 9: Reject digit separators in float (before decimal point)
+test("number_chars rejects float with separator before decimal", (
+    catch(
+        (number_chars(_, "1_0.0"), fail),
+        error(syntax_error(_), _),
+        true
+    )
+)).
+
+test("number_chars rejects float separator via atom_chars", (
+    catch(
+        (atom_chars('1_0.0', Cs), number_chars(_, Cs), fail),
+        error(syntax_error(_), _),
+        true
+    )
+)).
+
+test("direct literal rejects float with separator before decimal", (
+    % Can't test direct literal syntax in test file since it fails at parse time
+    % This test verifies the error occurs via atom -> number conversion
+    catch(
+        (atom_chars(A, ['1','_','0','.','0']), number_chars(_, A), fail),
+        error(_,_),
+        true
+    )
+)).

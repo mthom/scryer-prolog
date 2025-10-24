@@ -720,21 +720,24 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         Ok((offset, OrderedFloat(n)))
     }
 
-    fn skip_underscore_in_number(&mut self) -> Result<char, ParserError> {
+    fn skip_underscore_in_number(&mut self) -> Result<(char, bool), ParserError> {
         let mut c = self.lookahead_char()?;
+        let had_underscore;
 
         if c == '_' {
+            had_underscore = true;
             self.skip_char(c);
             self.scan_for_layout()?;
             c = self.lookahead_char()?;
 
             if decimal_digit_char!(c) {
-                Ok(c)
+                Ok((c, had_underscore))
             } else {
                 Err(ParserError::ParseBigInt(self.line_num, self.col_num))
             }
         } else {
-            Ok(c)
+            had_underscore = false;
+            Ok((c, had_underscore))
         }
     }
 
@@ -764,18 +767,30 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
     fn number_token(&mut self, leading_c: char) -> Result<NumberToken, ParserError> {
         let mut token = String::with_capacity(16);
+        let mut had_separator = false;
 
         self.skip_char(leading_c);
         token.push(leading_c);
-        let mut c = try_nt!(token, self.skip_underscore_in_number());
+
+        let result = try_nt!(token, self.skip_underscore_in_number());
+        let mut c = result.0;
+        had_separator |= result.1;
 
         while decimal_digit_char!(c) {
             token.push(c);
             self.skip_char(c);
-            c = try_nt!(token, self.skip_underscore_in_number());
+            let result = try_nt!(token, self.skip_underscore_in_number());
+            c = result.0;
+            had_separator |= result.1;
         }
 
         if decimal_point_char!(c) {
+            // Reject option 9: digit separators in float (before decimal point)
+            // Per WG17 decision, options 9-11 (float digit separators) are rejected
+            if had_separator {
+                return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+            }
+
             self.skip_char(c);
 
             if self.reader.peek_char().is_none() {
