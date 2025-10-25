@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/get_n_chars.pl", "-f", "-g", "use_module(library(get_n_chars_tests)), get_n_chars_tests:main_quiet(get_n_chars_tests)"]
