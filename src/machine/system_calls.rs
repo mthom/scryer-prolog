@@ -3590,12 +3590,9 @@ impl Machine {
             match number {
                 Number::Fixnum(n) => {
                     let ms = n.get_num();
-                    if ms < 0 {
-                        // Negative means infinite timeout
+                    if ms <= 0 {
+                        // Zero or negative means no timeout (infinite)
                         return Ok(None);
-                    } else if ms == 0 {
-                        // Zero means minimum timeout (1ms to avoid busy-wait)
-                        return Ok(Some(Duration::from_millis(1)));
                     } else {
                         return Ok(Some(Duration::from_millis(ms as u64)));
                     }
@@ -3613,10 +3610,9 @@ impl Machine {
                 }
                 Number::Float(f) => {
                     let ms = f.into_inner();
-                    if ms < 0.0 {
+                    if ms <= 0.0 {
+                        // Zero or negative means no timeout (infinite)
                         return Ok(None);
-                    } else if ms == 0.0 {
-                        return Ok(Some(Duration::from_millis(1)));
                     } else {
                         return Ok(Some(Duration::from_millis(ms as u64)));
                     }
@@ -3766,9 +3762,14 @@ impl Machine {
                     // Poll to see if data is available
                     match stream.poll_read_ready(remaining) {
                         Ok(true) => {
-                            // Data is available, read one byte
+                            // Data is available, read one byte directly from inner reader to bypass buffering
                             let mut byte = [0u8; 1];
-                            match stream.read(&mut byte) {
+                            let read_result = if let Stream::PipeReader(ref mut ptr) = stream {
+                                (**ptr).inner_mut().read(&mut byte)
+                            } else {
+                                unreachable!()
+                            };
+                            match read_result {
                                 Ok(0) => break, // EOF
                                 Ok(_) => {
                                     utf8_buf.push(byte[0]);
