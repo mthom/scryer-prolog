@@ -64,7 +64,7 @@ test("get_n_chars/3 (no timeout) after get_n_chars/4 timeout mid-char", (
     get_n_chars(Out, _, Chars1, 100),
     Chars1 == [],
     get_n_chars(Out, 2, Chars2),
-    Chars2 == ['💜', 'A'],
+    Chars2 == "💜A",
     close(Out)
 )).
 
@@ -90,7 +90,7 @@ test("get_line_to_chars/3 after get_n_chars/4 timeout mid-char", (
     get_n_chars(Out, _, Chars1, 100),
     Chars1 == [],
     get_line_to_chars(Out, Line, []),
-    Line == ['💜',t,e,s,t,'\n'],
+    Line == "💜test\n",
     close(Out)
 )).
 
