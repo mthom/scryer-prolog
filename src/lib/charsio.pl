@@ -413,7 +413,7 @@ chars_to_stream(Chars, Stream) :-
 %% chars_to_stream(+Chars, -Stream, +Options) :-
 % Creates a stream from a list of characters or bytes.
 %
-% Chars is the list of characters (or bytes for binary streams) to write to the stream.
+% Chars is the list of characters (or bytes for binary streams) that the stream will yield.
 % Stream is the created character stream (a memory stream).
 % Options may include:
 %   - type(text) (default): Chars must be a list of characters
