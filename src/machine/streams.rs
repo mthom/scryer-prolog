@@ -176,6 +176,41 @@ impl StreamLayout<CharReader<InputFileStream>> {
     }
 }
 
+impl StreamLayout<CharReader<PipeReader>> {
+    fn load_incomplete_utf8(&mut self) {
+        let bytes = self.incomplete_utf8.borrow().clone();
+        if !bytes.is_empty() {
+            self.stream.prepend_bytes(&bytes);
+            self.incomplete_utf8.borrow_mut().clear();
+        }
+    }
+
+    pub fn read_char(&mut self) -> Option<std::io::Result<char>> {
+        self.load_incomplete_utf8();
+        self.stream.read_char()
+    }
+
+    pub fn peek_char(&mut self) -> Option<std::io::Result<char>> {
+        self.load_incomplete_utf8();
+        self.stream.peek_char()
+    }
+
+    pub fn put_back_char(&mut self, c: char) {
+        self.stream.put_back_char(c)
+    }
+
+    pub fn consume(&mut self, nread: usize) {
+        self.stream.consume(nread)
+    }
+}
+
+impl Read for StreamLayout<CharReader<PipeReader>> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.load_incomplete_utf8();
+        self.stream.read(buf)
+    }
+}
+
 #[derive(Debug)]
 pub struct OutputFileStream {
     file_name: Atom,
@@ -510,12 +545,13 @@ impl Default for StreamOptions {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct StreamLayout<T> {
     pub options: StreamOptions,
     pub lines_read: usize,
     past_end_of_stream: bool,
     stream: T,
+    pub(crate) incomplete_utf8: std::cell::RefCell<Vec<u8>>,
 }
 
 impl<T> StreamLayout<T> {
@@ -526,6 +562,7 @@ impl<T> StreamLayout<T> {
             lines_read: 0,
             past_end_of_stream: false,
             stream,
+            incomplete_utf8: std::cell::RefCell::new(Vec::new()),
         }
     }
 }

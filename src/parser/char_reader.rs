@@ -64,6 +64,37 @@ impl<R> CharReader<R> {
     pub fn rem_buf_len(&self) -> usize {
         self.buf.len() - self.pos
     }
+
+    // Prepend bytes to the buffer. Used for handling incomplete UTF-8 sequences.
+    pub fn prepend_bytes(&mut self, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
+
+        // If we haven't consumed any bytes yet (pos == 0), just insert at the beginning
+        if self.pos == 0 {
+            // Insert new bytes at the beginning
+            for (i, &byte) in bytes.iter().enumerate() {
+                self.buf.insert(i, byte);
+            }
+        } else {
+            // We've consumed some bytes. Replace the consumed part with our new bytes.
+            // This maintains the invariant that pos points to the next byte to read.
+            if bytes.len() <= self.pos {
+                // New bytes fit in the consumed space
+                let start = self.pos - bytes.len();
+                self.buf[start..self.pos].copy_from_slice(bytes);
+                self.pos = start;
+            } else {
+                // New bytes don't fit, need to remove consumed bytes and insert new ones
+                self.buf.drain(0..self.pos);
+                for (i, &byte) in bytes.iter().enumerate() {
+                    self.buf.insert(i, byte);
+                }
+                self.pos = 0;
+            }
+        }
+    }
 }
 
 pub trait CharRead {
