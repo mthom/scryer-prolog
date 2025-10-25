@@ -27,10 +27,13 @@ use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem::ManuallyDrop;
 use std::net::{Shutdown, TcpStream};
 use std::ops::{Deref, DerefMut};
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 use std::ptr;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::TryRecvError;
+use std::time::Duration;
 
 #[cfg(feature = "tls")]
 use native_tls::TlsStream;
@@ -1261,6 +1264,80 @@ impl Stream {
             Stream::PipeReader(stream) => stream.past_end_of_stream = value,
             Stream::PipeWriter(stream) => stream.past_end_of_stream = value,
         }
+    }
+
+    #[inline]
+    pub(crate) fn set_read_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()> {
+        match self {
+            Stream::NamedTcp(stream) => {
+                stream.stream.inner_mut().tcp_stream.set_read_timeout(timeout)
+            }
+            Stream::PipeReader(_stream) => {
+                // Pipe timeout is handled via poll_read_ready() at the read level
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn poll_read_ready(&mut self, timeout: Duration) -> std::io::Result<bool> {
+        match self {
+            Stream::PipeReader(stream) => {
+                let fd = stream.stream.inner_mut().as_raw_fd();
+
+                let mut pollfd = libc::pollfd {
+                    fd,
+                    events: libc::POLLIN,
+                    revents: 0,
+                };
+
+                let timeout_ms = timeout.as_millis().min(i32::MAX as u128) as i32;
+
+                let result = unsafe {
+                    libc::poll(&mut pollfd as *mut libc::pollfd, 1, timeout_ms)
+                };
+
+                if result < 0 {
+                    Err(std::io::Error::last_os_error())
+                } else if result == 0 {
+                    // Timeout
+                    Ok(false)
+                } else {
+                    // Data available
+                    Ok(true)
+                }
+            }
+            Stream::NamedTcp(stream) => {
+                let fd = stream.stream.inner_mut().tcp_stream.as_raw_fd();
+
+                let mut pollfd = libc::pollfd {
+                    fd,
+                    events: libc::POLLIN,
+                    revents: 0,
+                };
+
+                let timeout_ms = timeout.as_millis().min(i32::MAX as u128) as i32;
+
+                let result = unsafe {
+                    libc::poll(&mut pollfd as *mut libc::pollfd, 1, timeout_ms)
+                };
+
+                if result < 0 {
+                    Err(std::io::Error::last_os_error())
+                } else if result == 0 {
+                    Ok(false)
+                } else {
+                    Ok(true)
+                }
+            }
+            _ => Ok(true), // Other streams don't need polling
+        }
+    }
+
+    #[cfg(not(unix))]
+    pub(crate) fn poll_read_ready(&mut self, _timeout: Duration) -> std::io::Result<bool> {
+        Ok(true)
     }
 
     #[inline]
