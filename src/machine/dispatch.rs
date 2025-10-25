@@ -3528,6 +3528,14 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.current_input());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallMemoryStream => {
+                        try_or_throw!(self.machine_st, self.memory_stream());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteMemoryStream => {
+                        try_or_throw!(self.machine_st, self.memory_stream());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallCurrentOutput => {
                         try_or_throw!(self.machine_st, self.current_output());
                         step_or_fail!(self, self.machine_st.p += 1);
