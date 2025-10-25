@@ -3574,27 +3574,155 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn get_n_chars(&mut self) -> CallResult {
+        self.get_n_chars_impl(3)
+    }
+
+    #[inline(always)]
+    pub(crate) fn get_n_chars_with_timeout(&mut self) -> CallResult {
+        self.get_n_chars_impl(4)
+    }
+
+    fn parse_timeout(&mut self, register_idx: usize) -> CallResult<Option<Duration>> {
+        let timeout_term = self.deref_register(register_idx);
+
+        // Try to parse as a number first
+        if let Ok(number) = Number::try_from((timeout_term, &self.machine_st.arena.f64_tbl)) {
+            match number {
+                Number::Fixnum(n) => {
+                    let ms = n.get_num();
+                    if ms < 0 {
+                        // Negative means infinite timeout
+                        return Ok(None);
+                    } else if ms == 0 {
+                        // Zero means minimum timeout (1ms to avoid busy-wait)
+                        return Ok(Some(Duration::from_millis(1)));
+                    } else {
+                        return Ok(Some(Duration::from_millis(ms as u64)));
+                    }
+                }
+                Number::Integer(n) => {
+                    if n.sign() != Sign::Positive {
+                        return Ok(None);
+                    }
+                    // Try to convert to u64, if too large treat as infinite
+                    let ms: u64 = match (&*n).try_into() {
+                        Ok(val) => val,
+                        Err(_) => return Ok(None), // Too large, treat as infinite
+                    };
+                    return Ok(Some(Duration::from_millis(ms)));
+                }
+                Number::Float(f) => {
+                    let ms = f.into_inner();
+                    if ms < 0.0 {
+                        return Ok(None);
+                    } else if ms == 0.0 {
+                        return Ok(Some(Duration::from_millis(1)));
+                    } else {
+                        return Ok(Some(Duration::from_millis(ms as u64)));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Try to parse as an atom
+        read_heap_cell!(timeout_term,
+            (HeapCellValueTag::Atom, (atom, _arity)) => {
+                if atom == atom!("infinity") || atom == atom!("inf") {
+                    return Ok(None);
+                } else if atom == atom!("nonblock") {
+                    return Ok(Some(Duration::from_millis(0)));
+                } else {
+                    // Invalid timeout atom
+                    let stub = functor_stub(atom!("get_n_chars"), 4);
+                    let err = self.machine_st.type_error(ValidType::Integer, timeout_term);
+                    return Err(self.machine_st.error_form(err, stub));
+                }
+            }
+            _ => {
+                let stub = functor_stub(atom!("get_n_chars"), 4);
+                let err = self.machine_st.type_error(ValidType::Integer, timeout_term);
+                return Err(self.machine_st.error_form(err, stub));
+            }
+        )
+    }
+
+    fn get_n_chars_impl(&mut self, arity: usize) -> CallResult {
         let _guard = RawReadGuard::new();
-        let stream = self.machine_st.get_stream_or_alias(
+
+        let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
             &self.indices,
             atom!("get_n_chars"),
-            3,
+            arity,
         )?;
 
-        let num = match Number::try_from((self.deref_register(2), &self.machine_st.arena.f64_tbl)) {
-            Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
-            Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
-                Ok(u) => u,
-                _ => {
-                    self.machine_st.fail = true;
-                    return Ok(());
-                }
-            },
-            _ => {
-                unreachable!()
-            }
+        let timeout = if arity == 4 {
+            self.parse_timeout(4)?
+        } else {
+            None
         };
+
+        let n_term = self.deref_register(2);
+        let (num, n_is_var) = read_heap_cell!(n_term,
+            (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
+                // N is unbound - use a reasonable maximum and unify later
+                (16384usize, true)
+            }
+            _ => {
+                // N is bound - use it as the maximum
+                match Number::try_from((n_term, &self.machine_st.arena.f64_tbl)) {
+                    Ok(Number::Fixnum(n)) => (usize::try_from(n.get_num()).unwrap(), false),
+                    Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
+                        Ok(u) => (u, false),
+                        _ => {
+                            self.machine_st.fail = true;
+                            return Ok(());
+                        }
+                    },
+                    Ok(Number::Float(f)) => {
+                        let val = f.into_inner();
+                        if val >= 0.0 && val.is_finite() {
+                            (val as usize, false)
+                        } else {
+                            self.machine_st.fail = true;
+                            return Ok(());
+                        }
+                    }
+                    _ => {
+                        // Type error - N is not a number
+                        let err = self.machine_st.type_error(ValidType::Integer, n_term);
+                        let stub = functor_stub(atom!("get_n_chars"), arity);
+                        return Err(self.machine_st.error_form(err, stub));
+                    }
+                }
+            }
+        );
+
+        if let Some(t) = timeout {
+            stream.set_read_timeout(Some(t)).ok();
+
+            // For pipes, check if data is ready with poll before reading
+            #[cfg(unix)]
+            {
+                use crate::machine::streams::Stream;
+                match stream {
+                    Stream::PipeReader(_) => {
+                        if !stream.poll_read_ready(t).unwrap_or(false) {
+                            // Timeout occurred, return empty string
+                            let output = self.deref_register(3);
+                            let cstr_cell = resource_error_call_result!(
+                                self.machine_st,
+                                self.machine_st.heap.allocate_cstr("")
+                            );
+                            unify!(self.machine_st, cstr_cell, output);
+                            return Ok(());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
 
         let mut string = String::new();
 
@@ -3608,32 +3736,158 @@ impl Machine {
                 string.push(c as char);
             }
         } else {
-            let mut iter = self.machine_st.open_parsing_stream(stream).map_err(|e| {
-                let err = self.machine_st.session_error(SessionError::from(e));
-                let stub = functor_stub(atom!("get_n_chars"), 2);
+            // For pipes with timeout, use direct byte reading with poll
+            #[cfg(unix)]
+            use crate::machine::streams::Stream;
+            #[cfg(unix)]
+            let is_pipe_with_timeout = timeout.is_some() && matches!(stream, Stream::PipeReader(_));
 
-                self.machine_st.error_form(err, stub)
-            })?;
+            #[cfg(unix)]
+            if is_pipe_with_timeout {
+                // Track start time for timeout calculation
+                use std::time::Instant;
+                let start_time = Instant::now();
+                let timeout_duration = timeout.unwrap();
 
-            for _ in 0..num {
-                let result = iter.read_char();
+                // Read UTF-8 bytes directly with poll before each read
+                let mut utf8_buf = Vec::new();
+                let mut chars_read = 0;
 
-                match result {
-                    Some(Ok(c)) => {
-                        string.push(c);
-                    }
-                    Some(Err(e)) => {
-                        let stub = functor_stub(atom!("$get_n_chars"), 3);
-                        let err = self.machine_st.session_error(SessionError::from(e));
-
-                        return Err(self.machine_st.error_form(err, stub));
-                    }
-                    _ => {
+                while chars_read < num {
+                    // Check if we've exceeded the total timeout
+                    let elapsed = start_time.elapsed();
+                    if elapsed >= timeout_duration {
                         break;
+                    }
+
+                    // Calculate remaining timeout
+                    let remaining = timeout_duration - elapsed;
+
+                    // Poll to see if data is available
+                    match stream.poll_read_ready(remaining) {
+                        Ok(true) => {
+                            // Data is available, read one byte
+                            let mut byte = [0u8; 1];
+                            match stream.read(&mut byte) {
+                                Ok(0) => break, // EOF
+                                Ok(_) => {
+                                    utf8_buf.push(byte[0]);
+                                    // Try to decode accumulated bytes as UTF-8
+                                    match std::str::from_utf8(&utf8_buf) {
+                                        Ok(s) => {
+                                            // Valid UTF-8 sequence, add characters
+                                            string.push_str(s);
+                                            chars_read += s.chars().count();
+                                            utf8_buf.clear();
+                                        }
+                                        Err(e) if e.error_len().is_none() => {
+                                            // Incomplete UTF-8 sequence, continue reading
+                                            continue;
+                                        }
+                                        Err(_) => {
+                                            // Invalid UTF-8, skip this byte
+                                            utf8_buf.clear();
+                                        }
+                                    }
+                                }
+                                Err(e) if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::Interrupted => {
+                                    continue;
+                                }
+                                Err(_) => break,
+                            }
+                        }
+                        Ok(false) | Err(_) => {
+                            // Timeout or error
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // Use regular CharReader for non-pipe streams or no timeout
+                let mut iter = self.machine_st.open_parsing_stream(stream).map_err(|e| {
+                    let err = self.machine_st.session_error(SessionError::from(e));
+                    let stub = functor_stub(atom!("get_n_chars"), 2);
+
+                    self.machine_st.error_form(err, stub)
+                })?;
+
+                for _ in 0..num {
+                    let result = iter.read_char();
+
+                    match result {
+                        Some(Ok(c)) => {
+                            string.push(c);
+                        }
+                        Some(Err(e)) => {
+                            if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut {
+                                break;
+                            }
+                            let stub = functor_stub(atom!("$get_n_chars"), arity);
+                            let err = self.machine_st.session_error(SessionError::from(e));
+
+                            return Err(self.machine_st.error_form(err, stub));
+                        }
+                        _ => {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            #[cfg(not(unix))]
+            {
+                let mut iter = self.machine_st.open_parsing_stream(stream).map_err(|e| {
+                    let err = self.machine_st.session_error(SessionError::from(e));
+                    let stub = functor_stub(atom!("get_n_chars"), 2);
+
+                    self.machine_st.error_form(err, stub)
+                })?;
+
+                for _ in 0..num {
+                    let result = iter.read_char();
+
+                    match result {
+                        Some(Ok(c)) => {
+                            string.push(c);
+                        }
+                        Some(Err(e)) => {
+                            if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut {
+                                break;
+                            }
+                            let stub = functor_stub(atom!("$get_n_chars"), arity);
+                            let err = self.machine_st.session_error(SessionError::from(e));
+
+                            return Err(self.machine_st.error_form(err, stub));
+                        }
+                        _ => {
+                            break;
+                        }
                     }
                 }
             }
         };
+
+        if timeout.is_some() {
+            stream.set_read_timeout(None).ok();
+        }
+
+        let actual_length = string.chars().count();
+
+        // If N was a variable, unify it with the actual length
+        if n_is_var {
+            let n_term = self.deref_register(2);
+            let length_number = Number::arena_from(actual_length, &mut self.machine_st.arena);
+
+            match length_number {
+                Number::Fixnum(n) => {
+                    self.machine_st.unify_fixnum(n, n_term);
+                }
+                Number::Integer(n) => {
+                    self.machine_st.unify_big_int(n, n_term);
+                }
+                _ => unreachable!(),
+            }
+        }
 
         let output = self.deref_register(3);
         let cstr_cell = resource_error_call_result!(

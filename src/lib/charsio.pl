@@ -10,6 +10,7 @@ read and write chars.
                     chars_utf8bytes/2,
                     get_single_char/1,
                     get_n_chars/3,
+                    get_n_chars/4,
                     get_line_to_chars/3,
                     read_from_chars/2,
                     read_term_from_chars/3,
@@ -333,6 +334,28 @@ get_n_chars(Stream, N, Cs) :-
             length(Cs, N)
         ;   N >= 0,
             '$get_n_chars'(Stream, N, Cs)
+        ).
+
+%% get_n_chars(+Stream, ?N, -Chars, +Timeout).
+%
+% Read up to N chars from stream Stream with a timeout.
+% N can be an integer (maximum chars to read) or a variable (unified with actual chars read).
+%
+% Timeout can be:
+%   - An integer (timeout in milliseconds)
+%   - 0 or nonblock/nowait (minimal timeout for non-blocking behavior)
+%   - infinity/inf (no timeout, blocks indefinitely)
+%
+% Returns whatever data is available within the timeout period.
+% On timeout, returns partial data (distinguishable from EOF).
+% The stream is NOT marked as EOF on timeout.
+% When N is a variable, it is unified with the number of chars actually read.
+get_n_chars(Stream, N, Cs, Timeout) :-
+        can_be(integer, N),
+        (   var(N) ->
+            '$get_n_chars'(Stream, N, Cs, Timeout)
+        ;   N >= 0,
+            '$get_n_chars'(Stream, N, Cs, Timeout)
         ).
 
 get_n_chars_wrapper(Stream, N, Cs) :-
