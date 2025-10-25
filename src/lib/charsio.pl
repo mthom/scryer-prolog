@@ -342,9 +342,10 @@ get_n_chars(Stream, N, Cs) :-
 % N can be an integer (maximum chars to read) or a variable (unified with actual chars read).
 %
 % Timeout can be:
-%   - An integer (timeout in milliseconds)
-%   - 0 or nonblock/nowait (minimal timeout for non-blocking behavior)
+%   - A positive integer (timeout in milliseconds)
+%   - 0 or negative (no timeout, same as get_n_chars/3)
 %   - infinity/inf (no timeout, blocks indefinitely)
+%   - nonblock (atom for minimal non-blocking behavior)
 %
 % Returns whatever data is available within the timeout period.
 % On timeout, returns partial data (distinguishable from EOF).
