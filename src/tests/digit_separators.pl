@@ -132,7 +132,7 @@ test("number_chars with decimal separator", (
 test("number_chars rejects float with separator before decimal", (
     catch(
         (number_chars(_, "1_0.0"), fail),
-        error(syntax_error(_), _),
+        error(syntax_error(cannot_parse_big_int), _),
         true
     )
 )).
@@ -140,17 +140,16 @@ test("number_chars rejects float with separator before decimal", (
 test("number_chars rejects float separator via atom_chars", (
     catch(
         (atom_chars('1_0.0', Cs), number_chars(_, Cs), fail),
-        error(syntax_error(_), _),
+        error(syntax_error(cannot_parse_big_int), _),
         true
     )
 )).
 
-test("direct literal rejects float with separator before decimal", (
-    % Can't test direct literal syntax in test file since it fails at parse time
-    % This test verifies the error occurs via atom -> number conversion
+test("number_chars rejects float separator via char list", (
+    % Test with explicit character list to ensure syntax_error, not type_error
     catch(
-        (atom_chars(A, ['1','_','0','.','0']), number_chars(_, A), fail),
-        error(_,_),
+        (number_chars(_, ['1','_','0','.','0']), fail),
+        error(syntax_error(cannot_parse_big_int), _),
         true
     )
 )).
@@ -159,7 +158,7 @@ test("direct literal rejects float with separator before decimal", (
 test("number_chars rejects trailing underscore with layout", (
     catch(
         (number_chars(_, "0_ "), fail),
-        error(syntax_error(_), _),
+        error(syntax_error(cannot_parse_big_int), _),
         true
     )
 )).
@@ -168,7 +167,7 @@ test("number_chars rejects trailing underscore with layout", (
 test("number_chars rejects trailing underscore decimal", (
     catch(
         (number_chars(_, "123_"), fail),
-        error(syntax_error(_), _),
+        error(syntax_error(cannot_parse_big_int), _),
         true
     )
 )).
@@ -176,7 +175,7 @@ test("number_chars rejects trailing underscore decimal", (
 test("number_chars rejects trailing underscore hex", (
     catch(
         (number_chars(_, "0xFF_"), fail),
-        error(syntax_error(_), _),
+        error(syntax_error(unexpected_end_of_file), _),
         true
     )
 )).
@@ -184,7 +183,7 @@ test("number_chars rejects trailing underscore hex", (
 test("number_chars rejects trailing underscore octal", (
     catch(
         (number_chars(_, "0o77_"), fail),
-        error(syntax_error(_), _),
+        error(syntax_error(unexpected_end_of_file), _),
         true
     )
 )).
@@ -192,7 +191,7 @@ test("number_chars rejects trailing underscore octal", (
 test("number_chars rejects trailing underscore binary", (
     catch(
         (number_chars(_, "0b11_"), fail),
-        error(syntax_error(_), _),
+        error(syntax_error(unexpected_end_of_file), _),
         true
     )
 )).
@@ -201,7 +200,7 @@ test("number_chars rejects trailing underscore binary", (
 test("number_chars rejects double underscore", (
     catch(
         (number_chars(_, "1__000"), fail),
-        error(syntax_error(_), _),
+        error(syntax_error(cannot_parse_big_int), _),
         true
     )
 )).
@@ -210,7 +209,7 @@ test("number_chars rejects double underscore", (
 test("number_chars rejects float with separator after decimal", (
     catch(
         (number_chars(_, "11.2_5"), fail),
-        error(syntax_error(_), _),
+        error(syntax_error(unexpected_char), _),
         true
     )
 )).
@@ -219,7 +218,7 @@ test("number_chars rejects float with separator after decimal", (
 test("number_chars rejects float with separator in exponent", (
     catch(
         (number_chars(_, "1.0e1_0"), fail),
-        error(syntax_error(_), _),
+        error(syntax_error(unexpected_char), _),
         true
     )
 )).
