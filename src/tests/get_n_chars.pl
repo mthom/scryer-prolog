@@ -11,15 +11,17 @@ test("timeout=0 equals get_n_chars/3", (
     atom_chars('/bin/echo', Echo),
     atom_chars('ABCDEFGHIJ', Content),
     iso_ext:setup_call_cleanup(
-        ( process:process_create(Echo, [Content], [stdout(pipe(Out1))]),
-          process:process_create(Echo, [Content], [stdout(pipe(Out2))]) ),
-        (
-            charsio:get_n_chars(Out1, 5, Chars1),
-            charsio:get_n_chars(Out2, 5, Chars2, 0),
-            Chars1 = Chars2
+        process:process_create(Echo, [Content], [stdout(pipe(Out1))]),
+        iso_ext:setup_call_cleanup(
+            process:process_create(Echo, [Content], [stdout(pipe(Out2))]),
+            (
+                charsio:get_n_chars(Out1, 5, Chars1),
+                charsio:get_n_chars(Out2, 5, Chars2, 0),
+                Chars1 = Chars2
+            ),
+            close(Out2)
         ),
-        ( close(Out2),
-          close(Out1) )
+        close(Out1)
     )
 )).
 
@@ -28,18 +30,20 @@ test("variable N with timeout=0", (
     atom_chars('/bin/echo', Echo),
     atom_chars('Testing', Content),
     iso_ext:setup_call_cleanup(
-        ( process:process_create(Echo, [Content], [stdout(pipe(Out1))]),
-          process:process_create(Echo, [Content], [stdout(pipe(Out2))]) ),
-        (
-            charsio:get_n_chars(Out1, N1, Chars1),
-            charsio:get_n_chars(Out2, N2, Chars2, 0),
-            N1 = N2,
-            Chars1 = Chars2,
-            N1 = 8,
-            Chars1 = "Testing\n"
+        process:process_create(Echo, [Content], [stdout(pipe(Out1))]),
+        iso_ext:setup_call_cleanup(
+            process:process_create(Echo, [Content], [stdout(pipe(Out2))]),
+            (
+                charsio:get_n_chars(Out1, N1, Chars1),
+                charsio:get_n_chars(Out2, N2, Chars2, 0),
+                N1 = N2,
+                Chars1 = Chars2,
+                N1 = 8,
+                Chars1 = "Testing\n"
+            ),
+            close(Out2)
         ),
-        ( close(Out2),
-          close(Out1) )
+        close(Out1)
     )
 )).
 
@@ -48,16 +52,18 @@ test("negative timeout equals no timeout", (
     atom_chars('/bin/echo', Echo),
     atom_chars('NegativeTest', Content),
     iso_ext:setup_call_cleanup(
-        ( process:process_create(Echo, [Content], [stdout(pipe(Out1))]),
-          process:process_create(Echo, [Content], [stdout(pipe(Out2))]) ),
-        (
-            charsio:get_n_chars(Out1, N1, Chars1),
-            charsio:get_n_chars(Out2, N2, Chars2, -100),
-            N1 = N2,
-            Chars1 = Chars2
+        process:process_create(Echo, [Content], [stdout(pipe(Out1))]),
+        iso_ext:setup_call_cleanup(
+            process:process_create(Echo, [Content], [stdout(pipe(Out2))]),
+            (
+                charsio:get_n_chars(Out1, N1, Chars1),
+                charsio:get_n_chars(Out2, N2, Chars2, -100),
+                N1 = N2,
+                Chars1 = Chars2
+            ),
+            close(Out2)
         ),
-        ( close(Out2),
-          close(Out1) )
+        close(Out1)
     )
 )).
 
