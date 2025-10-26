@@ -42,6 +42,7 @@ pub enum Token {
     OpenCurly,         // '{'
     CloseCurly,        // '}'
     HeadTailSeparator, // '|'
+    DoubleBar,         // '||'
     Comma,             // ','
     End,
 }
@@ -1107,6 +1108,11 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
                 if c == '|' {
                     self.skip_char(c);
+                    let next = self.lookahead_char()?;
+                    if next == '|' {
+                        self.skip_char(next);
+                        return Ok(Token::DoubleBar);
+                    }
                     return Ok(Token::HeadTailSeparator);
                 }
 
