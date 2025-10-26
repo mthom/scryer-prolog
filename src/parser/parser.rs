@@ -829,8 +829,17 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
         match td.tt {
             TokenType::Open | TokenType::OpenCT => {
-                if self.stack[idx].tt == TokenType::Comma {
-                    return false;
+                // Reject incomplete reductions and ISO-forbidden syntax
+                // See: https://www.complang.tuwien.ac.at/ulrich/iso-prolog/dtc2#C2
+                match self.stack[idx].tt {
+                    TokenType::Comma => {
+                        return false;
+                    }
+                    TokenType::HeadTailSeparator => {
+                        // (|) is forbidden by ISO spec
+                        return false;
+                    }
+                    _ => {}
                 }
 
                 if let Some(atom) = self.stack[idx].tt.sep_to_atom() {
