@@ -154,3 +154,12 @@ test("direct literal rejects float with separator before decimal", (
         true
     )
 )).
+
+% Reject trailing underscore with layout
+test("number_chars rejects trailing underscore with layout", (
+    catch(
+        (number_chars(_, "0_ "), fail),
+        error(syntax_error(_), _),
+        true
+    )
+)).

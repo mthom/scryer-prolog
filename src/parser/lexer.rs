@@ -728,7 +728,15 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             had_underscore = true;
             self.skip_char(c);
             self.scan_for_layout()?;
-            c = self.lookahead_char()?;
+
+            // After underscore and layout, must have a digit (not EOF or non-digit)
+            c = match self.lookahead_char() {
+                Ok(c) => c,
+                Err(_) => {
+                    // EOF or error after underscore+layout is invalid
+                    return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                }
+            };
 
             if decimal_digit_char!(c) {
                 Ok((c, had_underscore))
