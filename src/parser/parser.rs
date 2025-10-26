@@ -851,8 +851,16 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
         match td.tt {
             TokenType::Open | TokenType::OpenCT => {
-                if self.stack[idx].tt == TokenType::Comma {
-                    return false;
+                // Reject incomplete reductions like ([  and  ({
+                // Note: (,  is already rejected by checking Comma
+                // Note: ((  is already rejected by the check at line 823
+                match self.stack[idx].tt {
+                    TokenType::Comma
+                    | TokenType::OpenList
+                    | TokenType::OpenCurly => {
+                        return false;
+                    }
+                    _ => {}
                 }
 
                 if let Some(atom) = self.stack[idx].tt.sep_to_atom() {
