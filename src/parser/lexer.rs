@@ -727,7 +727,11 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         if c == '_' {
             had_underscore = true;
             self.skip_char(c);
-            self.scan_for_layout()?;
+
+            // Try to scan for layout - EOF here means trailing underscore
+            if let Err(_) = self.scan_for_layout() {
+                return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+            }
 
             // After underscore and layout, must have a digit (not EOF or non-digit)
             c = match self.lookahead_char() {

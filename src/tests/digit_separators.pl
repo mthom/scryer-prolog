@@ -163,3 +163,63 @@ test("number_chars rejects trailing underscore with layout", (
         true
     )
 )).
+
+% Reject trailing underscore without layout
+test("number_chars rejects trailing underscore decimal", (
+    catch(
+        (number_chars(_, "123_"), fail),
+        error(syntax_error(_), _),
+        true
+    )
+)).
+
+test("number_chars rejects trailing underscore hex", (
+    catch(
+        (number_chars(_, "0xFF_"), fail),
+        error(syntax_error(_), _),
+        true
+    )
+)).
+
+test("number_chars rejects trailing underscore octal", (
+    catch(
+        (number_chars(_, "0o77_"), fail),
+        error(syntax_error(_), _),
+        true
+    )
+)).
+
+test("number_chars rejects trailing underscore binary", (
+    catch(
+        (number_chars(_, "0b11_"), fail),
+        error(syntax_error(_), _),
+        true
+    )
+)).
+
+% Option 2: Double underscores are rejected (undecided in spec)
+test("number_chars rejects double underscore", (
+    catch(
+        (number_chars(_, "1__000"), fail),
+        error(syntax_error(_), _),
+        true
+    )
+)).
+
+% Option 10: Reject digit separators in float (after decimal point)
+test("number_chars rejects float with separator after decimal", (
+    catch(
+        (number_chars(_, "11.2_5"), fail),
+        error(syntax_error(_), _),
+        true
+    )
+)).
+
+% Option 11: Reject digit separators in float exponent
+test("number_chars rejects float with separator in exponent", (
+    catch(
+        (number_chars(_, "1.0e1_0"), fail),
+        error(syntax_error(_), _),
+        true
+    )
+)).
