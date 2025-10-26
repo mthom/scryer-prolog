@@ -76,3 +76,17 @@ fn clpz_load() {
 fn iso_conformity_tests() {
     load_module_test("tests-pl/iso-conformity-tests.pl", "All tests passed");
 }
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn get_n_chars() {
+    load_module_test("src/tests/get_n_chars.pl", "");
+}
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn incomplete_utf8() {
+    load_module_test("src/tests/incomplete_utf8.pl", "");
+}
