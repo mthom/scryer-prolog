@@ -2,7 +2,9 @@
 :- use_module(test_framework).
 :- use_module(library(charsio)).
 
-% Test for issue #3138 - ([) should be a syntax error when reading
+% Test for issue #3138
+% ([) and ({) should be syntax errors when reading
+% See: https://github.com/mthom/scryer-prolog/issues/3138
 test("read of ([). should produce syntax_error", (
     catch(
         (read_from_chars("([).", _), false),
