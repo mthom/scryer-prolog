@@ -1,3 +1,5 @@
+//! Types and Traits used for interacting with foreign functions from prolog
+
 /* How does FFI work?
 
 Each WAM machine has a ForeignFunctionTable instance that contains a table of functions and structs.
@@ -20,10 +22,13 @@ and finally we add the pointer the size of what we've written.
 */
 
 use crate::arena::Arena;
-use crate::atom_table::Atom;
+use crate::atom_table::{Atom, AtomTable};
 use crate::forms::Number;
+use crate::functor_macro::FunctorElement;
+use crate::machine::heap::{sized_iter_to_heap_list, Heap};
 use crate::machine::machine_errors::DomainErrorType;
 use crate::parser::ast::{Fixnum, MightNotFitInFixnum};
+use crate::Machine;
 
 use dashu::Integer;
 use libffi::middle::{Arg, Cif, CodePtr, Type};
@@ -39,14 +44,14 @@ use std::mem::ManuallyDrop;
 use std::ops::Deref;
 use std::ptr::NonNull;
 
-pub struct FunctionDefinition {
-    pub name: Atom,
-    pub return_value: Atom,
-    pub args: Vec<Atom>,
+pub(crate) struct FunctionDefinition {
+    pub(crate) name: Atom,
+    pub(crate) return_value: Atom,
+    pub(crate) args: Vec<Atom>,
 }
 
 #[derive(Debug)]
-pub struct FunctionImpl {
+pub(crate) struct FunctionImpl {
     cif: Cif,
     args: Vec<FfiType>,
     code_ptr: CodePtr,
@@ -160,7 +165,7 @@ impl FunctionImpl {
 }
 
 #[derive(Debug, Default)]
-pub struct ForeignFunctionTable {
+pub(crate) struct ForeignFunctionTable {
     table: HashMap<Atom, FunctionImpl>,
     structs: HashMap<Atom, StructImpl>,
 }
@@ -388,7 +393,9 @@ impl Deref for PointerArgs<'_, '_> {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum FfiType {
+#[non_exhaustive]
+#[allow(missing_docs)]
+pub enum FfiType {
     Void,
     Bool,
     U8,
@@ -406,6 +413,28 @@ enum FfiType {
     Struct(Atom),
 }
 
+impl FfiType {
+    fn to_atom(self) -> Atom {
+        match self {
+            FfiType::Void => atom!("void"),
+            FfiType::Bool => atom!("bool"),
+            FfiType::U8 => atom!("u8"),
+            FfiType::I8 => atom!("i8"),
+            FfiType::U16 => atom!("u16"),
+            FfiType::I16 => atom!("i16"),
+            FfiType::U32 => atom!("u32"),
+            FfiType::I32 => atom!("i32"),
+            FfiType::U64 => atom!("u64"),
+            FfiType::I64 => atom!("i64"),
+            FfiType::F32 => atom!("f32"),
+            FfiType::F64 => atom!("f64"),
+            FfiType::Ptr => atom!("ptr"),
+            FfiType::CStr => atom!("cstr"),
+            FfiType::Struct(atom) => atom,
+        }
+    }
+}
+
 trait ToFfiType {
     const TYPE: FfiType;
 }
@@ -415,6 +444,12 @@ macro_rules! impl_to_ffi_type {
         $(
             impl ToFfiType for $t {
                 const TYPE: FfiType = FfiType::$v;
+            }
+
+            impl FfiTypeable for $t {
+                fn to_type(_machine: &mut Machine) -> FfiType {
+                    Self::TYPE
+                }
             }
         )*
     };
@@ -432,6 +467,22 @@ impl_to_ffi_type!(
     f32 => F32;
     f64 => F64;
 );
+
+impl<T> ToFfiType for *mut T {
+    const TYPE: FfiType = FfiType::Ptr;
+}
+
+impl<T> ToFfiType for *const T {
+    const TYPE: FfiType = FfiType::Ptr;
+}
+
+impl<T> ToFfiType for &T {
+    const TYPE: FfiType = FfiType::Ptr;
+}
+
+impl<T> ToFfiType for &mut T {
+    const TYPE: FfiType = FfiType::Ptr;
+}
 
 impl FfiType {
     fn from_atom(atom: &Atom) -> Self {
@@ -637,11 +688,15 @@ impl Drop for FfiStruct {
 }
 
 impl ForeignFunctionTable {
-    pub fn merge(&mut self, other: ForeignFunctionTable) {
+    pub(crate) fn merge(&mut self, other: ForeignFunctionTable) {
         self.table.extend(other.table);
     }
 
-    pub fn define_struct(&mut self, name: Atom, atom_fields: Vec<Atom>) -> Result<(), FfiError> {
+    pub(crate) fn define_struct(
+        &mut self,
+        name: Atom,
+        atom_fields: Vec<Atom>,
+    ) -> Result<(), FfiError> {
         let fields: Vec<_> = atom_fields.iter().map(FfiType::from_atom).collect();
         let struct_type = libffi::middle::Type::structure(
             fields
@@ -708,7 +763,7 @@ impl ForeignFunctionTable {
         Ok(())
     }
 
-    pub fn exec(
+    pub(crate) fn exec(
         &mut self,
         fn_name: Atom,
         mut args: Vec<Value>,
@@ -732,7 +787,7 @@ impl ForeignFunctionTable {
         fn_impl.call(&args, arena, &self.structs)
     }
 
-    pub fn allocate(
+    pub(crate) fn allocate(
         &mut self,
         allocator: FfiAllocator,
         kind: Atom,
@@ -797,7 +852,7 @@ impl ForeignFunctionTable {
         }
     }
 
-    pub fn read_ptr(
+    pub(crate) fn read_ptr(
         &mut self,
         kind: Atom,
         mut ptr: Value,
@@ -851,7 +906,7 @@ impl ForeignFunctionTable {
         }
     }
 
-    pub fn deallocate(
+    pub(crate) fn deallocate(
         &mut self,
         allocator: FfiAllocator,
         kind: Atom,
@@ -902,7 +957,7 @@ impl ForeignFunctionTable {
 }
 
 #[derive(Clone, Debug)]
-pub enum Value {
+pub(crate) enum Value {
     Number(Number),
     CString(CString),
     Struct(Atom, Vec<Value>),
@@ -966,6 +1021,8 @@ impl Value {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
+#[allow(missing_docs)]
 pub enum FfiError {
     ValueCast(Atom, Atom),
     ValueOutOfRange(DomainErrorType, Value),
@@ -1009,3 +1066,176 @@ impl From<libffi::low::Error> for FfiError {
         }
     }
 }
+
+impl Machine {
+    /// register a struct to be usable with the prolog ffi module
+    pub fn register_struct<T: CustomFfiStruct>(&mut self) -> Result<(), FfiError> {
+        let fields = T::fields(self);
+
+        let struct_type = libffi::middle::Type::structure(
+            fields
+                .iter()
+                .map(|field| field.to_type(&self.foreign_function_table.structs))
+                .collect::<Result<Vec<_>, _>>()?,
+        );
+
+        unsafe {
+            // ensure that size and alignment of struct_type are set properly
+            use libffi::low::{ffi_abi_FFI_DEFAULT_ABI, prep_cif};
+            prep_cif(
+                &mut Default::default(),
+                ffi_abi_FFI_DEFAULT_ABI,
+                1,
+                struct_type.as_raw_ptr(),
+                [struct_type.as_raw_ptr()].as_mut_ptr(),
+            )?;
+        };
+
+        let name = AtomTable::build_with(&self.machine_st.atom_tbl, T::type_name());
+
+        self.foreign_function_table.structs.insert(
+            name,
+            StructImpl {
+                ffi_type: struct_type,
+                fields,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// register a function to be callable from prolog as ffi:'name'(Args..., Ret) see prolog ffi module for details
+    ///
+    /// # Safety:
+    /// - each name may only be registered once
+    pub unsafe fn register_function<F: FfiFn>(&mut self, name: &str, f: F) -> Result<(), FfiError> {
+        let args = f.args(self);
+        let return_type = f.return_type(self);
+
+        let cif = libffi::middle::Cif::new(
+            args.iter()
+                .map(|arg| arg.to_type(&self.foreign_function_table.structs))
+                .collect::<Result<Vec<_>, _>>()?,
+            return_type.to_type(&self.foreign_function_table.structs)?,
+        );
+
+        let inputs = sized_iter_to_heap_list(
+            &mut self.machine_st.heap,
+            args.len(),
+            args.iter().map(|arg| atom_as_cell!(arg.to_atom())),
+        )
+        .map_err(|_| FfiError::AllocationFailed)?;
+
+        let function_declaration = FunctionImpl {
+            cif,
+            args,
+            code_ptr: CodePtr(f.fn_ptr()),
+            return_type,
+        };
+
+        let name = AtomTable::build_with(&self.machine_st.atom_tbl, name);
+
+        self.foreign_function_table
+            .table
+            .insert(name, function_declaration);
+
+        let return_type = return_type.to_atom();
+
+        let def = functor!(name, [cell(inputs), atom_as_cell(return_type)]);
+        let cell = Heap::functor_writer(def)(&mut self.machine_st.heap)
+            .map_err(|_| FfiError::AllocationFailed)?;
+        self.machine_st.registers[1] = cell;
+
+        self.run_module_predicate(atom!("ffi"), (atom!("assert_predicate"), 1));
+
+        Ok(())
+    }
+}
+
+/// make a type registerable with `Machine::register_struct`
+///
+/// ## Safety
+/// - the string returned by type_name must be unique betweem all registered structs and must not shadow a build-in type
+/// - the fields must be of the correct type and in the correct order
+/// - the struct this represents must be compatible with repr(C)
+pub unsafe trait CustomFfiStruct {
+    /// the name of the struct as it will be refered to by the prolog machine
+    fn type_name() -> &'static str;
+    /// the declared fields of the struct in order of declaration
+    fn fields(machine: &mut Machine) -> Vec<FfiType>;
+}
+
+/// Mark types that can be used for ffi
+pub trait FfiTypeable {
+    /// The FfiType this type corresponds to
+    fn to_type(machine: &mut Machine) -> FfiType;
+}
+
+impl FfiTypeable for () {
+    fn to_type(_machine: &mut Machine) -> FfiType {
+        FfiType::Void
+    }
+}
+
+impl FfiTypeable for bool {
+    fn to_type(_machine: &mut Machine) -> FfiType {
+        FfiType::Bool
+    }
+}
+
+impl<T: CustomFfiStruct> FfiTypeable for T {
+    fn to_type(machine: &mut Machine) -> FfiType {
+        FfiType::Struct(AtomTable::build_with(
+            &machine.machine_st.atom_tbl,
+            T::type_name(),
+        ))
+    }
+}
+
+/// Marks functions that may be called from prolog via the ffi interface
+#[expect(private_bounds)]
+pub trait FfiFn: FfiFnImpl {}
+impl<T: FfiFnImpl> FfiFn for T {}
+
+trait FfiFnImpl {
+    fn args(&self, machine: &mut Machine) -> Vec<FfiType>;
+    fn return_type(&self, machine: &mut Machine) -> FfiType;
+    fn fn_ptr(&self) -> *mut c_void;
+}
+
+impl<R: FfiTypeable> FfiFnImpl for extern "C" fn() -> R {
+    fn args(&self, _machine: &mut Machine) -> Vec<FfiType> {
+        vec![]
+    }
+
+    fn return_type(&self, machine: &mut Machine) -> FfiType {
+        R::to_type(machine)
+    }
+
+    fn fn_ptr(&self) -> *mut c_void {
+        *self as *mut c_void
+    }
+}
+
+macro_rules! impl_ffi_fn {
+    ($arg0:ident $(, $arg:ident)*) => {
+        impl_ffi_fn!($($arg),*);
+
+        impl<$arg0:FfiTypeable $(, $arg: FfiTypeable)*, R: FfiTypeable> FfiFnImpl for extern "C" fn($arg0 $(, $arg)*) -> R {
+            fn args(&self, machine: &mut Machine) -> Vec<FfiType> {
+                vec![$arg0::to_type(machine) $(, $arg::to_type(machine))* ]
+            }
+
+            fn return_type(&self, machine: &mut Machine) -> FfiType {
+                R::to_type(machine)
+            }
+
+            fn fn_ptr(&self) -> *mut c_void {
+                *self as *mut c_void
+            }
+        }
+    };
+    () => {}
+}
+
+impl_ffi_fn!(A0, A1, A2, A3, A4, A5, A6, A7, A8);

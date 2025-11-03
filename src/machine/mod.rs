@@ -267,10 +267,17 @@ impl Machine {
                 self.machine_st.p = p;
 
                 return self.dispatch_loop();
+            } else {
+                panic!(
+                    "unknwon predicate: {}:{}/{}",
+                    module_name.as_str(),
+                    key.0.as_str(),
+                    key.1
+                )
             }
+        } else {
+            panic!("unknown module: {}", module_name.as_str())
         }
-
-        unreachable!();
     }
 
     fn load_file(&mut self, path: &str, stream: Stream) {
