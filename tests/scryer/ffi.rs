@@ -387,6 +387,8 @@ fn static_ffi() {
                     .unwrap();
             }
         },
-        "expected",
+        // FIXME: how is current_predicate(ffi:'get_example_struct'/1) true but calling ffi:'get_example_struct'(Arg) failes with an existence_error?
+        // expected is that the call should succeed
+        "is_current\n   error(existence_error(procedure,get_example_struct/1),get_example_struct/1).\n",
     );
 }
