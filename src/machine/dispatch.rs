@@ -4316,6 +4316,14 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.load_foreign_lib());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallLoadForeignLibGlobal => {
+                        try_or_throw!(self.machine_st, self.load_foreign_lib_global());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteLoadForeignLibGlobal => {
+                        try_or_throw!(self.machine_st, self.load_foreign_lib_global());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallForeignCall => {
                         try_or_throw!(self.machine_st, self.foreign_call());
                         step_or_fail!(self, self.machine_st.p += 1);

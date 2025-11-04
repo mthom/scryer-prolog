@@ -1,4 +1,4 @@
-:- module(ffi, [use_foreign_module/2, foreign_struct/2, with_locals/2, allocate/4, deallocate/3, read_ptr/3, array_type/3]).
+:- module(ffi, [use_foreign_module/2, use_foreign_module_global/2, foreign_struct/2, with_locals/2, allocate/4, deallocate/3, read_ptr/3, array_type/3]).
 
 /** Foreign Function Interface
 
@@ -10,6 +10,28 @@ the outside world in Prolog: sockets, pipes and HTTP may be good enough for your
 The main predicate is `use_foreign_module/2`. It takes a library name (which depending on the
 operating system could be a `.so`, `.dylib` or `.dll` file). and a list of functions. Each
 function is defined by its name, a list of the type of the arguments, and the return argument.
+
+## Library Loading Modes
+
+By default, shared libraries are loaded with the `RTLD_LOCAL` flag, which prevents symbol
+pollution and conflicts between libraries. For most use cases, this is the correct behavior.
+
+However, certain use cases require the `RTLD_GLOBAL` flag, which makes library symbols available
+for resolution by subsequently loaded shared libraries:
+
+- **Python C extensions**: When embedding Python, C extension modules (NumPy, SciPy, pandas,
+  standard library modules like `math`, `socket`, etc.) need to resolve symbols from libpython.
+  Without RTLD_GLOBAL, these imports fail with "undefined symbol" errors.
+
+- **Plugin architectures**: Libraries that dynamically load plugins which depend on symbols
+  from the main library.
+
+To use RTLD_GLOBAL loading, use `use_foreign_module_global/2` instead of `use_foreign_module/2`.
+
+On Windows, the loading mode flag has no effect as Windows uses a different library loading model.
+
+**Note**: Using RTLD_GLOBAL can cause symbol conflicts if multiple libraries export the same
+symbol names. Only use it when necessary.
 
 For each function in the list a predicate of the same name is generated in the ffi module which
 can then be used to call the native code.
@@ -125,6 +147,22 @@ foreign_struct(Name, Elements) :-
 %
 use_foreign_module(LibName, Predicates) :-
     '$load_foreign_lib'(LibName, Predicates),
+    maplist(assert_predicate, Predicates).
+
+%% use_foreign_module_global(+LibName, +Predicates)
+%
+%   Like use_foreign_module/2, but loads the library with RTLD_GLOBAL flag on Unix systems.
+%   This makes symbols from the library available for resolution by subsequently loaded libraries.
+%
+%   Use this variant when:
+%   - Embedding Python and loading C extension modules (NumPy, SciPy, pandas, etc.)
+%   - Loading plugin architectures where plugins depend on main library symbols
+%
+%   Note: May cause symbol conflicts if libraries export identical symbol names.
+%   Only use when necessary.
+%
+use_foreign_module_global(LibName, Predicates) :-
+    '$load_foreign_lib_global'(LibName, Predicates),
     maplist(assert_predicate, Predicates).
 
 assert_predicate(PredicateDefinition) :-

@@ -605,6 +605,8 @@ enum SystemClauseType {
     HttpAnswer,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$load_foreign_lib")))]
     LoadForeignLib,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$load_foreign_lib_global")))]
+    LoadForeignLibGlobal,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$foreign_call")))]
     ForeignCall,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$define_foreign_struct")))]
@@ -1810,6 +1812,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallHttpAccept |
                     &Instruction::CallHttpAnswer |
                     &Instruction::CallLoadForeignLib |
+                    &Instruction::CallLoadForeignLibGlobal |
                     &Instruction::CallForeignCall |
                     &Instruction::CallDefineForeignStruct |
                     &Instruction::CallFfiAllocate |
@@ -2071,6 +2074,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteHttpAccept |
                     &Instruction::ExecuteHttpAnswer |
                     &Instruction::ExecuteLoadForeignLib |
+                    &Instruction::ExecuteLoadForeignLibGlobal |
                     &Instruction::ExecuteForeignCall |
                     &Instruction::ExecuteDefineForeignStruct |
                     &Instruction::ExecuteFfiAllocate |
