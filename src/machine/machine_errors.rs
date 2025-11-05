@@ -447,25 +447,65 @@ impl MachineState {
                     location: None,
                 }
             }
-            ExistenceError::FfiFunction(name, arity) => {
-                let culprit = functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)]);
-                let stub = functor!(
-                    atom!("existence_error"),
-                    [atom_as_cell((atom!("ffi_function"))), functor(culprit)]
+            ExistenceError::FfiFunction(name, arity, expected_arity) => {
+                let culprit = functor!(
+                    atom!("-"),
+                    [
+                        atom_as_cell((atom!("culprit"))),
+                        functor((atom!("/")), [atom_as_cell(name), fixnum(arity)])
+                    ]
                 );
+
+                let stub = if let Some(expected_arity) = expected_arity {
+                    let suggestion = functor!(
+                        atom!("-"),
+                        [
+                            atom_as_cell((atom!("suggestion"))),
+                            functor((atom!("/")), [atom_as_cell(name), fixnum(expected_arity)])
+                        ]
+                    );
+                    functor!(
+                        atom!("existence_error"),
+                        [
+                            atom_as_cell((atom!("ffi_function"))),
+                            list([functor(culprit), functor(suggestion)])
+                        ]
+                    )
+                } else {
+                    functor!(
+                        atom!("existence_error"),
+                        [
+                            atom_as_cell((atom!("ffi_function"))),
+                            list([functor(culprit)])
+                        ]
+                    )
+                };
 
                 MachineError {
                     stub,
                     location: None,
                 }
             }
-            ExistenceError::FfiStructConstructor(name, arity) => {
-                let culprit = functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)]);
+            ExistenceError::FfiStructConstructor(name, arity, expected_arity) => {
+                let culprit = functor!(
+                    atom!("-"),
+                    [
+                        atom_as_cell((atom!("culprit"))),
+                        functor((atom!("/")), [atom_as_cell(name), fixnum(arity)])
+                    ]
+                );
+                let suggestion = functor!(
+                    atom!("-"),
+                    [
+                        atom_as_cell((atom!("suggestion"))),
+                        functor((atom!("/")), [atom_as_cell(name), fixnum(expected_arity)])
+                    ]
+                );
                 let stub = functor!(
                     atom!("existence_error"),
                     [
                         atom_as_cell((atom!("ffi_struct_constructor"))),
-                        functor(culprit)
+                        list([functor(culprit), functor(suggestion)])
                     ]
                 );
 
@@ -741,7 +781,7 @@ impl MachineState {
                 self.domain_error(domain, culprit)
             }
             FfiError::Use(FfiUseError::FunctionNotFound(name, arity)) => {
-                self.existence_error(ExistenceError::FfiFunction(name, arity))
+                self.existence_error(ExistenceError::FfiFunction(name, arity, None))
             }
             FfiError::Setup(FfiSetupError::StructNotFound(name))
             | FfiError::Use(FfiUseError::StructNotFound(name)) => {
@@ -750,14 +790,14 @@ impl MachineState {
             FfiError::Use(FfiUseError::ArgCountMismatch {
                 name,
                 kind,
-                expected: _,
+                expected,
                 got,
             }) => match kind {
                 ffi::ArgCountMismatchKind::Function => {
-                    self.existence_error(ExistenceError::FfiFunction(name, got))
+                    self.existence_error(ExistenceError::FfiFunction(name, got, Some(expected)))
                 }
                 ffi::ArgCountMismatchKind::Struct => {
-                    self.existence_error(ExistenceError::FfiStructConstructor(name, got))
+                    self.existence_error(ExistenceError::FfiStructConstructor(name, got, expected))
                 }
             },
             FfiError::Use(FfiUseError::LayoutError) => {
@@ -1203,8 +1243,8 @@ pub enum ExistenceError {
     SourceSink(HeapCellValue),
     Stream(HeapCellValue),
     Process(HeapCellValue),
-    FfiFunction(Atom, usize),
-    FfiStructConstructor(Atom, usize),
+    FfiFunction(Atom, usize, Option<usize>),
+    FfiStructConstructor(Atom, usize, usize),
     FfiStructType(Atom),
 }
 
