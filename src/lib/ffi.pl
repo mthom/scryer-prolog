@@ -7,37 +7,52 @@ It uses [libffi](https://sourceware.org/libffi/) under the hood. The bridge is v
 and is very unsafe and should be used with care. FFI isn't the only way to communicate with
 the outside world in Prolog: sockets, pipes and HTTP may be good enough for your use case.
 
-The main predicate is `use_foreign_module/2` or `use_foreign_module/3` (with options). It takes
-a library name (which depending on the operating system could be a `.so`, `.dylib` or `.dll` file),
-a list of functions, and optionally a list of options. Each function is defined by its name, a
-list of the type of the arguments, and the return argument.
+The main predicate is `use_foreign_module/2` or `use_foreign_module/3` (with options).
+It takes a library name (which depending on the operating system could be a `.so`, `.dylib`
+or `.dll` file), a list of functions, and optionally a list of options. Each function is
+defined by its name, a list of the type of the arguments, and the return argument.
 
-## Library Loading Modes
+## Library Loading Options
 
-By default, shared libraries are loaded with the `RTLD_LOCAL` flag, which prevents symbol
-pollution and conflicts between libraries. For most use cases, this is the correct behavior.
+Options are specified as a list of compound terms. Unspecified options use POSIX defaults.
 
-However, certain use cases require the `RTLD_GLOBAL` flag, which makes library symbols available
-for resolution by subsequently loaded shared libraries:
+### Scope Option (POSIX only)
 
-- **Python C extensions**: When embedding Python, C extension modules (NumPy, SciPy, pandas,
-  standard library modules like `math`, `socket`, etc.) need to resolve symbols from libpython.
-  Without RTLD_GLOBAL, these imports fail with "undefined symbol" errors.
+- **`scope(local)`** (default): `RTLD_LOCAL` - Symbols not available to subsequently loaded
+  libraries. Prevents symbol pollution and conflicts. Use this for most libraries.
 
-- **Plugin architectures**: Libraries that dynamically load plugins which depend on symbols
-  from the main library.
+- **`scope(global)`**: `RTLD_GLOBAL` - Symbols available for resolution by subsequently loaded
+  libraries. Required for certain use cases:
+  - **Python C extensions**: When embedding Python, C extension modules (NumPy, SciPy, pandas,
+    standard library modules like `math`, `socket`, etc.) need to resolve symbols from libpython.
+    Without RTLD_GLOBAL, these imports fail with "undefined symbol" errors.
+  - **Plugin architectures**: Libraries that dynamically load plugins which depend on symbols
+    from the main library.
 
-To use RTLD_GLOBAL loading, pass `[flags([rtld_global])]` as the third argument to
-`use_foreign_module/3`:
+### Binding Option (POSIX only)
+
+- **`binding(lazy)`** (default): `RTLD_LAZY` - Resolve symbols as code references them.
+  Faster loading, typical choice.
+
+- **`binding(now)`**: `RTLD_NOW` - Resolve all symbols before returning. Useful for catching
+  missing symbols early, but slower to load.
+
+### Examples
 
 ```prolog
-use_foreign_module('/path/libpython3.11.so', [...], [flags([rtld_global])]).
+% Default (local scope, lazy binding)
+use_foreign_module('/path/libmath.so', [...]).
+
+% Python C library - needs global scope for C extensions
+use_foreign_module('/path/libpython3.11.so', [...], [scope(global)]).
+
+% Eager binding to catch errors early
+use_foreign_module('/path/lib.so', [...], [scope(local), binding(now)]).
 ```
 
-On Windows, the loading mode flag has no effect as Windows uses a different library loading model.
-
-**Note**: Using RTLD_GLOBAL can cause symbol conflicts if multiple libraries export the same
-symbol names. Only use it when necessary.
+**Note**: On Windows, scope and binding options have no effect as Windows uses a different
+library loading model. Using `scope(global)` can cause symbol conflicts if multiple libraries
+export the same symbol names - only use it when necessary.
 
 For each function in the list a predicate of the same name is generated in the ffi module which
 can then be used to call the native code.
@@ -139,40 +154,46 @@ foreign_struct(Name, Elements) :-
 
 %% use_foreign_module(+LibName, +Predicates)
 %
-% - LibName the path to the shared library to load/bind
-% - Predicates list of function definitions
+%   Load a foreign library with default options and register predicates.
+%   Uses POSIX defaults: scope(local), binding(lazy).
 %
-%   Each function definition is a functor of arity 2.
-%   The functor name is the name of the function to bind,
-%   the first argument is the list of arguments of the function,
-%   the second argument is the return type of the function.
-%
-%   This will define a predicate in the ffi module with the defined name,
-%   for void and bool return type functions the arity will match the length of the arguments list,
-%   for other return types there will be an additional out parameter.
+%   @arg LibName The path to the shared library to load/bind (e.g. '/path/to/lib.so')
+%   @arg Predicates List of function definitions (functors of arity 2: Name(Args, ReturnType))
 %
 use_foreign_module(LibName, Predicates) :-
     use_foreign_module(LibName, Predicates, []).
 
 %% use_foreign_module(+LibName, +Predicates, +Options)
 %
-%   Load a foreign library with options.
+%   Load a foreign library with specified options and register predicates.
 %
-%   Options:
-%   - flags(FlagList): List of loading flags. Supported flags:
-%     - rtld_global: On Unix systems, load library with RTLD_GLOBAL flag, making
-%       symbols available for resolution by subsequently loaded libraries.
-%       Required for Python C extensions (NumPy, SciPy, pandas, etc.) and
-%       plugin architectures where plugins depend on main library symbols.
-%       Warning: May cause symbol conflicts if libraries export identical names.
+%   @arg LibName The path to the shared library to load/bind (e.g. '/path/to/lib.so')
+%   @arg Predicates List of function definitions (functors of arity 2: Name(Args, ReturnType))
+%   @arg Options List of loading options. Supported options:
+%     - scope(Scope): Symbol visibility - `local` (default) or `global`
+%     - binding(Binding): Symbol resolution - `lazy` (default) or `now`
+%
+%   Each function definition is a functor of arity 2.
+%   The functor name is the name of the function to bind,
+%   the first argument is the list of arguments of the function,
+%   the second argument is the return type of the function.
+%
+%   This will define a predicate in the ffi module with the defined name.
+%   For void and bool return type functions the arity will match the length of the arguments list,
+%   for other return types there will be an additional out parameter.
+%
+%   Unspecified options use POSIX defaults: scope(local), binding(lazy).
 %
 %   Examples:
 %   ```
-%   % Default (RTLD_LOCAL)
-%   use_foreign_module('lib.so', [foo([int], void)], []).
+%   % Default options
+%   use_foreign_module('lib.so', [foo([int], void)]).
 %
-%   % With RTLD_GLOBAL for Python embedding
-%   use_foreign_module('/path/libpython3.11.so', [...], [flags([rtld_global])]).
+%   % Python library - needs global scope for C extension modules
+%   use_foreign_module('/path/libpython3.11.so', [...], [scope(global)]).
+%
+%   % Custom scope and binding
+%   use_foreign_module('lib.so', [...], [scope(local), binding(now)]).
 %   ```
 %
 use_foreign_module(LibName, Predicates, Options) :-

@@ -4923,7 +4923,10 @@ impl Machine {
             let library_name = self.deref_register(1);
             let args_reg = self.deref_register(2);
             let options_reg = self.deref_register(3);
-            let mut options = LibraryLoadOptions::default();
+
+            // POSIX defaults
+            let mut scope = RtldScope::Local;
+            let mut binding = RtldBinding::Lazy;
 
             if let Ok(option_addrs) = self.machine_st.try_from_list(options_reg, stub_gen) {
                 for option_cell in option_addrs {
@@ -4936,34 +4939,67 @@ impl Machine {
                         }
                     );
 
-                    if option_name != atom!("flags") {
-                        continue;
-                    }
+                    match option_name {
+                        atom!("scope") => {
+                            let scope_value = read_heap_cell!(option_cell,
+                                (HeapCellValueTag::Str, s) => {
+                                    self.machine_st.heap[s + 1]
+                                }
+                                _ => {
+                                    continue;
+                                }
+                            );
 
-                    let flag_list_cell = read_heap_cell!(option_cell,
-                        (HeapCellValueTag::Str, s) => {
-                            self.machine_st.heap[s + 1]
+                            read_heap_cell!(scope_value,
+                                (HeapCellValueTag::Atom, (name, arity)) => {
+                                    debug_assert_eq!(arity, 0);
+                                    scope = match name {
+                                        atom!("global") => RtldScope::Global,
+                                        atom!("local") => RtldScope::Local,
+                                        _ => {
+                                            self.machine_st.fail = true;
+                                            return Ok(());
+                                        }
+                                    };
+                                }
+                                _ => {
+                                    self.machine_st.fail = true;
+                                    return Ok(());
+                                }
+                            );
+                        }
+                        atom!("binding") => {
+                            let binding_value = read_heap_cell!(option_cell,
+                                (HeapCellValueTag::Str, s) => {
+                                    self.machine_st.heap[s + 1]
+                                }
+                                _ => {
+                                    continue;
+                                }
+                            );
+
+                            read_heap_cell!(binding_value,
+                                (HeapCellValueTag::Atom, (name, arity)) => {
+                                    debug_assert_eq!(arity, 0);
+                                    binding = match name {
+                                        atom!("lazy") => RtldBinding::Lazy,
+                                        atom!("now") => RtldBinding::Now,
+                                        _ => {
+                                            self.machine_st.fail = true;
+                                            return Ok(());
+                                        }
+                                    };
+                                }
+                                _ => {
+                                    self.machine_st.fail = true;
+                                    return Ok(());
+                                }
+                            );
                         }
                         _ => {
+                            // Unknown option, ignore for forward compatibility
                             continue;
                         }
-                    );
-
-                    let Ok(flag_addrs) = self.machine_st.try_from_list(flag_list_cell, stub_gen) else {
-                        continue;
-                    };
-
-                    for flag_cell in flag_addrs {
-                        read_heap_cell!(flag_cell,
-                            (HeapCellValueTag::Atom, (name, arity)) => {
-                                debug_assert_eq!(arity, 0);
-                                match name {
-                                    atom!("rtld_global") => options.use_global = true,
-                                    _ => {}
-                                }
-                            }
-                            _ => {}
-                        );
                     }
                 }
             }
@@ -5000,7 +5036,7 @@ impl Machine {
                         }
                         if self
                             .foreign_function_table
-                            .load_library(&library_name.as_str(), &functions, &options)
+                            .load_library(&library_name.as_str(), &functions, scope, binding)
                             .is_err()
                         {
                             self.machine_st.fail = true;

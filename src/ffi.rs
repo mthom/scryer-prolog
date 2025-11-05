@@ -45,24 +45,22 @@ pub struct FunctionDefinition {
     pub args: Vec<Atom>,
 }
 
-/// Options for loading foreign libraries
-#[derive(Debug, Clone)]
-pub struct LibraryLoadOptions {
-    /// Load library with RTLD_GLOBAL flag (Unix only)
-    /// Makes symbols available for subsequently loaded libraries
-    pub use_global: bool,
-    // Future options can be added here:
-    // pub lazy_binding: bool,
-    // pub deepbind: bool,
-    // pub nodelete: bool,
+/// Symbol visibility scope for loaded libraries (Unix only)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RtldScope {
+    /// RTLD_LOCAL: Symbols not available to subsequently loaded libraries (default)
+    Local,
+    /// RTLD_GLOBAL: Symbols available for resolution by subsequently loaded libraries
+    Global,
 }
 
-impl Default for LibraryLoadOptions {
-    fn default() -> Self {
-        Self {
-            use_global: false,
-        }
-    }
+/// Symbol binding mode for loaded libraries
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RtldBinding {
+    /// RTLD_LAZY: Resolve symbols as code references them (lazy binding)
+    Lazy,
+    /// RTLD_NOW: Resolve all symbols before dlopen() returns (eager binding)
+    Now,
 }
 
 #[derive(Debug)]
@@ -696,23 +694,28 @@ impl ForeignFunctionTable {
         &mut self,
         library_name: &str,
         functions: &Vec<FunctionDefinition>,
-        options: &LibraryLoadOptions,
+        scope: RtldScope,
+        binding: RtldBinding,
     ) -> Result<(), Box<dyn Error>> {
         let mut ff_table: ForeignFunctionTable = Default::default();
 
         let library = unsafe {
             #[cfg(unix)]
             {
-                if options.use_global {
-                    use libloading::os::unix;
-                    let unix_lib = unix::Library::open(
-                        Some(library_name),
-                        unix::RTLD_LAZY | unix::RTLD_GLOBAL
-                    )?;
-                    Library::from(unix_lib)
-                } else {
-                    Library::new(library_name)?
-                }
+                use libloading::os::unix;
+                let scope_flag = match scope {
+                    RtldScope::Local => unix::RTLD_LOCAL,
+                    RtldScope::Global => unix::RTLD_GLOBAL,
+                };
+                let binding_flag = match binding {
+                    RtldBinding::Lazy => unix::RTLD_LAZY,
+                    RtldBinding::Now => unix::RTLD_NOW,
+                };
+                let unix_lib = unix::Library::open(
+                    Some(library_name),
+                    binding_flag | scope_flag
+                )?;
+                Library::from(unix_lib)
             }
             #[cfg(not(unix))]
             {
