@@ -196,7 +196,8 @@ fn ffi_invalid_type() {
     load_module_test_with_input(
         "tests-pl/ffi_invalid_type.pl",
         format!("LIB={dynlib_path:?}."),
-        "% Warning: initialization/1 failed for: user:test\n",
+        // its called void not c_void
+        "   error(existence_error(ffi_struct_type,c_void),'$load_foreign_lib'/2).\n",
     );
 }
 
