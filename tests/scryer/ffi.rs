@@ -10,7 +10,7 @@ use crate::helper::{load_module_test_with_input, load_module_test_with_setup};
 use current_platform::CURRENT_PLATFORM;
 use scryer_prolog::{
     ffi::{CustomFfiStruct, FfiType, FfiTypeable},
-    LeafAnswer, Machine, QueryState,
+    LeafAnswer, Machine,
 };
 
 const TMP_DIR: &str = env!("CARGO_TARGET_TMPDIR");
@@ -379,16 +379,13 @@ fn static_ffi() {
 
             unsafe {
                 machine
-                    .register_function(
+                    .register_function::<extern "C" fn() -> ExampleCStructOuter>(
                         "get_example_struct",
-                        // cast the function item to the corresponding function pointer type
-                        get_example_struct as extern "C" fn() -> ExampleCStructOuter,
+                        get_example_struct,
                     )
                     .unwrap();
             }
         },
-        // FIXME: how is current_predicate(ffi:'get_example_struct'/1) true but calling ffi:'get_example_struct'(Arg) failes with an existence_error?
-        // expected is that the call should succeed
-        "is_current\n   error(existence_error(procedure,get_example_struct/1),get_example_struct/1).\n",
+        "[ExampleCStructOuter,[ExampleCStructInner,1,2,3,4],-0.699999988079071,15.9]",
     );
 }

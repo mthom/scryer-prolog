@@ -691,8 +691,42 @@ impl MachineState {
 
     #[cfg(feature = "ffi")]
     pub(super) fn ffi_error(&mut self, err: FfiError) -> MachineError {
+        use crate::ffi::{FfiSetupError, FfiUseError};
+
         match err {
-            FfiError::ValueCast(expected, actual) => {
+            FfiError::LibLoading(culprit, libloading) => {
+                let desc = functor!(
+                    atom!("-"),
+                    [
+                        atom_as_cell((atom!("desc"))),
+                        string((format!("{libloading:?}")))
+                    ]
+                );
+                let culprit = functor!(
+                    atom!("-"),
+                    [atom_as_cell((atom!("culprit"))), string((culprit))]
+                );
+
+                MachineError {
+                    stub: functor!(
+                        atom!("system_error"),
+                        [list([functor(desc), functor(culprit)])]
+                    ),
+                    location: None,
+                }
+            }
+            FfiError::Setup(FfiSetupError::UnsupportedAbi) => {
+                self.representation_error(RepFlag::FfiAbi)
+            }
+            FfiError::Setup(FfiSetupError::UnsupportedTypedef) => {
+                self.representation_error(RepFlag::FfiLayout)
+            }
+            FfiError::Setup(FfiSetupError::AllocationFailed)
+            | FfiError::Use(FfiUseError::AllocationFailed) => MachineError {
+                stub: functor!(atom!("resource_error"), [atom_as_cell((atom!("heap")))]),
+                location: None,
+            },
+            FfiError::Use(FfiUseError::ValueCast(expected, actual)) => {
                 let stub = functor!(
                     atom!("domain_error"),
                     [atom_as_cell(expected), atom_as_cell(actual)]
@@ -703,19 +737,22 @@ impl MachineState {
                     location: None,
                 }
             }
-            FfiError::ValueOutOfRange(domain, culprit) => self.domain_error(domain, culprit),
-            FfiError::FunctionNotFound(name, arity) => {
+            FfiError::Use(FfiUseError::ValueOutOfRange(domain, culprit)) => {
+                self.domain_error(domain, culprit)
+            }
+            FfiError::Use(FfiUseError::FunctionNotFound(name, arity)) => {
                 self.existence_error(ExistenceError::FfiFunction(name, arity))
             }
-            FfiError::StructNotFound(name) => {
+            FfiError::Setup(FfiSetupError::StructNotFound(name))
+            | FfiError::Use(FfiUseError::StructNotFound(name)) => {
                 self.existence_error(ExistenceError::FfiStructType(name))
             }
-            FfiError::ArgCountMismatch {
+            FfiError::Use(FfiUseError::ArgCountMismatch {
                 name,
                 kind,
                 expected: _,
                 got,
-            } => match kind {
+            }) => match kind {
                 ffi::ArgCountMismatchKind::Function => {
                     self.existence_error(ExistenceError::FfiFunction(name, got))
                 }
@@ -723,25 +760,24 @@ impl MachineState {
                     self.existence_error(ExistenceError::FfiStructConstructor(name, got))
                 }
             },
-            FfiError::AllocationFailed => MachineError {
-                stub: functor!(atom!("resource_error"), [atom_as_cell((atom!("heap")))]),
-                location: None,
-            },
-            FfiError::LayoutError => self.representation_error(RepFlag::FfiLayout),
-            FfiError::UnsupportedTypedef => self.representation_error(RepFlag::FfiLayout),
-            FfiError::UnsupportedAbi => self.representation_error(RepFlag::FfiAbi),
-            FfiError::VoidArgumentType => self.domain_error(
+            FfiError::Use(FfiUseError::LayoutError) => {
+                self.representation_error(RepFlag::FfiLayout)
+            }
+            FfiError::Use(FfiUseError::VoidArgumentType) => self.domain_error(
                 DomainErrorType::FfiArgumentType,
                 atom_as_cell!(atom!("void")),
             ),
-            FfiError::CStrFieldType => self.domain_error(
+            FfiError::Use(FfiUseError::CStrFieldType) => self.domain_error(
                 DomainErrorType::NonCStrFfiArgumentType,
                 atom_as_cell!(atom!("cstr")),
             ),
-            FfiError::NullPtr => self.domain_error(
+            FfiError::Use(FfiUseError::NullPtr) => self.domain_error(
                 DomainErrorType::NonNullPtr,
                 fixnum_as_cell!(Fixnum::build_with(0)),
             ),
+            FfiError::InvalidSymbol(culprit) => {
+                self.domain_error(DomainErrorType::FfiSymbol, atom_as_cell!(culprit))
+            }
         }
     }
 
@@ -932,6 +968,7 @@ pub(crate) enum DomainErrorType {
     FfiArgumentType,
     FixedSizedInt,
     NonCStrFfiArgumentType,
+    FfiSymbol,
 }
 
 impl DomainErrorType {
@@ -956,6 +993,7 @@ impl DomainErrorType {
             DomainErrorType::FfiArgumentType => atom!("ffi_argument_type"),
             DomainErrorType::FixedSizedInt => atom!("fixed_sized_int"),
             DomainErrorType::NonCStrFfiArgumentType => atom!("non_cstr_ffi_argument_type"),
+            DomainErrorType::FfiSymbol => atom!("ffi_symbol"),
         }
     }
 }

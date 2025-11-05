@@ -1,6 +1,5 @@
 test :-
-    (current_predicate(ffi:'get_example_struct'/1) -> write(is_current); write(is_not_current)),
-    nl,
+    ffi:assert_predicate('get_example_struct'([], 'ExampleCStructOuter')), % this shouldn't be necessary
     ffi:'get_example_struct'(Example),
     write(Example).
 
