@@ -676,61 +676,29 @@ impl ForeignFunctionTable {
         &mut self,
         library_name: &str,
         functions: &Vec<FunctionDefinition>,
-    ) -> Result<(), Box<dyn Error>> {
-        let mut ff_table: ForeignFunctionTable = Default::default();
-        let library = unsafe { Library::new(library_name) }?;
-        for function in functions {
-            let symbol_name: CString = CString::new(&*function.name.as_str())?;
-            let code_ptr: Symbol<*mut c_void> =
-                unsafe { library.get(symbol_name.as_bytes_with_nul()) }?;
-            let args: Vec<_> = function.args.iter().map(FfiType::from_atom).collect();
-            let return_type = FfiType::from_atom(&function.return_value);
-
-            let cif = libffi::middle::Cif::new(
-                args.iter()
-                    .map(|arg| arg.to_type(&self.structs))
-                    .collect::<Result<Vec<_>, _>>()?,
-                return_type.to_type(&self.structs)?,
-            );
-
-            ff_table.table.insert(
-                function.name,
-                FunctionImpl {
-                    cif,
-                    args,
-                    code_ptr: CodePtr(unsafe { code_ptr.into_raw() }.as_raw_ptr()),
-                    return_type,
-                },
-            );
-        }
-        std::mem::forget(library);
-        self.merge(ff_table);
-        Ok(())
-    }
-
-    pub(crate) fn load_library_global(
-        &mut self,
-        library_name: &str,
-        functions: &Vec<FunctionDefinition>,
+        use_global: bool,
     ) -> Result<(), Box<dyn Error>> {
         let mut ff_table: ForeignFunctionTable = Default::default();
 
         let library = unsafe {
             #[cfg(unix)]
             {
-                use libloading::os::unix;
-                let unix_lib = unix::Library::open(
-                    Some(library_name),
-                    unix::RTLD_LAZY | unix::RTLD_GLOBAL
-                )?;
-                Library::from(unix_lib)
+                if use_global {
+                    use libloading::os::unix;
+                    let unix_lib = unix::Library::open(
+                        Some(library_name),
+                        unix::RTLD_LAZY | unix::RTLD_GLOBAL
+                    )?;
+                    Library::from(unix_lib)
+                } else {
+                    Library::new(library_name)?
+                }
             }
             #[cfg(not(unix))]
             {
                 Library::new(library_name)?
             }
         };
-
         for function in functions {
             let symbol_name: CString = CString::new(&*function.name.as_str())?;
             let code_ptr: Symbol<*mut c_void> =

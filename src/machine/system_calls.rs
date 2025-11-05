@@ -4915,81 +4915,41 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn load_foreign_lib(&mut self) -> CallResult {
         fn stub_gen() -> MachineStub {
-            functor_stub(atom!("$load_foreign_lib"), 2)
+            functor_stub(atom!("$load_foreign_lib"), 3)
         }
 
         #[cfg(feature = "ffi")]
         {
             let library_name = self.deref_register(1);
             let args_reg = self.deref_register(2);
-            if let Some(library_name) = self.machine_st.value_to_str_like(library_name) {
-                match self.machine_st.try_from_list(args_reg, stub_gen) {
-                    Ok(addrs) => {
-                        let mut functions = Vec::new();
-                        for heap_cell in addrs {
-                            read_heap_cell!(heap_cell,
-                                (HeapCellValueTag::Str, s) => {
-                                    let name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
-                                let args: Vec<Atom> = match self.machine_st.try_from_list(self.machine_st.heap[s + 1], stub_gen) {
-                                    Ok(addrs) => {
-                                    let mut args = Vec::new();
-                                    for heap_cell in addrs {
-                                        args.push(cell_as_atom_cell!(heap_cell).get_name());
-                                    }
-                                    args
-                                    }
-                                    Err(e) => return Err(e)
-                                };
-                                let return_value = cell_as_atom_cell!(self.machine_st.heap[s + 2]);
-                                functions.push(FunctionDefinition {
-                                    name,
-                                    args,
-                                    return_value: return_value.get_name(),
-                                });
-                                }
-                                _ => {
-                                    let err = self.machine_st.unreachable_error();
-                                    return Err(self.machine_st.error_form(err, stub_gen()))
-                                }
-                            )
-                        }
-                        if self
-                            .foreign_function_table
-                            .load_library(&library_name.as_str(), &functions)
-                            .is_err()
-                        {
-                            self.machine_st.fail = true;
-                        }
+            let options_reg = self.deref_register(3);
 
-                        Ok(())
-                    }
-                    Err(e) => Err(e),
+            let mut use_global = false;
+
+            if let Ok(option_addrs) = self.machine_st.try_from_list(options_reg, stub_gen) {
+                for option_cell in option_addrs {
+                    read_heap_cell!(option_cell,
+                        (HeapCellValueTag::Str, s) => {
+                            let option_name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
+                            if option_name == atom!("flags") {
+                                if let Ok(flag_addrs) = self.machine_st.try_from_list(self.machine_st.heap[s + 1], stub_gen) {
+                                    for flag_cell in flag_addrs {
+                                        read_heap_cell!(flag_cell,
+                                            (HeapCellValueTag::Atom, (name, arity)) => {
+                                                if name == atom!("rtld_global") {
+                                                    use_global = true;
+                                                }
+                                            }
+                                            _ => {}
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    )
                 }
-            } else {
-                let err = self
-                    .machine_st
-                    .type_error(ValidType::InCharacter, library_name);
-                Err(self.machine_st.error_form(err, stub_gen()))
             }
-        }
-
-        #[cfg(not(feature = "ffi"))]
-        {
-            let err = self.machine_st.missing_feature_error(atom!("ffi"));
-            Err(self.machine_st.error_form(err, stub_gen()))
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn load_foreign_lib_global(&mut self) -> CallResult {
-        fn stub_gen() -> MachineStub {
-            functor_stub(atom!("$load_foreign_lib_global"), 2)
-        }
-
-        #[cfg(feature = "ffi")]
-        {
-            let library_name = self.deref_register(1);
-            let args_reg = self.deref_register(2);
             if let Some(library_name) = self.machine_st.value_to_str_like(library_name) {
                 match self.machine_st.try_from_list(args_reg, stub_gen) {
                     Ok(addrs) => {
@@ -5023,7 +4983,7 @@ impl Machine {
                         }
                         if self
                             .foreign_function_table
-                            .load_library_global(&library_name.as_str(), &functions)
+                            .load_library(&library_name.as_str(), &functions, use_global)
                             .is_err()
                         {
                             self.machine_st.fail = true;
