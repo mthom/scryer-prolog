@@ -320,14 +320,6 @@ fn static_ffi() {
         d: u64,
     }
 
-    #[repr(C)]
-    #[derive(Clone, Copy, Debug)]
-    struct ExampleCStructOuter {
-        inner: ExampleCStructInner,
-        f32: f32,
-        f64: f64,
-    }
-
     unsafe impl CustomFfiStruct for ExampleCStructInner {
         fn fields(_machine: &mut Machine) -> Vec<FfiType> {
             vec![FfiType::U8, FfiType::U16, FfiType::U32, FfiType::U64]
@@ -336,6 +328,14 @@ fn static_ffi() {
         fn type_name() -> &'static str {
             "ExampleCStructInner"
         }
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug)]
+    struct ExampleCStructOuter {
+        inner: ExampleCStructInner,
+        f32: f32,
+        f64: f64,
     }
 
     unsafe impl CustomFfiStruct for ExampleCStructOuter {
