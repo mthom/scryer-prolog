@@ -1333,20 +1333,6 @@ trait FfiFnImpl {
     fn fn_ptr(&self) -> *mut c_void;
 }
 
-impl<R: FfiTypeable> FfiFnImpl for extern "C" fn() -> R {
-    fn fn_type(&self, machine: &mut Machine) -> FnType {
-        FnType {
-            calling_convention: FfiCallingConvention::Default,
-            args: vec![],
-            ret: R::to_type(machine),
-        }
-    }
-
-    fn fn_ptr(&self) -> *mut c_void {
-        *self as *mut c_void
-    }
-}
-
 macro_rules! impl_ffi_fn {
     ($arg0:ident $(, $arg:ident)*) => {
         impl_ffi_fn!($($arg),*);
@@ -1370,4 +1356,20 @@ macro_rules! impl_ffi_fn {
     () => {}
 }
 
-impl_ffi_fn!(A0, A1, A2, A3, A4, A5, A6, A7, A8);
+// implement FfiFnImpl for exteren "C" functions with 1 to 16 arguments
+impl_ffi_fn!(A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15);
+
+// implement FfiFnImpl for exteren "C" functions with 0 arguments
+impl<R: FfiTypeable> FfiFnImpl for extern "C" fn() -> R {
+    fn fn_type(&self, machine: &mut Machine) -> FnType {
+        FnType {
+            calling_convention: FfiCallingConvention::Default,
+            args: vec![],
+            ret: R::to_type(machine),
+        }
+    }
+
+    fn fn_ptr(&self) -> *mut c_void {
+        *self as *mut c_void
+    }
+}
