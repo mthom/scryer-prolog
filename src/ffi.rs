@@ -520,22 +520,6 @@ impl_to_ffi_type!(
     f64 => F64;
 );
 
-impl<T> ToFfiType for *mut T {
-    const TYPE: FfiType = FfiType::Ptr;
-}
-
-impl<T> ToFfiType for *const T {
-    const TYPE: FfiType = FfiType::Ptr;
-}
-
-impl<T> ToFfiType for &T {
-    const TYPE: FfiType = FfiType::Ptr;
-}
-
-impl<T> ToFfiType for &mut T {
-    const TYPE: FfiType = FfiType::Ptr;
-}
-
 impl FfiType {
     pub(crate) fn from_atom(atom: Atom) -> Self {
         match atom {
@@ -1302,6 +1286,30 @@ pub trait FfiTypeable {
     fn to_type(machine: &mut Machine) -> FfiType;
 }
 
+impl<T> FfiTypeable for *mut T {
+    fn to_type(_machine: &mut Machine) -> FfiType {
+        FfiType::Ptr
+    }
+}
+
+impl<T> FfiTypeable for *const T {
+    fn to_type(_machine: &mut Machine) -> FfiType {
+        FfiType::Ptr
+    }
+}
+
+impl<T> FfiTypeable for Option<&mut T> {
+    fn to_type(_machine: &mut Machine) -> FfiType {
+        FfiType::Ptr
+    }
+}
+
+impl<T> FfiTypeable for Option<&T> {
+    fn to_type(_machine: &mut Machine) -> FfiType {
+        FfiType::Ptr
+    }
+}
+
 impl FfiTypeable for () {
     fn to_type(_machine: &mut Machine) -> FfiType {
         FfiType::Void
@@ -1313,6 +1321,8 @@ impl FfiTypeable for bool {
         FfiType::Bool
     }
 }
+
+// cannot implement FfiTypeable for &T and &mut T as that conflicts with the impl below
 
 impl<T: CustomFfiStruct> FfiTypeable for T {
     fn to_type(machine: &mut Machine) -> FfiType {
