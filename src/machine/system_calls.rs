@@ -4923,31 +4923,48 @@ impl Machine {
             let library_name = self.deref_register(1);
             let args_reg = self.deref_register(2);
             let options_reg = self.deref_register(3);
-
-            let mut use_global = false;
+            let mut options = LibraryLoadOptions::default();
 
             if let Ok(option_addrs) = self.machine_st.try_from_list(options_reg, stub_gen) {
                 for option_cell in option_addrs {
-                    read_heap_cell!(option_cell,
+                    let option_name = read_heap_cell!(option_cell,
                         (HeapCellValueTag::Str, s) => {
-                            let option_name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
-                            if option_name == atom!("flags") {
-                                if let Ok(flag_addrs) = self.machine_st.try_from_list(self.machine_st.heap[s + 1], stub_gen) {
-                                    for flag_cell in flag_addrs {
-                                        read_heap_cell!(flag_cell,
-                                            (HeapCellValueTag::Atom, (name, arity)) => {
-                                                if name == atom!("rtld_global") {
-                                                    use_global = true;
-                                                }
-                                            }
-                                            _ => {}
-                                        )
-                                    }
+                            cell_as_atom_cell!(self.machine_st.heap[s]).get_name()
+                        }
+                        _ => {
+                            continue;
+                        }
+                    );
+
+                    if option_name != atom!("flags") {
+                        continue;
+                    }
+
+                    let flag_list_cell = read_heap_cell!(option_cell,
+                        (HeapCellValueTag::Str, s) => {
+                            self.machine_st.heap[s + 1]
+                        }
+                        _ => {
+                            continue;
+                        }
+                    );
+
+                    let Ok(flag_addrs) = self.machine_st.try_from_list(flag_list_cell, stub_gen) else {
+                        continue;
+                    };
+
+                    for flag_cell in flag_addrs {
+                        read_heap_cell!(flag_cell,
+                            (HeapCellValueTag::Atom, (name, arity)) => {
+                                debug_assert_eq!(arity, 0);
+                                match name {
+                                    atom!("rtld_global") => options.use_global = true,
+                                    _ => {}
                                 }
                             }
-                        }
-                        _ => {}
-                    )
+                            _ => {}
+                        );
+                    }
                 }
             }
             if let Some(library_name) = self.machine_st.value_to_str_like(library_name) {
@@ -4983,7 +5000,7 @@ impl Machine {
                         }
                         if self
                             .foreign_function_table
-                            .load_library(&library_name.as_str(), &functions, use_global)
+                            .load_library(&library_name.as_str(), &functions, &options)
                             .is_err()
                         {
                             self.machine_st.fail = true;
