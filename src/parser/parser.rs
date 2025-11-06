@@ -331,6 +331,25 @@ impl<'a, R: CharRead> Parser<'a, R> {
         }
     }
 
+    // Helper function to replace the tail of a Cons list with a new tail
+    fn replace_cons_tail(cons: Term, new_tail: Term) -> Term {
+        match cons {
+            Term::Cons(cell, head, tail) => {
+                match *tail {
+                    Term::Literal(_, Literal::Atom(atom)) if atom == atom!("[]") => {
+                        // Found the empty list tail, replace it
+                        Term::Cons(cell, head, Box::new(new_tail))
+                    }
+                    _ => {
+                        // Recurse on the tail
+                        Term::Cons(cell, head, Box::new(Self::replace_cons_tail(*tail, new_tail)))
+                    }
+                }
+            }
+            _ => cons,  // Not a Cons, return as-is (shouldn't happen)
+        }
+    }
+
     fn push_binary_op(&mut self, td: TokenDesc, spec: Specifier) {
         if let Some(arg2) = self.terms.pop() {
             if let Some(name) = self.get_term_name(td) {
@@ -345,6 +364,15 @@ impl<'a, R: CharRead> Parser<'a, R> {
                                     // Create/extend partial string: "abc"||K => [a,b,c|K]
                                     Term::PartialString(Cell::default(), s, Box::new(arg2))
                                 }
+                            }
+                            Term::Literal(_, Literal::Atom(atom)) if atom == atom!("[]") => {
+                                // Empty string in codes mode: ""||K => K
+                                arg2
+                            }
+                            Term::Cons(_, _, _) => {
+                                // Handle codes mode: "abc" becomes Term::Cons([97,98,99])
+                                // Replace the [] tail with arg2
+                                Self::replace_cons_tail(arg1, arg2)
                             }
                             _ => {
                                 // Should never reach here due to validation, but handle gracefully
@@ -1129,12 +1157,14 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     }
                 }
 
-                // Check that the last term is a string literal (CompleteString or PartialString)
-                // NOT arbitrary lists like [1,2,3] or variables
+                // Check that the last term is a string literal (CompleteString, PartialString, or Cons from codes mode)
+                // NOT arbitrary lists like [1,2,3] or variables from list syntax
                 let is_valid = if let Some(last_term) = self.terms.last() {
                     match last_term {
                         Term::CompleteString(_, _) => true,
                         Term::PartialString(_, _, _) => true,
+                        Term::Cons(_, _, _) => true,  // Allows codes mode: "abc" becomes [97,98,99]
+                        Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true,  // Empty string in codes mode
                         _ => false,
                     }
                 } else {
