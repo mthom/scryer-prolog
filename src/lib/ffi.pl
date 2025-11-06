@@ -14,9 +14,10 @@ defined by its name, a list of the type of the arguments, and the return argumen
 
 ## Library Loading Options
 
-Options are specified as a list of compound terms. Unspecified options use POSIX defaults.
-
 ### Scope Option (POSIX only)
+
+The scope option controls symbol visibility. Libraries are always loaded with lazy binding
+(`RTLD_LAZY` - symbols resolved as needed).
 
 - **`scope(local)`** (default): `RTLD_LOCAL` - Symbols not available to subsequently loaded
   libraries. Prevents symbol pollution and conflicts. Use this for most libraries.
@@ -29,30 +30,22 @@ Options are specified as a list of compound terms. Unspecified options use POSIX
   - **Plugin architectures**: Libraries that dynamically load plugins which depend on symbols
     from the main library.
 
-### Binding Option (POSIX only)
-
-- **`binding(lazy)`** (default): `RTLD_LAZY` - Resolve symbols as code references them.
-  Faster loading, typical choice.
-
-- **`binding(now)`**: `RTLD_NOW` - Resolve all symbols before returning. Useful for catching
-  missing symbols early, but slower to load.
-
 ### Examples
 
 ```prolog
-% Default (local scope, lazy binding)
+% Default (local scope with lazy binding)
 use_foreign_module('/path/libmath.so', [...]).
 
 % Python C library - needs global scope for C extensions
 use_foreign_module('/path/libpython3.11.so', [...], [scope(global)]).
 
-% Eager binding to catch errors early
-use_foreign_module('/path/lib.so', [...], [scope(local), binding(now)]).
+% Explicit local scope
+use_foreign_module('/path/lib.so', [...], [scope(local)]).
 ```
 
-**Note**: On Windows, scope and binding options have no effect as Windows uses a different
-library loading model. Using `scope(global)` can cause symbol conflicts if multiple libraries
-export the same symbol names - only use it when necessary.
+**Note**: On Windows, the scope option has no effect as Windows uses a different library
+loading model. Using `scope(global)` can cause symbol conflicts if multiple libraries export
+the same symbol names - only use it when necessary.
 
 For each function in the list a predicate of the same name is generated in the ffi module which
 can then be used to call the native code.
@@ -155,7 +148,7 @@ foreign_struct(Name, Elements) :-
 %% use_foreign_module(+LibName, +Predicates)
 %
 %   Load a foreign library with default options and register predicates.
-%   Uses POSIX defaults: scope(local), binding(lazy).
+%   Uses POSIX defaults: scope(local) with lazy binding (RTLD_LAZY).
 %
 %   @arg LibName The path to the shared library to load/bind (e.g. '/path/to/lib.so')
 %   @arg Predicates List of function definitions (functors of arity 2: Name(Args, ReturnType))
@@ -171,7 +164,6 @@ use_foreign_module(LibName, Predicates) :-
 %   @arg Predicates List of function definitions (functors of arity 2: Name(Args, ReturnType))
 %   @arg Options List of loading options. Supported options:
 %     - scope(Scope): Symbol visibility - `local` (default) or `global`
-%     - binding(Binding): Symbol resolution - `lazy` (default) or `now`
 %
 %   Each function definition is a functor of arity 2.
 %   The functor name is the name of the function to bind,
@@ -182,18 +174,19 @@ use_foreign_module(LibName, Predicates) :-
 %   For void and bool return type functions the arity will match the length of the arguments list,
 %   for other return types there will be an additional out parameter.
 %
-%   Unspecified options use POSIX defaults: scope(local), binding(lazy).
+%   Libraries are always loaded with lazy binding (RTLD_LAZY - symbols resolved as needed).
+%   Default scope is local (RTLD_LOCAL).
 %
 %   Examples:
 %   ```
-%   % Default options
+%   % Default options (local scope, lazy binding)
 %   use_foreign_module('lib.so', [foo([int], void)]).
 %
 %   % Python library - needs global scope for C extension modules
 %   use_foreign_module('/path/libpython3.11.so', [...], [scope(global)]).
 %
-%   % Custom scope and binding
-%   use_foreign_module('lib.so', [...], [scope(local), binding(now)]).
+%   % Explicit local scope
+%   use_foreign_module('lib.so', [...], [scope(local)]).
 %   ```
 %
 use_foreign_module(LibName, Predicates, Options) :-

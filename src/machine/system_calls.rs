@@ -4924,9 +4924,8 @@ impl Machine {
             let args_reg = self.deref_register(2);
             let options_reg = self.deref_register(3);
 
-            // POSIX defaults
+            // POSIX default: local scope with lazy binding
             let mut scope = RtldScope::Local;
-            let mut binding = RtldBinding::Lazy;
 
             if let Ok(option_addrs) = self.machine_st.try_from_list(options_reg, stub_gen) {
                 for option_cell in option_addrs {
@@ -4956,34 +4955,6 @@ impl Machine {
                                     scope = match name {
                                         atom!("global") => RtldScope::Global,
                                         atom!("local") => RtldScope::Local,
-                                        _ => {
-                                            self.machine_st.fail = true;
-                                            return Ok(());
-                                        }
-                                    };
-                                }
-                                _ => {
-                                    self.machine_st.fail = true;
-                                    return Ok(());
-                                }
-                            );
-                        }
-                        atom!("binding") => {
-                            let binding_value = read_heap_cell!(option_cell,
-                                (HeapCellValueTag::Str, s) => {
-                                    self.machine_st.heap[s + 1]
-                                }
-                                _ => {
-                                    continue;
-                                }
-                            );
-
-                            read_heap_cell!(binding_value,
-                                (HeapCellValueTag::Atom, (name, arity)) => {
-                                    debug_assert_eq!(arity, 0);
-                                    binding = match name {
-                                        atom!("lazy") => RtldBinding::Lazy,
-                                        atom!("now") => RtldBinding::Now,
                                         _ => {
                                             self.machine_st.fail = true;
                                             return Ok(());
@@ -5036,7 +5007,7 @@ impl Machine {
                         }
                         if self
                             .foreign_function_table
-                            .load_library(&library_name.as_str(), &functions, scope, binding)
+                            .load_library(&library_name.as_str(), &functions, scope)
                             .is_err()
                         {
                             self.machine_st.fail = true;

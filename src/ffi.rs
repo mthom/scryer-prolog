@@ -54,15 +54,6 @@ pub enum RtldScope {
     Global,
 }
 
-/// Symbol binding mode for loaded libraries
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RtldBinding {
-    /// RTLD_LAZY: Resolve symbols as code references them (lazy binding)
-    Lazy,
-    /// RTLD_NOW: Resolve all symbols before dlopen() returns (eager binding)
-    Now,
-}
-
 #[derive(Debug)]
 pub struct FunctionImpl {
     cif: Cif,
@@ -695,7 +686,6 @@ impl ForeignFunctionTable {
         library_name: &str,
         functions: &Vec<FunctionDefinition>,
         scope: RtldScope,
-        binding: RtldBinding,
     ) -> Result<(), Box<dyn Error>> {
         let mut ff_table: ForeignFunctionTable = Default::default();
 
@@ -707,13 +697,10 @@ impl ForeignFunctionTable {
                     RtldScope::Local => unix::RTLD_LOCAL,
                     RtldScope::Global => unix::RTLD_GLOBAL,
                 };
-                let binding_flag = match binding {
-                    RtldBinding::Lazy => unix::RTLD_LAZY,
-                    RtldBinding::Now => unix::RTLD_NOW,
-                };
+                // Always use RTLD_LAZY (standard, faster loading)
                 let unix_lib = unix::Library::open(
                     Some(library_name),
-                    binding_flag | scope_flag
+                    unix::RTLD_LAZY | scope_flag
                 )?;
                 Library::from(unix_lib)
             }
