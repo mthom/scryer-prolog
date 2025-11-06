@@ -311,7 +311,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         }
     }
 
-    fn replace_list_tail(&self, mut list: &mut Term, new_tail: Term) {
+    fn replace_cons_tail(&self, mut list: &mut Term, new_tail: Term) {
         while let Term::Cons(_cell, _head, tail) = list {
             list = tail.as_mut();
         }
@@ -357,8 +357,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
                             Term::PartialString(Cell::default(), s, Box::new(arg2))
                         }
                     }
+                    Term::Literal(_, Literal::Atom(atom)) if atom == atom!("[]") => {
+                        // Empty string in codes mode: ""||K => K
+                        arg2
+                    }
                     Term::Cons(_, _, _) => {
-                        self.replace_list_tail(&mut arg1, arg2);
+                        self.replace_cons_tail(&mut arg1, arg2);
                         arg1
                     }
                     Term::Literal(_, Literal::Atom(atom!("[]"))) => arg2,
@@ -1037,16 +1041,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     // Handle as DoubleBar - check validation constraints
                     if let Some(last_stack) = self.stack.last() {
                         if last_stack.tt == TokenType::Term && last_stack.spec == BTERM {
-                            return Err(ParserError::IncompleteReduction(
-                                self.lexer.line_num,
-                                self.lexer.col_num,
-                            ));
+                            return Err(self.lexer.incomplete_reduction());
                         }
                         if last_stack.tt == TokenType::Term && last_stack.spec == LIST_TERM {
-                            return Err(ParserError::IncompleteReduction(
-                                self.lexer.line_num,
-                                self.lexer.col_num,
-                            ));
+                            return Err(self.lexer.incomplete_reduction());
                         }
                     }
 
@@ -1061,10 +1059,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     };
 
                     if !is_valid {
-                        return Err(ParserError::IncompleteReduction(
-                            self.lexer.line_num,
-                            self.lexer.col_num,
-                        ));
+                        return Err(self.lexer.incomplete_reduction());
                     }
 
                     self.reduce_op(1);
@@ -1103,19 +1098,18 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     }
                     if last_stack.tt == TokenType::Term && last_stack.spec == LIST_TERM {
                         // Term came from list syntax like [a,b,c], reject it
-                        return Err(ParserError::IncompleteReduction(
-                            self.lexer.line_num,
-                            self.lexer.col_num,
-                        ));
+                        return Err(self.lexer.incomplete_reduction());
                     }
                 }
 
-                // Check that the last term is a string literal (CompleteString or PartialString)
-                // NOT arbitrary lists like [1,2,3] or variables
+                // Check that the last term is a string literal (CompleteString, PartialString, or Cons from codes mode)
+                // NOT arbitrary lists like [1,2,3] or variables from list syntax
                 let is_valid = if let Some(last_term) = self.terms.last() {
                     match last_term {
                         Term::CompleteString(_, _) => true,
                         Term::PartialString(_, _, _) => true,
+                        Term::Cons(_, _, _) => true, // Allows codes mode: "abc" becomes [97,98,99]
+                        Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true, // Empty string in codes mode
                         _ => false,
                     }
                 } else {
