@@ -71,7 +71,6 @@ arg_consults_goals(c(Mod), Args, [c(Mod)|Consults], Goals) :-
 arg_consults_goals(g(Goal), Args, Consults, [g(Goal)|Goals]) :-
     args_consults_goals(Args, Consults, Goals).
 
-delegate_task([], []).
 delegate_task([], Goals0) :-
     (\+ disabled_init_file -> load_scryerrc ; true),
     reverse(Goals0, Goals1),
