@@ -58,7 +58,12 @@ start_repl :-
 
 start_toplevel :-
     (   custom_toplevel(Goal) ->
-        user:call(Goal)
+        catch(user:call(Goal),
+              Exception,
+              (   print_exception(Exception),
+                  halt(1)
+              )
+        )
     ;   repl
     ).
 
@@ -174,7 +179,8 @@ run_goals([g(Gs0)|Goals]) :- !,
               Exception,
               (   write_term(Goal, [variable_names(VNs),double_quotes(DQ)]),
                   write(' causes: '),
-                  write_term(Exception, [double_quotes(DQ)]), nl
+                  write_term(Exception, [double_quotes(DQ)]), nl,
+                  asserta(user:g_caused_exception(Goal, Exception))
               )
         ) -> true
     ;   write('% Warning: initialization failed for: '),
