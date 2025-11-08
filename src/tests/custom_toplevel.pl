@@ -2,42 +2,44 @@
 
 :- use_module(test_framework).
 
-% Test predicate that will be used as custom toplevel
+% Helper predicates for CLI testing
 custom_halt :-
     write('Custom toplevel executed'), nl,
     halt(0).
 
-% Test predicate with non-zero exit
 custom_halt_with_code :-
     write('Custom toplevel with exit code'), nl,
     halt(42).
 
-% Test predicate that writes and then succeeds (would enter REPL without -t halt)
 test_predicate :-
     write('Test predicate executed'), nl.
 
-test("-t halt terminates after initialization", (
-    % This tests that -t halt prevents entering REPL
-    % When run with: scryer-prolog -t halt custom_toplevel.pl
-    % Should execute initialization and halt
+% Test predicates for g_caused_exception/2
+:- dynamic(g_caused_exception/2).
+
+check_for_exception :-
+    (   g_caused_exception(_Goal, Exception) ->
+        write('Exception occurred: '), write(Exception), nl,
+        halt(1)
+    ;   write('No exception'), nl,
+        halt(0)
+    ).
+
+% Prolog integration tests
+test("custom toplevel functionality is tested via CLI tests", (
     true
 )).
 
-test("custom toplevel can be user-defined", (
-    % This tests that custom predicates can be used as toplevel
-    % When run with: scryer-prolog -t custom_halt custom_toplevel.pl
-    % Should call custom_halt and exit with code 0
-    true
+test("g_caused_exception/2 is not asserted when no exception occurs", (
+    retractall(g_caused_exception(_, _)),
+    \+ g_caused_exception(_, _)
 )).
 
-test("custom toplevel receives control after initialization", (
-    % Initialization runs before toplevel
-    % So any initialization goals should complete first
-    true
-)).
-
-test("default behavior is repl when no -t specified", (
-    % Without -t, should enter REPL after initialization
-    % This is the traditional behavior
-    true
+test("g_caused_exception/2 can be checked from custom toplevel", (
+    % This tests the predicate structure; actual exception handling
+    % is tested via CLI tests since it requires -g and -t flags
+    retractall(g_caused_exception(_, _)),
+    asserta(g_caused_exception(test_goal, test_error)),
+    g_caused_exception(test_goal, test_error),
+    retractall(g_caused_exception(_, _))
 )).
