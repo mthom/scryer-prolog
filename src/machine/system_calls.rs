@@ -4922,58 +4922,27 @@ impl Machine {
         {
             let library_name = self.deref_register(1);
             let args_reg = self.deref_register(2);
-            let options_reg = self.deref_register(3);
+            let scope_reg = self.deref_register(3);
 
-            // POSIX default: local scope with lazy binding
-            let mut scope = RtldScope::Local;
-
-            if let Ok(option_addrs) = self.machine_st.try_from_list(options_reg, stub_gen) {
-                for option_cell in option_addrs {
-                    let option_name = read_heap_cell!(option_cell,
-                        (HeapCellValueTag::Str, s) => {
-                            cell_as_atom_cell!(self.machine_st.heap[s]).get_name()
-                        }
+            // Expect scope to be a simple atom: 'local' or 'global'
+            // Options validation is done on the Prolog side
+            let scope = read_heap_cell!(scope_reg,
+                (HeapCellValueTag::Atom, (name, arity)) => {
+                    debug_assert_eq!(arity, 0);
+                    match name {
+                        atom!("global") => RtldScope::Global,
+                        atom!("local") => RtldScope::Local,
                         _ => {
-                            continue;
-                        }
-                    );
-
-                    match option_name {
-                        atom!("scope") => {
-                            let scope_value = read_heap_cell!(option_cell,
-                                (HeapCellValueTag::Str, s) => {
-                                    self.machine_st.heap[s + 1]
-                                }
-                                _ => {
-                                    continue;
-                                }
-                            );
-
-                            read_heap_cell!(scope_value,
-                                (HeapCellValueTag::Atom, (name, arity)) => {
-                                    debug_assert_eq!(arity, 0);
-                                    scope = match name {
-                                        atom!("global") => RtldScope::Global,
-                                        atom!("local") => RtldScope::Local,
-                                        _ => {
-                                            self.machine_st.fail = true;
-                                            return Ok(());
-                                        }
-                                    };
-                                }
-                                _ => {
-                                    self.machine_st.fail = true;
-                                    return Ok(());
-                                }
-                            );
-                        }
-                        _ => {
-                            // Unknown option, ignore for forward compatibility
-                            continue;
+                            self.machine_st.fail = true;
+                            return Ok(());
                         }
                     }
                 }
-            }
+                _ => {
+                    self.machine_st.fail = true;
+                    return Ok(());
+                }
+            );
             if let Some(library_name) = self.machine_st.value_to_str_like(library_name) {
                 match self.machine_st.try_from_list(args_reg, stub_gen) {
                     Ok(addrs) => {

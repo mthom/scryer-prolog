@@ -122,7 +122,7 @@ This creates a `'InitWindow'` predicate under the ffi module. Now, we can call i
 And a new window should pop up!
 */
 
-:- use_module(library(lists)).
+:- use_module(library(lists), [member/2, maplist/2, append/2, length/2]).
 :- use_module(library(error)).
 :- use_module(library(format)).
 :- use_module(library(dcgs)).
@@ -190,8 +190,44 @@ use_foreign_module(LibName, Predicates) :-
 %   ```
 %
 use_foreign_module(LibName, Predicates, Options) :-
-    '$load_foreign_lib'(LibName, Predicates, Options),
+    call_with_error_context(use_foreign_module_(LibName, Predicates, Options), predicate-use_foreign_module/3).
+
+use_foreign_module_(LibName, Predicates, Options) :-
+    must_be(list, Predicates),
+    must_be(list, Options),
+    validate_ffi_options(Options, Scope),
+    '$load_foreign_lib'(LibName, Predicates, Scope),
     maplist(assert_predicate, Predicates).
+
+%% validate_ffi_options(+Options, -Scope)
+%
+%  Validate FFI loading options and extract scope value.
+%  Throws domain_error for unknown or duplicate options.
+%  Default scope is 'local'.
+%
+validate_ffi_options(Options, Scope) :-
+    validate_ffi_options_(Options, [], local, Scope).
+
+validate_ffi_options_([], _Seen, Scope, Scope).
+validate_ffi_options_([Option|Rest], Seen, _CurrentScope, FinalScope) :-
+    ( Option = scope(Value) ->
+        ( member(scope, Seen) ->
+            domain_error(non_duplicate_options, scope, [])
+        ; valid_scope(Value) ->
+            validate_ffi_options_(Rest, [scope|Seen], Value, FinalScope)
+        ; domain_error(ffi_scope, Value, [])
+        )
+    ; functor(Option, Name, 1) ->
+        domain_error(ffi_option, Name, [])
+    ; domain_error(ffi_option, Option, [])
+    ).
+
+%% valid_scope(+Scope)
+%
+%  Check if Scope is a valid scope value (local or global).
+%
+valid_scope(local).
+valid_scope(global).
 
 assert_predicate(PredicateDefinition) :-
     PredicateDefinition =.. [Name, Inputs, void],
