@@ -1,1 +1,0 @@
-args = ["-f", "--no-add-history", "src/tests/custom_toplevel.pl", "-f", "-g", "use_module(library(custom_toplevel_tests)), custom_toplevel_tests:main_quiet(custom_toplevel_tests)", "-t", "halt"]
