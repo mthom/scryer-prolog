@@ -1,50 +1,50 @@
 % Helper predicates for testing custom toplevel functionality
 
 success_toplevel :-
-    write('SUCCESS_TOPLEVEL_EXECUTED'), nl,
+    format("SUCCESS_TOPLEVEL_EXECUTED~n", []),
     halt(0).
 
 failure_toplevel :-
-    write('FAILURE_TOPLEVEL_EXECUTED'), nl,
+    format("FAILURE_TOPLEVEL_EXECUTED~n", []),
     halt(1).
 
 exit_code_42 :-
-    write('EXIT_CODE_42'), nl,
+    format("EXIT_CODE_42~n", []),
     halt(42).
 
 write_and_exit :-
-    write('Output from custom toplevel'), nl,
+    format("Output from custom toplevel~n", []),
     halt(0).
 
 % This one doesn't halt - to test what happens if toplevel doesn't halt
 non_halting_toplevel :-
-    write('NON_HALTING_TOPLEVEL'), nl.
+    format("NON_HALTING_TOPLEVEL~n", []).
 
 % Test that toplevel can access loaded predicates
 test_file_loaded :-
-    write('LOADED_PREDICATE_CALLED'), nl,
+    format("LOADED_PREDICATE_CALLED~n", []),
     halt(0).
 
 helper_predicate :-
-    write('Helper predicate works'), nl.
+    format("Helper predicate works~n", []).
 
 % g_caused_exception/2 testing predicates
 :- dynamic(g_caused_exception/2).
 
 check_exception_halt_1 :-
     (   g_caused_exception(Goal, Exception) ->
-        write('EXCEPTION_CAUGHT'), nl,
-        write('Goal: '), write(Goal), nl,
-        write('Exception: '), write(Exception), nl,
+        format("EXCEPTION_CAUGHT~n", []),
+        format("Goal: ~w~n", [Goal]),
+        format("Exception: ~w~n", [Exception]),
         halt(1)
-    ;   write('NO_EXCEPTION'), nl,
+    ;   format("NO_EXCEPTION~n", []),
         halt(0)
     ).
 
 check_exception_halt_0 :-
     (   g_caused_exception(_, _) ->
-        write('UNEXPECTED_EXCEPTION'), nl,
+        format("UNEXPECTED_EXCEPTION~n", []),
         halt(1)
-    ;   write('SUCCESS_NO_EXCEPTION'), nl,
+    ;   format("SUCCESS_NO_EXCEPTION~n", []),
         halt(0)
     ).

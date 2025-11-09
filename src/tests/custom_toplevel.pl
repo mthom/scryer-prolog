@@ -4,24 +4,24 @@
 
 % Helper predicates for CLI testing
 custom_halt :-
-    write('Custom toplevel executed'), nl,
+    format("Custom toplevel executed~n", []),
     halt(0).
 
 custom_halt_with_code :-
-    write('Custom toplevel with exit code'), nl,
+    format("Custom toplevel with exit code~n", []),
     halt(42).
 
 test_predicate :-
-    write('Test predicate executed'), nl.
+    format("Test predicate executed~n", []).
 
 % Test predicates for g_caused_exception/2
 :- dynamic(g_caused_exception/2).
 
 check_for_exception :-
     (   g_caused_exception(_Goal, Exception) ->
-        write('Exception occurred: '), write(Exception), nl,
+        format("Exception occurred: ~w~n", [Exception]),
         halt(1)
-    ;   write('No exception'), nl,
+    ;   format("No exception~n", []),
         halt(0)
     ).
 
