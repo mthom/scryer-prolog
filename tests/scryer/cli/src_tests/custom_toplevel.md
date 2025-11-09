@@ -28,7 +28,7 @@ $ scryer-prolog -f --no-add-history -g "fail" -t halt
 Test custom toplevel that exits with code 0
 
 ```trycmd
-$ scryer-prolog -f --no-add-history tests/scryer/cli/fixtures/toplevel_test_helper.pl -t success_toplevel
+$ scryer-prolog -f --no-add-history -t success_toplevel tests/scryer/cli/fixtures/toplevel_test_helper.pl
 SUCCESS_TOPLEVEL_EXECUTED
 
 ```
@@ -37,7 +37,7 @@ SUCCESS_TOPLEVEL_EXECUTED
 Test that custom toplevel can access predicates from loaded file
 
 ```trycmd
-$ scryer-prolog -f --no-add-history tests/scryer/cli/fixtures/toplevel_test_helper.pl -t test_file_loaded
+$ scryer-prolog -f --no-add-history -t test_file_loaded tests/scryer/cli/fixtures/toplevel_test_helper.pl
 LOADED_PREDICATE_CALLED
 
 ```
@@ -46,7 +46,7 @@ LOADED_PREDICATE_CALLED
 Test combining -g goal with custom toplevel
 
 ```trycmd
-$ scryer-prolog -f --no-add-history tests/scryer/cli/fixtures/toplevel_test_helper.pl -g "helper_predicate" -t halt
+$ scryer-prolog -f --no-add-history -g "helper_predicate" -t halt tests/scryer/cli/fixtures/toplevel_test_helper.pl
 Helper predicate works
 
 ```
@@ -55,7 +55,7 @@ Helper predicate works
 Test multiple -g goals before custom toplevel
 
 ```trycmd
-$ scryer-prolog -f --no-add-history tests/scryer/cli/fixtures/toplevel_test_helper.pl -g "write('First goal'), nl" -g "write('Second goal'), nl" -t halt
+$ scryer-prolog -f --no-add-history -g "write('First goal'), nl" -g "write('Second goal'), nl" -t halt tests/scryer/cli/fixtures/toplevel_test_helper.pl
 First goal
 Second goal
 
@@ -65,7 +65,7 @@ Second goal
 Test that files are loaded before toplevel runs
 
 ```trycmd
-$ scryer-prolog -f --no-add-history tests/scryer/cli/fixtures/toplevel_test_helper.pl -t write_and_exit
+$ scryer-prolog -f --no-add-history -t write_and_exit tests/scryer/cli/fixtures/toplevel_test_helper.pl
 Output from custom toplevel
 
 ```
@@ -93,7 +93,7 @@ No custom toplevel
 Test that g_caused_exception/2 is asserted when -g goal throws exception
 
 ```trycmd
-$ scryer-prolog -f --no-add-history tests/scryer/cli/fixtures/toplevel_test_helper.pl -g "throw(test_error)" -t check_exception_halt_1
+$ scryer-prolog -f --no-add-history -g "throw(test_error)" -t check_exception_halt_1 tests/scryer/cli/fixtures/toplevel_test_helper.pl
 ? 1
 throw(test_error) causes: test_error
 EXCEPTION_CAUGHT
@@ -106,7 +106,7 @@ Exception: test_error
 Test that g_caused_exception/2 is not asserted when -g goal succeeds
 
 ```trycmd
-$ scryer-prolog -f --no-add-history tests/scryer/cli/fixtures/toplevel_test_helper.pl -g "write('Success')" -t check_exception_halt_0
+$ scryer-prolog -f --no-add-history -g "write('Success')" -t check_exception_halt_0 tests/scryer/cli/fixtures/toplevel_test_helper.pl
 SuccessSUCCESS_NO_EXCEPTION
 
 ```
@@ -115,7 +115,7 @@ SuccessSUCCESS_NO_EXCEPTION
 Test that g_caused_exception/2 captures error/2 terms correctly
 
 ```trycmd
-$ scryer-prolog -f --no-add-history tests/scryer/cli/fixtures/toplevel_test_helper.pl -g "throw(error(type_error(integer, foo), context))" -t check_exception_halt_1
+$ scryer-prolog -f --no-add-history -g "throw(error(type_error(integer, foo), context))" -t check_exception_halt_1 tests/scryer/cli/fixtures/toplevel_test_helper.pl
 ? 1
 throw(error(type_error(integer,foo),context)) causes: error(type_error(integer,foo),context)
 EXCEPTION_CAUGHT
