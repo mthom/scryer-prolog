@@ -17,6 +17,7 @@
 :- dynamic(disabled_init_file/0).
 :- dynamic(started/0).
 :- dynamic(custom_toplevel/1).
+:- dynamic(g_caused_exception/2).
 
 load_scryerrc :-
     (  '$home_directory'(HomeDir) ->
@@ -180,7 +181,7 @@ run_goals([g(Gs0)|Goals]) :- !,
               (   write_term(Goal, [variable_names(VNs),double_quotes(DQ)]),
                   write(' causes: '),
                   write_term(Exception, [double_quotes(DQ)]), nl,
-                  asserta(user:g_caused_exception(Goal, Exception))
+                  asserta(g_caused_exception(Goal, Exception))
               )
         ) -> true
     ;   write('% Warning: initialization failed for: '),

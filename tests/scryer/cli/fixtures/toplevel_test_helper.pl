@@ -29,10 +29,8 @@ helper_predicate :-
     format("Helper predicate works~n", []).
 
 % g_caused_exception/2 testing predicates
-:- dynamic(g_caused_exception/2).
-
 check_exception_halt_1 :-
-    (   g_caused_exception(Goal, Exception) ->
+    (   '$toplevel':g_caused_exception(Goal, Exception) ->
         format("EXCEPTION_CAUGHT~n", []),
         format("Goal: ~w~n", [Goal]),
         format("Exception: ~w~n", [Exception]),
@@ -42,7 +40,7 @@ check_exception_halt_1 :-
     ).
 
 check_exception_halt_0 :-
-    (   g_caused_exception(_, _) ->
+    (   '$toplevel':g_caused_exception(_, _) ->
         format("UNEXPECTED_EXCEPTION~n", []),
         halt(1)
     ;   format("SUCCESS_NO_EXCEPTION~n", []),
