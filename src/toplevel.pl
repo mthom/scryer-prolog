@@ -110,7 +110,7 @@ print_help :-
     write('   -g, --goal GOAL        '),
     write('Run the query GOAL'), nl,
     write('   -t GOAL                '),
-    write('Use GOAL as custom toplevel (arity 0 predicate)'), nl,
+    write('Use GOAL as custom toplevel'), nl,
     write('   -f                     '),
     write('Fast startup. Do not load initialization file (~/.scryerrc)'), nl,
     write('   --no-add-history       '),
