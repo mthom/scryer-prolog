@@ -16,6 +16,8 @@
 
 :- dynamic(disabled_init_file/0).
 :- dynamic(started/0).
+:- dynamic(custom_toplevel/1).
+:- dynamic(g_caused_exception/2).
 
 load_scryerrc :-
     (  '$home_directory'(HomeDir) ->
@@ -53,7 +55,18 @@ start_repl :-
     ;   true
     ),
     (\+ disabled_init_file -> load_scryerrc ; true),
-    repl.
+    start_toplevel.
+
+start_toplevel :-
+    (   custom_toplevel(Goal) ->
+        catch(user:call(Goal),
+              Exception,
+              (   print_exception(Exception),
+                  halt(1)
+              )
+        )
+    ;   repl
+    ).
 
 args_consults_goals([], [], []).
 args_consults_goals([Arg|Args], Consults, Goals) :-
@@ -64,19 +77,19 @@ arg_consults_goals(c(Mod), Args, [c(Mod)|Consults], Goals) :-
 arg_consults_goals(g(Goal), Args, Consults, [g(Goal)|Goals]) :-
     args_consults_goals(Args, Consults, Goals).
 
-delegate_task([], []).
 delegate_task([], Goals0) :-
     (\+ disabled_init_file -> load_scryerrc ; true),
     reverse(Goals0, Goals1),
     args_consults_goals(Goals1, Consults, Goals),
     run_goals(Consults),
     run_goals(Goals),
-    repl.
+    start_toplevel.
 
 delegate_task([Arg0|Args], Goals0) :-
     (   (   member(Arg0, ["-h", "--help"]) -> print_help
         ;   member(Arg0, ["-v", "--version"]) -> print_version
         ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
+        ;   member(Arg0, ["-t"]) -> gather_toplevel(Args, Goals0)
         ;   member(Arg0, ["-f"]) -> disable_init_file
         ;   member(Arg0, ["--no-add-history"]) -> ignore_machine_arg
         ),
@@ -96,6 +109,8 @@ print_help :-
     write('Print version information and exit'), nl,
     write('   -g, --goal GOAL        '),
     write('Run the query GOAL'), nl,
+    write('   -t GOAL                '),
+    write('Use GOAL as custom toplevel'), nl,
     write('   -f                     '),
     write('Fast startup. Do not load initialization file (~/.scryerrc)'), nl,
     write('   --no-add-history       '),
@@ -116,6 +131,17 @@ gather_goal(Type, Args0, Goals) :-
     [Gs1|Args] = Args0,
     Gs =.. [Type, Gs1],
     delegate_task(Args, [Gs|Goals]).
+
+gather_toplevel(Args0, Goals0) :-
+    length(Args0, N),
+    (   N < 1 -> print_help, halt
+    ;   true
+    ),
+    [TopLevel|Args] = Args0,
+    atom_chars(Goal, TopLevel),
+    retractall(custom_toplevel(_)),
+    asserta(custom_toplevel(Goal)),
+    delegate_task(Args, Goals0).
 
 disable_init_file :-
     asserta('disabled_init_file').
@@ -154,7 +180,8 @@ run_goals([g(Gs0)|Goals]) :- !,
               Exception,
               (   write_term(Goal, [variable_names(VNs),double_quotes(DQ)]),
                   write(' causes: '),
-                  write_term(Exception, [double_quotes(DQ)]), nl % halt?
+                  write_term(Exception, [double_quotes(DQ)]), nl,
+                  asserta(g_caused_exception(Goal, Exception))
               )
         ) -> true
     ;   write('% Warning: initialization failed for: '),
