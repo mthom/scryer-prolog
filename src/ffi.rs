@@ -28,14 +28,14 @@ use crate::functor_macro::FunctorElement;
 use crate::machine::heap::{sized_iter_to_heap_list, Heap};
 use crate::machine::machine_errors::DomainErrorType;
 use crate::parser::ast::{Fixnum, MightNotFitInFixnum};
-use crate::Machine;
+use crate::{LeafAnswer, Machine, Term};
 
 use dashu::Integer;
 use libffi::middle::{Arg, Cif, CodePtr, FfiAbi, Type};
 use libloading::{Library, Symbol};
 use ordered_float::OrderedFloat;
 use std::alloc::{self, Layout};
-use std::collections::HashMap;
+use std::collections::{HashMap, TryReserveError};
 use std::error::Error;
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::fmt::Debug;
@@ -57,10 +57,14 @@ pub enum FfiCallingConvention {
     Explicit(FfiAbi),
 }
 
-pub(crate) struct FnType {
+/// A struct representing a function type
+pub struct FnType {
+    /// the calling convention of the function
     #[allow(dead_code)] // used with unstable_ffi feature
     pub(crate) calling_convention: FfiCallingConvention,
+    /// the arguments of the function
     pub(crate) args: Vec<FfiType>,
+    // the return type of the function
     pub(crate) ret: FfiType,
 }
 
@@ -1104,6 +1108,12 @@ pub enum FfiSetupError {
     AllocationFailed,
 }
 
+impl From<TryReserveError> for FfiSetupError {
+    fn from(_: TryReserveError) -> Self {
+        Self::AllocationFailed
+    }
+}
+
 impl From<StructNotFoundError> for FfiSetupError {
     fn from(StructNotFoundError(name): StructNotFoundError) -> Self {
         Self::StructNotFound(name)
@@ -1197,6 +1207,18 @@ impl Machine {
     pub fn register_struct<T: CustomFfiStruct>(&mut self) -> Result<(), FfiSetupError> {
         let fields = T::fields(self);
 
+        unsafe {
+            self.register_struct_unchecked(T::type_name(), fields)
+        }
+    }
+
+    /// register a struct to be usable with the prolog ffi module
+    ///
+    /// ## Safety
+    /// - name must not be unique under all registered types
+    /// - the fields must be of the correct type and in the correct order (matching the C struct this is supposed to match)
+    pub unsafe fn register_struct_unchecked(&mut self, name: &str, fields: Vec<FfiType>) -> Result<(), FfiSetupError> {
+
         let struct_type = libffi::middle::Type::structure(
             fields
                 .iter()
@@ -1216,8 +1238,9 @@ impl Machine {
             )?;
         };
 
-        let name = AtomTable::build_with(&self.machine_st.atom_tbl, T::type_name());
+        let name = AtomTable::build_with(&self.machine_st.atom_tbl, name);
 
+        self.foreign_function_table.structs.try_reserve(1)?;
         self.foreign_function_table.structs.insert(
             name,
             StructImpl {
@@ -1231,18 +1254,28 @@ impl Machine {
 
     /// register a function to be callable from prolog as ffi:'name'(Args..., Ret) see prolog ffi module for details
     ///
-    /// # Safety
+    /// ## Safety
     /// - each name may only be registered once
     pub unsafe fn register_function<F: FfiFn>(
         &mut self,
         name: &str,
         f: F,
     ) -> Result<(), FfiSetupError> {
-        let name = AtomTable::build_with(&self.machine_st.atom_tbl, name);
         let fn_type = f.fn_type(self);
 
+        self.register_function_unchecked(name, f.fn_ptr(), fn_type)
+    }
+
+    /// register a function to be callable from prolog as ffi:'name'(Args..., Ret) see prolog ffi module for details
+    ///
+    /// # Safety
+    /// - each name may only be registered once
+    /// - fn_ptr must be a pointer to an extern "C" fn with the argument and return type matching the definition in fn_type
+    pub unsafe fn register_function_unchecked(&mut self, name: &str, fn_ptr: *mut c_void, fn_type: FnType) -> Result<(), FfiSetupError> {
+        let name = AtomTable::build_with(&self.machine_st.atom_tbl, name);
+
         self.foreign_function_table
-            .define_function(name, f.fn_ptr(), &fn_type)?;
+            .define_function(name, fn_ptr, &fn_type)?;
 
         // using if false rather than commenting out or #[cfg(any())] so that the compiler still checks it for correctnes
         if false {
@@ -1319,6 +1352,43 @@ impl FfiTypeable for () {
 impl FfiTypeable for bool {
     fn to_type(_machine: &mut Machine) -> FfiType {
         FfiType::Bool
+    }
+}
+
+impl<T: FfiTypeable, const N : usize> FfiTypeable for [T; N] {
+    fn to_type(machine: &mut Machine) -> FfiType {
+        let var = "At";
+        let element_type = T::to_type(machine);
+
+        let mut state = machine.run_query2(crate::Term::Compound(String::from(":"), vec![
+            Term::Atom(String::from("ffi")),
+            Term::Compound(String::from("array_type"), vec![
+                Term::Atom(element_type.to_atom().as_str().to_owned()),
+                Term::Integer(N.into()),
+                Term::Var(String::from(var))
+            ])
+        ]));
+
+        let result = state.next().expect("Querry should have a result").expect("Querry should succeed");
+        assert!(state.next().is_none_or(|answer| matches!(answer, Ok(LeafAnswer::False))));
+        drop(state);
+        match result {
+            crate::LeafAnswer::True => unreachable!("Querry should have bindings"),
+            crate::LeafAnswer::False => unreachable!("Querry shouldn't fail"),
+            crate::LeafAnswer::Exception(term) => unreachable!("Querry shouldn't throw: {term:?}"),
+            crate::LeafAnswer::LeafAnswer { bindings } => {
+                let res = bindings.get(var).unwrap_or_else(|| panic!("Querry should have a binding for variable {var}"));
+                match res {
+                    crate::Term::Atom(atom) => {
+                        let array_type = AtomTable::build_with(&machine.machine_st.atom_tbl, atom);
+                        FfiType::Struct(array_type)
+                    },
+                    _ => {
+                        unreachable!("Variable {var} should be bound to an atom: {res:?}")
+                    }
+                }
+            },
+        }
     }
 }
 
