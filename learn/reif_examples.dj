@@ -28,19 +28,8 @@ that you should already be familiar with.
 ?- A is 112, C= (A<10).  
    A = 112, C = (112<10).
 ?- 
-```
-To make C bound to a boolean value with the built in (->):
 
-``` prolog
-?- A is 2, ( A#<10 -> C=true;C=false), C, format("~s",["C holds"]).
-C holds   A = 2, C = true.
-?- A is 2000, ( A#<10 -> C=true;C=false), C, format("~s",["C holds"]).
-   false.
-?- 
-```
- 
-if_ from reif provides a better way to do the same, and you should consider using if_ unless you ahve a compelling reason to use -> .  
-
+ if_ from reif provides a consise way to bind a variable that is true when a relatinship holds.  
 ``` prolog
 ?- A #= 2,if_(A#<103,C=true,C=false),C,format("~s",["C Holds"]).
 C Holds   A = 2, C = true.
