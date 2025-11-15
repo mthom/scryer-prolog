@@ -438,5 +438,13 @@ Todo:  Explain how ,/3 and ;/3 are to be used, and how they are used internally 
 
 # Motiviation for Using reif
 
-Todo:   add some examples compared to using list or builtin predicates.
+The legacy built in predictes !/0, (->)/2, (\+), (\=)  are not pure and
+may lead to incomplete (buggy) programs.   This is well covered in  [Prolog Antipatterns: How not to do it](
+https://www.youtube.com/watch?v=6olf24BDtJc).  Unfortunately, these legacy predicates are used in many prolog tutorials.  
+
+The reason for most programmers learning or using Prolog is to enjoy the declarative nature of prolog.  
+The predicates in modules reif, dif, and clpz provide a better experience than the legacy predicates  !/0, (->)/2, (\+), (\=).   
+
+You should still  be aware of the predicates in builtins, since you will need some of them, and may see all of them in existing prolog code.  For example,
+you will see (->) and (\+) in clpz, so you will need to understand (->) and (\+) to understand the implemention of clpz.  
 
