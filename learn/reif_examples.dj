@@ -434,7 +434,7 @@ A is not B   A = wild, B = one.
 ```
 ## ,/3 and ;/3
 
-Todo:  Explain how ,/3 and ;/3 are to be used, and how they are used internally withing reif.
+Todo:  Explain how ,/3 and ;/3 are to be used, and how they are used internally within reif.
 
 # Motiviation for Using reif
 
