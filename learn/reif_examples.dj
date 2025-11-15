@@ -25,10 +25,11 @@ truthyness of a term like 'A < 10' can not be directly bound to a variable with 
 that you should already be familiar with.
 
 ``` prolog
-?- A is 112, C= (A<10).  
+?- A=112, C=(A<10).
    A = 112, C = (112<10).
 ?- 
 
+```
  if_ from reif provides a consise way to bind a variable that is true when a relatinship holds.  
 ``` prolog
 ?- A #= 2,if_(A#<103,C=true,C=false),C,format("~s",["C Holds"]).
@@ -435,6 +436,68 @@ A is not B   A = wild, B = one.
 ## ,/3 and ;/3
 
 Todo:  Explain how ,/3 and ;/3 are to be used, and how they are used internally within reif.
+
+# Sample Problems
+
+## FizzBuzz
+
+Copied from somewhere online:
+Given an integer n, for every positive integer i <= n, the task is to print,
+
+    "FizzBuzz" if i is divisible by 3 and 5,
+    "Fizz" if i is divisible by 3,
+    "Buzz" if i is divisible by 5
+                   "i" as a string, if none of the conditions are true.
+                   
+### FizzBuzz with if_ ladder.
+
+```prolog
+i_output(I, Os) :-
+    if_((I mod 3 #= 0, I mod 5 #= 0),
+        Os = "FizzBuzz",
+        if_(I mod 3 #= 0,
+            Os = "Fizz",
+            if_(I mod 5 #= 0,
+                Os = "Buzz",
+                number_chars(I, Os)))).
+```
+Yielding for example:
+
+```
+?- N = 15, between(1, N, I), i_output(I, Os).
+   N = 15, I = 1, Os = "1"
+;  N = 15, I = 2, Os = "2"
+;  N = 15, I = 3, Os = "Fizz"
+;  N = 15, I = 4, Os = "4"
+;  N = 15, I = 5, Os = "Buzz"
+;  N = 15, I = 6, Os = "Fizz"
+;  N = 15, I = 7, Os = "7"
+;  N = 15, I = 8, Os = "8"
+;  N = 15, I = 9, Os = "Fizz"
+;  N = 15, I = 10, Os = "Buzz"
+;  N = 15, I = 11, Os = "11"
+;  N = 15, I = 12, Os = "Fizz"
+;  N = 15, I = 13, Os = "13"
+;  N = 15, I = 14, Os = "14"
+;  N = 15, I = 15, Os = "FizzBuzz".
+```
+We can test it also in other ways, for instance: Which integers yield "Fizz"?
+    
+```prolog
+?- length(_, I), catch(i_output(I, "Fizz"), error(syntax_error(_),_), false).
+   I = 3
+;  I = 6
+;  I = 9
+;  I = 12
+;  I = 18
+;  I = 21
+;  I = 24
+;  I = 27
+;  I = 33
+;  I = 36
+;  ... .
+```
+
 
 # Motiviation for Using reif
 
