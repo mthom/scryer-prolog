@@ -1,6 +1,7 @@
 #![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
 #![allow(unused_parens)] // mthom/scryer-prolog#3092 rust-lang/rust#147126
 
+use crate::Machine;
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::offset_table::*;
@@ -889,6 +890,55 @@ impl Term {
         match self {
             Term::Clause(_, _, ref child_terms, ..) => child_terms.len(),
             _ => 0,
+        }
+    }
+}
+
+impl From<(crate::Term, &mut Machine)> for Term {
+    fn from((value, machine): (crate::Term, &mut Machine)) -> Self {
+        match value {
+            crate::Term::Integer(ibig) => {
+                let integer = arena_alloc!(ibig, &mut machine.machine_st.arena);
+                Term::Literal(Cell::default(), Literal::Integer(integer))
+            },
+            crate::Term::Rational(rbig) => {
+                let rational = arena_alloc!(rbig, &mut machine.machine_st.arena);
+                Term::Literal(Cell::default(), Literal::Rational(rational))
+            },
+            crate::Term::Float(f) => {
+                let offset = float_alloc!(f, machine.machine_st.arena);
+                Term::Literal(Cell::default(), Literal::F64(offset, OrderedFloat(f)))
+            },
+            crate::Term::Atom(val) => {
+                let atom = AtomTable::build_with(&machine.machine_st.atom_tbl, &val);
+                Term::Literal(Cell::default(), Literal::Atom(atom))
+            },
+            crate::Term::String(str) => {
+                Term::CompleteString(Cell::default(), Rc::new(str))
+            },
+            crate::Term::List(mut terms) => {
+                let mut list_term = Term::Literal(Cell::default(), Literal::Atom(atom!("[]")));
+
+                while let Some(last) = terms.pop() {
+                    let last = Term::from((last, &mut *machine));
+                    list_term = Term::Cons(Cell::default(), Box::new(last), Box::new(list_term));
+                }
+
+                list_term
+            },
+            crate::Term::Compound(name, terms) => {
+                let name = AtomTable::build_with(&machine.machine_st.atom_tbl, &name);
+
+                let terms = terms.into_iter().map(|term| Term::from((term, &mut *machine))).collect();
+                Term::Clause(Cell::default(), name, terms)
+            },
+            crate::Term::Var(var) => {
+                if var == "_" {
+                    Term::AnonVar
+                } else {
+                    Term::Var(Cell::default(), VarPtr(Rc::new(RefCell::new(Var::Named(var.into())))))
+                }
+            },
         }
     }
 }
