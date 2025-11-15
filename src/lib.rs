@@ -20,8 +20,9 @@ mod allocator;
 mod arithmetic;
 pub(crate) mod codegen;
 mod debray_allocator;
+
 #[cfg(feature = "ffi")]
-mod ffi;
+pub mod ffi;
 mod forms;
 mod heap_iter;
 pub(crate) mod heap_print;

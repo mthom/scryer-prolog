@@ -1,4 +1,5 @@
 #![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
+#![allow(unused_parens)] // mthom/scryer-prolog#3092 rust-lang/rust#147126
 
 use crate::parser::ast::*;
 

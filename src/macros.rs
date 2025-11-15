@@ -34,10 +34,14 @@ macro_rules! empty_list_as_cell {
 
 macro_rules! atom_as_cell {
     ($atom:expr) => {
-        HeapCellValue::from_bytes(AtomCell::build_with($atom.index, 0).into_bytes())
+        $crate::types::HeapCellValue::from_bytes(
+            $crate::atom_table::AtomCell::build_with($atom.index, 0).into_bytes(),
+        )
     };
     ($atom:expr, $arity:expr) => {
-        HeapCellValue::from_bytes(AtomCell::build_with($atom.index, $arity as u8).into_bytes())
+        $crate::types::HeapCellValue::from_bytes(
+            $crate::atom_table::AtomCell::build_with($atom.index, $arity as u8).into_bytes(),
+        )
     };
 }
 

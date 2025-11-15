@@ -1,4 +1,4 @@
-use scryer_prolog::MachineBuilder;
+use scryer_prolog::{Machine, MachineBuilder};
 
 use std::borrow::Cow;
 
@@ -62,5 +62,17 @@ pub(crate) fn load_module_test_with_input<T: Expectable>(
     let mut wam = MachineBuilder::default()
         .with_streams(StreamConfig::in_memory().with_user_input(InputStreamConfig::string(input)))
         .build();
+    expected.assert_eq(wam.test_load_file(file).as_slice());
+}
+
+pub(crate) fn load_module_test_with_setup<T: Expectable>(
+    file: &str,
+    setup: fn(&mut Machine),
+    expected: T,
+) {
+    use scryer_prolog::MachineBuilder;
+
+    let mut wam = MachineBuilder::default().build();
+    setup(&mut wam);
     expected.assert_eq(wam.test_load_file(file).as_slice());
 }

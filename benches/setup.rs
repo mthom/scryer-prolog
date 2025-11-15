@@ -77,7 +77,7 @@ impl PrologBenchmark {
             use criterion::black_box;
             black_box(
                 machine
-                    .run_query(black_box(query))
+                    .run_query_string(black_box(query))
                     .collect::<Result<Vec<_>, _>>()
                     .unwrap(),
             )
@@ -107,7 +107,7 @@ mod test {
             let setup_inference_count = machine.get_inference_count();
 
             let result: Vec<_> = machine
-                .run_query(r.query)
+                .run_query_string(r.query)
                 .collect::<Result<_, _>>()
                 .unwrap();
             let query_inference_count = machine.get_inference_count() - setup_inference_count;
