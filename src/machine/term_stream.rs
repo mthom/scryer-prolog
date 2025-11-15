@@ -4,6 +4,7 @@ use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::machine::*;
 use crate::parser::ast::*;
+use crate::parser::lexer::*;
 use crate::parser::parser::*;
 use crate::read::devour_whitespace;
 
@@ -61,7 +62,7 @@ impl<'a> TermStream for BootstrappingTermStream<'a> {
 
     #[inline]
     fn eof(&mut self) -> Result<bool, CompilationError> {
-        devour_whitespace(&mut self.parser) // eliminate dangling comments before checking for EOF.
+        devour_whitespace(&mut self.parser.lexer) // eliminate dangling comments before checking for EOF.
             .map_err(CompilationError::from)
     }
 

@@ -3,8 +3,9 @@ use crate::atom_table::*;
 use crate::parser::ast::*;
 
 #[cfg(feature = "ffi")]
-use crate::ffi::FFIError;
+use crate::ffi::{self, FfiError};
 use crate::forms::*;
+use crate::functor_macro::*;
 use crate::machine::heap::*;
 use crate::machine::loader::CompilationTarget;
 use crate::machine::machine_state::*;
@@ -12,20 +13,13 @@ use crate::machine::streams::*;
 use crate::machine::system_calls::BrentAlgState;
 use crate::types::*;
 
-pub type MachineStub = Vec<HeapCellValue>;
+pub type MachineStub = Vec<FunctorElement>;
 pub type MachineStubGen = Box<dyn Fn(&mut MachineState) -> MachineStub>;
-
-#[derive(Debug, Clone, Copy)]
-enum ErrorProvenance {
-    Constructed, // if constructed, offset the addresses.
-    Received,    // otherwise, preserve the addresses.
-}
 
 #[derive(Debug)]
 pub(crate) struct MachineError {
     stub: MachineStub,
     location: Option<(usize, usize)>, // line_num, col_num
-    from: ErrorProvenance,
 }
 
 // from 7.12.2 b) of 13211-1:1995
@@ -50,6 +44,7 @@ pub(crate) enum ValidType {
     //    PredicateIndicator,
     //    Variable
     TcpListener,
+    Process,
 }
 
 impl ValidType {
@@ -73,6 +68,7 @@ impl ValidType {
             //            ValidType::PredicateIndicator => atom!("predicate_indicator"),
             //            ValidType::Variable => atom!("variable")
             ValidType::TcpListener => atom!("tcp_listener"),
+            ValidType::Process => atom!("process"),
         }
     }
 }
@@ -91,45 +87,26 @@ impl TypeError for HeapCellValue {
     fn type_error(self, _machine_st: &mut MachineState, valid_type: ValidType) -> MachineError {
         let stub = functor!(
             atom!("type_error"),
-            [atom(valid_type.as_atom()), cell(self)]
+            [atom_as_cell((valid_type.as_atom())), cell(self)]
         );
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received,
         }
     }
 }
 
 impl TypeError for MachineStub {
-    fn type_error(self, machine_st: &mut MachineState, valid_type: ValidType) -> MachineError {
+    fn type_error(self, _machine_st: &mut MachineState, valid_type: ValidType) -> MachineError {
         let stub = functor!(
             atom!("type_error"),
-            [atom(valid_type.as_atom()), str(machine_st.heap.len(), 0)],
-            [self]
+            [atom_as_cell((valid_type.as_atom())), functor(self)]
         );
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Constructed,
-        }
-    }
-}
-
-impl TypeError for FunctorStub {
-    fn type_error(self, machine_st: &mut MachineState, valid_type: ValidType) -> MachineError {
-        let stub = functor!(
-            atom!("type_error"),
-            [atom(valid_type.as_atom()), str(machine_st.heap.len(), 0)],
-            [self]
-        );
-
-        MachineError {
-            stub,
-            location: None,
-            from: ErrorProvenance::Constructed,
         }
     }
 }
@@ -139,15 +116,14 @@ impl TypeError for Number {
         let stub = functor!(
             atom!("type_error"),
             [
-                atom(valid_type.as_atom()),
-                number(&mut machine_st.arena, self)
+                atom_as_cell((valid_type.as_atom())),
+                number(self, (&mut machine_st.arena))
             ]
         );
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received,
         }
     }
 }
@@ -171,16 +147,15 @@ impl PermissionError for Atom {
         let stub = functor!(
             atom!("permission_error"),
             [
-                atom(perm.as_atom()),
-                atom(index_atom),
-                cell(atom_as_cell!(self))
+                atom_as_cell((perm.as_atom())),
+                atom_as_cell(index_atom),
+                atom_as_cell(self)
             ]
         );
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received,
         }
     }
 }
@@ -214,13 +189,16 @@ impl PermissionError for HeapCellValue {
 
         let stub = functor!(
             atom!("permission_error"),
-            [atom(perm.as_atom()), atom(index_atom), cell(cell)]
+            [
+                atom_as_cell((perm.as_atom())),
+                atom_as_cell(index_atom),
+                cell(cell)
+            ]
         );
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received,
         }
     }
 }
@@ -228,24 +206,22 @@ impl PermissionError for HeapCellValue {
 impl PermissionError for MachineStub {
     fn permission_error(
         self,
-        machine_st: &mut MachineState,
+        _machine_st: &mut MachineState,
         index_atom: Atom,
         perm: Permission,
     ) -> MachineError {
         let stub = functor!(
             atom!("permission_error"),
             [
-                atom(perm.as_atom()),
-                atom(index_atom),
-                str(machine_st.heap.len(), 0)
-            ],
-            [self]
+                atom_as_cell((perm.as_atom())),
+                atom_as_cell(index_atom),
+                functor(self)
+            ]
         );
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Constructed,
         }
     }
 }
@@ -256,32 +232,14 @@ pub(super) trait DomainError {
 
 impl DomainError for HeapCellValue {
     fn domain_error(self, _machine_st: &mut MachineState, error: DomainErrorType) -> MachineError {
-        let stub = functor!(atom!("domain_error"), [atom(error.as_atom()), cell(self)]);
-
-        MachineError {
-            stub,
-            location: None,
-            from: ErrorProvenance::Received,
-        }
-    }
-}
-
-impl DomainError for FunctorStub {
-    fn domain_error(
-        self,
-        machine_st: &mut MachineState,
-        valid_type: DomainErrorType,
-    ) -> MachineError {
         let stub = functor!(
             atom!("domain_error"),
-            [atom(valid_type.as_atom()), str(machine_st.heap.len(), 0)],
-            [self]
+            [atom_as_cell((error.as_atom())), cell(self)]
         );
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Constructed,
         }
     }
 }
@@ -290,26 +248,60 @@ impl DomainError for Number {
     fn domain_error(self, machine_st: &mut MachineState, error: DomainErrorType) -> MachineError {
         let stub = functor!(
             atom!("domain_error"),
-            [atom(error.as_atom()), number(&mut machine_st.arena, self)]
+            [
+                atom_as_cell((error.as_atom())),
+                number(self, (&mut machine_st.arena))
+            ]
         );
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received,
         }
     }
 }
 
-pub(super) type FunctorStub = [HeapCellValue; 3];
+impl DomainError for MachineStub {
+    fn domain_error(self, _machine_st: &mut MachineState, error: DomainErrorType) -> MachineError {
+        let stub = functor!(
+            atom!("domain_error"),
+            [atom_as_cell((error.as_atom())), functor(self)]
+        );
+
+        MachineError {
+            stub,
+            location: None,
+        }
+    }
+}
+
+#[cfg(feature = "ffi")]
+impl DomainError for ffi::Value {
+    fn domain_error(self, machine_st: &mut MachineState, error: DomainErrorType) -> MachineError {
+        use ffi::Value;
+
+        match self {
+            Value::Number(number) => number.domain_error(machine_st, error),
+            Value::CString(cstring) => {
+                let str = cstring.to_string_lossy().into_owned();
+                let stub = functor!(
+                    atom!("domain_error"),
+                    [atom_as_cell((error.as_atom())), string(str)]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                }
+            }
+            Value::Struct(atom, _values) => atom_as_cell!(atom).domain_error(machine_st, error),
+        }
+    }
+}
 
 #[inline(always)]
-pub(super) fn functor_stub(name: Atom, arity: usize) -> FunctorStub {
-    [
-        atom_as_cell!(atom!("/"), 2),
-        atom_as_cell!(name),
-        fixnum_as_cell!(Fixnum::build_with(arity as i64)),
-    ]
+pub(super) fn functor_stub(name: Atom, arity: usize) -> MachineStub {
+    functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)])
 }
 
 impl MachineState {
@@ -320,37 +312,40 @@ impl MachineState {
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received,
         }
     }
 
     pub(super) fn evaluation_error(&mut self, eval_error: EvalError) -> MachineError {
-        let stub = functor!(atom!("evaluation_error"), [atom(eval_error.as_atom())]);
+        let stub = functor!(
+            atom!("evaluation_error"),
+            [atom_as_cell((eval_error.as_atom()))]
+        );
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received,
         }
     }
 
-    pub(super) fn resource_error(&mut self, err: ResourceError) -> MachineError {
+    pub(super) fn resource_error(err: ResourceError) -> MachineError {
         let stub = match err {
             ResourceError::FiniteMemory(size_requested) => {
                 functor!(
                     atom!("resource_error"),
-                    [atom(atom!("finite_memory")), cell(size_requested)]
+                    [atom_as_cell((atom!("finite_memory"))), cell(size_requested)]
                 )
             }
             ResourceError::OutOfFiles => {
-                functor!(atom!("resource_error"), [atom(atom!("file_descriptors"))])
+                functor!(
+                    atom!("resource_error"),
+                    [atom_as_cell((atom!("file_descriptors")))]
+                )
             }
         };
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received,
         }
     }
 
@@ -367,13 +362,12 @@ impl MachineState {
             ExistenceError::Module(name) => {
                 let stub = functor!(
                     atom!("existence_error"),
-                    [atom(atom!("source_sink")), atom(name)]
+                    [atom_as_cell((atom!("source_sink"))), atom_as_cell(name)]
                 );
 
                 MachineError {
                     stub,
                     location: None,
-                    from: ErrorProvenance::Received,
                 }
             }
             ExistenceError::QualifiedProcedure {
@@ -381,36 +375,30 @@ impl MachineState {
                 name,
                 arity,
             } => {
-                let h = self.heap.len();
-
-                let ind_stub = functor!(atom!("/"), [atom(name), fixnum(arity)]);
-                let res_stub = functor!(atom!(":"), [atom(module_name), str(h + 3, 0)], [ind_stub]);
+                let ind_stub = functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)]);
+                let res_stub = functor!(atom!(":"), [atom_as_cell(module_name), functor(ind_stub)]);
 
                 let stub = functor!(
                     atom!("existence_error"),
-                    [atom(atom!("procedure")), str(h, 0)],
-                    [res_stub]
+                    [atom_as_cell((atom!("procedure"))), functor(res_stub)]
                 );
 
                 MachineError {
                     stub,
                     location: None,
-                    from: ErrorProvenance::Constructed,
                 }
             }
             ExistenceError::Procedure(name, arity) => {
-                let culprit = functor!(atom!("/"), [atom(name), fixnum(arity)]);
+                let culprit = functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)]);
 
                 let stub = functor!(
                     atom!("existence_error"),
-                    [atom(atom!("procedure")), str(self.heap.len(), 0)],
-                    [culprit]
+                    [atom_as_cell((atom!("procedure"))), functor(culprit)]
                 );
 
                 MachineError {
                     stub,
                     location: None,
-                    from: ErrorProvenance::Constructed,
                 }
             }
             ExistenceError::ModuleSource(source) => {
@@ -418,39 +406,120 @@ impl MachineState {
 
                 let stub = functor!(
                     atom!("existence_error"),
-                    [atom(atom!("source_sink")), str(self.heap.len(), 0)],
-                    [source_stub]
+                    [atom_as_cell((atom!("source_sink"))), functor(source_stub)]
                 );
 
                 MachineError {
                     stub,
                     location: None,
-                    from: ErrorProvenance::Constructed,
                 }
             }
             ExistenceError::SourceSink(culprit) => {
                 let stub = functor!(
                     atom!("existence_error"),
-                    [atom(atom!("source_sink")), cell(culprit)]
+                    [atom_as_cell((atom!("source_sink"))), cell(culprit)]
                 );
 
                 MachineError {
                     stub,
                     location: None,
-                    from: ErrorProvenance::Received,
                 }
             }
             ExistenceError::Stream(culprit) => {
                 let stub = functor!(
                     atom!("existence_error"),
-                    [atom(atom!("stream")), cell(culprit)]
+                    [atom_as_cell((atom!("stream"))), cell(culprit)]
                 );
 
                 MachineError {
                     stub,
                     location: None,
-                    from: ErrorProvenance::Received,
                 }
+            }
+            ExistenceError::Process(culprit) => {
+                let stub = functor!(
+                    atom!("existence_error"),
+                    [atom_as_cell((atom!("process"))), cell(culprit)]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                }
+            }
+            ExistenceError::FfiFunction(name, arity) => {
+                let culprit = functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)]);
+                let stub = functor!(
+                    atom!("existence_error"),
+                    [atom_as_cell((atom!("ffi_function"))), functor(culprit)]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                }
+            }
+            ExistenceError::FfiStructConstructor(name, arity) => {
+                let culprit = functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)]);
+                let stub = functor!(
+                    atom!("existence_error"),
+                    [
+                        atom_as_cell((atom!("ffi_struct_constructor"))),
+                        functor(culprit)
+                    ]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                }
+            }
+            ExistenceError::FfiStructType(atom) => {
+                let stub = functor!(
+                    atom!("existence_error"),
+                    [atom_as_cell((atom!("ffi_struct_type"))), atom_as_cell(atom)]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                }
+            }
+        }
+    }
+
+    pub(crate) fn directive_error(&mut self, err: DirectiveError) -> MachineError {
+        match err {
+            DirectiveError::ExpectedDirective(_term) => self.domain_error(
+                DomainErrorType::Directive,
+                atom_as_cell!(atom!("todo_insert_invalid_term_here")),
+            ),
+            DirectiveError::InvalidDirective(name, arity) => {
+                self.domain_error(DomainErrorType::Directive, functor_stub(name, arity))
+            }
+            DirectiveError::InvalidOpDeclNameType(_term) => self.type_error(
+                ValidType::List,
+                atom_as_cell!(atom!("todo_insert_invalid_term_here")),
+            ),
+            DirectiveError::InvalidOpDeclSpecDomain(_term) => self.domain_error(
+                DomainErrorType::OperatorSpecifier,
+                atom_as_cell!(atom!("todo_insert_invalid_term_here")),
+            ),
+            DirectiveError::InvalidOpDeclSpecValue(atom) => {
+                self.domain_error(DomainErrorType::OperatorSpecifier, atom_as_cell!(atom))
+            }
+            DirectiveError::InvalidOpDeclPrecType(_term) => self.type_error(
+                ValidType::Integer,
+                atom_as_cell!(atom!("todo_insert_invalid_term_here")),
+            ),
+            DirectiveError::InvalidOpDeclPrecDomain(num) => {
+                self.domain_error(DomainErrorType::OperatorPriority, fixnum_as_cell!(num))
+            }
+            DirectiveError::ShallNotCreate(atom) => {
+                self.permission_error(Permission::Create, atom!("operator"), atom)
+            }
+            DirectiveError::ShallNotModify(atom) => {
+                self.permission_error(Permission::Modify, atom!("operator"), atom)
             }
         }
     }
@@ -471,12 +540,11 @@ impl MachineState {
 
     fn arithmetic_error(&mut self, err: ArithmeticError) -> MachineError {
         match err {
-            ArithmeticError::UninstantiatedVar => self.instantiation_error(),
-            ArithmeticError::NonEvaluableFunctor(literal, arity) => {
-                let culprit = functor!(atom!("/"), [literal(literal), fixnum(arity)]);
-
+            ArithmeticError::NonEvaluableFunctor(cell, arity) => {
+                let culprit = functor!(atom!("/"), [literal(cell), fixnum(arity)]);
                 self.type_error(ValidType::Evaluable, culprit)
             }
+            ArithmeticError::UninstantiatedVar => self.instantiation_error(),
         }
     }
 
@@ -495,7 +563,6 @@ impl MachineState {
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received,
         }
     }
 
@@ -504,16 +571,12 @@ impl MachineState {
             SessionError::CannotOverwriteBuiltIn(key) => self.permission_error(
                 Permission::Modify,
                 atom!("static_procedure"),
-                functor_stub(key.0, key.1)
-                    .into_iter()
-                    .collect::<MachineStub>(),
+                functor_stub(key.0, key.1),
             ),
             SessionError::CannotOverwriteStaticProcedure(key) => self.permission_error(
                 Permission::Modify,
                 atom!("static_procedure"),
-                functor_stub(key.0, key.1)
-                    .into_iter()
-                    .collect::<MachineStub>(),
+                functor_stub(key.0, key.1),
             ),
             SessionError::CannotOverwriteBuiltInModule(module) => {
                 self.permission_error(Permission::Modify, atom!("static_module"), module)
@@ -524,8 +587,7 @@ impl MachineState {
 
                 let stub = functor!(
                     atom!("module_does_not_contain_claimed_export"),
-                    [atom(module_name), str(self.heap.len() + 4, 0)],
-                    [functor_stub]
+                    [atom_as_cell(module_name), functor(functor_stub)]
                 );
 
                 self.permission_error(Permission::Access, atom!("private_procedure"), stub)
@@ -536,7 +598,7 @@ impl MachineState {
                 self.permission_error(
                     Permission::Modify,
                     atom!("module"),
-                    functor!(error_atom, [atom(module_name)]),
+                    functor!(error_atom, [atom_as_cell(module_name)]),
                 )
             }
             SessionError::NamelessEntry => {
@@ -555,15 +617,12 @@ impl MachineState {
             }
             SessionError::CompilationError(err) => self.syntax_error(err),
             SessionError::PredicateNotMultifileOrDiscontiguous(compilation_target, key) => {
-                let functor_stub = functor_stub(key.0, key.1);
-
                 let stub = functor!(
                     atom!(":"),
                     [
-                        atom(compilation_target.module_name()),
-                        str(self.heap.len() + 4, 0)
-                    ],
-                    [functor_stub]
+                        atom_as_cell((compilation_target.module_name())),
+                        functor((key.0), [fixnum((key.1))])
+                    ]
                 );
 
                 self.permission_error(
@@ -587,113 +646,145 @@ impl MachineState {
         }
 
         let location = err.line_and_col_num();
-        let len = self.heap.len();
         let stub = err.as_functor();
 
-        let stub = functor!(atom!("syntax_error"), [str(len, 0)], [stub]);
+        let stub = functor!(atom!("syntax_error"), [functor(stub)]);
 
-        MachineError {
-            stub,
-            location,
-            from: ErrorProvenance::Constructed,
-        }
+        MachineError { stub, location }
     }
 
-    pub(super) fn representation_error(&mut self, flag: RepFlag) -> MachineError {
-        let stub = functor!(atom!("representation_error"), [atom(flag.as_atom())]);
+    pub(super) fn representation_error(&self, flag: RepFlag) -> MachineError {
+        let stub = functor!(
+            atom!("representation_error"),
+            [atom_as_cell((flag.as_atom()))]
+        );
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received,
+        }
+    }
+
+    #[allow(dead_code)] // not used when all features are enabled
+    pub(super) fn missing_feature_error(&self, feature: Atom) -> MachineError {
+        let stub = functor!(
+            atom!("representation_error"),
+            [functor(
+                (functor!(atom!("feature"), [atom_as_cell((feature))]))
+            )]
+        );
+
+        MachineError {
+            stub,
+            location: None,
+        }
+    }
+
+    pub(super) fn unreachable_error(&self) -> MachineError {
+        let stub = functor!(atom!("system_error"));
+
+        MachineError {
+            stub,
+            location: None,
         }
     }
 
     #[cfg(feature = "ffi")]
-    pub(super) fn ffi_error(&mut self, err: FFIError) -> MachineError {
-        let error_atom = match err {
-            FFIError::ValueCast => atom!("value_cast"),
-            FFIError::ValueDontFit => atom!("value_dont_fit"),
-            FFIError::InvalidFFIType => atom!("invalid_ffi_type"),
-            FFIError::InvalidStructName => atom!("invalid_struct_name"),
-            FFIError::FunctionNotFound => atom!("function_not_found"),
-            FFIError::StructNotFound => atom!("struct_not_found"),
-        };
-        let stub = functor!(atom!("ffi_error"), [atom(error_atom)]);
+    pub(super) fn ffi_error(&mut self, err: FfiError) -> MachineError {
+        match err {
+            FfiError::ValueCast(expected, actual) => {
+                let stub = functor!(
+                    atom!("domain_error"),
+                    [atom_as_cell(expected), atom_as_cell(actual)]
+                );
 
-        MachineError {
-            stub,
-            location: None,
-            from: ErrorProvenance::Constructed,
+                MachineError {
+                    stub,
+                    location: None,
+                }
+            }
+            FfiError::ValueOutOfRange(domain, culprit) => self.domain_error(domain, culprit),
+            FfiError::FunctionNotFound(name, arity) => {
+                self.existence_error(ExistenceError::FfiFunction(name, arity))
+            }
+            FfiError::StructNotFound(name) => {
+                self.existence_error(ExistenceError::FfiStructType(name))
+            }
+            FfiError::ArgCountMismatch {
+                name,
+                kind,
+                expected: _,
+                got,
+            } => match kind {
+                ffi::ArgCountMismatchKind::Function => {
+                    self.existence_error(ExistenceError::FfiFunction(name, got))
+                }
+                ffi::ArgCountMismatchKind::Struct => {
+                    self.existence_error(ExistenceError::FfiStructConstructor(name, got))
+                }
+            },
+            FfiError::AllocationFailed => MachineError {
+                stub: functor!(atom!("resource_error"), [atom_as_cell((atom!("heap")))]),
+                location: None,
+            },
+            FfiError::LayoutError => self.representation_error(RepFlag::FfiLayout),
+            FfiError::UnsupportedTypedef => self.representation_error(RepFlag::FfiLayout),
+            FfiError::UnsupportedAbi => self.representation_error(RepFlag::FfiAbi),
+            FfiError::VoidArgumentType => self.domain_error(
+                DomainErrorType::FfiArgumentType,
+                atom_as_cell!(atom!("void")),
+            ),
+            FfiError::CStrFieldType => self.domain_error(
+                DomainErrorType::NonCStrFfiArgumentType,
+                atom_as_cell!(atom!("cstr")),
+            ),
+            FfiError::NullPtr => self.domain_error(
+                DomainErrorType::NonNullPtr,
+                fixnum_as_cell!(Fixnum::build_with(0)),
+            ),
         }
     }
 
-    pub(super) fn error_form(&mut self, err: MachineError, src: FunctorStub) -> MachineStub {
-        let h = self.heap.len();
-        let location = err.location;
-        let stub_addition_len = if err.len() == 1 {
-            0 // if err contains 1 cell, it can be inlined at stub[1].
+    pub(super) fn error_form(&mut self, err: MachineError, src: MachineStub) -> MachineStub {
+        if let Some((line_num, _col_num)) = err.location {
+            functor!(
+                atom!("error"),
+                [
+                    functor((err.stub)),
+                    functor(
+                        (atom!(":")),
+                        [functor(src), number(line_num, (&mut self.arena))]
+                    )
+                ]
+            )
         } else {
-            err.len()
-        };
-
-        let mut stub = vec![
-            atom_as_cell!(atom!("error"), 2),
-            str_loc_as_cell!(h + 3),
-            str_loc_as_cell!(h + 3 + stub_addition_len),
-        ];
-
-        if stub_addition_len > 0 {
-            stub.extend(err.into_iter(3));
-        } else {
-            stub[1] = err.stub[0];
+            functor!(atom!("error"), [functor((err.stub)), functor(src)])
         }
+    }
 
-        if let Some((line_num, _)) = location {
-            stub.push(atom_as_cell!(atom!(":"), 2));
-            stub.push(str_loc_as_cell!(h + 6 + stub_addition_len));
-            stub.push(integer_as_cell!(Number::arena_from(
-                line_num,
-                &mut self.arena
-            )));
-        }
-
-        stub.extend(src.iter());
-        stub
+    // throw an error pre-allocated in the heap
+    pub(super) fn throw_resource_error(&mut self, err_loc: usize) {
+        self.registers[1] = str_loc_as_cell!(err_loc);
+        self.set_ball();
+        self.unwind_stack();
     }
 
     pub(super) fn throw_exception(&mut self, err: MachineStub) {
-        let h = self.heap.len();
-        let err_len = err.len();
-
         self.ball.boundary = 0;
         self.ball.stub.truncate(0);
 
-        self.heap.extend(err);
+        let mut writer = Heap::functor_writer(err);
 
-        self.registers[1] = if err_len == 1 {
-            heap_loc_as_cell!(h)
-        } else {
-            str_loc_as_cell!(h)
+        self.registers[1] = match writer(&mut self.heap) {
+            Ok(loc) => loc,
+            Err(resource_err_loc) => {
+                self.throw_resource_error(resource_err_loc);
+                return;
+            }
         };
 
         self.set_ball();
         self.unwind_stack();
-    }
-}
-
-impl MachineError {
-    fn into_iter(self, offset: usize) -> Box<dyn Iterator<Item = HeapCellValue>> {
-        match self.from {
-            ErrorProvenance::Constructed => {
-                Box::new(self.stub.into_iter().map(move |hcv| hcv + offset))
-            }
-            ErrorProvenance::Received => Box::new(self.stub.into_iter()),
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.stub.len()
     }
 }
 
@@ -711,6 +802,7 @@ pub enum CompilationError {
     InvalidRuleHead,
     InvalidUseModuleDecl,
     InvalidModuleResolution(Atom),
+    FiniteMemoryInHeap(usize),
 }
 
 #[derive(Debug)]
@@ -757,11 +849,9 @@ impl CompilationError {
                 functor!(atom!("exceeded_max_arity"))
             }
             CompilationError::InadmissibleFact => {
-                // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_fact"))
             }
             CompilationError::InadmissibleQueryTerm => {
-                // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_query_term"))
             }
             CompilationError::InvalidDirective(_) => {
@@ -776,8 +866,8 @@ impl CompilationError {
             CompilationError::InvalidModuleExport => {
                 functor!(atom!("invalid_module_export"))
             }
-            CompilationError::InvalidModuleResolution(ref module_name) => {
-                functor!(atom!("no_such_module"), [atom(module_name)])
+            &CompilationError::InvalidModuleResolution(module_name) => {
+                functor!(atom!("no_such_module"), [atom_as_cell(module_name)])
             }
             CompilationError::InvalidRuleHead => {
                 functor!(atom!("invalid_head_of_rule")) // TODO: type_error(callable, _).
@@ -787,6 +877,9 @@ impl CompilationError {
             }
             CompilationError::ParserError(ref err) => {
                 functor!(err.as_atom())
+            }
+            CompilationError::FiniteMemoryInHeap(h) => {
+                vec![FunctorElement::AbsoluteCell(str_loc_as_cell!(*h))]
             }
         }
     }
@@ -829,6 +922,16 @@ pub(crate) enum DomainErrorType {
     OperatorSpecifier,
     OperatorPriority,
     Directive,
+    Allocator,
+    FfiStruct,
+    ZeroOrOne,
+    NonNullPtr,
+    PtrLike,
+    F64,
+    FfiArgument,
+    FfiArgumentType,
+    FixedSizedInt,
+    NonCStrFfiArgumentType,
 }
 
 impl DomainErrorType {
@@ -843,6 +946,16 @@ impl DomainErrorType {
             DomainErrorType::OperatorSpecifier => atom!("operator_specifier"),
             DomainErrorType::OperatorPriority => atom!("operator_priority"),
             DomainErrorType::Directive => atom!("directive"),
+            DomainErrorType::Allocator => atom!("allocator"),
+            DomainErrorType::ZeroOrOne => atom!("zero_or_one"),
+            DomainErrorType::FfiStruct => atom!("ffi_struct"),
+            DomainErrorType::NonNullPtr => atom!("non_null_pointer"),
+            DomainErrorType::PtrLike => atom!("pointer_like"),
+            DomainErrorType::F64 => atom!("f64"),
+            DomainErrorType::FfiArgument => atom!("ffi_argument"),
+            DomainErrorType::FfiArgumentType => atom!("ffi_argument_type"),
+            DomainErrorType::FixedSizedInt => atom!("fixed_sized_int"),
+            DomainErrorType::NonCStrFfiArgumentType => atom!("non_cstr_ffi_argument_type"),
         }
     }
 }
@@ -857,6 +970,8 @@ pub(crate) enum RepFlag {
     //    MaxInteger,
     //    MinInteger,
     Term,
+    FfiLayout,
+    FfiAbi,
 }
 
 impl RepFlag {
@@ -868,7 +983,9 @@ impl RepFlag {
             RepFlag::MaxArity => atom!("max_arity"),
             RepFlag::Term => atom!("term"),
             //            RepFlag::MaxInteger => atom!("max_integer"),
-            //            RepFlag::MinInteger => atom!("min_integer")
+            //            RepFlag::MinInteger => atom!("min_integer"),
+            RepFlag::FfiLayout => atom!("ffi_layout"),
+            RepFlag::FfiAbi => atom!("ffi_abi"),
         }
     }
 }
@@ -896,14 +1013,29 @@ impl EvalError {
 // used by '$skip_max_list'.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CycleSearchResult {
-    Cyclic(usize),
+    Cyclic {
+        lambda: usize,
+    }, // number of steps
     EmptyList,
-    NotList(usize, HeapCellValue), // the list length until the second argument in the heap
-    PartialList(usize, Ref),       // the list length (up to max), and an offset into the heap.
-    ProperList(usize),             // the list length.
-    PStrLocation(usize, usize, usize), // list length (up to max), the heap address of the PStr, the offset
-    UntouchedList(usize, usize), // list length (up to max), the address of an uniterated Addr::Lis(address).
-    UntouchedCStr(Atom, usize),
+    NotList {
+        num_steps: usize,
+        heap_loc: HeapCellValue,
+    },
+    PartialList {
+        num_steps: usize,
+        heap_loc: HeapCellValue,
+    },
+    ProperList {
+        num_steps: usize,
+    },
+    PStrLocation {
+        num_steps: usize,
+        pstr_loc: HeapCellValue,
+    },
+    UntouchedList {
+        num_steps: usize,
+        list_loc: usize,
+    },
 }
 
 impl MachineState {
@@ -915,11 +1047,11 @@ impl MachineState {
         let sorted = self.store(self.deref(self.registers[2]));
 
         match BrentAlgState::detect_cycles(&self.heap, list) {
-            CycleSearchResult::PartialList(..) => {
+            CycleSearchResult::PartialList { .. } => {
                 let err = self.instantiation_error();
                 return Err(self.error_form(err, stub_gen()));
             }
-            CycleSearchResult::NotList(..) | CycleSearchResult::Cyclic(_) => {
+            CycleSearchResult::NotList { .. } | CycleSearchResult::Cyclic { .. } => {
                 let err = self.type_error(ValidType::List, list);
                 return Err(self.error_form(err, stub_gen()));
             }
@@ -927,7 +1059,9 @@ impl MachineState {
         };
 
         match BrentAlgState::detect_cycles(&self.heap, sorted) {
-            CycleSearchResult::NotList(..) | CycleSearchResult::Cyclic(_) if !sorted.is_var() => {
+            CycleSearchResult::NotList { .. } | CycleSearchResult::Cyclic { .. }
+                if !sorted.is_var() =>
+            {
                 let err = self.type_error(ValidType::List, sorted);
                 Err(self.error_form(err, stub_gen()))
             }
@@ -939,7 +1073,9 @@ impl MachineState {
         let stub_gen = || functor_stub(atom!("keysort"), 2);
 
         match BrentAlgState::detect_cycles(&self.heap, list) {
-            CycleSearchResult::NotList(..) | CycleSearchResult::Cyclic(_) if !list.is_var() => {
+            CycleSearchResult::NotList { .. } | CycleSearchResult::Cyclic { .. }
+                if !list.is_var() =>
+            {
                 let err = self.type_error(ValidType::List, list);
                 Err(self.error_form(err, stub_gen()))
             }
@@ -1001,11 +1137,11 @@ impl MachineState {
         let sorted = self.store(self.deref(self[temp_v!(2)]));
 
         match BrentAlgState::detect_cycles(&self.heap, pairs) {
-            CycleSearchResult::PartialList(..) => {
+            CycleSearchResult::PartialList { .. } => {
                 let err = self.instantiation_error();
                 Err(self.error_form(err, stub_gen()))
             }
-            CycleSearchResult::NotList(..) | CycleSearchResult::Cyclic(_) => {
+            CycleSearchResult::NotList { .. } | CycleSearchResult::Cyclic { .. } => {
                 let err = self.type_error(ValidType::List, pairs);
                 Err(self.error_form(err, stub_gen()))
             }
@@ -1028,6 +1164,10 @@ pub enum ExistenceError {
     },
     SourceSink(HeapCellValue),
     Stream(HeapCellValue),
+    Process(HeapCellValue),
+    FfiFunction(Atom, usize),
+    FfiStructConstructor(Atom, usize),
+    FfiStructType(Atom),
 }
 
 #[derive(Debug)]

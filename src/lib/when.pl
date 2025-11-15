@@ -19,6 +19,7 @@ Provides the predicate `when/2`.
 %% when(Condition, Goal).
 %
 % Executes Goal when Condition becomes true.
+% Condition may consist of `ground(T)`, `nonvar(T)`, `C1,C2`, `C1;C2`.
 when(Condition, Goal) :-
     (   when_condition(Condition) ->
         (   Condition ->

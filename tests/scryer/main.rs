@@ -2,6 +2,8 @@ mod helper;
 mod issues;
 mod src_tests;
 
+mod ffi;
+
 /// To add new cli test copy an existing .toml file in `tests/scryer/cli/issues/` or `tests/scryer/cli/issues/src_tests/`,
 /// adjust as necessary the `-f` and `--no-add-history` args should be kept but additional args may be added.
 /// For input on stdin add a .stdin file with the same filename.
@@ -19,9 +21,21 @@ mod src_tests;
     ignore = "miri isolation, unsupported operation: can't call foreign function"
 )]
 fn cli_tests() {
-    trycmd::TestCases::new()
+    let cases = trycmd::TestCases::new();
+    cases
         .default_bin_name("scryer-prolog")
         .case("tests/scryer/cli/issues/*.toml")
+        .case("tests/scryer/cli/issues/*.md")
         .case("tests/scryer/cli/src_tests/*.toml")
         .case("tests/scryer/cli/src_tests/*.md");
+
+    #[cfg(windows)]
+    {
+        cases.case("tests/scryer/cli/windows/*.md");
+    }
+
+    #[cfg(unix)]
+    {
+        cases.case("tests/scryer/cli/unix/*.md");
+    }
 }

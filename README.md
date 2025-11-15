@@ -72,7 +72,7 @@ Extend Scryer Prolog to include the following, among other features:
         (`atom`, `var`, etc) with if/else ladders. (_in progress_)
   - [ ] Inlining all built-ins and system call instructions.
   - [x] Greatly reducing the number of instructions used to compile disjunctives.
-  - [ ] Storing short atoms to heap cells without writing them to the atom table.
+  - [x] Storing short atoms to heap cells without writing them to the atom table.
 - [ ] A compacting garbage collector satisfying the five properties of
       "[Precise Garbage Collection in Prolog](https://www.complang.tuwien.ac.at/ulrich/papers/PDF/2008-ciclops.pdf)." (_in progress_)
 - [ ] Mode declarations.
@@ -761,9 +761,13 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   public key signatures and signature verification with&nbsp;Ed25519,
   ECDH key&nbsp;exchange over Curve25519 (X25519), authenticated symmetric
   encryption with ChaCha20-Poly1305, and reasoning about elliptic curves.
+* [`process`](src/lib/process.pl)
+  Create and manage parallel processes.
 * [`uuid`](src/lib/uuid.pl) UUIDv4 generation and hex representation
 * [`tls`](src/lib/tls.pl)
   Predicates for negotiating TLS connections explicitly.
+* [`numerics/special_functions`](src/lib/numerics/special_functions.pl)
+  Predicates for erf, gamma, beta, and related special functions.
 * [`ugraphs`](src/lib/ugraphs.pl) Graph manipulation library
 * [`simplex`](src/lib/simplex.pl) Providing `assignment/2`,
   `transportation/4` and other predicates for solving linear
@@ -875,6 +879,7 @@ Successful existing applications of Scryer Prolog include:
   safety-critical and highly regulated domain of oncology
   trial&nbsp;design, described in [*An Executable Specification of
   Oncology Dose-Escalation Protocols with&nbsp;Prolog*](https://arxiv.org/abs/2402.08334)
+  and culminating in&nbsp;[**DEDUCTION**](https://codeberg.org/dcnorris/DEDUCTION)
 - semantic reasoning and queries in [AD4M](https://github.com/coasys/ad4m),
   an agent-centric distributed application meta-ontology.
 
@@ -893,7 +898,7 @@ in&nbsp;person.
 - [Scryer Prolog Meetup 2023](https://hsd-pbsa.de/veranstaltung/scryer-prolog-meetup-2023/)
   in Düsseldorf, Germany. Its [announcement](https://github.com/mthom/scryer-prolog/discussions/1813)
   and [discussion](https://github.com/mthom/scryer-prolog/discussions/2160).
-- [Scryer Prolog Meetup 2024](https://www.digitalaustria.gv.at/eng/insights/Digital-Austria-Events-EN/Scryer-Prolog-Meetup-2024.html)
+- [Scryer Prolog Meetup 2024](https://www.digitalaustria.gv.at/wissenswertes/events/scryerprologmeetup2024)
   in Vienna, Austria. Its [announcement and discussion](https://github.com/mthom/scryer-prolog/discussions/2377).
 - **Save the date:** The [Scryer Prolog Meetup 2025](https://hsd-pbsa.de/veranstaltung/scryer-prolog-meetup-2025/)
   will take place on Nov.&nbsp;13th and 14th&nbsp;2025 in Düsseldorf, Germany.

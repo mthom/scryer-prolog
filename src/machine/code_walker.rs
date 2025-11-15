@@ -41,7 +41,7 @@ fn capture_offset(line: &Instruction, index: usize, stack: &mut Vec<usize>) -> b
 /* This function walks the code of a single predicate, supposed to
  * begin in code at the offset p. Each instruction is passed to the
  * walker function.
- */
+*/
 pub(crate) fn walk_code(code: &Code, p: usize, mut walker: impl FnMut(&Instruction)) {
     let mut stack = vec![p];
     let mut visited_indices = IndexSet::with_hasher(FxBuildHasher::default());

@@ -11,6 +11,7 @@ use crate::forms::*;
 use crate::heap_iter::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_state::*;
+use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
@@ -48,7 +49,7 @@ macro_rules! drop_iter_on_err {
     };
 }
 
-fn zero_divisor_eval_error(stub_gen: impl Fn() -> FunctorStub + 'static) -> MachineStubGen {
+fn zero_divisor_eval_error(stub_gen: impl Fn() -> MachineStub + 'static) -> MachineStubGen {
     Box::new(move |machine_st| {
         let eval_error = machine_st.evaluation_error(EvalError::ZeroDivisor);
         let stub = stub_gen();
@@ -57,7 +58,7 @@ fn zero_divisor_eval_error(stub_gen: impl Fn() -> FunctorStub + 'static) -> Mach
     })
 }
 
-fn undefined_eval_error(stub_gen: impl Fn() -> FunctorStub + 'static) -> MachineStubGen {
+fn undefined_eval_error(stub_gen: impl Fn() -> MachineStub + 'static) -> MachineStubGen {
     Box::new(move |machine_st| {
         let eval_error = machine_st.evaluation_error(EvalError::Undefined);
         let stub = stub_gen();
@@ -69,7 +70,7 @@ fn undefined_eval_error(stub_gen: impl Fn() -> FunctorStub + 'static) -> Machine
 fn numerical_type_error(
     valid_type: ValidType,
     n: Number,
-    stub_gen: impl Fn() -> FunctorStub + 'static,
+    stub_gen: impl Fn() -> MachineStub + 'static,
 ) -> MachineStubGen {
     Box::new(move |machine_st| {
         let type_error = machine_st.type_error(valid_type, n);
@@ -197,11 +198,10 @@ pub(crate) fn neg(n: Number, arena: &mut Arena) -> Number {
 pub(crate) fn abs(n: Number, arena: &mut Arena) -> Number {
     match n {
         Number::Fixnum(n) => {
-            if let Some(n) = n.get_num().checked_abs() {
-                fixnum!(Number, n, arena)
+            if let Some(n) = n.checked_abs() {
+                Number::Fixnum(n)
             } else {
-                let arena_int = Integer::from(n.get_num());
-                Number::arena_from(arena_int.abs(), arena)
+                Number::arena_from(Integer::from(Fixnum::MAX + 1), arena)
             }
         }
         Number::Integer(n) => {
@@ -528,7 +528,7 @@ pub(crate) fn min(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
 
 pub fn rational_from_number(
     n: Number,
-    stub_gen: impl Fn() -> FunctorStub + 'static,
+    stub_gen: impl Fn() -> MachineStub + 'static,
     arena: &mut Arena,
 ) -> Result<TypedArenaPtr<Rational>, MachineStubGen> {
     match n {
@@ -1104,7 +1104,7 @@ pub(crate) fn round(num: Number, arena: &mut Arena) -> Result<Number, MachineStu
 
 pub(crate) fn bitwise_complement(n1: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
     match n1 {
-        Number::Fixnum(n) => Ok(Number::Fixnum(Fixnum::build_with(!n.get_num()))),
+        Number::Fixnum(n) => Ok(Number::Fixnum(!n)),
         Number::Integer(n1) => Ok(Number::arena_from(Integer::from(!&*n1), arena)),
         _ => {
             let stub_gen = || {
@@ -1124,9 +1124,12 @@ impl MachineState {
             &ArithmeticTerm::Reg(r) => {
                 let value = self.store(self.deref(self[r]));
 
-                match Number::try_from(value) {
+                match Number::try_from((value, &self.arena.f64_tbl)) {
                     Ok(n) => Ok(n),
-                    Err(_) => self.arith_eval_by_metacall(value),
+                    Err(_) => {
+                        self.heap[0] = value;
+                        self.arith_eval_by_metacall(0)
+                    }
                 }
             }
             &ArithmeticTerm::Interm(i) => Ok(mem::replace(
@@ -1140,7 +1143,7 @@ impl MachineState {
     pub fn get_rational(
         &mut self,
         at: &ArithmeticTerm,
-        caller: impl Fn() -> FunctorStub + 'static,
+        caller: impl Fn() -> MachineStub + 'static,
     ) -> Result<TypedArenaPtr<Rational>, MachineStub> {
         let n = self.get_number(at)?;
 
@@ -1152,11 +1155,11 @@ impl MachineState {
 
     pub(crate) fn arith_eval_by_metacall(
         &mut self,
-        value: HeapCellValue,
+        term_loc: usize,
     ) -> Result<Number, MachineStub> {
         let stub_gen = || functor_stub(atom!("is"), 2);
         let mut iter =
-            stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, value);
+            stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, term_loc);
 
         while let Some(value) = iter.next() {
             if value.get_forwarding_bit() {
@@ -1169,7 +1172,7 @@ impl MachineState {
                      (HeapCellValueTag::Str, s) => {
                          cell_as_atom_cell!(self.heap[s]).get_name_and_arity()
                      }
-                     (HeapCellValueTag::Lis | HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset |
+                     (HeapCellValueTag::Lis | // HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset |
                       HeapCellValueTag::PStrLoc) => {
                          (atom!("."), 2)
                      }
@@ -1385,8 +1388,9 @@ impl MachineState {
                 (HeapCellValueTag::Fixnum, n) => {
                     self.interms.push(Number::Fixnum(n));
                 }
-                (HeapCellValueTag::F64, fl) => {
-                    self.interms.push(Number::Float(*fl));
+                (HeapCellValueTag::F64Offset, offset) => {
+                    let fl = self.arena.f64_tbl.get_entry(offset);
+                    self.interms.push(Number::Float(fl));
                 }
                 (HeapCellValueTag::Cons, ptr) => {
                     match_untyped_arena_ptr!(ptr,
@@ -1449,7 +1453,7 @@ mod tests {
             parse_and_write_parsed_term_to_heap(&mut wam, "3 + 4 - 1 + 2.", &op_dir).unwrap();
 
         assert_eq!(
-            wam.arith_eval_by_metacall(heap_loc_as_cell!(term_write_result.heap_loc)),
+            wam.arith_eval_by_metacall(term_write_result.heap_loc),
             Ok(Number::Fixnum(Fixnum::build_with(8))),
         );
 
@@ -1459,7 +1463,7 @@ mod tests {
             parse_and_write_parsed_term_to_heap(&mut wam, "5 * 4 - 1.", &op_dir).unwrap();
 
         assert_eq!(
-            wam.arith_eval_by_metacall(heap_loc_as_cell!(term_write_result.heap_loc)),
+            wam.arith_eval_by_metacall(term_write_result.heap_loc),
             Ok(Number::Fixnum(Fixnum::build_with(19))),
         );
 
@@ -1469,7 +1473,7 @@ mod tests {
             parse_and_write_parsed_term_to_heap(&mut wam, "sign(-1).", &op_dir).unwrap();
 
         assert_eq!(
-            wam.arith_eval_by_metacall(heap_loc_as_cell!(term_write_result.heap_loc)),
+            wam.arith_eval_by_metacall(term_write_result.heap_loc),
             Ok(Number::Fixnum(Fixnum::build_with(-1)))
         );
     }

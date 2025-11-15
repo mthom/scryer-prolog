@@ -1,6 +1,6 @@
 :- module(cont, [reset/3, shift/1]).
 
-:- meta_predicate reset(0, ?, ?).
+:- meta_predicate(reset(0, ?, ?)).
 
 reset(Goal, Ball, Cont) :-
     call(Goal),

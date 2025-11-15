@@ -105,7 +105,7 @@ run_initialization_goals(Module) :-
     ;  true
     ).
 
-:- meta_predicate success_or_warning(0).
+:- meta_predicate(success_or_warning(0)).
 
 success_or_warning(Goal) :-
     (   call(Goal) ->
@@ -199,23 +199,61 @@ warn_about_singletons([Singleton|Singletons], LinesRead) :-
     ).
 
 
-load_loop(Stream, Evacuable) :-
+stream_next_term(Stream, Term, LinesRead, Singletons) :-
     (  '$devour_whitespace'(Stream) ->
        stream_property(Stream, position(position_and_lines_read(_, LinesRead))),
        read_term(Stream, Term, [singletons(Singletons)])
     ;  Term = end_of_file
-    ),
+    ).
+
+load_loop(Stream, Evacuable) :-
+    stream_next_term(Stream, Term, LinesRead, Singletons),
     (  Term == end_of_file ->
        close(Stream),
        '$conclude_load'(Evacuable)
     ;  var(Term) ->
        instantiation_error(load/1)
+    ;  Term = (?- _Query) ->
+       devour_answer_descriptions(Stream, Evacuable)
     ;  LineNum is LinesRead + 1,
        warn_about_singletons(Singletons, LineNum),
        compile_term(Term, Evacuable),
        load_loop(Stream, Evacuable)
     ).
 
+devour_answer_descriptions(Stream, Evacuable) :-
+    stream_next_term(Stream, Term, LinesRead, Singletons),
+    (  Term == end_of_file ->
+       close(Stream),
+       '$conclude_load'(Evacuable)
+    ;  var(Term) ->
+       instantiation_error(load/1)
+    ;  Term = (?- _Query) ->
+       devour_answer_descriptions(Stream, Evacuable)
+    ;  answer_description(Term) ->
+       devour_answer_descriptions(Stream, Evacuable)
+    ;  warn_about_singletons(Singletons, LinesRead),
+       compile_term(Term, Evacuable),
+       load_loop(Stream, Evacuable)
+    ).
+
+answer_description(true).
+answer_description(false).
+answer_description(_V=_T).
+answer_description((_A,_As)).
+answer_description((_Answer;_Answers)).
+answer_description(...).
+answer_description(loops).
+answer_description(throw(_Ball)).
+answer_description(error(_Error_Term, _Impdef)).
+answer_description(instantiation_error).
+answer_description(type_error(_Type,_Culprit)).
+answer_description(domain_error(_Domain, _Culprit)).
+answer_description(syntax_error(_Error)).
+answer_description(representation_error(_Flag)).
+answer_description(resource_error(_Ressource)).
+answer_description(uninstantiation_error(_Culprit)).
+answer_description('|'(_AD,_ADs)).
 
 compile_term(Term, Evacuable) :-
     expand_terms_and_goals(Term, Terms),
@@ -299,7 +337,7 @@ expand_term_goals(Terms0, Terms) :-
           (  atom(Module) ->
              prolog_load_context(module, Target),
              module_expanded_head_variables(Head2, HeadVars),
-             catch(expand_goal(Body0, Target, Body1, HeadVars, []),
+             catch('$call'(loader:expand_goal(Body0, Target, Body1, HeadVars, [])),
                    error(type_error(callable, Pred), _),
                    (  loader:print_goal_expansion_warning(Pred),
                       builtins:(Body1 = Body0)
@@ -309,7 +347,7 @@ expand_term_goals(Terms0, Terms) :-
           )
        ;  module_expanded_head_variables(Head1, HeadVars),
           prolog_load_context(module, Target),
-          catch(expand_goal(Body0, Target, Body1, HeadVars, []),
+          catch('$call'(loader:expand_goal(Body0, Target, Body1, HeadVars, [])),
                 error(type_error(callable, Pred), _),
                 (  loader:print_goal_expansion_warning(Pred),
                    builtins:(Body1 = Body0)
@@ -403,7 +441,7 @@ predicate_indicator_sequence(PI_Seq) :-
        )
     ).
 
-:- meta_predicate add_predicate_declaration(3, ?).
+:- meta_predicate(add_predicate_declaration(3, ?)).
 
 add_predicate_declaration(Handler, Name/Arity) :-
     predicate_indicator(Name/Arity),

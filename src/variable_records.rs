@@ -1,3 +1,4 @@
+use crate::forms::GenContext;
 use crate::parser::ast::*;
 
 use bit_set::*;

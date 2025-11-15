@@ -96,14 +96,14 @@ is_sgml_source([]).
 is_sgml_source([C|Cs]) :- must_be(chars, [C|Cs]).
 
 load_structure_([], [], _, _).
-load_structure_([C|Cs], [E], Options, What) :-
-        load_(What, [C|Cs], E, Options).
-load_structure_(file(Fs), [E], Options, What) :-
+load_structure_([C|Cs], [E|Es], Options, What) :-
+        load_(What, [C|Cs], [E|Es], Options).
+load_structure_(file(Fs), [E|Es], Options, What) :-
         once(phrase_from_file(seq(Cs), Fs)),
-        load_(What, Cs, E, Options).
-load_structure_(stream(Stream), [E], Options, What) :-
+        load_(What, Cs, [E|Es], Options).
+load_structure_(stream(Stream), [E|Es], Options, What) :-
         get_n_chars(Stream, _, Cs),
-        load_(What, Cs, E, Options).
+        load_(What, Cs, [E|Es], Options).
 
 load_(html, Cs, E, Options) :- '$load_html'(Cs, E, Options).
 load_(xml, Cs, E, Options) :- '$load_xml'(Cs, E, Options).

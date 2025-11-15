@@ -2,7 +2,6 @@
 
 use crate::parser::ast::*;
 
-use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::machine::loader::*;
@@ -10,6 +9,7 @@ use crate::machine::machine_state::*;
 use crate::machine::streams::{Stream, StreamOptions};
 use crate::machine::ClauseType;
 use crate::machine::MachineStubGen;
+use crate::offset_table::*;
 
 use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
@@ -18,7 +18,6 @@ use scryer_modular_bitfield::{bitfield, BitfieldSpecifier};
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::ops::{Deref, DerefMut};
 
 use crate::types::*;
 
@@ -126,10 +125,19 @@ impl IndexPtr {
     pub(crate) fn is_dynamic_undefined(&self) -> bool {
         matches!(self.tag(), IndexPtrTag::DynamicUndefined)
     }
+
+    #[inline]
+    pub(crate) fn local(&self) -> Option<usize> {
+        match self.tag() {
+            IndexPtrTag::Index => Some(self.p() as usize),
+            IndexPtrTag::DynamicIndex => Some(self.p() as usize),
+            _ => None,
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, Ord, Hash, PartialOrd, Eq, PartialEq)]
-pub struct CodeIndex(TypedArenaPtr<IndexPtr>);
+#[derive(Debug, Clone, Copy)] // , Ord, Hash, PartialOrd, Eq, PartialEq)]
+pub struct CodeIndex(CodeIndexOffset);
 
 #[cfg(target_pointer_width = "32")]
 const_assert!(std::mem::align_of::<CodeIndex>() == 4);
@@ -137,78 +145,53 @@ const_assert!(std::mem::align_of::<CodeIndex>() == 4);
 #[cfg(target_pointer_width = "64")]
 const_assert!(std::mem::align_of::<CodeIndex>() == 8);
 
-impl Deref for CodeIndex {
-    type Target = TypedArenaPtr<IndexPtr>;
-
+impl From<CodeIndex> for HeapCellValue {
     #[inline(always)]
-    fn deref(&self) -> &TypedArenaPtr<IndexPtr> {
-        &self.0
+    fn from(idx: CodeIndex) -> HeapCellValue {
+        HeapCellValue::from(idx.0)
     }
 }
 
-impl DerefMut for CodeIndex {
+impl From<CodeIndexOffset> for CodeIndex {
     #[inline(always)]
-    fn deref_mut(&mut self) -> &mut TypedArenaPtr<IndexPtr> {
-        &mut self.0
+    fn from(offset: CodeIndexOffset) -> CodeIndex {
+        CodeIndex(offset)
     }
 }
 
-impl From<CodeIndex> for UntypedArenaPtr {
+impl From<CodeIndex> for CodeIndexOffset {
     #[inline(always)]
-    fn from(ptr: CodeIndex) -> UntypedArenaPtr {
-        UntypedArenaPtr::build_with(ptr.0.as_ptr() as usize)
+    fn from(value: CodeIndex) -> CodeIndexOffset {
+        value.0
     }
 }
 
-impl From<TypedArenaPtr<IndexPtr>> for CodeIndex {
+impl From<&'_ CodeIndex> for CodeIndexOffset {
     #[inline(always)]
-    fn from(ptr: TypedArenaPtr<IndexPtr>) -> CodeIndex {
-        CodeIndex(ptr)
+    fn from(value: &'_ CodeIndex) -> CodeIndexOffset {
+        value.0
     }
 }
 
 impl CodeIndex {
     #[inline]
-    pub(crate) fn new(ptr: IndexPtr, arena: &mut Arena) -> Self {
-        CodeIndex(arena_alloc!(ptr, arena))
+    pub(crate) fn new(ptr: IndexPtr, code_index_tbl: &mut CodeIndexTable) -> Self {
+        CodeIndex(code_index_tbl.build_with(ptr))
     }
 
     #[inline(always)]
-    pub(crate) fn default(arena: &mut Arena) -> Self {
-        CodeIndex::new(IndexPtr::undefined(), arena)
-    }
-
-    pub(crate) fn local(&self) -> Option<usize> {
-        match self.0.tag() {
-            IndexPtrTag::Index => Some(self.0.p() as usize),
-            IndexPtrTag::DynamicIndex => Some(self.0.p() as usize),
-            _ => None,
-        }
+    pub(crate) fn default(code_index_tbl: &mut CodeIndexTable) -> Self {
+        CodeIndex::new(IndexPtr::undefined(), code_index_tbl)
     }
 
     #[inline(always)]
-    pub(crate) fn get(&self) -> IndexPtr {
-        *self.0.deref()
+    pub(crate) fn set(&self, code_index_tbl: &mut CodeIndexTable, value: IndexPtr) {
+        code_index_tbl.with_entry_mut(self.0, |idx| *idx = value);
     }
 
     #[inline(always)]
-    pub(crate) fn set(&mut self, value: IndexPtr) {
-        *self.0.deref_mut() = value;
-    }
-
-    #[inline(always)]
-    pub(crate) fn get_tag(self) -> IndexPtrTag {
-        self.0.tag()
-    }
-
-    #[inline(always)]
-    pub(crate) fn replace(&mut self, value: IndexPtr) -> IndexPtr {
-        std::mem::replace(self.0.deref_mut(), value)
-    }
-
-    #[inline(always)]
-    pub(crate) fn as_ptr(&self) -> *const IndexPtr {
-        self.0.as_ptr()
+    pub(crate) fn replace(&self, code_index_tbl: &mut CodeIndexTable, value: IndexPtr) -> IndexPtr {
+        code_index_tbl.with_entry_mut(self.0, |idx| std::mem::replace(idx, value))
     }
 }
 
@@ -223,7 +206,7 @@ impl VarKey {
     #[inline]
     pub(crate) fn to_string(&self) -> String {
         match self {
-            VarKey::AnonVar(h) => format!("_{}", h),
+            VarKey::AnonVar(h) => format!("_{h}"),
             VarKey::VarPtr(var) => var.borrow().to_string(),
         }
     }
@@ -543,7 +526,7 @@ impl IndexStore {
         &'a self,
         range: R,
     ) -> impl Iterator<Item = Stream> + 'a {
-        self.streams.range(range).into_iter().copied()
+        self.streams.range(range).copied()
     }
 
     /// Forcibly sets `alias` to `stream`.

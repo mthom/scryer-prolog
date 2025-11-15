@@ -1,6 +1,6 @@
 use crate::allocator::*;
 use crate::codegen::SubsumedBranchHits;
-use crate::forms::Level;
+use crate::forms::{GenContext, Level};
 use crate::instructions::*;
 use crate::machine::disjuncts::VarData;
 use crate::parser::ast::*;
@@ -133,7 +133,10 @@ impl BranchStack {
     }
 
     #[inline]
-    pub(crate) fn drain_branches(&mut self, depth: usize) -> std::vec::Drain<BranchOccurrences> {
+    pub(crate) fn drain_branches(
+        &mut self,
+        depth: usize,
+    ) -> std::vec::Drain<'_, BranchOccurrences> {
         let start_idx = self.len() - depth;
         self.drain(start_idx..)
     }
@@ -251,7 +254,7 @@ impl DebrayAllocator {
             }
         }
 
-        if self.branch_stack.len() > 0 {
+        if !self.branch_stack.is_empty() {
             for var_num in subsumed_hits {
                 self.branch_stack.add_branch_occurrence(var_num);
             }
@@ -534,7 +537,9 @@ impl DebrayAllocator {
             VarAlloc::Temp { safety, .. } => {
                 *safety = VarSafetyStatus::unneeded(branch_designator);
             }
-            _ => unreachable!(),
+            _ => {
+                unreachable!()
+            }
         }
     }
 
@@ -679,7 +684,7 @@ impl Allocator for DebrayAllocator {
         lvl: Level,
         term_loc: GenContext,
         code: &mut CodeDeque,
-    ) {
+    ) -> RegType {
         let r = RegType::Temp(self.alloc_reg_to_non_var());
 
         match lvl {
@@ -696,6 +701,8 @@ impl Allocator for DebrayAllocator {
                 code.push_back(Target::argument_to_variable(r, k));
             }
         };
+
+        r
     }
 
     fn mark_non_var<'a, Target: CompilationTarget<'a>>(

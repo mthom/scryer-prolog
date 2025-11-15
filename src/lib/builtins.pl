@@ -113,7 +113,7 @@ call(_, _, _, _, _, _, _, _).
 call(_, _, _, _, _, _, _, _, _).
 
 
-:- meta_predicate catch(0, ?, 0).
+:- meta_predicate(catch(0, ?, 0)).
 
 % flags.
 
@@ -125,7 +125,7 @@ call(_, _, _, _, _, _, _, _, _).
 %
 % The flags that Scryer Prolog support are:
 %
-%  * `max_arity`: The max arity a predicate can have in Prolog. On Scryer is set to 1023. Read only.
+%  * `max_arity`: The max arity a predicate can have in Prolog. On Scryer is set to 255. Read only.
 %  * `bounded`: `true` if integer arithmethic is bounded between some min/max values. On Scryer is always set
 %    to `false` since it supports unbounded integer arithmethic. Read only.
 %  * `integer_rounding_function`: Describes the rounding donde by `//` and `rem` functions. On Scryer is
@@ -145,8 +145,8 @@ call(_, _, _, _, _, _, _, _, _).
 %    `fail` (the call silently fails) and `warn` (the call fails and a warning about the undefined predicate is printed).
 %  * `answer_write_options`: Additional write options used by the top level for writing answers.
 %
-current_prolog_flag(Flag, Value) :- Flag == max_arity, !, Value = 1023.
-current_prolog_flag(max_arity, 1023).
+current_prolog_flag(Flag, Value) :- Flag == max_arity, !, Value = 255.
+current_prolog_flag(max_arity, 255).
 current_prolog_flag(Flag, Value) :- Flag == bounded, !, Value = false.
 current_prolog_flag(bounded, false).
 current_prolog_flag(Flag, Value) :- Flag == integer_rounding_function, !, Value == toward_zero.
@@ -248,7 +248,7 @@ flag_domain_error(Flag, Value) :-
 fail :- '$fail'.
 
 
-:- meta_predicate \+(0).
+:- meta_predicate(\+(0)).
 
 %% \+(Goal)
 %
@@ -263,7 +263,7 @@ X \= X :- !, '$fail'.
 _ \= _.
 
 
-:- meta_predicate once(0).
+:- meta_predicate(once(0)).
 
 %% once(Goal)
 %
@@ -278,11 +278,11 @@ repeat.
 repeat :- repeat.
 
 
-:- meta_predicate ','(0,0).
+:- meta_predicate(','(0,0)).
 
-:- meta_predicate ;(0,0).
+:- meta_predicate(;(0,0)).
 
-:- meta_predicate ->(0,0).
+:- meta_predicate(->(0,0)).
 
 %% ->(G1, G2)
 %
@@ -553,7 +553,7 @@ get_args([Arg|Args], Func, I0, N) :-
     get_args(Args, Func, I1, N).
 
 
-:- meta_predicate parse_options_list(?, 2, ?, ?, ?).
+:- meta_predicate(parse_options_list(?, 2, ?, ?, ?)).
 
 parse_options_list(Options, Selector, DefaultPairs, OptionValues, Stub) :-
     '$skip_max_list'(_, _, Options, Tail),
@@ -816,7 +816,7 @@ catch(G,C,R) :-
     '$get_current_block'(Bb),
     catch(G,C,R,Bb).
 
-:- meta_predicate catch(0, ?, 0, ?).
+:- meta_predicate(catch(0, ?, 0, ?)).
 
 :- non_counted_backtracking catch/4.
 
@@ -884,7 +884,7 @@ throw(Ball) :-
 truncate_lh_to(LhLength) :- '$truncate_lh_to'(LhLength).
 
 
-:- meta_predicate findall(?, 0, ?).
+:- meta_predicate(findall(?, 0, ?)).
 
 :- non_counted_backtracking findall_cleanup/2.
 
@@ -927,7 +927,7 @@ findall(Template, Goal, Solutions) :-
     '$get_lh_from_offset_diff'(LhOffset, Solutions0, Solutions1).
 
 
-:- meta_predicate findall(?, 0, ?, ?).
+:- meta_predicate(findall(?, 0, ?, ?)).
 
 :- non_counted_backtracking findall/4.
 
@@ -1054,7 +1054,7 @@ findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses)
     ).
 
 
-:- meta_predicate bagof(?, 0, ?).
+:- meta_predicate(bagof(?, 0, ?)).
 
 :- non_counted_backtracking bagof/3.
 
@@ -1100,7 +1100,7 @@ iterate_variants_and_sort([_|GroupSolutions], Ws, Solution) :-
     iterate_variants_and_sort(GroupSolutions, Ws, Solution).
 
 
-:- meta_predicate setof(?, 0, ?).
+:- meta_predicate(setof(?, 0, ?)).
 
 :- non_counted_backtracking setof/3.
 
@@ -1177,7 +1177,7 @@ clause(H, B) :-
     ).
 
 
-:- meta_predicate asserta(:).
+:- meta_predicate(asserta(:)).
 
 %% asserta(Clause).
 %
@@ -1193,7 +1193,7 @@ asserta_(Module, (Head :- Body)) :-
 asserta_(Module, Fact) :-
     '$asserta'(Module, Fact, true).
 
-:- meta_predicate assertz(:).
+:- meta_predicate(assertz(:)).
 
 %% assertz(Clause).
 %
@@ -1210,7 +1210,7 @@ assertz_(Module, Fact) :-
     '$assertz'(Module, Fact, true).
 
 
-:- meta_predicate retract(:).
+:- meta_predicate(retract(:)).
 
 %% retract(Clause)
 %
@@ -1287,7 +1287,7 @@ retract_module_clause(Head, Body, Module) :-
     ;  throw(error(type_error(callable, Head), retract/1))
     ).
 
-:- meta_predicate retractall(:).
+:- meta_predicate(retractall(:)).
 
 %% retractall(Head)
 %
@@ -1327,7 +1327,7 @@ module_abolish(Pred, Module) :-
     ;  throw(error(type_error(predicate_indicator, Module:Pred), abolish/1))
     ).
 
-:- meta_predicate abolish(:).
+:- meta_predicate(abolish(:)).
 
 %% abolish(Pred).
 %
@@ -1728,20 +1728,27 @@ must_be_number(N, PI) :-
     ).
 
 
-chars_or_vars(Cs, _) :-
+chars_or_vars(Cs, PI) :-
+    (  '$is_partial_string'(Cs) ->
+       % use a fast test for the expected case
+       true
+    ;  chars_or_vars_(Cs, PI)
+    ).
+
+chars_or_vars_(Cs, _) :-
     (  var(Cs) ->
        !
     ;  Cs == [] ->
        !
     ).
-chars_or_vars([C|Cs], PI) :-
+chars_or_vars_([C|Cs], PI) :-
     (  nonvar(C) ->
        (  atom(C),
           atom_length(C, 1) ->
-          chars_or_vars(Cs, PI)
+          chars_or_vars_(Cs, PI)
        ;  throw(error(type_error(character, C), PI))
        )
-    ;  chars_or_vars(Cs, PI)
+    ;  chars_or_vars_(Cs, PI)
     ).
 
 

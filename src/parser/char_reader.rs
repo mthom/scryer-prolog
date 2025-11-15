@@ -8,7 +8,7 @@
  * wrapping it a Bytes struct.
  *
  * Unlike BufReader, its buffer is peekable as a char.
- */
+*/
 
 use smallvec::*;
 
