@@ -1106,6 +1106,8 @@ pub enum FfiSetupError {
     UnsupportedAbi,
     /// An allocation failed
     AllocationFailed,
+    /// Configuring ffi internaly ran a query that evaluated to an unexpected result
+    UnexpectedQueryResult(Option<Result<LeafAnswer, Term>>)
 }
 
 impl From<TryReserveError> for FfiSetupError {
@@ -1298,6 +1300,48 @@ impl Machine {
 
         Ok(())
     }
+
+    /// Get the array type for the given element type and arity
+    pub fn get_array_type(&mut self, element_type: FfiType, arity: usize) -> Result<FfiType, FfiSetupError> {
+        const VAR: &str = "At";
+
+        let mut state = self.run_query2(crate::Term::Compound(String::from(":"), vec![
+            Term::Atom(String::from("ffi")),
+            Term::Compound(String::from("array_type"), vec![
+                Term::Atom(element_type.to_atom().as_str().to_owned()),
+                Term::Integer(arity.into()),
+                Term::Var(String::from(VAR))
+            ])
+        ]));
+
+        let Some(result) = state.next() else {
+            return Err(FfiSetupError::UnexpectedQueryResult(None))
+        };
+
+
+        // we shouln't get any forther results so ensure there is no next result,
+        // or that the next result is false
+        let next = state.next();
+        if !next.as_ref().is_none_or(|answer| matches!(answer, Ok(LeafAnswer::False))) {
+            return Err(FfiSetupError::UnexpectedQueryResult(next))
+        }
+
+        drop(state);
+
+        if let Ok(crate::LeafAnswer::LeafAnswer { bindings }) = &result {
+            match bindings.get(VAR) {
+                Some(crate::Term::Atom(atom)) => {
+                    let array_type = AtomTable::build_with(&self.machine_st.atom_tbl, atom);
+                    Ok(FfiType::Struct(array_type))
+                },
+                _ => {
+                    Err(FfiSetupError::UnexpectedQueryResult(Some(result)))
+                }
+            }
+        } else {
+            Err(FfiSetupError::UnexpectedQueryResult(Some(result)))
+        }
+    }
 }
 
 /// make a type registerable with `Machine::register_struct`
@@ -1357,38 +1401,11 @@ impl FfiTypeable for bool {
 
 impl<T: FfiTypeable, const N : usize> FfiTypeable for [T; N] {
     fn to_type(machine: &mut Machine) -> FfiType {
-        let var = "At";
         let element_type = T::to_type(machine);
 
-        let mut state = machine.run_query2(crate::Term::Compound(String::from(":"), vec![
-            Term::Atom(String::from("ffi")),
-            Term::Compound(String::from("array_type"), vec![
-                Term::Atom(element_type.to_atom().as_str().to_owned()),
-                Term::Integer(N.into()),
-                Term::Var(String::from(var))
-            ])
-        ]));
+        // Fixme FfiTypeable::to_type should return a Result<FfiType, ???> to account for allocation errors etc.
+        machine.get_array_type(element_type, N).expect("Retrieving an Array type shouldn't fail")
 
-        let result = state.next().expect("Querry should have a result").expect("Querry should succeed");
-        assert!(state.next().is_none_or(|answer| matches!(answer, Ok(LeafAnswer::False))));
-        drop(state);
-        match result {
-            crate::LeafAnswer::True => unreachable!("Querry should have bindings"),
-            crate::LeafAnswer::False => unreachable!("Querry shouldn't fail"),
-            crate::LeafAnswer::Exception(term) => unreachable!("Querry shouldn't throw: {term:?}"),
-            crate::LeafAnswer::LeafAnswer { bindings } => {
-                let res = bindings.get(var).unwrap_or_else(|| panic!("Querry should have a binding for variable {var}"));
-                match res {
-                    crate::Term::Atom(atom) => {
-                        let array_type = AtomTable::build_with(&machine.machine_st.atom_tbl, atom);
-                        FfiType::Struct(array_type)
-                    },
-                    _ => {
-                        unreachable!("Variable {var} should be bound to an atom: {res:?}")
-                    }
-                }
-            },
-        }
     }
 }
 

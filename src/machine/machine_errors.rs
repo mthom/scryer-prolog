@@ -761,6 +761,9 @@ impl MachineState {
             FfiError::Setup(FfiSetupError::UnsupportedTypedef) => {
                 self.representation_error(RepFlag::FfiLayout)
             }
+            FfiError::Setup(FfiSetupError::UnexpectedQueryResult(res)) => {
+                todo!()
+            }
             FfiError::Setup(FfiSetupError::AllocationFailed)
             | FfiError::Use(FfiUseError::AllocationFailed) => MachineError {
                 stub: functor!(atom!("resource_error"), [atom_as_cell((atom!("heap")))]),
