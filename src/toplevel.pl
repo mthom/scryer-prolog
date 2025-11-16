@@ -101,6 +101,9 @@ print_help :-
     write('   --no-add-history       '),
     write('Prevent adding input to history file (~/.scryer_history)'), nl,
     % write('                        '),
+    nl,
+    write('Top Level Keybindings:'),
+    help_message_(1, '   '),
     halt.
 
 print_version :-
@@ -490,15 +493,26 @@ trailing_period_is_ambiguous(Value) :-
 term_variables_under_max_depth(Term, MaxDepth, Vars) :-
     '$term_variables_under_max_depth'(Term, MaxDepth, Vars).
 
+repeated_write(0, _).
+repeated_write(N, Char):- Char, N2 is N-1, (N2 == 0 -> true; repeated_write(N2, Char)).
+
+help_message_(N_nl, Space) :-
+  repeated_write(N_nl, nl),
+  command_write(Space, 'SPACE, "n" or ";": next solution, if any'),
+  command_write(Space, 'RETURN or ".": stop enumeration'),
+  command_write(Space, '"a": enumerate all solutions'),
+  command_write(Space, '"f": enumerate the next 5 solutions'),
+  command_write(Space, '"h": display this help message'),
+  command_write(Space, '"w": write terms without depth limit'),
+  command_write(Space, '"p": print terms with depth limit').
+
+command_write(Space, Msg):-
+  write(Space),
+  write(Msg),
+  nl.
+
 help_message :-
-    nl, nl,
-    write('SPACE, "n" or ";": next solution, if any\n'),
-    write('RETURN or ".": stop enumeration\n'),
-    write('"a": enumerate all solutions\n'),
-    write('"f": enumerate the next 5 solutions\n'),
-    write('"h": display this help message\n'),
-    write('"w": write terms without depth limit\n'),
-    write('"p": print terms with depth limit\n\n').
+    help_message_(2, '').
 
 gather_query_vars([_ = Var | Vars], QueryVars) :-
     (  var(Var) ->
