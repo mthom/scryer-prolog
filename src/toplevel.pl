@@ -493,11 +493,8 @@ trailing_period_is_ambiguous(Value) :-
 term_variables_under_max_depth(Term, MaxDepth, Vars) :-
     '$term_variables_under_max_depth'(Term, MaxDepth, Vars).
 
-repeated_write(0, _).
-repeated_write(N, Char):- Char, N2 is N-1, (N2 == 0 -> true; repeated_write(N2, Char)).
-
 help_message_(N_nl, Space) :-
-  repeated_write(N_nl, nl),
+  format("~*n", [N_nl]),
   command_write(Space, 'SPACE, "n" or ";": next solution, if any'),
   command_write(Space, 'RETURN or ".": stop enumeration'),
   command_write(Space, '"a": enumerate all solutions'),
@@ -507,9 +504,7 @@ help_message_(N_nl, Space) :-
   command_write(Space, '"p": print terms with depth limit').
 
 command_write(Space, Msg):-
-  write(Space),
-  write(Msg),
-  nl.
+  format("~a~a~n", [Space, Msg]).
 
 help_message :-
     help_message_(2, '').
