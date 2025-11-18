@@ -1328,9 +1328,7 @@ impl Indexer for DynamicCodeIndices {
         for (key, code) in indices.into_iter() {
             if code.len() > 1 {
                 index_locs.insert(key, IndexingCodePtr::Internal(prelude.len() + 1));
-                prelude.push_back(IndexingLine::DynamicIndexedChoice(
-                    code.into_iter().collect(),
-                ));
+                prelude.push_back(IndexingLine::DynamicIndexedChoice(code));
             } else if let Some(i) = code.front() {
                 index_locs.insert(key, IndexingCodePtr::DynamicExternal(*i));
             }
@@ -1369,9 +1367,7 @@ impl Indexer for DynamicCodeIndices {
     ) -> IndexingCodePtr {
         if lists.len() > 1 {
             let lists = std::mem::take(lists);
-            prelude.push_back(IndexingLine::DynamicIndexedChoice(
-                lists.into_iter().collect(),
-            ));
+            prelude.push_back(IndexingLine::DynamicIndexedChoice(lists));
             IndexingCodePtr::Internal(1)
         } else {
             lists
@@ -1548,6 +1544,6 @@ impl<I: Indexer> CodeOffsets<I> {
             str_loc,
         )));
 
-        prelude.into_iter().collect()
+        prelude.into()
     }
 }

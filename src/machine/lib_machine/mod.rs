@@ -224,14 +224,14 @@ impl Term {
 
                     let list = match tail {
                         Term::Atom(atom) if atom == "[]" => match head {
-                            Term::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                            Term::Atom(ref a) if a.chars().count() == 1 => {
                                 // Handle lists of char as strings
                                 Term::String(a.to_string())
                             }
                             _ => Term::List(vec![head]),
                         },
                         Term::List(elems) if elems.is_empty() => match head {
-                            Term::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                            Term::Atom(ref a) if a.chars().count() == 1 => {
                                 // Handle lists of char as strings
                                 Term::String(a.to_string())
                             },
@@ -242,7 +242,7 @@ impl Term {
                             Term::List(elems)
                         },
                         Term::String(mut elems) => match head {
-                            Term::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                            Term::Atom(ref a) if a.chars().count() == 1 => {
                                 // Handle lists of char as strings
                                 elems.insert(0, a.chars().next().unwrap());
                                 Term::String(elems)

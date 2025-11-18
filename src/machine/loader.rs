@@ -1842,9 +1842,7 @@ impl Machine {
             let err = self.machine_st.permission_error(
                 Permission::Modify,
                 atom!("static_procedure"),
-                functor_stub(atom!(":"), 2)
-                    .into_iter()
-                    .collect::<MachineStub>(),
+                functor_stub(atom!(":"), 2),
             );
 
             self.machine_st

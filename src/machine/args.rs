@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::env;
 
 #[derive(Debug)]
@@ -8,9 +7,8 @@ pub struct MachineArgs {
 
 impl MachineArgs {
     pub fn new() -> Self {
-        let args: BTreeSet<String> = env::args().collect();
         Self {
-            add_history: !args.contains("--no-add-history"),
+            add_history: env::args().all(|arg| arg != "--no-add-history"),
         }
     }
 }
