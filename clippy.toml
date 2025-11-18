@@ -1,0 +1,26 @@
+disallowed-macros = [
+    # https://rust-lang.github.io/rust-clippy/master/#disallowed_macros
+
+    # list of macros that may panic on allocation failure e.g.
+
+    # "std::vec",
+]
+
+disallowed-methods = [
+    # https://rust-lang.github.io/rust-clippy/master/#disallowed_method
+
+    # list of methods that may panic on allocation failue 
+    # though not including things that can be used correctly by reversing ahead of time (i.e. std::vec::Vec::try_reserve + std::iter::Extend::extend ).
+
+    # "std::iter::Iter::collect",
+    # { path = "std::vec::Vec::with_capacity", replacement = "std::vec::Vec::new + std::vec::Vec::try_reserve" },
+    # { path = "std::string::String::with_capacity", replacement = "std::string::String::new + std::string::String::try_reserve" },
+]
+
+disallowed-types = [
+    # https://rust-lang.github.io/rust-clippy/master/#disallowed_types
+
+    # list of types that can't be used without risking a panic due to allocation failure  
+
+    # { path = "std::collections::BTreeMap", reason = "unlike Vec and HashMap BTreeMap cannot reserve capacity ahead of time (i.e. try_reserve) making it unusable without risk of oom panic"},
+]
