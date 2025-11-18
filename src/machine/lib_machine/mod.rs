@@ -128,9 +128,11 @@ impl Term {
     pub fn try_conjunction(value: impl IntoIterator<Item = Term>) -> Option<Self> {
         let mut iter = value.into_iter();
         iter.next().map(|first| {
-            Term::try_conjunction(iter)
-                .map(|rest| Term::compound(",", [first.clone(), rest]))
-                .unwrap_or(first)
+            if let Some(rest) = Term::try_conjunction(iter) {
+                Term::compound(",", [first, rest])
+            } else {
+                first
+            }
         })
     }
 
@@ -143,9 +145,11 @@ impl Term {
     pub fn try_disjunction(value: impl IntoIterator<Item = Term>) -> Option<Self> {
         let mut iter = value.into_iter();
         iter.next().map(|first| {
-            Term::try_disjunction(iter)
-                .map(|rest| Term::compound(";", [first.clone(), rest]))
-                .unwrap_or(first)
+            if let Some(rest) = Term::try_disjunction(iter) {
+                Term::compound(";", [first, rest])
+            } else {
+                first
+            }
         })
     }
 }
