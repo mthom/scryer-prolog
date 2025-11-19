@@ -75,8 +75,7 @@ The prefix of t_  (tmember/2,tmember_t/3, tfilter, tpartition/4)  in a predicate
 argument is  a predicate that takes as as an argument a (partial) goal taking additional arguments, the last of which will
 be a reified boolean value for whether the query holds.  
 
-The naming convention for the parameters which are predicates is C_N, where C may convey some meaning about the arguments purpose, and the 
-N indicates how many additional arguments are required by the  predicate.
+The naming convention for the parameters which are partial goals is C_N, which will be called with N more arguments.
 
 A suffix of _t indicates the last parameter of a predicate is a reified boolean value.  The last argument of the following are also reified boolean values:  
 (=)/3, (,)/3, (;)/3, dif/3.  
@@ -84,7 +83,7 @@ A suffix of _t indicates the last parameter of a predicate is a reified boolean 
 
 You may wish to follow that convention when writing your own predicates.  
 
-It is useful to inspect the source of reif so you can see the information conveyed in the predicate and predicate parameter names.
+It is useful to inspect the source of reif so you can see the information conveyed in the predicate and parameter names.
 
 ``` prolog
 :- meta_predicate(tfilter(2, ?, ?)).
@@ -93,8 +92,6 @@ tfilter(_, [], []).
 tfilter(C_2, [E|Es], Fs0) :-
    …
 ```
-C_2 can be a partial goal requiring two more arguments, or a 2-ary predicate.  In either case the last parameter of C_2 is the reified
-truth value. 
 
 For example, using dif/3 from reif, and applying one argument 3, gives a partially applied goal X_2 requiring two more arguments.
 
@@ -111,18 +108,6 @@ or more succinctly:
 ?- 
 ```
 
-It is useful inspect reif.pl to  understand how to use the module.  By studying the implementation of predicates, you may also learn
-some new prolog skills.
-
-There is some code in reif, which shows a predicate expecting 2 arguments, but only one is provided:
-
-``` 
-tfilter(_, [], []).
-tfilter(C_2, [E|Es], Fs0) :-
-   ...
-```
-The C_2 parameter name gives you enough information about the partial goal
-you must supply  as an argument.  The _2 in the parameter name indicates C_2 requires two additional arguments. 
 
  
 
