@@ -306,7 +306,7 @@ impl<T: CopierTarget> CopyTermState<T> {
             let heap_loc = list_addr.get_value() as usize;
             let str_loc = self.target[heap_loc].get_value() as usize;
             let str_cell = self.target[str_loc];
-            let mut writer = self.target.reserve(3).unwrap();
+            let mut writer = self.target.reserve(3)?;
 
             writer.write_with(|section| {
                 section.push_cell(heap_loc_as_cell!(threshold + 2));
@@ -435,7 +435,7 @@ impl<T: CopierTarget> CopyTermState<T> {
                 let str_cell = if get_structure_index(index_cell).is_some() {
                     // copy the index pointer trailing this
                     // inlined or expanded goal.
-                    let mut writer = self.target.reserve(1).unwrap();
+                    let mut writer = self.target.reserve(1)?;
 
                     writer.write_with(|section| {
                         section.push_cell(index_cell);
