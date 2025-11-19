@@ -20,14 +20,14 @@ Here are predicates exported by reif:
 
 ### What is a reified boolean value?  
 
-In prolog it means representing the truth of some expression or relation as a boolean value.  Unlike many languages, the 
-truthyness of a term like 'A < 10' can not be directly bound to a variable with an assignment.   This is because terms have a different meaning in prolog
-that you should already be familiar with.
-
+In many languages, A < 10 is an expression that evaluates to a Boolean value". In Prolog, it is merely a compound term.
 ``` prolog
 ?- A=112, C=(A<10).
    A = 112, C = (112<10).
 ?- 
+
+A reified boolean value is a value that contains true or false depending on whether some relationship holds.  Binding a value to true or false
+when a relationship holds is reifying the relationship as a boolean value.
 
 ```
  `if_` from reif provides a concise way to bind a variable that is true when a relationship holds.  
@@ -93,7 +93,7 @@ tfilter(_, [], []).
 tfilter(C_2, [E|Es], Fs0) :-
    …
 ```
-C_2 can be a partial goal requiring two more arguments, or a 2-ary predicate.  In either case the parameter of C_2 is the reified
+C_2 can be a partial goal requiring two more arguments, or a 2-ary predicate.  In either case the last parameter of C_2 is the reified
 truth value. 
 
 For example, using dif/3 from reif, and applying one argument 3, gives a partially applied goal X_2 requiring two more arguments.
@@ -111,16 +111,20 @@ or more succinctly:
 ?- 
 ```
 
-You will probably need to inspect reif.pl to fully understand how to use the module .  By studying the implementation of predicates, you may also learn
-some new prolog skills
+It is useful inspect reif.pl to  understand how to use the module.  By studying the implementation of predicates, you may also learn
+some new prolog skills.
 
-There is some code that you may find confusing, which shows a predicate expecting 2 arguments, but only one is provided:
+There is some code in reif, which shows a predicate expecting 2 arguments, but only one is provided:
 
-``` prolog
-   if_(call(C_2, E), Fs0 = [E|Fs], Fs0 = Fs),
+``` 
+tfilter(_, [], []).
+tfilter(C_2, [E|Es], Fs0) :-
+   ...
 ```
-Fortunately, you don't need to understand that mechanism to use the reif module. The C_2 parameter name gives you enough information about the partial goal
-you must supply  as an argument.
+The C_2 parameter name gives you enough information about the partial goal
+you must supply  as an argument.  The _2 in the parameter name indicates C_2 requires two additional arguments. 
+
+ 
 
 ### Surprises
 
@@ -130,6 +134,9 @@ You may be surprised when something like this works:
 ?- call( tfilter,=(3),[3],X).
    X = [3].
 ?- 
+?- tfilter(#<(3),[3],X).
+   X = [].
+
 ```
 
 but this breaks.
@@ -141,9 +148,10 @@ but this breaks.
 ```
 
 What is happening is that reif has provided (=)/3, and that is what is being used in tfilter (not the usual (=)/2).   
+clps provides (#<)/3, but it doesn't provide (#>)/3.
 
-But (in my system at the time of writing) (#>)/2 exists, but there is no (#>)/3.  
-A workaround is to define a three-arity predicate to do the comparison (it could be (#>)/3, but I choose pound\_gt\_t):
+  
+A workaround is to define a three-arity predicate to do the comparison (it could be (#>)/3, but I choose gt\_t):
 
 ``` prolog
 gt_t(X,Y,T) :- if_(Y #< X, T=true, T=false).
@@ -155,7 +163,9 @@ gt_t(X,Y,T) :- if_(Y #< X, T=true, T=false).
 
 If you are writing predicates to use with reif,   look at the implementation (=)/3 in reif as an example.  
 
-You might wonder if you can write a predicate to relate a predicate with a reified value as the last parameter.
+You might wonder if you can write a predicate to relate a predicate with a reified value as the last parameter.  
+
+
 
 ```  prolog
 unreif_reif(P1, P2).
@@ -163,7 +173,8 @@ unreif_reif(P1, P2).
 
 so that P1(A1, A2, ...AN) holds when P2(A1, A2, ..., AN, T) holds and T is the reified value of P1(A1...AN).  
 
-[Probably not](https://github.com/mthom/scryer-prolog/discussions/2557), but you can probably learn something about writing reified versions of predicates by reading that discussion.
+It seems like a good idea, but [probably not](https://github.com/mthom/scryer-prolog/discussions/2557). 
+
 
 You can look at predicates like dif/3  or (=)/3 in [reif](/reif.html) to get ideas about writing predicates that include a reifed boolean value.
 
@@ -286,7 +297,8 @@ If your prolog system has
    Xs = [20].
 ```
 
-Oddly, scryer prolog 0.9.4-614 has 
+clpz in scryer v0.10.0-17 
+ has 
 
 ```   prolog
 (#<)/3
@@ -467,6 +479,7 @@ i_output(I, Os) :-
 Yielding for example:
 
 ```
+?- use_module(library(between)).
 ?- N = 15, between(1, N, I), i_output(I, Os).
    N = 15, I = 1, Os = "1"
 ;  N = 15, I = 2, Os = "2"
