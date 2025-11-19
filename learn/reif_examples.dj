@@ -116,19 +116,22 @@ or more succinctly:
 You may be surprised when something like this works:
 
 ``` prolog
-?- call( tfilter,=(3),[3],X).
+?- tfilter(=(3),[3],X).
    X = [3].
 ?- 
+
 ?- tfilter(#<(3),[3],X).
    X = [].
 
 ```
 
-but this breaks.
+but this breaks:
 
-``` prolog
-?- call( tfilter,#>(3),[3],X).
-   error(existence_error(procedure,(#>)/3),(#>)/3).
+
+```
+
+?- ?- tfilter(#>(3),[3],X).
+   error(syntax_error(unexpected_char),read_term/3:0).
 ?- 
 ```
 
