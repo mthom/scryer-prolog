@@ -47,13 +47,14 @@ foo   X = true.
 ?- 
 ```
   
-Oddly, there is no build in < operator in prolog for boolean values:
+There is no build in < operator in prolog for boolean values.  true and false are just atoms.
 
 ``` prolog
 ?- false < true, true.
    error(type_error(evaluable,false/0),(is)/2).
 ?- 
 ```
+
 
 Note that other Prolog modules (like clp(z)) may express a reified boolean value as 0 or 1 or choose some other representation instead of false and true.  
 
@@ -145,14 +146,14 @@ But (in my system at the time of writing) (#>)/2 exists, but there is no (#>)/3.
 A workaround is to define a three-arity predicate to do the comparison (it could be (#>)/3, but I choose pound\_gt\_t):
 
 ``` prolog
-pound_gt_t(X,Y,T) :- if_(Y #< X, T=true, T=false).
+gt_t(X,Y,T) :- if_(Y #< X, T=true, T=false).
 
-?- tfilter(pound_gt_t(3),[1,3],T).
+?- tfilter(gt_t(3),[1,3],T).
    T = [1].
 ?- 
 ```
 
-If you are writing predicates to use with reif,   look at the implementation (=)/3 in reif.  
+If you are writing predicates to use with reif,   look at the implementation (=)/3 in reif as an example.  
 
 You might wonder if you can write a predicate to relate a predicate with a reified value as the last parameter.
 
