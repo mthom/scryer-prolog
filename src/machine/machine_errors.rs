@@ -646,6 +646,19 @@ impl MachineState {
             return self.directive_error(err);
         }
 
+        if let CompilationError::FiniteMemoryInHeap(err) = err {
+            // err.resource_error_offset() should be the address of the error/2 functor in the pre-allocated term error(resource_error(memory), [])
+            let err_loc = err.resource_error_offset(&mut self.heap);
+            let stub = vec![FunctorElement::AbsoluteCell(
+                // err_loc + 1 should be the functors first argument which should be a str cell pointing at the resource_error/1 functor
+                self.heap[err_loc + 1],
+            )];
+            return MachineError {
+                stub,
+                location: None,
+            };
+        }
+
         let location = err.line_and_col_num();
         let stub = err.as_functor();
 
@@ -803,7 +816,13 @@ pub enum CompilationError {
     InvalidRuleHead,
     InvalidUseModuleDecl,
     InvalidModuleResolution(Atom),
-    FiniteMemoryInHeap(usize),
+    FiniteMemoryInHeap(AllocError),
+}
+
+impl From<AllocError> for CompilationError {
+    fn from(value: AllocError) -> Self {
+        Self::FiniteMemoryInHeap(value)
+    }
 }
 
 #[derive(Debug)]
@@ -879,8 +898,8 @@ impl CompilationError {
             CompilationError::ParserError(ref err) => {
                 functor!(err.as_atom())
             }
-            CompilationError::FiniteMemoryInHeap(h) => {
-                vec![FunctorElement::AbsoluteCell(str_loc_as_cell!(*h))]
+            CompilationError::FiniteMemoryInHeap(_) => {
+                functor!(atom!("resource_error"))
             }
         }
     }

@@ -1,6 +1,5 @@
 use crate::atom_table::*;
 use crate::functor_macro::*;
-use crate::machine::machine_errors::CompilationError;
 use crate::machine::{ArenaHeaderTag, Fixnum, Integer};
 use crate::types::*;
 
@@ -16,10 +15,6 @@ const ALIGN: usize = Heap::heap_cell_alignment();
 pub struct AllocError;
 
 impl AllocError {
-    pub(crate) fn to_compilation_error(&self, heap: &mut Heap) -> CompilationError {
-        CompilationError::FiniteMemoryInHeap(self.resource_error_offset(heap))
-    }
-
     pub(crate) fn resource_error_offset(&self, heap: &mut Heap) -> usize {
         heap.resource_error_offset()
     }
@@ -706,7 +701,13 @@ impl Heap {
 
     pub(crate) fn store_resource_error(&mut self) {
         RESOURCE_ERROR_OFFSET_INIT.call_once(move || {
-            let stub = functor!(atom!("resource_error"), [atom_as_cell((atom!("memory")))]);
+            let stub = functor!(
+                atom!("error"),
+                [
+                    functor((atom!("resource_error")), [atom_as_cell((atom!("memory")))]),
+                    atom_as_cell((atom!("[]")))
+                ]
+            );
             self.resource_err_loc = cell_index!(self.inner.byte_len);
 
             let mut writer = Heap::functor_writer(stub);
