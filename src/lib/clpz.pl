@@ -104,7 +104,8 @@
                  % for use in predicates from library(reif)
                  clpz_t/2,
                  (#=)/3,
-                 (#<)/3
+                 (#<)/3,
+                 (#>)/3,
 
                  % called from goal_expansion
                  % clpz_equal/2,
@@ -8024,6 +8025,8 @@ clpz_t(Expr, T) :-
 #=(X, Y, T) :- clpz_t(X #= Y, T).
 
 #<(X, Y, T) :- clpz_t(X #< Y, T).
+
+#>(X, Y, T) :- clpz_t(X #> Y, T).
 
 zo_t(0, false).
 zo_t(1, true).
