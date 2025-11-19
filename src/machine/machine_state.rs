@@ -5,6 +5,7 @@ use crate::heap_iter::*;
 use crate::heap_print::*;
 use crate::machine::attributed_variables::*;
 use crate::machine::copier::*;
+use crate::machine::heap::AllocError;
 use crate::machine::heap::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
@@ -192,7 +193,7 @@ fn push_var_eq_functors<'a>(
     size: usize,
     iter: impl Iterator<Item = (&'a VarKey, &'a HeapCellValue)>,
     atom_tbl: &AtomTable,
-) -> Result<HeapCellValue, usize> {
+) -> Result<HeapCellValue, AllocError> {
     let src_h = heap.cell_len();
 
     let true_size = if size > 0 {
@@ -257,7 +258,7 @@ impl Ball {
         self.stub.clear();
     }
 
-    pub(super) fn copy_and_align_to(&self, dest: &mut Heap) -> Result<usize, usize> {
+    pub(super) fn copy_and_align_to(&self, dest: &mut Heap) -> Result<usize, AllocError> {
         let h = dest.cell_len();
         let diff = self.boundary as i64 - h as i64;
 
@@ -346,17 +347,17 @@ impl<'a> CopierTarget for CopyTerm<'a> {
     }
 
     #[inline(always)]
-    fn copy_pstr_to_threshold(&mut self, pstr_loc: usize) -> Result<usize, usize> {
+    fn copy_pstr_to_threshold(&mut self, pstr_loc: usize) -> Result<usize, AllocError> {
         self.state.heap.copy_pstr_within(pstr_loc)
     }
 
     #[inline(always)]
-    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, usize> {
+    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, AllocError> {
         self.state.heap.reserve(num_cells)
     }
 
     #[inline(always)]
-    fn copy_slice_to_end(&mut self, bounds: Range<usize>) -> Result<(), usize> {
+    fn copy_slice_to_end(&mut self, bounds: Range<usize>) -> Result<(), AllocError> {
         self.state.heap.copy_slice_to_end(bounds)
     }
 }
@@ -455,7 +456,7 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
         self.stack
     }
 
-    fn copy_pstr_to_threshold(&mut self, pstr_loc: usize) -> Result<usize, usize> {
+    fn copy_pstr_to_threshold(&mut self, pstr_loc: usize) -> Result<usize, AllocError> {
         debug_assert!(pstr_loc < self.heap.byte_len());
 
         let HeapStringScan { string, tail_idx } = self.heap.scan_slice_to_str(pstr_loc);
@@ -477,11 +478,11 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
     }
 
     #[inline]
-    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, usize> {
+    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, AllocError> {
         self.stub.reserve(num_cells)
     }
 
-    fn copy_slice_to_end(&mut self, bounds: Range<usize>) -> Result<(), usize> {
+    fn copy_slice_to_end(&mut self, bounds: Range<usize>) -> Result<(), AllocError> {
         let len = bounds.end - bounds.start;
         let mut stub_writer = self.stub.reserve(len)?;
 

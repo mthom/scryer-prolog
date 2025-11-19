@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use crate::atom_table;
 use crate::heap_iter::{stackful_post_order_iter, NonListElider};
+use crate::machine::heap::AllocError;
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{
@@ -445,14 +446,15 @@ impl Iterator for QueryState<'_> {
             // contained in self.machine_st.ball.
             let h = machine.machine_st.heap.cell_len();
 
-            if let Err(resource_err_loc) = machine
+            if let Err(err) = machine
                 .machine_st
                 .heap
                 .append(&machine.machine_st.ball.stub)
             {
+                let resource_error_offset = err.resource_error_offset(&mut machine.machine_st.heap);
                 return Some(Err(Term::from_heapcell(
                     machine,
-                    machine.machine_st.heap[resource_err_loc],
+                    machine.machine_st.heap[resource_error_offset],
                     &mut IndexMap::new(),
                 )));
             }
@@ -553,11 +555,11 @@ impl Machine {
         self.run_module_predicate(atom!("loader"), (atom!("consult_stream"), 2));
     }
 
-    pub(crate) fn allocate_stub_choice_point(&mut self) {
+    pub(crate) fn allocate_stub_choice_point(&mut self) -> Result<(), AllocError> {
         // NOTE: create a choice point to terminate the dispatch_loop
         // if an exception is thrown.
 
-        let stub_b = self.machine_st.stack.allocate_or_frame(0);
+        let stub_b = self.machine_st.stack.allocate_or_frame(0)?;
         let or_frame = self.machine_st.stack.index_or_frame_mut(stub_b);
 
         or_frame.prelude.num_cells = 0;
@@ -575,6 +577,8 @@ impl Machine {
         self.machine_st.b = stub_b;
         self.machine_st.hb = self.machine_st.heap.cell_len();
         self.machine_st.block = stub_b;
+
+        Ok(())
     }
 
     /// Runs a query.
@@ -588,7 +592,8 @@ impl Machine {
             .read_term(&op_dir, Tokens::Default)
             .expect("Failed to parse query");
 
-        self.allocate_stub_choice_point();
+        self.allocate_stub_choice_point()
+            .expect("failed to allocate stub choice point");
 
         // Write parsed term to heap
         let term_write_result = write_term_to_heap(&term, &mut self.machine_st.heap)

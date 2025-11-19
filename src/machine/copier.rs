@@ -83,16 +83,16 @@ pub trait CopierTarget: IndexMut<usize, Output = HeapCellValue> {
     fn threshold(&self) -> usize;
     // returns the tail location of the pstr on success
     fn as_slice_from<'a>(&'a self, from: usize) -> Box<dyn Iterator<Item = u8> + 'a>;
-    fn copy_pstr_to_threshold(&mut self, pstr_loc: usize) -> Result<usize, usize>;
-    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, usize>;
-    fn copy_slice_to_end(&mut self, bounds: Range<usize>) -> Result<(), usize>;
+    fn copy_pstr_to_threshold(&mut self, pstr_loc: usize) -> Result<usize, AllocError>;
+    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, AllocError>;
+    fn copy_slice_to_end(&mut self, bounds: Range<usize>) -> Result<(), AllocError>;
 }
 
 pub(crate) fn copy_term<T: CopierTarget>(
     target: T,
     addr: HeapCellValue,
     attr_var_policy: AttrVarPolicy,
-) -> Result<usize, usize> {
+) -> Result<usize, AllocError> {
     let mut copy_term_state = CopyTermState::new(target, attr_var_policy);
     let old_threshold = copy_term_state.target.threshold();
 
@@ -149,7 +149,7 @@ impl<T: CopierTarget> CopyTermState<T> {
         self.trail.push((TrailRef::heap_cell(addr), trail_item));
     }
 
-    fn copy_list(&mut self, addr: usize) -> Result<(), usize> {
+    fn copy_list(&mut self, addr: usize) -> Result<(), AllocError> {
         for offset in 0..2 {
             read_heap_cell!(self.target[addr + offset],
                 (HeapCellValueTag::Lis, h) => {
@@ -194,7 +194,7 @@ impl<T: CopierTarget> CopyTermState<T> {
         Ok(())
     }
 
-    fn copy_partial_string(&mut self, pstr_loc: usize) -> Result<(), usize> {
+    fn copy_partial_string(&mut self, pstr_loc: usize) -> Result<(), AllocError> {
         match self.pstr_loc_locs.range_mut(..=pstr_loc).next_back() {
             Some((
                 _prev_pstr_loc,
@@ -281,7 +281,7 @@ impl<T: CopierTarget> CopyTermState<T> {
         Ok(())
     }
 
-    fn copy_attr_var_lists(&mut self) -> Result<(), usize> {
+    fn copy_attr_var_lists(&mut self) -> Result<(), AllocError> {
         while !self.attr_var_list_locs.is_empty() {
             let mut list_loc_vec = std::mem::take(&mut self.attr_var_list_locs);
 
@@ -300,7 +300,7 @@ impl<T: CopierTarget> CopyTermState<T> {
      * structure which is ensured by this function and not at all by
      * the vanilla copier.
      */
-    fn copy_attr_var_list(&mut self, mut list_addr: HeapCellValue) -> Result<(), usize> {
+    fn copy_attr_var_list(&mut self, mut list_addr: HeapCellValue) -> Result<(), AllocError> {
         while let HeapCellValueTag::Lis = list_addr.get_tag() {
             let threshold = self.target.threshold();
             let heap_loc = list_addr.get_value() as usize;
@@ -330,7 +330,11 @@ impl<T: CopierTarget> CopyTermState<T> {
         Ok(())
     }
 
-    fn reinstantiate_var(&mut self, addr: HeapCellValue, frontier: usize) -> Result<(), usize> {
+    fn reinstantiate_var(
+        &mut self,
+        addr: HeapCellValue,
+        frontier: usize,
+    ) -> Result<(), AllocError> {
         read_heap_cell!(addr,
             (HeapCellValueTag::Var, h) => {
                 self.target[frontier] = heap_loc_as_cell!(frontier);
@@ -381,7 +385,7 @@ impl<T: CopierTarget> CopyTermState<T> {
         Ok(())
     }
 
-    fn copy_var(&mut self, addr: HeapCellValue) -> Result<(), usize> {
+    fn copy_var(&mut self, addr: HeapCellValue) -> Result<(), AllocError> {
         let index = addr.get_value() as usize;
         let rd = self.target.deref(addr);
         let ra = self.target.store(rd);
@@ -421,7 +425,7 @@ impl<T: CopierTarget> CopyTermState<T> {
         Ok(())
     }
 
-    fn copy_structure(&mut self, addr: usize) -> Result<(), usize> {
+    fn copy_structure(&mut self, addr: usize) -> Result<(), AllocError> {
         read_heap_cell!(self.target[addr],
             (HeapCellValueTag::Atom, (_name, arity)) => {
                 let threshold = self.target.threshold();
@@ -464,7 +468,7 @@ impl<T: CopierTarget> CopyTermState<T> {
         Ok(())
     }
 
-    fn copy_term_impl(&mut self, addr: HeapCellValue) -> Result<(), usize> {
+    fn copy_term_impl(&mut self, addr: HeapCellValue) -> Result<(), AllocError> {
         self.scan = self.target.threshold();
         let mut writer = self.target.reserve(1)?;
 
@@ -503,7 +507,7 @@ impl<T: CopierTarget> CopyTermState<T> {
         Ok(())
     }
 
-    fn copy_pstrs(&mut self) -> Result<(), usize> {
+    fn copy_pstrs(&mut self) -> Result<(), AllocError> {
         while let Some((least_pstr_loc, pstr_data)) = self.pstr_loc_locs.pop_first() {
             let threshold = heap_index!(self.target.threshold());
 

@@ -3,6 +3,7 @@
 
 #[cfg(feature = "http")]
 use crate::http::{HttpListener, HttpResponse};
+use crate::machine::heap::AllocError;
 use crate::machine::loader::LiveLoadState;
 use crate::machine::streams::*;
 use crate::offset_table::*;
@@ -486,12 +487,12 @@ unsafe impl Sync for Arena {}
 #[allow(clippy::new_without_default)]
 impl Arena {
     #[inline]
-    pub fn new() -> Self {
-        Arena {
+    pub fn new() -> Result<Self, AllocError> {
+        Ok(Arena {
             base: None,
-            f64_tbl: F64Table::new(),
-            code_index_tbl: CodeIndexTable::new(),
-        }
+            f64_tbl: F64Table::new()?,
+            code_index_tbl: CodeIndexTable::new()?,
+        })
     }
 }
 

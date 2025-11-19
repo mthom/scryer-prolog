@@ -6,6 +6,7 @@ use crate::parser::ast::*;
 use crate::ffi::{self, FfiError};
 use crate::forms::*;
 use crate::functor_macro::*;
+use crate::machine::heap::AllocError;
 use crate::machine::heap::*;
 use crate::machine::loader::CompilationTarget;
 use crate::machine::machine_state::*;
@@ -763,8 +764,8 @@ impl MachineState {
     }
 
     // throw an error pre-allocated in the heap
-    pub(super) fn throw_resource_error(&mut self, err_loc: usize) {
-        self.registers[1] = str_loc_as_cell!(err_loc);
+    pub(super) fn throw_resource_error(&mut self, err: AllocError) {
+        self.registers[1] = str_loc_as_cell!(err.resource_error_offset(&mut self.heap));
         self.set_ball();
         self.unwind_stack();
     }
@@ -777,8 +778,8 @@ impl MachineState {
 
         self.registers[1] = match writer(&mut self.heap) {
             Ok(loc) => loc,
-            Err(resource_err_loc) => {
-                self.throw_resource_error(resource_err_loc);
+            Err(err) => {
+                self.throw_resource_error(err);
                 return;
             }
         };

@@ -1,5 +1,6 @@
 use crate::atom_table::*;
 use crate::functor_macro::*;
+use crate::machine::machine_errors::CompilationError;
 use crate::machine::{ArenaHeaderTag, Fixnum, Integer};
 use crate::types::*;
 
@@ -10,6 +11,19 @@ use std::ptr;
 use std::sync::Once;
 
 const ALIGN: usize = Heap::heap_cell_alignment();
+
+#[derive(Debug, Clone)]
+pub struct AllocError;
+
+impl AllocError {
+    pub(crate) fn to_compilation_error(&self, heap: &mut Heap) -> CompilationError {
+        CompilationError::FiniteMemoryInHeap(self.resource_error_offset(heap))
+    }
+
+    pub(crate) fn resource_error_offset(&self, heap: &mut Heap) -> usize {
+        heap.resource_error_offset()
+    }
+}
 
 #[derive(Debug)]
 pub struct Heap {
@@ -612,7 +626,7 @@ impl Heap {
         }
     }
 
-    pub fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, usize> {
+    pub fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, AllocError> {
         let section;
         let len = heap_index!(num_cells);
 
@@ -625,7 +639,7 @@ impl Heap {
                     };
                     break;
                 } else if !self.grow() {
-                    return Err(self.resource_error_offset());
+                    return Err(AllocError);
                 }
             }
         }
@@ -649,7 +663,7 @@ impl Heap {
         }
     }
 
-    pub(crate) fn append(&mut self, other_heap: &impl SizedHeap) -> Result<(), usize> {
+    pub(crate) fn append(&mut self, other_heap: &impl SizedHeap) -> Result<(), AllocError> {
         let other_len = heap_index!(other_heap.cell_len());
 
         loop {
@@ -665,7 +679,7 @@ impl Heap {
                 self.inner.byte_len += heap_index!(other_heap.cell_len());
                 break;
             } else if unsafe { !self.grow() } {
-                return Err(self.resource_error_offset());
+                return Err(AllocError);
             }
         }
 
@@ -742,10 +756,10 @@ impl Heap {
 
     // either succeed & return nothing or fail & return an offset into
     // the heap to a pre-allocated resource error
-    pub(crate) fn push_cell(&mut self, cell: HeapCellValue) -> Result<(), usize> {
+    pub(crate) fn push_cell(&mut self, cell: HeapCellValue) -> Result<(), AllocError> {
         unsafe {
             if self.inner.byte_len == self.inner.byte_cap && !self.grow() {
-                return Err(self.resource_error_offset());
+                return Err(AllocError);
             }
 
             // SAFETY:
@@ -779,7 +793,7 @@ impl Heap {
         Range { start, end }
     }
 
-    pub fn allocate_pstr(&mut self, src: &str) -> Result<HeapCellValue, usize> {
+    pub fn allocate_pstr(&mut self, src: &str) -> Result<HeapCellValue, AllocError> {
         let size_in_heap = Self::compute_pstr_size(src);
         let mut writer = self.reserve(size_in_heap)?;
         let HeapSectionWriteResult { result, .. } =
@@ -794,7 +808,7 @@ impl Heap {
     // note that allocate_cstr emits a tail cell to the string (completing it with the empty list)
     // unlike any version of allocate_pstr.
 
-    pub fn allocate_cstr(&mut self, src: &str) -> Result<HeapCellValue, usize> {
+    pub fn allocate_cstr(&mut self, src: &str) -> Result<HeapCellValue, AllocError> {
         let size_in_heap = Self::compute_pstr_size(src);
         let mut writer = self.reserve(size_in_heap + 1)?;
         let HeapSectionWriteResult { result, .. } =
@@ -849,7 +863,7 @@ impl Heap {
 
     // copies only the string, not its tail. returns the cell index of
     // the tail location
-    pub(crate) fn copy_pstr_within(&mut self, pstr_loc: usize) -> Result<usize, usize> {
+    pub(crate) fn copy_pstr_within(&mut self, pstr_loc: usize) -> Result<usize, AllocError> {
         let HeapStringScan { string, tail_idx } = self.scan_slice_to_str(pstr_loc);
         let s_len = string.len();
 
@@ -884,7 +898,7 @@ impl Heap {
 
                     break;
                 } else if !self.grow() {
-                    return Err(self.resource_error_offset());
+                    return Err(AllocError);
                 }
             }
         }
@@ -893,7 +907,10 @@ impl Heap {
     }
 
     // src is a cell-indexed range.
-    pub(crate) fn copy_slice_to_end<R: RangeBounds<usize>>(&mut self, src: R) -> Result<(), usize> {
+    pub(crate) fn copy_slice_to_end<R: RangeBounds<usize>>(
+        &mut self,
+        src: R,
+    ) -> Result<(), AllocError> {
         let range = self.slice_range(src);
         let len = range.end - range.start;
 
@@ -911,7 +928,7 @@ impl Heap {
 
                     break;
                 } else if !self.grow() {
-                    return Err(self.resource_error_offset());
+                    return Err(AllocError);
                 }
             }
         }
@@ -970,7 +987,7 @@ impl Heap {
 
     pub(crate) fn functor_writer(
         functor: Vec<FunctorElement>,
-    ) -> impl FnMut(&mut Heap) -> Result<HeapCellValue, usize> {
+    ) -> impl FnMut(&mut Heap) -> Result<HeapCellValue, AllocError> {
         let size = Heap::compute_functor_byte_size(&functor);
         let mut functor_writer = ReservedHeapSection::functor_writer(functor);
 
@@ -1133,7 +1150,7 @@ pub fn sized_iter_to_heap_list<SrcT: Into<HeapCellValue>>(
     heap: &mut Heap,
     size: usize,
     values: impl Iterator<Item = SrcT>,
-) -> Result<HeapCellValue, usize> {
+) -> Result<HeapCellValue, AllocError> {
     if size > 0 {
         let h = heap.cell_len();
         let mut writer = heap.reserve(1 + 2 * size)?;

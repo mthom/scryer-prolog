@@ -381,7 +381,7 @@ impl<'a> TermWriter<'a> {
     fn push_cell(&mut self, cell: HeapCellValue) -> Result<(), CompilationError> {
         self.heap
             .push_cell(cell)
-            .map_err(CompilationError::FiniteMemoryInHeap)
+            .map_err(|err| err.to_compilation_error(self.heap))
     }
 
     fn term_as_addr(&mut self, term: &TermRef, h: usize) -> HeapCellValue {
@@ -478,7 +478,7 @@ impl<'a> TermWriter<'a> {
                     let cell = self
                         .heap
                         .allocate_cstr(src)
-                        .map_err(CompilationError::FiniteMemoryInHeap)?;
+                        .map_err(|err| err.to_compilation_error(self.heap))?;
 
                     let new_h = self.heap.cell_len();
                     self.push_cell(cell)?;
@@ -499,7 +499,7 @@ impl<'a> TermWriter<'a> {
                     let cell = self
                         .heap
                         .allocate_pstr(src)
-                        .map_err(CompilationError::FiniteMemoryInHeap)?;
+                        .map_err(|err| err.to_compilation_error(self.heap))?;
 
                     let tail_h = self.heap.cell_len();
                     self.push_stub_addr()?;

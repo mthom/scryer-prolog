@@ -10,6 +10,7 @@ use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use parking_lot::{Mutex, RwLock};
 
+use crate::machine::heap::AllocError;
 use crate::machine::machine_indices::IndexPtr;
 use crate::raw_block::RawBlock;
 use crate::raw_block::RawBlockTraits;
@@ -58,8 +59,10 @@ impl<T: RawBlockTraits> From<Arc<ConcurrentOffsetTable<T>>> for OffsetTableImpl<
 
 impl<T: fmt::Debug + RawBlockTraits> OffsetTableImpl<T> {
     #[inline(always)]
-    pub fn new() -> Self {
-        Self(InnerOffsetTableImpl::Serial(SerialOffsetTable::new()))
+    pub fn new() -> Result<Self, AllocError> {
+        Ok(Self(
+            InnerOffsetTableImpl::Serial(SerialOffsetTable::new()?),
+        ))
     }
 
     #[must_use = "the returned concurrent table must be absorbed into the owned OffsetTable"]
@@ -116,7 +119,7 @@ impl<T: fmt::Debug + RawBlockTraits> OffsetTableImpl<T> {
 
 impl<T: fmt::Debug + RawBlockTraits> Default for OffsetTableImpl<T> {
     fn default() -> Self {
-        Self::new()
+        Self::new().unwrap()
     }
 }
 
@@ -201,10 +204,10 @@ impl OffsetTable<IndexPtr> for OffsetTableImpl<IndexPtr> {
 
 impl<T: RawBlockTraits> SerialOffsetTable<T> {
     #[inline]
-    fn new() -> Self {
-        Self {
-            block: RawBlock::new(),
-        }
+    fn new() -> Result<Self, AllocError> {
+        Ok(Self {
+            block: RawBlock::new()?,
+        })
     }
 
     unsafe fn build_with(&mut self, value: T) -> usize {
@@ -374,11 +377,11 @@ pub enum F64Table {
 }
 
 impl F64Table {
-    pub fn new() -> Self {
-        Self::Serial(SerialF64Table {
+    pub fn new() -> Result<Self, AllocError> {
+        Ok(Self::Serial(SerialF64Table {
             indirection_tbl: IndexMap::with_hasher(FxBuildHasher::new()),
-            offset_tbl: SerialOffsetTable::new(),
-        })
+            offset_tbl: SerialOffsetTable::new()?,
+        }))
     }
 
     pub fn build_with(&mut self, value: OrderedFloat<f64>) -> F64Offset {
