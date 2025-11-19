@@ -1,4 +1,5 @@
 #![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
+#![allow(unused_parens)] // see mthom/scryer-prolog#3092 and rust-lang/rust#147126
 
 #[cfg(test)]
 pub(crate) use crate::machine::gc::StacklessPreOrderHeapIter;

@@ -128,9 +128,11 @@ impl Term {
     pub fn try_conjunction(value: impl IntoIterator<Item = Term>) -> Option<Self> {
         let mut iter = value.into_iter();
         iter.next().map(|first| {
-            Term::try_conjunction(iter)
-                .map(|rest| Term::compound(",", [first.clone(), rest]))
-                .unwrap_or(first)
+            if let Some(rest) = Term::try_conjunction(iter) {
+                Term::compound(",", [first, rest])
+            } else {
+                first
+            }
         })
     }
 
@@ -143,9 +145,11 @@ impl Term {
     pub fn try_disjunction(value: impl IntoIterator<Item = Term>) -> Option<Self> {
         let mut iter = value.into_iter();
         iter.next().map(|first| {
-            Term::try_disjunction(iter)
-                .map(|rest| Term::compound(";", [first.clone(), rest]))
-                .unwrap_or(first)
+            if let Some(rest) = Term::try_disjunction(iter) {
+                Term::compound(";", [first, rest])
+            } else {
+                first
+            }
         })
     }
 }
@@ -155,9 +159,14 @@ impl Term {
 fn count_to_letter_code(mut count: usize) -> String {
     let mut letters = Vec::new();
 
+    // +2 rather than +1 to account for the _ at the end
+    let length = count.checked_ilog(26).unwrap_or(0) as usize + 2;
+
+    letters.reserve(length);
+
     loop {
-        let letter_idx = (count % 26) as u32;
-        letters.push(char::from_u32('A' as u32 + letter_idx).unwrap());
+        let letter_idx = (count % 26) as u8;
+        letters.push(b'A' + letter_idx);
         count /= 26;
 
         if count == 0 {
@@ -165,7 +174,15 @@ fn count_to_letter_code(mut count: usize) -> String {
         }
     }
 
-    letters.into_iter().chain("_".chars()).rev().collect()
+    letters.push(b'_');
+
+    debug_assert_eq!(length, letters.len());
+
+    letters.reverse();
+
+    // Safety: we only push ascii chars A-Z and _
+    // an ascii only byte sequence is always valid utf-8
+    unsafe { String::from_utf8_unchecked(letters) }
 }
 
 impl Term {
@@ -207,14 +224,14 @@ impl Term {
 
                     let list = match tail {
                         Term::Atom(atom) if atom == "[]" => match head {
-                            Term::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                            Term::Atom(ref a) if a.chars().count() == 1 => {
                                 // Handle lists of char as strings
                                 Term::String(a.to_string())
                             }
                             _ => Term::List(vec![head]),
                         },
                         Term::List(elems) if elems.is_empty() => match head {
-                            Term::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                            Term::Atom(ref a) if a.chars().count() == 1 => {
                                 // Handle lists of char as strings
                                 Term::String(a.to_string())
                             },
@@ -225,7 +242,7 @@ impl Term {
                             Term::List(elems)
                         },
                         Term::String(mut elems) => match head {
-                            Term::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                            Term::Atom(ref a) if a.chars().count() == 1 => {
                                 // Handle lists of char as strings
                                 elems.insert(0, a.chars().next().unwrap());
                                 Term::String(elems)
@@ -617,5 +634,13 @@ impl Machine {
             var_names,
             called: false,
         }
+    }
+}
+
+#[test]
+fn test_count_to_letter_code() {
+    for idx in 0..1000 {
+        // ensure the debug assert doesn't trigger
+        count_to_letter_code(idx);
     }
 }

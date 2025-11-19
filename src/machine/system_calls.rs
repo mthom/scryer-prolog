@@ -3303,7 +3303,7 @@ impl Machine {
                     bytes.push(c as u8);
                 }
             } else {
-                bytes = string.as_str().bytes().collect();
+                bytes = string.as_str().as_bytes().to_vec();
             }
 
             match stream.write_all(&bytes) {
@@ -4420,7 +4420,7 @@ impl Machine {
         let address_data = self.deref_register(5);
         let mut bytes: Vec<u8> = Vec::new();
         if let Some(string) = self.machine_st.value_to_str_like(address_data) {
-            bytes = string.as_str().bytes().collect();
+            bytes = string.as_str().as_bytes().to_vec();
         }
         let stub_gen = || functor_stub(atom!("http_open"), 3);
 
@@ -9309,7 +9309,7 @@ impl Machine {
         let data = self.machine_st.value_to_str_like(data_arg).unwrap();
 
         match encoding {
-            atom!("utf8") => data.as_str().bytes().collect(),
+            atom!("utf8") => data.as_str().as_bytes().to_vec(),
             atom!("octet") => data.as_str().chars().map(|c| c as u8).collect(),
             _ => {
                 unreachable!()

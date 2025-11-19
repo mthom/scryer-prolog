@@ -65,6 +65,8 @@ mod lt_1_87_0 {
 
 #[cfg(rust_version = "1.87.0")]
 mod ge_1_87_0 {
+    #![allow(clippy::incompatible_msrv)]
+
     pub type PipeReader = std::io::PipeReader;
     pub type PipeWriter = std::io::PipeWriter;
 }
