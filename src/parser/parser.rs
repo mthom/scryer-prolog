@@ -728,7 +728,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
         if let Some(ref mut td) = self.stack.last_mut() {
             if td.tt == TokenType::OpenList {
-                td.spec = TERM;
+                td.spec = LIST_TERM;
                 td.tt = TokenType::Term;
                 td.priority = 0;
 
