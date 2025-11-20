@@ -451,8 +451,8 @@ macro_rules! step_or_resource_error {
     ($machine_st:expr, $val:expr) => {{
         match $val {
             Ok(r) => r,
-            Err(err_loc) => {
-                $machine_st.throw_resource_error(err_loc);
+            Err(err) => {
+                $machine_st.throw_resource_error(err);
                 return;
             }
         }
@@ -460,8 +460,8 @@ macro_rules! step_or_resource_error {
     ($machine_st:expr, $val:expr, $fail:block) => {{
         match $val {
             Ok(r) => r,
-            Err(err_loc) => {
-                $machine_st.throw_resource_error(err_loc);
+            Err(err) => {
+                $machine_st.throw_resource_error(err);
                 $fail
             }
         }
@@ -484,6 +484,6 @@ macro_rules! heap_index {
 
 macro_rules! cell_index {
     ($idx:expr) => {
-        (($idx) / std::mem::size_of::<HeapCellValue>())
+        ($idx) / std::mem::size_of::<HeapCellValue>()
     };
 }

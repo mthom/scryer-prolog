@@ -4,6 +4,8 @@ use std::alloc;
 use std::cell::UnsafeCell;
 use std::ptr;
 
+use crate::machine::heap::AllocError;
+
 pub trait RawBlockTraits {
     fn init_size() -> usize;
     fn align() -> usize;
@@ -29,65 +31,57 @@ impl<T: RawBlockTraits> RawBlock<T> {
     }
 
     #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self, AllocError> {
         let mut block = Self::empty_block();
 
         unsafe {
-            block.grow();
+            block.grow()?;
         }
 
-        block
+        Ok(block)
     }
 
-    unsafe fn init_at_size(&mut self, cap: usize) {
+    unsafe fn init_at_size(&mut self, cap: usize) -> Result<(), AllocError> {
         let layout = alloc::Layout::from_size_align_unchecked(cap, T::align());
         let new_base = alloc::alloc(layout).cast_const();
         if new_base.is_null() {
-            panic!(
-                "failed to allocate in init_at_size for {}",
-                std::any::type_name::<Self>()
-            );
+            return Err(AllocError);
         }
         self.base = new_base;
         self.top = self.base.add(cap);
         *self.ptr.get_mut() = self.base.cast_mut();
+        Ok(())
     }
 
-    pub unsafe fn grow(&mut self) -> bool {
+    pub unsafe fn grow(&mut self) -> Result<(), AllocError> {
         if self.base.is_null() {
-            self.init_at_size(T::init_size());
-            true
+            self.init_at_size(T::init_size())
         } else {
             let size = self.size();
             let layout = alloc::Layout::from_size_align_unchecked(size, T::align());
 
             let new_base = alloc::realloc(self.base.cast_mut(), layout, size * 2).cast_const();
             if new_base.is_null() {
-                false
+                Err(AllocError)
             } else {
                 self.base = new_base;
                 self.top = self.base.add(size * 2);
                 *self.ptr.get_mut() = self.base.add(size).cast_mut();
-                true
+                Ok(())
             }
         }
     }
 
-    pub unsafe fn grow_new(&self) -> Option<Self> {
+    pub unsafe fn grow_new(&self) -> Result<Self, AllocError> {
         if self.base.is_null() {
-            Some(Self::new())
+            Self::new()
         } else {
             let mut new_block = Self::empty_block();
-            new_block.init_at_size(self.size() * 2);
-            if new_block.base.is_null() {
-                // allocation failed
-                None
-            } else {
-                let allocated = (*self.ptr.get()).addr() - self.base.addr();
-                self.base.copy_to(new_block.base.cast_mut(), allocated);
-                *new_block.ptr.get_mut() = new_block.base.add(allocated).cast_mut();
-                Some(new_block)
-            }
+            new_block.init_at_size(self.size() * 2)?;
+            let allocated = (*self.ptr.get()).addr() - self.base.addr();
+            self.base.copy_to(new_block.base.cast_mut(), allocated);
+            *new_block.ptr.get_mut() = new_block.base.add(allocated).cast_mut();
+            Ok(new_block)
         }
     }
 

@@ -217,6 +217,8 @@ mod test {
     fn pstr_iter_tests() {
         let mut wam = MockWAM::new();
 
+        let init_len = wam.machine_st.heap.cell_len();
+
         let pstr_cell = wam.machine_st.heap.allocate_pstr("abc ").unwrap();
         wam.machine_st
             .heap
@@ -233,7 +235,7 @@ mod test {
             assert_eq!(
                 iter.next(),
                 Some(PStrIteratee::PStrSlice {
-                    slice_loc: heap_index!(1),
+                    slice_loc: heap_index!(init_len),
                     slice_len: "abc ".len()
                 }),
             );
@@ -241,9 +243,9 @@ mod test {
             assert!(!iter.is_cyclic());
         }
 
-        assert_eq!(wam.machine_st.heap[2], empty_list_as_cell!());
+        assert_eq!(wam.machine_st.heap[init_len + 1], empty_list_as_cell!());
 
-        wam.machine_st.heap[2] = pstr_loc_as_cell!(heap_index!(3));
+        wam.machine_st.heap[init_len + 1] = pstr_loc_as_cell!(heap_index!(init_len + 2));
 
         wam.machine_st.heap.allocate_pstr("def").unwrap();
         let h = wam.machine_st.heap.cell_len();
@@ -256,14 +258,14 @@ mod test {
             assert_eq!(
                 iter.next(),
                 Some(PStrIteratee::PStrSlice {
-                    slice_loc: heap_index!(1),
+                    slice_loc: heap_index!(init_len),
                     slice_len: "abc ".len()
                 })
             );
             assert_eq!(
                 iter.next(),
                 Some(PStrIteratee::PStrSlice {
-                    slice_loc: heap_index!(3),
+                    slice_loc: heap_index!(init_len + 2),
                     slice_len: "def".len(),
                 })
             );
@@ -282,14 +284,14 @@ mod test {
             assert_eq!(
                 iter.next(),
                 Some(PStrIteratee::PStrSlice {
-                    slice_loc: heap_index!(1),
+                    slice_loc: heap_index!(init_len),
                     slice_len: "abc ".len()
                 })
             );
             assert_eq!(
                 iter.next(),
                 Some(PStrIteratee::PStrSlice {
-                    slice_loc: heap_index!(3),
+                    slice_loc: heap_index!(init_len + 2),
                     slice_len: "def".len(),
                 })
             );
@@ -298,7 +300,7 @@ mod test {
             assert!(!iter.is_cyclic());
         }
 
-        wam.machine_st.heap[h] = pstr_loc_as_cell!(heap_index!(3));
+        wam.machine_st.heap[h] = pstr_loc_as_cell!(heap_index!(init_len + 2));
 
         {
             let mut iter = HeapPStrIter::new(&wam.machine_st.heap, 0);

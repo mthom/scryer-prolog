@@ -551,7 +551,7 @@ mod tests {
 
     #[test]
     fn inlined_atoms() {
-        let atom_table = AtomTable::new();
+        let atom_table = AtomTable::new().unwrap();
         let inlined = AtomTable::build_with(&atom_table, "inline");
 
         assert!(inlined.is_inlined());

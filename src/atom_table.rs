@@ -1,5 +1,7 @@
 #![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
+#![allow(unused_parens)] // see mthom/scryer-prolog#3092 and rust-lang/rust#147126
 
+use crate::machine::heap::AllocError;
 use crate::parser::ast::MAX_ARITY;
 use crate::raw_block::*;
 use crate::types::*;
@@ -436,21 +438,21 @@ impl InnerAtomTable {
 
 impl AtomTable {
     #[inline]
-    pub fn new() -> Arc<Self> {
+    pub fn new() -> Result<Arc<Self>, AllocError> {
         let upgraded = global_atom_table().read().unwrap().upgrade();
         // don't inline upgraded, otherwise temporary will be dropped too late in case of None
         if let Some(atom_table) = upgraded {
-            atom_table
+            Ok(atom_table)
         } else {
             let mut guard = global_atom_table().write().unwrap();
             // try to upgrade again in case we lost the race on the write lock
             if let Some(atom_table) = guard.upgrade() {
-                atom_table
+                Ok(atom_table)
             } else {
                 let atom_table = Arc::new(Self {
                     inner: Arcu::new(
                         InnerAtomTable {
-                            block: RawBlock::new(),
+                            block: RawBlock::new()?,
                             table: Arcu::new(IndexSet::new(), GlobalEpochCounterPool),
                         },
                         GlobalEpochCounterPool,
@@ -458,9 +460,14 @@ impl AtomTable {
                     update: Mutex::new(()),
                 });
                 *guard = Arc::downgrade(&atom_table);
-                atom_table
+                Ok(atom_table)
             }
         }
+    }
+
+    #[inline]
+    pub fn retrieve() -> Arc<Self> {
+        global_atom_table().read().unwrap().upgrade().unwrap()
     }
 
     pub fn active_table(&self) -> RcuRef<IndexSet<Atom>, IndexSet<Atom>> {

@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use crate::atom_table;
 use crate::heap_iter::{stackful_post_order_iter, NonListElider};
+use crate::machine::heap::AllocError;
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{
@@ -128,9 +129,11 @@ impl Term {
     pub fn try_conjunction(value: impl IntoIterator<Item = Term>) -> Option<Self> {
         let mut iter = value.into_iter();
         iter.next().map(|first| {
-            Term::try_conjunction(iter)
-                .map(|rest| Term::compound(",", [first.clone(), rest]))
-                .unwrap_or(first)
+            if let Some(rest) = Term::try_conjunction(iter) {
+                Term::compound(",", [first, rest])
+            } else {
+                first
+            }
         })
     }
 
@@ -143,9 +146,11 @@ impl Term {
     pub fn try_disjunction(value: impl IntoIterator<Item = Term>) -> Option<Self> {
         let mut iter = value.into_iter();
         iter.next().map(|first| {
-            Term::try_disjunction(iter)
-                .map(|rest| Term::compound(";", [first.clone(), rest]))
-                .unwrap_or(first)
+            if let Some(rest) = Term::try_disjunction(iter) {
+                Term::compound(";", [first, rest])
+            } else {
+                first
+            }
         })
     }
 }
@@ -155,9 +160,14 @@ impl Term {
 fn count_to_letter_code(mut count: usize) -> String {
     let mut letters = Vec::new();
 
+    // +2 rather than +1 to account for the _ at the end
+    let length = count.checked_ilog(26).unwrap_or(0) as usize + 2;
+
+    letters.reserve(length);
+
     loop {
-        let letter_idx = (count % 26) as u32;
-        letters.push(char::from_u32('A' as u32 + letter_idx).unwrap());
+        let letter_idx = (count % 26) as u8;
+        letters.push(b'A' + letter_idx);
         count /= 26;
 
         if count == 0 {
@@ -165,7 +175,15 @@ fn count_to_letter_code(mut count: usize) -> String {
         }
     }
 
-    letters.into_iter().chain("_".chars()).rev().collect()
+    letters.push(b'_');
+
+    debug_assert_eq!(length, letters.len());
+
+    letters.reverse();
+
+    // Safety: we only push ascii chars A-Z and _
+    // an ascii only byte sequence is always valid utf-8
+    unsafe { String::from_utf8_unchecked(letters) }
 }
 
 impl Term {
@@ -207,14 +225,14 @@ impl Term {
 
                     let list = match tail {
                         Term::Atom(atom) if atom == "[]" => match head {
-                            Term::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                            Term::Atom(ref a) if a.chars().count() == 1 => {
                                 // Handle lists of char as strings
                                 Term::String(a.to_string())
                             }
                             _ => Term::List(vec![head]),
                         },
                         Term::List(elems) if elems.is_empty() => match head {
-                            Term::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                            Term::Atom(ref a) if a.chars().count() == 1 => {
                                 // Handle lists of char as strings
                                 Term::String(a.to_string())
                             },
@@ -225,7 +243,7 @@ impl Term {
                             Term::List(elems)
                         },
                         Term::String(mut elems) => match head {
-                            Term::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                            Term::Atom(ref a) if a.chars().count() == 1 => {
                                 // Handle lists of char as strings
                                 elems.insert(0, a.chars().next().unwrap());
                                 Term::String(elems)
@@ -428,14 +446,15 @@ impl Iterator for QueryState<'_> {
             // contained in self.machine_st.ball.
             let h = machine.machine_st.heap.cell_len();
 
-            if let Err(resource_err_loc) = machine
+            if let Err(err) = machine
                 .machine_st
                 .heap
                 .append(&machine.machine_st.ball.stub)
             {
+                let resource_error_offset = err.resource_error_offset(&mut machine.machine_st.heap);
                 return Some(Err(Term::from_heapcell(
                     machine,
-                    machine.machine_st.heap[resource_err_loc],
+                    machine.machine_st.heap[resource_error_offset],
                     &mut IndexMap::new(),
                 )));
             }
@@ -536,11 +555,11 @@ impl Machine {
         self.run_module_predicate(atom!("loader"), (atom!("consult_stream"), 2));
     }
 
-    pub(crate) fn allocate_stub_choice_point(&mut self) {
+    pub(crate) fn allocate_stub_choice_point(&mut self) -> Result<(), AllocError> {
         // NOTE: create a choice point to terminate the dispatch_loop
         // if an exception is thrown.
 
-        let stub_b = self.machine_st.stack.allocate_or_frame(0);
+        let stub_b = self.machine_st.stack.allocate_or_frame(0)?;
         let or_frame = self.machine_st.stack.index_or_frame_mut(stub_b);
 
         or_frame.prelude.num_cells = 0;
@@ -558,6 +577,8 @@ impl Machine {
         self.machine_st.b = stub_b;
         self.machine_st.hb = self.machine_st.heap.cell_len();
         self.machine_st.block = stub_b;
+
+        Ok(())
     }
 
     /// Runs a query.
@@ -571,7 +592,8 @@ impl Machine {
             .read_term(&op_dir, Tokens::Default)
             .expect("Failed to parse query");
 
-        self.allocate_stub_choice_point();
+        self.allocate_stub_choice_point()
+            .expect("failed to allocate stub choice point");
 
         // Write parsed term to heap
         let term_write_result = write_term_to_heap(&term, &mut self.machine_st.heap)
@@ -617,5 +639,13 @@ impl Machine {
             var_names,
             called: false,
         }
+    }
+}
+
+#[test]
+fn test_count_to_letter_code() {
+    for idx in 0..1000 {
+        // ensure the debug assert doesn't trigger
+        count_to_letter_code(idx);
     }
 }

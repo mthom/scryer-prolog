@@ -38,6 +38,7 @@ use crate::instructions::*;
 use crate::machine::args::*;
 use crate::machine::compile::*;
 use crate::machine::copier::*;
+use crate::machine::heap::AllocError;
 use crate::machine::heap::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
@@ -60,6 +61,7 @@ use std::cmp::Ordering;
 use std::env;
 use std::io::Read;
 use std::path::PathBuf;
+use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
 use std::sync::OnceLock;
 
@@ -261,7 +263,9 @@ impl Machine {
                 let p = index_ptr.local().unwrap();
 
                 // Leave a halting choice point to backtrack to in case the predicate fails or throws.
-                self.allocate_stub_choice_point();
+                if self.allocate_stub_choice_point().is_err() {
+                    return ExitCode::FAILURE;
+                }
 
                 self.machine_st.cp = BREAK_FROM_DISPATCH_LOOP_LOC;
                 self.machine_st.p = p;
@@ -729,10 +733,10 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(super) fn try_me_else(&mut self, offset: usize) {
+    pub(super) fn try_me_else(&mut self, offset: usize) -> Result<(), AllocError> {
         if let Some(offset) = self.next_applicable_clause(offset) {
             let n = self.machine_st.num_of_args;
-            let b = self.machine_st.stack.allocate_or_frame(n);
+            let b = self.machine_st.stack.allocate_or_frame(n)?;
             let or_frame = self.machine_st.stack.index_or_frame_mut(b);
 
             or_frame.prelude.num_cells = n;
@@ -758,13 +762,15 @@ impl Machine {
         }
 
         self.machine_st.p += 1;
+
+        Ok(())
     }
 
     #[inline(always)]
-    pub(super) fn indexed_try(&mut self, offset: usize) {
+    pub(super) fn indexed_try(&mut self, offset: usize) -> Result<(), AllocError> {
         if let Some(iip_offset) = self.next_inner_applicable_clause() {
             let n = self.machine_st.num_of_args;
-            let b = self.machine_st.stack.allocate_or_frame(n);
+            let b = self.machine_st.stack.allocate_or_frame(n)?;
             let or_frame = self.machine_st.stack.index_or_frame_mut(b);
 
             or_frame.prelude.num_cells = n;
@@ -793,6 +799,7 @@ impl Machine {
         }
 
         self.machine_st.p += offset;
+        Ok(())
     }
 
     #[inline(always)]
