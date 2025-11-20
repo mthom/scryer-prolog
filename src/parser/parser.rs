@@ -695,6 +695,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
         for (i, desc) in self.stack.iter().rev().enumerate() {
             if i % 2 == 0 {
                 // expect a term or non-comma operator.
+                // HeadTailSeparator is NEVER valid as a term, even if its spec suggests otherwise
+                if let TokenType::HeadTailSeparator = desc.tt {
+                    return None;
+                }
                 if let TokenType::Comma = desc.tt {
                     return None;
                 } else if is_term!(desc.spec) || is_op!(desc.spec) || is_negate!(desc.spec) {
