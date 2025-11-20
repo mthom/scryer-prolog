@@ -744,7 +744,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             }
         }
 
-        self.reduce_op(1000);
+        self.reduce_op(999);
 
         let mut arity = match self.compute_arity_in_list() {
             Some(arity) => arity,
