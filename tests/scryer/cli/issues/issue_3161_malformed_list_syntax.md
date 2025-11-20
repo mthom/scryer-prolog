@@ -10,7 +10,7 @@ After the fix, it should throw a syntax error.
 
 ```trycmd
 $ scryer-prolog -f --no-add-history -g "use_module(library(dcgs)), {!*[|]*}=T, halt"
-use_module(library(dcgs)),{!*[|]*}=T,halt causes: error(syntax_error(incomplete_reduction),read_term/3:1)
+"use_module(library(dcgs)), {!*[|]*}=T, halt" cannot be read: error(syntax_error(incomplete_reduction),read_term_from_chars/3:0)
 
 ```
 
@@ -18,7 +18,7 @@ use_module(library(dcgs)),{!*[|]*}=T,halt causes: error(syntax_error(incomplete_
 
 ```trycmd
 $ scryer-prolog -f --no-add-history -g "use_module(library(dcgs)), {!+[|]+}=T, halt"
-use_module(library(dcgs)),{!+[|]+}=T,halt causes: error(syntax_error(incomplete_reduction),read_term/3:1)
+"use_module(library(dcgs)), {!+[|]+}=T, halt" cannot be read: error(syntax_error(incomplete_reduction),read_term_from_chars/3:0)
 
 ```
 
@@ -26,7 +26,7 @@ use_module(library(dcgs)),{!+[|]+}=T,halt causes: error(syntax_error(incomplete_
 
 ```trycmd
 $ scryer-prolog -f --no-add-history -g "{[|]}=T, halt"
-"{[|]}=T,halt" cannot be read: error(syntax_error(incomplete_reduction),read_term/3:1)
+"{[|]}=T, halt" cannot be read: error(syntax_error(incomplete_reduction),read_term_from_chars/3:0)
 
 ```
 
