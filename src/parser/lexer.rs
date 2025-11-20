@@ -798,18 +798,18 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         }
 
         if decimal_point_char!(c) {
-            // Reject option 9: digit separators in float (before decimal point)
-            // Per WG17 decision, options 9-11 (float digit separators) are rejected
-            if had_separator {
-                return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
-            }
-
             self.skip_char(c);
 
             if self.reader.peek_char().is_none() {
                 self.return_char('.');
                 self.parse_integer(&token).map(NumberToken::Integer)
             } else if decimal_digit_char!(self.lookahead_char()?) {
+                // Reject option 9: digit separators in float (before decimal point)
+                // Per WG17 decision, options 9-11 (float digit separators) are rejected
+                if had_separator {
+                    return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                }
+
                 token.push('.');
                 token.push(self.read_char()?);
 

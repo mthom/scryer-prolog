@@ -1,5 +1,6 @@
 :- module(digit_separators_tests, []).
 :- use_module(test_framework).
+:- use_module(library(charsio)).
 
 test("decimal with single underscore", (
     X = 1_000,
@@ -219,6 +220,45 @@ test("number_chars rejects float with separator in exponent", (
     catch(
         (number_chars(_, "1.0e1_0"), fail),
         error(syntax_error(unexpected_char), _),
+        true
+    )
+)).
+
+% Tests for read_from_chars with digit separators
+test("read_from_chars with decimal separator", (
+    read_from_chars("1_0.", N),
+    N =:= 10
+)).
+
+test("read_from_chars with multiple decimal separators", (
+    read_from_chars("1_000_000.", N),
+    N =:= 1000000
+)).
+
+test("read_from_chars with hex separator", (
+    read_from_chars("0xDE_AD.", N),
+    N =:= 0xDEAD
+)).
+
+test("read_from_chars with octal separator", (
+    read_from_chars("0o7_6.", N),
+    N =:= 0o76
+)).
+
+test("read_from_chars with binary separator", (
+    read_from_chars("0b10_11.", N),
+    N =:= 0b1011
+)).
+
+test("read_from_chars with separator and whitespace", (
+    read_from_chars("123_ 456.", N),
+    N =:= 123456
+)).
+
+test("read_from_chars rejects float with separator", (
+    catch(
+        (read_from_chars("1_0.5", _), fail),
+        error(syntax_error(cannot_parse_big_int), _),
         true
     )
 )).
