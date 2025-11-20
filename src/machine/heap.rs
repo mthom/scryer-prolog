@@ -596,7 +596,7 @@ impl Heap {
         self.resource_err_loc
     }
 
-    pub(crate) fn with_cell_capacity(cap: usize) -> Result<Self, usize> {
+    pub(crate) fn with_cell_capacity(cap: usize) -> Result<Self, AllocError> {
         let ptr = unsafe {
             let layout = alloc::Layout::from_size_align(
                 cap * size_of::<HeapCellValue>(),
@@ -607,7 +607,7 @@ impl Heap {
         };
 
         if ptr.is_null() {
-            panic!("could not allocate {} bytes for heap!", heap_index!(cap))
+            Err(AllocError)
         } else {
             Ok(Self {
                 inner: InnerHeap {
