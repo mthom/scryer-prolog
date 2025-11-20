@@ -687,16 +687,7 @@ impl Heap {
     }
 
     pub(crate) fn clear(&mut self) {
-        unsafe {
-            let layout =
-                alloc::Layout::from_size_align(self.inner.byte_cap, size_of::<HeapCellValue>())
-                    .unwrap();
-            alloc::dealloc(self.inner.ptr, layout);
-        }
-
-        self.inner.ptr = ptr::null_mut();
-        self.inner.byte_len = 0;
-        self.inner.byte_cap = 0;
+        *self = Heap::new();
     }
 
     pub(crate) fn store_resource_error(&mut self) {
