@@ -5,9 +5,9 @@ use crate::types::*;
 
 use std::alloc;
 use std::convert::TryFrom;
+use std::num::NonZero;
 use std::ops::{Bound, Index, IndexMut, Range, RangeBounds};
 use std::ptr;
-use std::sync::Once;
 
 const ALIGN: usize = Heap::heap_cell_alignment();
 
@@ -23,7 +23,7 @@ impl AllocError {
 #[derive(Debug)]
 pub struct Heap {
     inner: InnerHeap,
-    resource_err_loc: usize,
+    resource_err_loc: Option<NonZero<usize>>,
 }
 
 impl Drop for Heap {
@@ -93,8 +93,6 @@ impl InnerHeap {
 
 unsafe impl Send for Heap {}
 unsafe impl Sync for Heap {}
-
-static RESOURCE_ERROR_OFFSET_INIT: Once = Once::new();
 
 #[derive(Debug)]
 pub struct HeapStringScan<'a> {
@@ -572,7 +570,7 @@ impl Heap {
                 byte_len: 0,
                 byte_cap: 0,
             },
-            resource_err_loc: 0,
+            resource_err_loc: None,
         }
     }
 
@@ -594,6 +592,8 @@ impl Heap {
     #[inline]
     fn resource_error_offset(&self) -> usize {
         self.resource_err_loc
+            .expect("`error(resource_error(memory), [])` should be stored at the start of the heap")
+            .get()
     }
 
     pub(crate) fn with_cell_capacity(cap: usize) -> Result<Self, AllocError> {
@@ -616,7 +616,7 @@ impl Heap {
                     byte_cap: heap_index!(cap),
                 },
                 // pstr_vec: bitvec![],
-                resource_err_loc: 0,
+                resource_err_loc: None,
             })
         }
     }
@@ -700,7 +700,7 @@ impl Heap {
     }
 
     pub(crate) fn store_resource_error(&mut self) {
-        RESOURCE_ERROR_OFFSET_INIT.call_once(move || {
+        if self.resource_err_loc.is_none() {
             let stub = functor!(
                 atom!("error"),
                 [
@@ -708,11 +708,14 @@ impl Heap {
                     atom_as_cell((atom!("[]")))
                 ]
             );
-            self.resource_err_loc = cell_index!(self.inner.byte_len);
+
+            self.resource_err_loc = Some(NonZero::new(cell_index!(self.inner.byte_len)).expect(
+                "index 0 should already be taken by an interstitial cell reserved by the runtime",
+            ));
 
             let mut writer = Heap::functor_writer(stub);
             writer(self).unwrap();
-        });
+        }
     }
 
     #[inline]
