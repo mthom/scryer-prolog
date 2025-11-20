@@ -3,51 +3,31 @@
 ## Test that priority 1000 operator in list throws syntax error
 
 ```trycmd
-$ scryer-prolog -f --no-add-history
-?- use_module(library(charsio)).
-   true.
-?- op(1000,xfx,~>).
-   true.
-?- read_from_chars("[a~>b].",T).
-   error(syntax_error(incomplete_reduction),read_term_from_chars/3:0).
-?- halt.
+$ scryer-prolog -f --no-add-history -g "use_module(library(charsio)), op(1000,xfx,~>), read_from_chars(\"[a~>b].\",T), halt"
+use_module(library(charsio)),op(1000,xfx,~>),read_from_chars("[a~>b].",T),halt causes: error(syntax_error(incomplete_reduction),read_term_from_chars/3:0)
+
 ```
 
 ## Test that priority 1000 yfx operator in list throws syntax error
 
 ```trycmd
-$ scryer-prolog -f --no-add-history
-?- use_module(library(charsio)).
-   true.
-?- op(1000,yfx,~>).
-   true.
-?- read_from_chars("[a~>b].",T).
-   error(syntax_error(incomplete_reduction),read_term_from_chars/3:0).
-?- halt.
+$ scryer-prolog -f --no-add-history -g "use_module(library(charsio)), op(1000,yfx,~>), read_from_chars(\"[a~>b].\",T), halt"
+use_module(library(charsio)),op(1000,yfx,~>),read_from_chars("[a~>b].",T),halt causes: error(syntax_error(incomplete_reduction),read_term_from_chars/3:0)
+
 ```
 
 ## Test that priority 999 operator in list works
 
 ```trycmd
-$ scryer-prolog -f --no-add-history
-?- use_module(library(charsio)).
-   true.
-?- op(999,xfx,~>).
-   true.
-?- read_from_chars("[a~>b].",T).
-   T = [a~>b].
-?- halt.
+$ scryer-prolog -f --no-add-history -g "use_module(library(charsio)), op(999,xfx,~>), read_from_chars(\"[a~>b].\",T), writeq(T), nl, halt"
+[a~>b]
+
 ```
 
 ## Test that parenthesized priority 1000 operator in list works
 
 ```trycmd
-$ scryer-prolog -f --no-add-history
-?- use_module(library(charsio)).
-   true.
-?- op(1000,xfx,~>).
-   true.
-?- read_from_chars("[(a~>b)].",T).
-   T = [a~>b].
-?- halt.
+$ scryer-prolog -f --no-add-history -g "use_module(library(charsio)), op(1000,xfx,~>), read_from_chars(\"[(a~>b)].\",T), writeq(T), nl, halt"
+[(a~>b)]
+
 ```
