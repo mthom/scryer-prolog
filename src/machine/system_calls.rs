@@ -3609,8 +3609,20 @@ impl Machine {
             }
         } else {
             let mut iter = self.machine_st.open_parsing_stream(stream).map_err(|e| {
-                let err = self.machine_st.session_error(SessionError::from(e));
                 let stub = functor_stub(atom!("get_n_chars"), 2);
+
+                // Check if this is a UTF-8 encoding error
+                let err = if let ParserError::IO(io_err) = &e {
+                    if io_err.kind() == ErrorKind::InvalidData {
+                        // ISO Prolog standard requires representation_error(character)
+                        // for character encoding errors
+                        self.machine_st.representation_error(RepFlag::Character)
+                    } else {
+                        self.machine_st.session_error(SessionError::from(e))
+                    }
+                } else {
+                    self.machine_st.session_error(SessionError::from(e))
+                };
 
                 self.machine_st.error_form(err, stub)
             })?;
@@ -3624,7 +3636,15 @@ impl Machine {
                     }
                     Some(Err(e)) => {
                         let stub = functor_stub(atom!("$get_n_chars"), 3);
-                        let err = self.machine_st.session_error(SessionError::from(e));
+
+                        // Check if this is a UTF-8 encoding error
+                        let err = if e.kind() == ErrorKind::InvalidData {
+                            // ISO Prolog standard requires representation_error(character)
+                            // for character encoding errors
+                            self.machine_st.representation_error(RepFlag::Character)
+                        } else {
+                            self.machine_st.session_error(SessionError::from(e))
+                        };
 
                         return Err(self.machine_st.error_form(err, stub));
                     }
