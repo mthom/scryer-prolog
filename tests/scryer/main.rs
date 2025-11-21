@@ -2,6 +2,7 @@ mod helper;
 mod issues;
 mod src_tests;
 
+#[cfg(feature = "ffi")]
 mod ffi;
 
 /// To add new cli test copy an existing .toml file in `tests/scryer/cli/issues/` or `tests/scryer/cli/issues/src_tests/`,

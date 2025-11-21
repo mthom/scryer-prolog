@@ -560,21 +560,39 @@ impl Machine {
         self.machine_st.block = stub_b;
     }
 
-    /// Runs a query.
-    pub fn run_query(&mut self, query: impl Into<String>) -> QueryState<'_> {
+
+    /// Runs a string as a query.
+    pub fn run_query_string(&mut self, query: impl Into<String>) -> QueryState<'_> {
         let mut parser = Parser::new(
             Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
             &mut self.machine_st,
         );
         let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
-        let term = parser
+        let query_term = parser
             .read_term(&op_dir, Tokens::Default)
             .expect("Failed to parse query");
 
+        self.run_query_term(query_term)
+
+    }
+
+    /// Runs a string as a query.
+    #[deprecated(note = "renamed to `run_query_string`")]
+    pub fn run_query(&mut self, query: impl Into<String>) -> QueryState<'_> {
+        self.run_query_string(query)
+    }
+
+    // TODO on the next braking change bump rename this to run_query
+    pub(crate) fn run_query2(&mut self, query: crate::Term) -> QueryState<'_> {
+        let query_term = (query, &mut *self).into();
+        self.run_query_term(query_term)
+    }
+
+    fn run_query_term(&mut self, query: crate::parser::ast::Term) -> QueryState<'_>  {
         self.allocate_stub_choice_point();
 
         // Write parsed term to heap
-        let term_write_result = write_term_to_heap(&term, &mut self.machine_st.heap)
+        let term_write_result = write_term_to_heap(&query, &mut self.machine_st.heap)
             .expect("couldn't write term to heap");
 
         let var_names: IndexMap<_, _> = term_write_result
@@ -592,7 +610,8 @@ impl Machine {
         // Write term to heap
         self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
 
-        self.machine_st.cp = LIB_QUERY_SUCCESS; // BREAK_FROM_DISPATCH_LOOP_LOC;
+        self.machine_st.cp = LIB_QUERY_SUCCESS;
+        // BREAK_FROM_DISPATCH_LOOP_LOC;
         let call_index_p = self
             .indices
             .code_dir

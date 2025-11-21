@@ -5,9 +5,13 @@ use std::{
     process::Stdio,
 };
 
-use crate::helper::load_module_test_with_input;
+use crate::helper::{load_module_test_with_input, load_module_test_with_setup};
 
 use current_platform::CURRENT_PLATFORM;
+use scryer_prolog::{
+    ffi::{CustomFfiStruct, FfiType, FfiTypeable},
+    LeafAnswer, Machine,
+};
 
 const TMP_DIR: &str = env!("CARGO_TARGET_TMPDIR");
 
@@ -192,7 +196,8 @@ fn ffi_invalid_type() {
     load_module_test_with_input(
         "tests-pl/ffi_invalid_type.pl",
         format!("LIB={dynlib_path:?}."),
-        "% Warning: initialization/1 failed for: user:test\n",
+        // its called void not c_void
+        "   error(existence_error(ffi_struct_type,c_void),'$load_foreign_lib'/2).\n",
     );
 }
 
@@ -301,5 +306,87 @@ fn ffi_heap() {
         "tests-pl/ffi_heap.pl",
         format!("LIB={dynlib_path:?}."),
         r#"133742"#,
+    );
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "ffi")]
+fn static_ffi() {
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug)]
+    struct ExampleCStructInner {
+        a: u8,
+        b: u16,
+        c: u32,
+        d: u64,
+    }
+
+    unsafe impl CustomFfiStruct for ExampleCStructInner {
+        fn fields(_machine: &mut Machine) -> Vec<FfiType> {
+            vec![FfiType::U8, FfiType::U16, FfiType::U32, FfiType::U64]
+        }
+
+        fn type_name() -> &'static str {
+            "ExampleCStructInner"
+        }
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug)]
+    struct ExampleCStructOuter {
+        inner: ExampleCStructInner,
+        f32: f32,
+        f64: f64,
+    }
+
+    unsafe impl CustomFfiStruct for ExampleCStructOuter {
+        fn fields(machine: &mut Machine) -> Vec<FfiType> {
+            vec![
+                ExampleCStructInner::to_type(machine),
+                FfiType::F32,
+                FfiType::F64,
+            ]
+        }
+
+        fn type_name() -> &'static str {
+            "ExampleCStructOuter"
+        }
+    }
+
+    static EXAMPLE: ExampleCStructOuter = ExampleCStructOuter {
+        inner: ExampleCStructInner {
+            a: 1,
+            b: 2,
+            c: 3,
+            d: 4,
+        },
+        f32: -0.7,
+        f64: 15.9,
+    };
+
+    extern "C" fn get_example_struct() -> ExampleCStructOuter {
+        EXAMPLE
+    }
+
+    load_module_test_with_setup(
+        "tests-pl/ffi_static.pl",
+        |machine| {
+            let mut state = machine.run_query("use_module(library(ffi)).");
+            assert!(matches!(state.next(), Some(Ok(LeafAnswer::True))));
+            drop(state);
+
+            machine.register_struct::<ExampleCStructInner>().unwrap();
+            machine.register_struct::<ExampleCStructOuter>().unwrap();
+
+            unsafe {
+                machine
+                    .register_function::<extern "C" fn() -> ExampleCStructOuter>(
+                        "get_example_struct",
+                        get_example_struct,
+                    )
+                    .unwrap();
+            }
+        },
+        "[ExampleCStructOuter,[ExampleCStructInner,1,2,3,4],-0.699999988079071,15.9]",
     );
 }

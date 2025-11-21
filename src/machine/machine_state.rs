@@ -76,7 +76,7 @@ pub struct MachineState {
     pub heap: Heap,
     pub(super) mode: MachineMode,
     pub(crate) stack: Stack,
-    pub(super) registers: Registers,
+    pub(crate) registers: Registers,
     pub(super) trail: Vec<TrailEntry>,
     pub(super) tr: usize,
     pub(super) hb: usize,

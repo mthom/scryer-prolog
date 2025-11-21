@@ -4929,22 +4929,35 @@ impl Machine {
                         for heap_cell in addrs {
                             read_heap_cell!(heap_cell,
                                 (HeapCellValueTag::Str, s) => {
-                                    let name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
-                                let args: Vec<Atom> = match self.machine_st.try_from_list(self.machine_st.heap[s + 1], stub_gen) {
+                                    let name = cell_as_atom!(self.machine_st.heap[s]);
+                                let args = match self.machine_st.try_from_list(self.machine_st.heap[s + 1], stub_gen) {
                                     Ok(addrs) => {
-                                    let mut args = Vec::new();
-                                    for heap_cell in addrs {
-                                        args.push(cell_as_atom_cell!(heap_cell).get_name());
-                                    }
-                                    args
+                                        let mut args = Vec::new();
+                                        for heap_cell in addrs {
+                                            args.push(FfiType::from_atom(cell_as_atom!(heap_cell)));
+                                        }
+                                        args
                                     }
                                     Err(e) => return Err(e)
                                 };
-                                let return_value = cell_as_atom_cell!(self.machine_st.heap[s + 2]);
+                                let return_value = FfiType::from_atom(cell_as_atom!(self.machine_st.heap[s + 2]));
+
+                                let symbol = match CString::new(&*name.as_str()) {
+                                    Ok(symbol) => {symbol},
+                                    Err(_) => {
+                                        let err = self.machine_st.ffi_error(FfiError::InvalidSymbol(name));
+                                        return Err(self.machine_st.error_form(err, stub_gen()))
+                                    },
+                                } ;
+
                                 functions.push(FunctionDefinition {
+                                    symbol,
                                     name,
-                                    args,
-                                    return_value: return_value.get_name(),
+                                    fn_type: FnType {
+                                        calling_convention: FfiCallingConvention::Default,
+                                        args,
+                                        ret: return_value,
+                                    }
                                 });
                                 }
                                 _ => {
@@ -4953,12 +4966,12 @@ impl Machine {
                                 }
                             )
                         }
-                        if self
+                        if let Err(err) = self
                             .foreign_function_table
                             .load_library(&library_name.as_str(), &functions)
-                            .is_err()
                         {
-                            self.machine_st.fail = true;
+                            let err = self.machine_st.ffi_error(err.into());
+                            return Err(self.machine_st.error_form(err, stub_gen()));
                         }
 
                         Ok(())
@@ -5072,7 +5085,7 @@ impl Machine {
                         ) {
                             Ok(result) => self.unify_ffi_result(return_value, result),
                             Err(e) => {
-                                let err = self.machine_st.ffi_error(e);
+                                let err = self.machine_st.ffi_error(e.into());
                                 Err(self.machine_st.error_form(err, stub_gen()))
                             }
                         }
@@ -5163,10 +5176,10 @@ impl Machine {
 
         #[cfg(feature = "ffi")]
         {
-            let struct_name_arg = self.machine_st.store(self.deref_register(1));
+            let struct_name_arg = self.deref_register(1);
             let fields_reg = self.deref_register(2);
             if let Some(struct_name) = struct_name_arg.to_atom() {
-                let fields: Vec<Atom> = match self.machine_st.try_from_list(fields_reg, stub_gen) {
+                let fields = match self.machine_st.try_from_list(fields_reg, stub_gen) {
                     Ok(addrs) => {
                         let mut args = Vec::new();
                         for heap_cell in addrs {
@@ -5181,7 +5194,7 @@ impl Machine {
                                 return Err(self.machine_st.error_form(err, stub_gen()));
                             };
 
-                            args.push(arg);
+                            args.push(FfiType::from_atom(arg));
                         }
                         args
                     }
@@ -5190,7 +5203,7 @@ impl Machine {
                 self.foreign_function_table
                     .define_struct(struct_name, fields)
                     .map_err(|err| {
-                        let ffi_error = self.machine_st.ffi_error(err);
+                        let ffi_error = self.machine_st.ffi_error(err.into());
                         self.machine_st.error_form(ffi_error, stub_gen())
                     })?;
                 Ok(())
@@ -5216,7 +5229,7 @@ impl Machine {
         {
             let allocator = self.deref_register(1);
             let ffi_type_arg = self.deref_register(2);
-            let ffi_type = ffi_type_arg.to_atom().unwrap();
+            let ffi_type = FfiType::from_atom(ffi_type_arg.to_atom().unwrap());
             let args = self.deref_register(3);
             let return_value = self.deref_register(4);
 
@@ -5237,7 +5250,7 @@ impl Machine {
             ) {
                 Ok(value) => value,
                 Err(ffi_error) => {
-                    let machine_error = self.machine_st.ffi_error(ffi_error);
+                    let machine_error = self.machine_st.ffi_error(ffi_error.into());
                     return Err(self.machine_st.error_form(machine_error, stub_gen()));
                 }
             };
@@ -5260,7 +5273,7 @@ impl Machine {
         #[cfg(feature = "ffi")]
         {
             let ffi_type_arg = self.deref_register(1);
-            let ffi_type = ffi_type_arg.to_atom().unwrap();
+            let ffi_type = FfiType::from_atom(ffi_type_arg.to_atom().unwrap());
             let ptr = self.deref_register(2);
             let return_value = self.deref_register(3);
 
@@ -5270,7 +5283,7 @@ impl Machine {
                 .foreign_function_table
                 .read_ptr(ffi_type, ptr, &mut self.machine_st.arena)
                 .map_err(|ffi_error| {
-                    let machine_error = self.machine_st.ffi_error(ffi_error);
+                    let machine_error = self.machine_st.ffi_error(ffi_error.into());
                     self.machine_st.error_form(machine_error, stub_gen())
                 })?;
 
@@ -5293,7 +5306,7 @@ impl Machine {
         {
             let allocator = self.deref_register(1);
             let ffi_type_arg = self.deref_register(2);
-            let ffi_type = ffi_type_arg.to_atom().unwrap();
+            let ffi_type = FfiType::from_atom(ffi_type_arg.to_atom().unwrap());
             let ptr = self.deref_register(3);
 
             let allocator = FfiAllocator::try_from(allocator.to_atom().unwrap()).map_err(|_| {
@@ -5311,7 +5324,7 @@ impl Machine {
             {
                 Ok(value) => value,
                 Err(ffi_error) => {
-                    let machine_error = self.machine_st.ffi_error(ffi_error);
+                    let machine_error = self.machine_st.ffi_error(ffi_error.into());
                     return Err(self.machine_st.error_form(machine_error, stub_gen()));
                 }
             }
