@@ -855,7 +855,7 @@ test_236 :- write_canonical_term_to_chars(a- - -b, Cs),
 
 test_237 :- catch((op(699,xf,>),
                    false),
-                  error(permission_error(create,operator,>),op/3),
+                  error(permission_error(create,operator,>),[predicate-op/3]),
                   true).
 
 test_238 :- writeq_term_to_chars(>(>(a),b), Cs),
