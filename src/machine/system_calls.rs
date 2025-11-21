@@ -4983,10 +4983,10 @@ impl Machine {
     #[cfg(feature = "ffi")]
     fn map_ffi_arg(
         &mut self,
-        source: HeapCellValue,
+        orig_source: HeapCellValue,
         stub_gen: impl Copy + Fn() -> MachineStub,
     ) -> CallResult<Value> {
-        let source = self.machine_st.store(self.machine_st.deref(source));
+        let source = self.machine_st.store(self.machine_st.deref(orig_source));
         if let Ok(number) = Number::try_from((source, &self.machine_st.arena.f64_tbl)) {
             Ok(Value::Number(number))
         } else if let Some(string) = self.machine_st.value_to_str_like(source) {
@@ -5007,15 +5007,14 @@ impl Machine {
                             .collect::<Result<_, _>>()?,
                     ))
                 } else if head.is_var() {
-                    let err = self.machine_st.instantiation_error();
+                    let mut err = self.machine_st.instantiation_error();
 
-                    let src = stub_gen();
+                    err.add_context(functor!(
+                        atom!("-"),
+                        [atom_as_cell((atom!("var"))), cell(source)]
+                    ));
 
-                    let culprit = functor!(atom!("-"), [atom_as_cell((atom!("var"))), cell(head)]);
-
-                    let src = functor!(atom!("."), [functor(culprit), list([functor(src)])]);
-
-                    Err(self.machine_st.error_form(err, src))
+                    Err(self.machine_st.error_form(err, stub_gen()))
                 } else {
                     // first element of a struct needs to be the type
                     let err = self.machine_st.type_error(ValidType::Atom, head);
@@ -5029,15 +5028,14 @@ impl Machine {
                 Err(self.machine_st.error_form(err, stub_gen()))
             }
         } else if self.machine_st.deref(source).is_var() {
-            let err = self.machine_st.instantiation_error();
+            let mut err = self.machine_st.instantiation_error();
 
-            let src = stub_gen();
+            err.add_context(functor!(
+                atom!("-"),
+                [atom_as_cell((atom!("var"))), cell(source)]
+            ));
 
-            let culprit = functor!(atom!("-"), [atom_as_cell((atom!("var"))), cell(source)]);
-
-            let src = functor!(atom!("."), [functor(culprit), list([functor(src)])]);
-
-            Err(self.machine_st.error_form(err, src))
+            Err(self.machine_st.error_form(err, stub_gen()))
         } else {
             let err = self
                 .machine_st
