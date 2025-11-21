@@ -731,10 +731,6 @@ impl Drop for FfiStruct {
 }
 
 impl ForeignFunctionTable {
-    pub(crate) fn merge(&mut self, other: ForeignFunctionTable) {
-        self.table.extend(other.table);
-    }
-
     pub(crate) fn define_struct(
         &mut self,
         name: Atom,
@@ -780,33 +776,64 @@ impl ForeignFunctionTable {
         Ok(())
     }
 
+    pub(crate) fn open_library(
+        &mut self,
+        library_name: &str,
+    ) -> Result<Library, FfiLoadLibraryError> {
+        let library = unsafe { Library::new(library_name) }.map_err(|err| {
+            FfiLoadLibraryError::LibLoadingError {
+                library_name: library_name.to_string(),
+                symbol_name: None,
+                error: err,
+            }
+        })?;
+        // TODO store the loaded libray e.g. in the arena and give out TypedArenaPtr<Library> instead?
+        Ok(library)
+    }
+
+    pub(crate) fn lookup_symbol<'lib>(
+        library: &'lib Library,
+        library_name: &str,
+        symbol_name: &CStr,
+    ) -> Result<Symbol<'lib, *mut c_void>, FfiLoadLibraryError> {
+        unsafe { library.get(symbol_name.to_bytes_with_nul()) }.map_err(|err| {
+            FfiLoadLibraryError::LibLoadingError {
+                library_name: library_name.to_string(),
+                symbol_name: Some(symbol_name.to_string_lossy().into_owned()),
+                error: err,
+            }
+        })
+    }
+
     pub(crate) fn load_library(
         &mut self,
         library_name: &str,
         functions: &Vec<FunctionDefinition>,
     ) -> Result<(), FfiLoadLibraryError> {
-        let mut ff_table: ForeignFunctionTable = Default::default();
-        let library = unsafe { Library::new(library_name) }
-            .map_err(|err| FfiLoadLibraryError::LibLoadingError(library_name.to_string(), err))?;
+        let library = self.open_library(library_name)?;
+
+        let mut pending_functions = HashMap::new();
+
+        // lookup all symbols before commiting so that we get all or nothing
+        // and so that we can drop (rather than forget) the library on error
+        // causing it to be cleaned-up/unloaded (assuming that's not a noop)
         for function in functions {
-            let code_ptr: Symbol<*mut c_void> =
-                unsafe { library.get(function.symbol.as_bytes_with_nul()) }.map_err(|err| {
-                    FfiLoadLibraryError::LibLoadingError(
-                        function.symbol.to_string_lossy().to_string(),
-                        err,
-                    )
-                })?;
+            let symbol = Self::lookup_symbol(&library, library_name, &function.symbol)?;
 
             // Safety:
             // - if a failure occurs before all functions have been looked up the temporary ff_table is droppedn and fn_ptr is never used
             // - if no failure occurs we forget the library ensuring it is never dropped before we merge the temporary ff_table into self
-            let fn_ptr = unsafe { code_ptr.into_raw() }.as_raw_ptr();
+            let fn_ptr = unsafe { symbol.into_raw() }.as_raw_ptr();
 
             let fn_impl = FunctionImpl::new(fn_ptr, &function.fn_type, &self.structs)?;
-            ff_table.table.insert(function.name, fn_impl);
+
+            pending_functions.insert(function.name, fn_impl);
         }
-        std::mem::forget(library);
-        self.merge(ff_table);
+
+        // forget the library before commiting the pending functions
+        std::mem::forget::<Library>(library);
+        self.table.extend(pending_functions);
+
         Ok(())
     }
 
@@ -1075,7 +1102,11 @@ impl Value {
 #[derive(Debug)]
 pub(crate) enum FfiLoadLibraryError {
     SetupError(FfiSetupError),
-    LibLoadingError(String, libloading::Error),
+    LibLoadingError {
+        library_name: String,
+        symbol_name: Option<String>,
+        error: libloading::Error,
+    },
 }
 
 impl From<FfiSetupError> for FfiLoadLibraryError {
@@ -1107,7 +1138,7 @@ pub enum FfiSetupError {
     /// An allocation failed
     AllocationFailed,
     /// Configuring ffi internaly ran a query that evaluated to an unexpected result
-    UnexpectedQueryResult(Option<Result<LeafAnswer, Term>>)
+    UnexpectedQueryResult(Option<Result<LeafAnswer, Term>>),
 }
 
 impl From<TryReserveError> for FfiSetupError {
@@ -1161,7 +1192,11 @@ pub(crate) enum FfiUseError {
 
 #[derive(Debug)]
 pub(crate) enum FfiError {
-    LibLoading(String, libloading::Error),
+    LibLoading {
+        library_name: String,
+        symbol_name: Option<String>,
+        error: libloading::Error,
+    },
     Setup(FfiSetupError),
     Use(FfiUseError),
     InvalidSymbol(Atom),
@@ -1183,9 +1218,15 @@ impl From<FfiLoadLibraryError> for FfiError {
     fn from(value: FfiLoadLibraryError) -> Self {
         match value {
             FfiLoadLibraryError::SetupError(ffi_setup_error) => Self::Setup(ffi_setup_error),
-            FfiLoadLibraryError::LibLoadingError(culprit, error) => {
-                Self::LibLoading(culprit, error)
-            }
+            FfiLoadLibraryError::LibLoadingError {
+                library_name,
+                symbol_name,
+                error,
+            } => Self::LibLoading {
+                library_name,
+                symbol_name,
+                error,
+            },
         }
     }
 }
@@ -1209,9 +1250,7 @@ impl Machine {
     pub fn register_struct<T: CustomFfiStruct>(&mut self) -> Result<(), FfiSetupError> {
         let fields = T::fields(self);
 
-        unsafe {
-            self.register_struct_unchecked(T::type_name(), fields)
-        }
+        unsafe { self.register_struct_unchecked(T::type_name(), fields) }
     }
 
     /// register a struct to be usable with the prolog ffi module
@@ -1219,8 +1258,11 @@ impl Machine {
     /// ## Safety
     /// - name must not be unique under all registered types
     /// - the fields must be of the correct type and in the correct order (matching the C struct this is supposed to match)
-    pub unsafe fn register_struct_unchecked(&mut self, name: &str, fields: Vec<FfiType>) -> Result<(), FfiSetupError> {
-
+    pub unsafe fn register_struct_unchecked(
+        &mut self,
+        name: &str,
+        fields: Vec<FfiType>,
+    ) -> Result<(), FfiSetupError> {
         let struct_type = libffi::middle::Type::structure(
             fields
                 .iter()
@@ -1273,7 +1315,12 @@ impl Machine {
     /// # Safety
     /// - each name may only be registered once
     /// - fn_ptr must be a pointer to an extern "C" fn with the argument and return type matching the definition in fn_type
-    pub unsafe fn register_function_unchecked(&mut self, name: &str, fn_ptr: *mut c_void, fn_type: FnType) -> Result<(), FfiSetupError> {
+    pub unsafe fn register_function_unchecked(
+        &mut self,
+        name: &str,
+        fn_ptr: *mut c_void,
+        fn_type: FnType,
+    ) -> Result<(), FfiSetupError> {
         let name = AtomTable::build_with(&self.machine_st.atom_tbl, name);
 
         self.foreign_function_table
@@ -1302,28 +1349,40 @@ impl Machine {
     }
 
     /// Get the array type for the given element type and arity
-    pub fn get_array_type(&mut self, element_type: FfiType, arity: usize) -> Result<FfiType, FfiSetupError> {
+    pub fn get_array_type(
+        &mut self,
+        element_type: FfiType,
+        arity: usize,
+    ) -> Result<FfiType, FfiSetupError> {
         const VAR: &str = "At";
 
-        let mut state = self.run_query2(crate::Term::Compound(String::from(":"), vec![
-            Term::Atom(String::from("ffi")),
-            Term::Compound(String::from("array_type"), vec![
-                Term::Atom(element_type.to_atom().as_str().to_owned()),
-                Term::Integer(arity.into()),
-                Term::Var(String::from(VAR))
-            ])
-        ]));
+        let mut state = self.run_query2(crate::Term::Compound(
+            String::from(":"),
+            vec![
+                Term::Atom(String::from("ffi")),
+                Term::Compound(
+                    String::from("array_type"),
+                    vec![
+                        Term::Atom(element_type.to_atom().as_str().to_owned()),
+                        Term::Integer(arity.into()),
+                        Term::Var(String::from(VAR)),
+                    ],
+                ),
+            ],
+        ));
 
         let Some(result) = state.next() else {
-            return Err(FfiSetupError::UnexpectedQueryResult(None))
+            return Err(FfiSetupError::UnexpectedQueryResult(None));
         };
-
 
         // we shouln't get any forther results so ensure there is no next result,
         // or that the next result is false
         let next = state.next();
-        if !next.as_ref().is_none_or(|answer| matches!(answer, Ok(LeafAnswer::False))) {
-            return Err(FfiSetupError::UnexpectedQueryResult(next))
+        if !next
+            .as_ref()
+            .is_none_or(|answer| matches!(answer, Ok(LeafAnswer::False)))
+        {
+            return Err(FfiSetupError::UnexpectedQueryResult(next));
         }
 
         drop(state);
@@ -1333,10 +1392,8 @@ impl Machine {
                 Some(crate::Term::Atom(atom)) => {
                     let array_type = AtomTable::build_with(&self.machine_st.atom_tbl, atom);
                     Ok(FfiType::Struct(array_type))
-                },
-                _ => {
-                    Err(FfiSetupError::UnexpectedQueryResult(Some(result)))
                 }
+                _ => Err(FfiSetupError::UnexpectedQueryResult(Some(result))),
             }
         } else {
             Err(FfiSetupError::UnexpectedQueryResult(Some(result)))
@@ -1399,13 +1456,14 @@ impl FfiTypeable for bool {
     }
 }
 
-impl<T: FfiTypeable, const N : usize> FfiTypeable for [T; N] {
+impl<T: FfiTypeable, const N: usize> FfiTypeable for [T; N] {
     fn to_type(machine: &mut Machine) -> FfiType {
         let element_type = T::to_type(machine);
 
         // Fixme FfiTypeable::to_type should return a Result<FfiType, ???> to account for allocation errors etc.
-        machine.get_array_type(element_type, N).expect("Retrieving an Array type shouldn't fail")
-
+        machine
+            .get_array_type(element_type, N)
+            .expect("Retrieving an Array type shouldn't fail")
     }
 }
 

@@ -734,7 +734,11 @@ impl MachineState {
         use crate::ffi::{FfiSetupError, FfiUseError};
 
         match err {
-            FfiError::LibLoading(culprit, libloading) => {
+            FfiError::LibLoading {
+                library_name,
+                symbol_name: None,
+                error: libloading,
+            } => {
                 let desc = functor!(
                     atom!("-"),
                     [
@@ -742,15 +746,44 @@ impl MachineState {
                         string((format!("{libloading:?}")))
                     ]
                 );
-                let culprit = functor!(
+                let library = functor!(
                     atom!("-"),
-                    [atom_as_cell((atom!("culprit"))), string((culprit))]
+                    [atom_as_cell((atom!("library"))), string((library_name))]
                 );
 
                 MachineError {
                     stub: functor!(
                         atom!("system_error"),
-                        [list([functor(desc), functor(culprit)])]
+                        [list([functor(library), functor(desc)])]
+                    ),
+                    location: None,
+                }
+            }
+            FfiError::LibLoading {
+                library_name,
+                symbol_name: Some(symbol_name),
+                error: libloading,
+            } => {
+                let desc = functor!(
+                    atom!("-"),
+                    [
+                        atom_as_cell((atom!("desc"))),
+                        string((format!("{libloading:?}")))
+                    ]
+                );
+                let library = functor!(
+                    atom!("-"),
+                    [atom_as_cell((atom!("library"))), string((library_name))]
+                );
+                let symbol = functor!(
+                    atom!("-"),
+                    [atom_as_cell((atom!("symbol"))), string((symbol_name))]
+                );
+
+                MachineError {
+                    stub: functor!(
+                        atom!("system_error"),
+                        [list([functor(symbol), functor(library), functor(desc)])]
                     ),
                     location: None,
                 }
