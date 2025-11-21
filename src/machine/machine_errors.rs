@@ -33,6 +33,16 @@ impl MachineError {
             context: vec![],
         }
     }
+
+    fn into_stub(self) -> MachineStub {
+        let mut context = functor!(atom!("[]"));
+
+        for ctx in self.context.into_iter().rev() {
+            context = functor!(atom!("."), [functor(ctx), functor(context)]);
+        }
+
+        functor!(atom!("error"), [functor((self.stub)), functor(context)])
+    }
 }
 
 impl MachineError {
@@ -729,19 +739,12 @@ impl MachineState {
         }
     }
 
-    pub(super) fn error_form(&self, mut err: MachineError, predicate: MachineStub) -> MachineStub {
-        err.add_context(functor!(
+    pub(super) fn error_form(&self, err: MachineError, predicate: MachineStub) -> MachineStub {
+        err.with_context(functor!(
             atom!("-"),
             [atom_as_cell((atom!("predicate"))), functor(predicate)]
-        ));
-
-        let mut context = functor!(atom!("[]"));
-
-        for ctx in err.context.into_iter().rev() {
-            context = functor!(atom!("."), [functor(ctx), functor(context)]);
-        }
-
-        functor!(atom!("error"), [functor((err.stub)), functor(context)])
+        ))
+        .into_stub()
     }
 
     // throw an error pre-allocated in the heap
