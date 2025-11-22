@@ -6,7 +6,9 @@
 %% - §6.3.3.1: Arguments have priority ≤999 (to avoid conflict with comma at 1000)
 %% - §6.3.4: Operator Notation - operators require operands based on their specifier
 %% - §6.3.4.2: Operators as Functors - '|' when declared as operator (priority 1105)
-%% - §6.3.6: Curly Bracketed Term {T} == '{}'(T) where T must be valid term
+%% - §6.3.6: Curly Bracketed Term - {term} == '{}'(term)
+%%           Examples: {a} == '{}'(a), {a,b} == '{}'(','(a,b))
+%%           Commas inside {} are comma OPERATOR (priority 1000), not list separators
 %%
 %% When op(1105,xfy,'|') is declared:
 %% - '|' becomes an operator requiring two operands (xfy = infix right-associative)

@@ -8,7 +8,9 @@
 %% - §6.3.4: Operator Notation - operators require operands per their specifier
 %% - §6.3.4.2: Operators as Functors - '|' when declared as op(1105,xfy,'|')
 %% - §6.3.5: List Notation - items must be valid args (priority ≤999)
-%% - §6.3.6: Curly Bracketed Term - {T} where T must be valid term
+%% - §6.3.6: Curly Bracketed Term - {term} == '{}'(term)
+%%           Examples: {a} == '{}'(a), {a,b} == '{}'(','(a,b))
+%%           Commas inside {} are comma OPERATOR (priority 1000), not list separators
 %%
 %% Universal Rule (§6.3.3.1):
 %% In ANY context requiring an 'arg' (function arguments, list items, nested terms),

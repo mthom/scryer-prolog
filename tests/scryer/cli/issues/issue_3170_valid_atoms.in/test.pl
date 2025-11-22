@@ -39,18 +39,21 @@ test3 :-
     T = '|'.
 
 %% Category 2: Curly brace cases
+%% ISO §6.3.6: {term} == '{}'(term), where commas are comma OPERATOR (priority 1000)
+%% Examples: {a} == '{}'(a), {a,b} == '{}'(','(a,b)) == '{}'((a,b))
 test4 :-
-    % {(|)} - curly with atom
+    % {(|)} - curly with atom, ISO §6.3.6: {(|)} == '{}'('|')
     read_from_chars("{(|)}.", T),
     T = '{}'('|').
 
 test5 :-
-    % {((|))} - curly with nested parens
+    % {((|))} - curly with nested parens, ISO §6.3.6: {((|))} == '{}'('|')
     read_from_chars("{((|))}.", T),
     T = '{}'('|').
 
 test6 :-
-    % {a,(|),b} - curly with comma and atom
+    % {a,(|),b} - curly with commas, ISO §6.3.6: {a,(|),b} == '{}'((a,','('|',b)))
+    % Simplified: '{}'((a,('|'),b)) where (a,('|'),b) is nested comma operators
     read_from_chars("{a,(|),b}.", T),
     T = '{}'((a,('|'),b)).
 
