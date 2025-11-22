@@ -1,0 +1,2 @@
+read_from_chars("{!*!(|)/}.",T), write(T), nl.
+halt.
