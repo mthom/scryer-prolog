@@ -1,6 +1,18 @@
 %% Comprehensive test cases for issue #3170
 %% Testing (|) patterns inside curly braces with op(1105,xfy,'|')
 %% All patterns should throw syntax_error, not produce artifacts
+%%
+%% ISO/IEC 13211-1:1995 References:
+%% - §6.3.3.1: Arguments have priority ≤999 (to avoid conflict with comma at 1000)
+%% - §6.3.4: Operator Notation - operators require operands based on their specifier
+%% - §6.3.4.2: Operators as Functors - '|' when declared as operator (priority 1105)
+%% - §6.3.6: Curly Bracketed Term {T} == '{}'(T) where T must be valid term
+%%
+%% When op(1105,xfy,'|') is declared:
+%% - '|' becomes an operator requiring two operands (xfy = infix right-associative)
+%% - (|) means "operator without operands" which violates §6.3.4 requirements
+%% - Inside {}, the argument must be a valid term (§6.3.6), but (|) is not
+%% - Therefore {(|)} and variants must produce syntax_error
 
 :- use_module(library(charsio)).
 :- op(1105, xfy, '|').

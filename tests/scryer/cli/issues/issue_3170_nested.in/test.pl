@@ -1,6 +1,29 @@
 % Comprehensive test cases for issue #3170
 % Testing nested parentheses and mixed contexts with op(1105,xfy,'|')
 % All tests should throw syntax_error when the operator is declared
+%%
+%% ISO/IEC 13211-1:1995 References:
+%% - §6.3.3: Functional Notation - f(a1,...,an) where each arg has priority ≤999
+%% - §6.3.3.1: Arguments - explicit constraint that args have priority ≤999
+%% - §6.3.4: Operator Notation - operators require operands per their specifier
+%% - §6.3.4.2: Operators as Functors - '|' when declared as op(1105,xfy,'|')
+%% - §6.3.5: List Notation - items must be valid args (priority ≤999)
+%% - §6.3.6: Curly Bracketed Term - {T} where T must be valid term
+%%
+%% Universal Rule (§6.3.3.1):
+%% In ANY context requiring an 'arg' (function arguments, list items, nested terms),
+%% the argument must have priority ≤999 OR be an atom that is an operator.
+%%
+%% When op(1105,xfy,'|') is declared:
+%% - '|' has priority 1105 > 999, so CANNOT appear as naked operator in arg position
+%% - (|) attempts to use '|' as operator WITHOUT operands → INVALID
+%% - ((|)), (((|))), etc. - parentheses don't change that (|) is still invalid
+%%
+%% These patterns violate §6.3.3.1 in ALL contexts:
+%% - Function args: foo((|)), bar(a,(|),b)
+%% - List items: [(|)], [a,(|),b]  (NOT ht_sep usage like [a|b] which is §6.3.5)
+%% - Curly braces: {(|)}, {a+(|)}
+%% - Nested combinations: [{(|)}], {[(|)]}, (({[(|)]}))
 
 :- use_module(library(charsio)).
 :- op(1105,xfy,'|').

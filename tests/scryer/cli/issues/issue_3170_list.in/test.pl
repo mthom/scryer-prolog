@@ -1,5 +1,28 @@
 %% Test cases for issue #3170: (|) patterns in LIST contexts
 %% When op(1105,xfy,'|') is declared, patterns like [(|)] should throw syntax_error
+%%
+%% ISO/IEC 13211-1:1995 References:
+%% - §6.3.3.1: Arguments have priority ≤999 (to avoid conflict with comma at 1000)
+%% - §6.3.4: Operator Notation - operators require operands based on their specifier
+%% - §6.3.4.2: Operators as Functors - '|' when declared as operator (priority 1105)
+%% - §6.3.5: List Notation - [H|T] uses special 'ht_sep' syntax, NOT operator syntax
+%%           List items: arg, comma, items  OR  arg, ht_sep, arg  OR  arg
+%%           where 'arg' has priority ≤999 (§6.3.3.1)
+%%
+%% Critical Distinction:
+%% - [a|b] uses '|' as HEAD-TAIL SEPARATOR (ht_sep), special syntax per §6.3.5
+%%   This is ALWAYS valid regardless of operator declarations
+%% - [(|)] contains '(|)' as a list ITEM, which must be a valid 'arg' (priority ≤999)
+%%   When op(1105,xfy,'|') is declared, (|) = "operator without operands" = INVALID
+%%
+%% When op(1105,xfy,'|') is declared:
+%% - [a|b] SUCCEEDS - uses ht_sep syntax (§6.3.5), not affected by operator table
+%% - [(|)] FAILS - contains invalid arg: operator '|' (priority 1105) without operands
+%% - [a,(|),b] FAILS - same reason, (|) is invalid list item
+%%
+%% Without op declaration (default):
+%% - '|' is just an atom, so (|) = atom in parentheses = valid arg
+%% - [(|)] SUCCEEDS, parses as list containing atom '|'
 
 :- use_module(library(charsio)).
 :- op(1105,xfy,'|').
