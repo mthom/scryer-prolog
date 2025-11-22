@@ -990,12 +990,15 @@ variant(X, Y) :-
 
 :- non_counted_backtracking group_by_variant/4.
 
-group_by_variant([V2-S2 | Pairs], V1-S1, [S2 | Solutions], Pairs0) :-
-    variant(V1, V2),
-    !,
-    V1 = V2,
-    group_by_variant(Pairs, V2-S2, Solutions, Pairs0).
-group_by_variant(Pairs, _, [], Pairs).
+group_by_variant([V2-S2 | Pairs], V1-S1, Solutions, Pairs0) :-
+    (  variant(V1, V2) ->
+       V1 = V2,
+       Solutions = [S2 | MoreSolutions],
+       group_by_variant(Pairs, V1-S1, MoreSolutions, Pairs0)
+    ;  group_by_variant(Pairs, V1-S1, Solutions, RestPairs),
+       Pairs0 = [V2-S2 | RestPairs]
+    ).
+group_by_variant([], _, [], []).
 
 :- non_counted_backtracking group_by_variants/2.
 
