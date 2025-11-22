@@ -10,7 +10,7 @@ use serial_test::serial;
 fn call_0() {
     load_module_test(
         "tests-pl/issue831-call0.pl",
-        "   error(existence_error(procedure,call/0),'.'(predicate-call/0,[])).\n",
+        "   error(existence_error(procedure,call/0),[]).\n",
     );
 }
 

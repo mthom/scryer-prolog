@@ -34,7 +34,7 @@ impl MachineError {
         }
     }
 
-    fn into_stub(self) -> MachineStub {
+    pub(super) fn into_stub(self) -> MachineStub {
         let mut context = functor!(atom!("[]"));
 
         for ctx in self.context.into_iter().rev() {

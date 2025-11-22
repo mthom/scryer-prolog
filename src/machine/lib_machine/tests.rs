@@ -57,13 +57,7 @@ fn failing_query() {
                         Term::compound("/", [Term::atom("triple"), Term::integer(3)]),
                     ]
                 ),
-                Term::list([Term::compound(
-                    "-",
-                    [
-                        Term::atom("predicate"),
-                        Term::compound("/", [Term::atom("triple"), Term::integer(3)]),
-                    ]
-                )]),
+                Term::list([]),
             ],
         ))
     );
@@ -379,16 +373,7 @@ fn non_existent_predicate_should_not_cause_panic_when_other_predicates_are_defin
                         ),
                     ],
                 ),
-                Term::list([Term::compound(
-                    "-",
-                    [
-                        Term::atom("predicate"),
-                        Term::compound(
-                            "/",
-                            [Term::atom("non_existent_predicate"), Term::integer(3)]
-                        ),
-                    ]
-                )])
+                Term::list([])
             ],
         ))
     );
