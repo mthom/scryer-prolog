@@ -833,6 +833,17 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     return Ok(false);
                 }
 
+                // Fixes issue #3170: Reject (|) when | is an operator
+                // When | is declared as an operator, HeadTailSeparator has priority > 1000
+                // When | is just the default list separator, priority == 1000
+                // Return error instead of Ok(false) to actually fail the parse
+                if self.stack[idx].tt == TokenType::HeadTailSeparator && self.stack[idx].priority > 1000 {
+                    return Err(ParserError::IncompleteReduction(
+                        self.lexer.line_num,
+                        self.lexer.col_num,
+                    ));
+                }
+
                 if let Some(atom) = self.stack[idx].tt.sep_to_atom() {
                     self.terms
                         .push(Term::Literal(Cell::default(), Literal::Atom(atom)));
@@ -996,22 +1007,19 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::Open => self.shift(Token::Open, 1300, DELIMITER),
             Token::OpenCT => self.shift(Token::OpenCT, 1300, DELIMITER),
             Token::Close => {
-                // Fixes issue #3170: Reject (|) pattern when inside curly braces
-                // Check if the last token is HeadTailSeparator and second-to-last is Open/OpenCT
-                // AND there's an unclosed OpenCurly on the stack
+                // Defense in depth: Check for (|) pattern BEFORE reducing
+                // When | is declared as an operator, it has priority > 1000
+                // Pattern: stack has at least 2 elements, last is HeadTailSeparator, second-to-last is Open/OpenCT
                 if self.stack.len() >= 2 {
                     let last_idx = self.stack.len() - 1;
                     let prev_idx = self.stack.len() - 2;
                     if self.stack[last_idx].tt == TokenType::HeadTailSeparator &&
+                       self.stack[last_idx].priority > 1000 &&
                        matches!(self.stack[prev_idx].tt, TokenType::Open | TokenType::OpenCT) {
-                        // Check if there's an unclosed OpenCurly on the stack
-                        let has_open_curly = self.stack.iter().any(|td| td.tt == TokenType::OpenCurly);
-                        if has_open_curly {
-                            return Err(ParserError::IncompleteReduction(
-                                self.lexer.line_num,
-                                self.lexer.col_num,
-                            ));
-                        }
+                        return Err(ParserError::IncompleteReduction(
+                            self.lexer.line_num,
+                            self.lexer.col_num,
+                        ));
                     }
                 }
 
