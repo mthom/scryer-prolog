@@ -1,14 +1,32 @@
-# Issue #3170: Operators with priority 1200 should not be allowed in curly braces
+# Issue #3170: Curly brace operator priority limits
 
-## Test that priority 1200 operator in curly braces throws syntax error
+## Test that built-in priority 1200 operators work in curly braces
+
+### Test :- operator (priority 1200)
 
 ```trycmd
-$ scryer-prolog -f --no-add-history -g "use_module(library(charsio)), op(1200,xfx,~>), read_from_chars(\"{a~>b}.\",T), halt"
-use_module(library(charsio)),op(1200,xfx,~>),read_from_chars("{a~>b}.",T),halt causes: error(syntax_error(incomplete_reduction),read_term_from_chars/3:0)
+$ scryer-prolog -f --no-add-history -g "use_module(library(charsio)), read_from_chars(\"{a:-b}.\",T), writeq(T), nl, halt"
+{a:-b}
 
 ```
 
-## Test that priority 1199 operator in curly braces works
+### Test --> operator (priority 1200)
+
+```trycmd
+$ scryer-prolog -f --no-add-history -g "use_module(library(charsio)), read_from_chars(\"{a-->b}.\",T), writeq(T), nl, halt"
+{a-->b}
+
+```
+
+## Test that user-defined priority 1200 operators work in curly braces
+
+```trycmd
+$ scryer-prolog -f --no-add-history -g "use_module(library(charsio)), op(1200,xfx,~>), read_from_chars(\"{a~>b}.\",T), writeq(T), nl, halt"
+{a~>b}
+
+```
+
+## Test that priority 1199 operators work in curly braces
 
 ```trycmd
 $ scryer-prolog -f --no-add-history -g "use_module(library(charsio)), op(1199,xfx,~>), read_from_chars(\"{a~>b}.\",T), writeq(T), nl, halt"
@@ -16,10 +34,18 @@ $ scryer-prolog -f --no-add-history -g "use_module(library(charsio)), op(1199,xf
 
 ```
 
-## Test that parenthesized priority 1200 operator in curly braces works
+## Test that parenthesized priority 1200 operators work
 
 ```trycmd
 $ scryer-prolog -f --no-add-history -g "use_module(library(charsio)), op(1200,xfx,~>), read_from_chars(\"{(a~>b)}.\",T), writeq(T), nl, halt"
 {a~>b}
+
+```
+
+## Test that priority 1201 operators fail (if definable)
+
+```trycmd
+$ scryer-prolog -f --no-add-history -g "op(1201,xfx,~>), halt"
+op(1201,xfx,~>),halt causes: error(domain_error(operator_priority,1201),op/3)
 
 ```

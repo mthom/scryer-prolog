@@ -773,7 +773,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             }
         }
 
-        self.reduce_op(1199);
+        self.reduce_op(1200);
 
         if self.stack.len() > 1 {
             if let Some(td) = self.stack.pop() {
