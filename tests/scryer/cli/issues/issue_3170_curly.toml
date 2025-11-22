@@ -1,0 +1,3 @@
+# issue #3170 - curly brace tests
+# Test that (|) patterns in curly braces throw syntax_error when op(1105,xfy,'|') is declared
+args = ["-f", "--no-add-history", "-g", "run", "test.pl"]
