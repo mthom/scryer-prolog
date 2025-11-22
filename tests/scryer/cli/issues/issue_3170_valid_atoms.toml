@@ -1,0 +1,4 @@
+# issue #3170 - valid atom tests (backward compatibility)
+# Test that (|) patterns work correctly WITHOUT op(1105,xfy,'|') declaration
+# Ensures fix only affects operator case, not normal atom usage
+args = ["-f", "--no-add-history", "-g", "run", "test.pl"]
