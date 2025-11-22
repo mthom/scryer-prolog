@@ -809,19 +809,19 @@ impl<'a, R: CharRead> Parser<'a, R> {
         Ok(false)
     }
 
-    fn reduce_brackets(&mut self) -> bool {
+    fn reduce_brackets(&mut self) -> Result<bool, ParserError> {
         if self.stack.is_empty() {
-            return false;
+            return Ok(false);
         }
 
         self.reduce_op(1400);
 
         if self.stack.len() <= 1 {
-            return false;
+            return Ok(false);
         }
 
         if let Some(TokenType::Open | TokenType::OpenCT) = self.stack.last().map(|token| token.tt) {
-            return false;
+            return Ok(false);
         }
 
         let idx = self.stack.len() - 2;
@@ -830,7 +830,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         match td.tt {
             TokenType::Open | TokenType::OpenCT => {
                 if self.stack[idx].tt == TokenType::Comma {
-                    return false;
+                    return Ok(false);
                 }
 
                 if let Some(atom) = self.stack[idx].tt.sep_to_atom() {
@@ -842,9 +842,9 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 self.stack[idx].tt = TokenType::Term;
                 self.stack[idx].priority = 0;
 
-                true
+                Ok(true)
             }
-            _ => false,
+            _ => Ok(false),
         }
     }
 
@@ -996,7 +996,26 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::Open => self.shift(Token::Open, 1300, DELIMITER),
             Token::OpenCT => self.shift(Token::OpenCT, 1300, DELIMITER),
             Token::Close => {
-                if !self.reduce_term() && !self.reduce_brackets() {
+                // Fixes issue #3170: Reject (|) pattern when inside curly braces
+                // Check if the last token is HeadTailSeparator and second-to-last is Open/OpenCT
+                // AND there's an unclosed OpenCurly on the stack
+                if self.stack.len() >= 2 {
+                    let last_idx = self.stack.len() - 1;
+                    let prev_idx = self.stack.len() - 2;
+                    if self.stack[last_idx].tt == TokenType::HeadTailSeparator &&
+                       matches!(self.stack[prev_idx].tt, TokenType::Open | TokenType::OpenCT) {
+                        // Check if there's an unclosed OpenCurly on the stack
+                        let has_open_curly = self.stack.iter().any(|td| td.tt == TokenType::OpenCurly);
+                        if has_open_curly {
+                            return Err(ParserError::IncompleteReduction(
+                                self.lexer.line_num,
+                                self.lexer.col_num,
+                            ));
+                        }
+                    }
+                }
+
+                if !self.reduce_term() && !self.reduce_brackets()? {
                     return Err(ParserError::IncompleteReduction(
                         self.lexer.line_num,
                         self.lexer.col_num,
@@ -1029,9 +1048,11 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     .map(|CompositeOpDesc { inf, spec, .. }| (inf, spec))
                     .unwrap_or((1000, DELIMITER));
 
+                let reduce_priority = priority;
+
                 let old_stack_len = self.stack.len();
 
-                self.reduce_op(priority);
+                self.reduce_op(reduce_priority);
 
                 let new_stack_len = self.stack.len();
 

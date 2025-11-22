@@ -1,2 +1,1 @@
-{!*!(|)/}
-   T = {!*!(|)/}.
+   error(syntax_error(incomplete_reduction),read_term_from_chars/3:0).
