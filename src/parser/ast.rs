@@ -148,7 +148,7 @@ macro_rules! fixnum {
     ($wrapper:tt, $n:expr, $arena:expr) => {
         Fixnum::build_with_checked($n)
             .map(<$wrapper>::Fixnum)
-            .unwrap_or_else(|_| <$wrapper>::Integer(arena_alloc!(Integer::from($n), $arena)))
+            .unwrap_or_else(|_| <$wrapper>::Integer(arena_alloc!(dashu::Integer::from($n), $arena)))
     };
 }
 

@@ -573,10 +573,9 @@ impl MachineState {
     }
 
     pub(super) fn throw_undefined_error(&mut self, name: Atom, arity: usize) -> MachineStub {
-        let stub = functor_stub(name, arity);
         let err = self.existence_error(ExistenceError::Procedure(name, arity));
 
-        self.error_form(err, stub)
+        err.into_stub()
     }
 
     #[inline(always)]
