@@ -1171,27 +1171,60 @@ fn generate_instruction_preface() -> TokenStream {
             #[inline]
             pub fn registers(&self) -> Vec<RegType> {
                 match *self {
-                    Instruction::GetConstant(_, _, r) => vec![r],
-                    Instruction::GetList(_, r) => vec![r],
-                    Instruction::GetPartialString(_, _, r) => vec![r],
-                    Instruction::GetStructure(_, _, _, r) => vec![r],
-                    Instruction::GetVariable(r, t) => vec![r, temp_v!(t)],
-                    Instruction::GetValue(r, t) => vec![r, temp_v!(t)],
-                    Instruction::UnifyLocalValue(r) => vec![r],
-                    Instruction::UnifyVariable(r) => vec![r],
-                    Instruction::PutConstant(_, _, r) => vec![r],
-                    Instruction::PutList(_, r) => vec![r],
-                    Instruction::PutPartialString(_, _, r) => vec![r],
-                    Instruction::PutStructure(_, _, r) => vec![r],
-                    Instruction::PutValue(r, t) => vec![r, temp_v!(t)],
-                    Instruction::PutVariable(r, t) => vec![r, temp_v!(t)],
-                    Instruction::SetLocalValue(r) => vec![r],
-                    Instruction::SetVariable(r) => vec![r],
-                    Instruction::SetValue(r) => vec![r],
-                    Instruction::GetLevel(r) => vec![r],
-                    Instruction::GetPrevLevel(r) => vec![r],
-                    Instruction::GetCutPoint(r) => vec![r],
+                    Instruction::GetVariable(r, t)
+                    | Instruction::GetValue(r, t)
+                    | Instruction::PutValue(r, t)
+                    | Instruction::PutVariable(r, t) => vec![r, temp_v!(t)],
+                    Instruction::GetConstant(_, _, r)
+                    | Instruction::GetList(_, r)
+                    | Instruction::GetPartialString(_, _, r)
+                    | Instruction::GetStructure(_, _, _, r)
+                    | Instruction::UnifyLocalValue(r)
+                    | Instruction::UnifyVariable(r)
+                    | Instruction::PutConstant(_, _, r)
+                    | Instruction::PutList(_, r)
+                    | Instruction::PutPartialString(_, _, r)
+                    | Instruction::PutStructure(_, _, r)
+                    | Instruction::SetLocalValue(r)
+                    | Instruction::SetVariable(r)
+                    | Instruction::SetValue(r)
+                    | Instruction::GetLevel(r)
+                    | Instruction::GetPrevLevel(r)
+                    | Instruction::GetCutPoint(r) => vec![r],
                     _ => vec![],
+                }
+            }
+
+            #[inline]
+            pub fn max_temp_register(&self) -> usize {
+                match *self {
+                    Instruction::GetVariable(r, t)
+                    | Instruction::GetValue(r, t)
+                    | Instruction::PutValue(r, t)
+                    | Instruction::PutVariable(r, t) => match r {
+                        RegType::Perm(_) => t,
+                        RegType::Temp(t2) => t.max(t2)
+                    },
+                    Instruction::GetConstant(_, _, r)
+                    | Instruction::GetList(_, r)
+                    | Instruction::GetPartialString(_, _, r)
+                    | Instruction::GetStructure(_, _, _, r)
+                    | Instruction::UnifyLocalValue(r)
+                    | Instruction::UnifyVariable(r)
+                    | Instruction::PutConstant(_, _, r)
+                    | Instruction::PutList(_, r)
+                    | Instruction::PutPartialString(_, _, r)
+                    | Instruction::PutStructure(_, _, r)
+                    | Instruction::SetLocalValue(r)
+                    | Instruction::SetVariable(r)
+                    | Instruction::SetValue(r)
+                    | Instruction::GetLevel(r)
+                    | Instruction::GetPrevLevel(r)
+                    | Instruction::GetCutPoint(r) => match r {
+                        RegType::Perm(_) => 0,
+                        RegType::Temp(t) => t
+                    },
+                    _ => 0,
                 }
             }
 

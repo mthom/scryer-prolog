@@ -605,11 +605,7 @@ impl Machine {
                         // Scan registers of all instructions to find out how many to save
                         let arity = self.code[current_pred_start..current_pred_end]
                             .iter()
-                            .flat_map(Instruction::registers)
-                            .flat_map(|r| match r {
-                                RegType::Temp(t) => Some(t),
-                                _ => None,
-                            })
+                            .map(Instruction::max_temp_register)
                             .max()
                             .unwrap_or(0);
 
