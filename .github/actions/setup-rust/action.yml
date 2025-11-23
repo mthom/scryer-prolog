@@ -41,7 +41,8 @@ runs:
         ~/.cargo/registry/cache/
         ~/.cargo/git/db/
         target/
-      key: ${{ inputs.cache-context }}_${{ inputs.targets }}_rustc-${{ steps.toolchain.outputs.cachekey }}_cargo-${{ hashFiles('**/Cargo.lock') }}
+      # FIXME replace `dummy` with `${{ hashFiles('**/Cargo.lock') }}` once https://github.com/actions/runner-images/issues/13341 is fixed
+      key: ${{ inputs.cache-context }}_${{ inputs.targets }}_rustc-${{ steps.toolchain.outputs.cachekey }}_cargo-dummy
 
   # Remove build artifacts for the current crate, since it will be rebuilt every
   # run anyway, but keep dependency artifacts to cache them.
