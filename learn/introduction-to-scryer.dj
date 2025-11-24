@@ -1,9 +1,14 @@
-#Introduction to Scryer Prolog
+# Introduction to Scryer Prolog
 
 This tutorial  is intended to help you get started with [Scryer Prolog](https://www.scryer.pl/), 
 and perhaps save you some time as you learn Prolog.  
 
 It is not intended to teach you Prolog concepts.  The [Power of Prolog](https://www.metalevel.at/prolog) is a great resource for that.    
+
+## Choose your Operating System
+
+As a Prolog learner, you should consider Linux or Mac OSX;  Windows is not as widely used in the Scyrer community.  Windows users 
+ are likely to run into problems with Scryer Linux or Mac users do not exerience.    
 
 ## Avoid or Unlearn Legacy Predicates 
 
@@ -116,7 +121,7 @@ Hello, Prolog world!
 
 ## Set up an Environment for Experimenting and Learning
 
-In ~/.scryerrc (TODO in Windows...), add the following lines. As you experiment
+In ~/.scryerrc on Linux or OSX, add the following lines. As you experiment
 with Prolog you will find it convenient to have these available in your 
 toplevel.
 
