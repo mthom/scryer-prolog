@@ -1,7 +1,6 @@
-// ...existing code...
-# Learning Scryer Prolog
+#Introduction to Scryer Prolog
 
-This tutorial series is intended to help you get started with [Scryer Prolog](https://www.scryer.pl/), 
+This tutorial  is intended to help you get started with [Scryer Prolog](https://www.scryer.pl/), 
 and perhaps save you some time as you learn Prolog.  
 
 It is not intended to teach you Prolog concepts.  The [Power of Prolog](https://www.metalevel.at/prolog) is a great resource for that.    
@@ -228,8 +227,6 @@ clpz:(#=) is more friendly.
 ?- 
 ```
 
-
-
 You will eventually run into other instantiation_errors. Hopefully you
 will have learned a little Prolog by then and will be able to solve them.
 
@@ -314,4 +311,3 @@ is_python_rust :- false.
 ?- 
 
 ```
-// ...existing code...
