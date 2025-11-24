@@ -1,0 +1,318 @@
+# Learning Scryer Prolog
+
+This tutorial series is intended to help you get started with [Scryer Prolog](https://www.scryer.pl/), 
+and perhaps save you some time as you learn Prolog.  
+
+It is not intended to teach you Prolog concepts.  The [Power of Prolog](https://www.metalevel.at/prolog) is a great resource for that.    
+
+## Avoid or Unlearn Legacy Predicates 
+
+Many tutorials or lessons you will teach facets of Prolog that are best avoided, at least while you are at the early 
+stages of the learning the language.  Prolog has improved over its lifetime,  but many recorded lectures or tutorials ignore
+tose advancements.
+
+As a beginner, these legacy prolog predicates are sharp corners you may wish to avoid.  
+For more information see [Prolog Patterns:  How Not to Do It](https://www.youtube.com/watch?v=6G-3DqyJ_l8).
+
+```prolog
+- (!) cut.  
+- (->) if.  
+(is).  
+(\+).
+include/3.
+exclude/3.
+
+```
+
+## Install Scryer Prolog
+
+There are prebuilt downloads for Debian, macOS,  and Windows on [www.scryer.pl](https://www.scryer.pl/).  This is the fasteset way to get started.
+
+You may find you wish to build Scryer from source to incorporate the latest features and bug fixes.  It isn't terribly difficult.  Some tips:
+
+* keep your Rust current.
+* build Scryer for release, not debug.   The debug builds take a long time to load and run. 
+
+## Hello World
+
+Run a basic Scryer Program.
+
+It is useful to know how to do something when a Prolog script loads.
+You may have tests you wish to run, and it can be tedius to run them
+in the Scryer toplevel every time your code changes.
+
+Copy this into hello.pl:
+
+```prolog
+:- use_module(library(format)).
+:- initialization(main).
+
+main :-
+    format("Hello, world!~n", []).
+
+hello_prolog :-
+    format("Hello, Prolog world!~n", []).
+```
+
+The line 
+
+```prolog
+:- initialization(main).
+```
+queries the main/0 predicate when the script loads.
+
+Run it like this:
+
+```bash
+$ scryer-prolog hello
+Hello, world!
+?- 
+```
+Scryer queries main and then waits for input in the toplevel.
+
+You can query main again in the toplevel.
+
+```bash
+$ scryer-prolog hello
+Hello, world!
+?- main.
+Hello, world!
+   true.
+?- 
+```
+
+You can query another goal as a command line 
+argument:
+
+```bash
+$ scryer-prolog hello -g hello_prolog
+Hello, world!
+Hello, Prolog world!
+?- 
+```
+or in the toplevel:
+
+```bash
+$ scryer-prolog hello 
+Hello, world!
+?- hello_prolog.
+Hello, Prolog world!
+   true.
+?- 
+
+```
+
+You will frequently start Scryer and then load your Prolog program 
+in the toplevel.
+
+```bash
+$ scryer-prolog 
+?- [hello].
+Hello, world!
+   true.
+?- hello_prolog.
+Hello, Prolog world!
+   true.
+?- 
+```
+
+## Set up an Environment for Experimenting and Learning
+
+In ~/.scryerrc (TODO in Windows...), add the following lines. As you experiment
+with Prolog you will find it convenient to have these available in your 
+toplevel.
+
+```prolog
+:- use_module(library(clpz)).
+:- use_module(library(dcgs)).
+:- use_module(library(charsio)).
+:- use_module(library(pio)).
+:- use_module(library(iso_ext)).
+:- use_module(library(lists)).
+:- use_module(library(debug)).
+:- use_module(library(reif)).
+:- use_module(library(dif)).
+```
+
+Now, test your environment and make sure your .scryerrc is loading.
+
+If everything is working:
+
+```prolog
+?- current_predicate(dif:dif/2).
+   true.
+?- dif(3,4).
+   true.
+?- 
+
+```
+
+If these modules aren't loading, the toplevel will report
+an error:
+
+```prolog
+?- current_predicate(dif:dif/2).
+   false.
+?- dif(3,4).
+   error(existence_error(procedure,dif/2),dif/2).
+?- 
+```
+
+That means your .scryerrc is not loading.  Perhaps you saved it in the 
+wrong location. Take the time to figure this out.
+
+## Select an Editor
+
+Select an editor or an IDE.  Preferably one with prolog features such as syntax highlighting, to help you read your code and identify
+errors.  
+
+Emacs has [Prolog support](https://www.metalevel.at/pceprolog/).
+
+If you don't know emacs and aren't prepared to spend the time to learn it now,
+Visual Studio Code with the Better Prolog Syntax extension can highlight Prolog code.  But currently (2025) there is no way to execute Scryer 
+Prolog in Visual Studio Code.  You will have to use the terminal.
+
+## Testing Frameworks
+
+Only if you are experienced with testing frameworks and package managers for other languages, and think that 
+have a testing framework available will help you learn, consider installaing [bakage](https://github.com/bakaq/bakage) and then use bakage
+to install [testing.pl](https://github.com/bakaq/testing.pl).
+
+Otherwise, learn Prolog until you are somewhat comfortable with the system and concepts.  
+
+
+## Errors and Warnings
+
+### Instantiation Error
+
+Above we recommended staying away for (is)/2, for now.  And that recommendation still holds.  It is useful though to identify 
+and understand some of the errors you will experience in Scryer Prolog (and most other Prolog systems).
+
+
+```prolog
+?- A is 3.
+   A = 3.
+?- 3 is  A.
+   error(instantiation_error,(is)/2).
+?- 
+```
+
+```prolog
+?- X is "hello".
+   error(type_error(evaluable,[]/0),(is)/2).
+?- 
+
+```
+
+clpz:(#=) is smore friendly.
+
+```prolog
+?- 3 #= X.
+   X = 3.
+?- 
+```
+
+
+
+You will eventually run into other instantiation_errors. Hopefully you
+will have learned a little Prolog by then and will be able to solve them.
+
+### Discontiguous Clause Warnings
+
+Pay attention to these warnings. It can be hard to identify the cause, but the warning likely indicates a problem.
+
+```prolog
+?- [user].
+ce(a).
+ce(b).
+ce(c).
+ce(d).
+cd(e).
+ce(f).
+ce(g).
+ce(h).
+
+% Warning: overwriting ce/1 because the clauses are discontiguous
+?- 
+
+```
+If you can't eyball where the error is, introduce a syntax error 
+in your program and move it around until you locate the warning.
+
+
+
+### Toplevel Syntax Problems.
+
+Sometimes pasting valid code into the Scryer toplevel from a text editor fails.  
+
+```prolog
+?- [user]
+a(3):-  3#>4.
+a(_):-  X#>12.
+.
+   error(syntax_error(incomplete_reduction),read_term/3:2).
+?- 
+
+```
+
+If you can't solve something like this, 
+load your prolog from a file instead. 
+
+### : instead of :-
+
+Writing : instead of :- can result in difficult to find 
+ errors, even when you know the cause:
+
+colon.pl:
+
+```prolog
+a(-1) :- true.
+a(3) :-  3#>4.
+a(2) : true.
+a(_) :-  X#>12.
+```
+
+```prolog
+?- [colon].
+   error(permission_error(modify,static_procedure,(:)/2),load/1).
+?- 
+
+```
+
+In a longer file, you may not be able to detect the missing - visually.
+You can try deliberately introducing a syntax error in 
+your Prolog program to help locate the line where the error ocurrs.
+
+```prolog
+a(-1) :- true.
+a(3) :-  3#>4.
+deliberate syntax error
+a(2) : true.
+a(_) :-  X#>12.
+```
+
+```
+?- [colon].
+   error(syntax_error(incomplete_reduction),read_term/3:4).
+```
+
+The error .../read_term/*3:4* indicates the syntax error is at column 3 (the column is reported first), line 4.
+
+### Prolog isn't Python
+
+Prolog does not use # for line comments. If you are used to using # for line comments,
+you will eventually make this mistake. And staring at this, the problem is not obvious until you
+remember that % is for line comments in Prolog.  Then the problem and solution will be obvious.
+
+```prolog
+is_prolog_prolog :- true.
+is_prolog_python :-  false.  #of course it is_prolog_python
+is_python_rust :- false.
+
+```
+```
+?- [python].
+   error(syntax_error(incomplete_reduction),read_term/3:3).
+?- 
+
+```
