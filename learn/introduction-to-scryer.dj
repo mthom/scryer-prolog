@@ -1,3 +1,4 @@
+// ...existing code...
 # Learning Scryer Prolog
 
 This tutorial series is intended to help you get started with [Scryer Prolog](https://www.scryer.pl/), 
@@ -7,11 +8,9 @@ It is not intended to teach you Prolog concepts.  The [Power of Prolog](https://
 
 ## Avoid or Unlearn Legacy Predicates 
 
-Many tutorials or lessons you will teach facets of Prolog that are best avoided, at least while you are at the early 
-stages of the learning the language.  Prolog has improved over its lifetime,  but many recorded lectures or tutorials ignore or predate
-those advancements.
+Many tutorials or lessons will teach facets of Prolog that are best avoided, at least while you are at the early stages of learning the language.  Prolog has improved over its lifetime, but many recorded lectures or tutorials ignore or predate those advancements.
 
-As a beginner, these legacy prolog predicates are sharp corners you may wish to avoid.  
+As a beginner, these legacy Prolog predicates are sharp corners you may wish to avoid.  
 For more information see [Prolog Patterns:  How Not to Do It](https://www.youtube.com/watch?v=6G-3DqyJ_l8).
 
 ```prolog
@@ -26,7 +25,7 @@ exclude/3.
 
 ## Install Scryer Prolog
 
-There are prebuilt downloads for Debian, macOS,  and Windows on [www.scryer.pl](https://www.scryer.pl/).  This is the fasteset way to get started.
+There are prebuilt downloads for Debian, macOS, and Windows on [www.scryer.pl](https://www.scryer.pl/).  This is the fastest way to get started.
 
 You may find you wish to build Scryer from source to incorporate the latest features and bug fixes.  It isn't terribly difficult.  Some tips:
 
@@ -35,10 +34,10 @@ You may find you wish to build Scryer from source to incorporate the latest feat
 
 ## Hello World
 
-Run a basic Scryer Program.
+Run a basic Scryer program.
 
 It is useful to know how to do something when a Prolog script loads.
-You may have tests you wish to run, and it can be tedius to run them
+You may have tests you wish to run, and it can be tedious to run them
 in the Scryer toplevel every time your code changes.
 
 Copy this into hello.pl:
@@ -163,20 +162,17 @@ wrong location. Take the time to figure this out.
 
 ## Select an Editor
 
-Select an editor or an IDE.  Preferably one with prolog features such as syntax highlighting, to help you read your code and identify
+Select an editor or an IDE.  Preferably one with Prolog features such as syntax highlighting, to help you read your code and identify
 errors.  
 
 Emacs has [Prolog support](https://www.metalevel.at/pceprolog/).
 
-If you don't know emacs and aren't prepared to spend the time to learn it now,
-Visual Studio Code with the Better Prolog Syntax extension can highlight Prolog code.  But currently (2025) there is no way to execute Scryer 
-Prolog in Visual Studio Code.  You will have to use the terminal.
+If you don't know Emacs and aren't prepared to spend the time to learn it now,
+Visual Studio Code with the Better Prolog Syntax extension can highlight Prolog code.  But currently (2025) there is no way to execute Scryer Prolog in Visual Studio Code.  You will have to use the terminal.
 
 ## Testing Frameworks
 
-Only if you are experienced with testing frameworks and package managers for other languages, and think that 
-have a testing framework available will help you learn, consider installaing [bakage](https://github.com/bakaq/bakage) and then use bakage
-to install [testing.pl](https://github.com/bakaq/testing.pl).
+Only if you are experienced with testing frameworks and package managers for other languages, and think that having a testing framework available will help you learn, consider installing [bakage](https://github.com/bakaq/bakage) and then use bakage to install [testing.pl](https://github.com/bakaq/testing.pl).
 
 Otherwise, learn Prolog until you are somewhat comfortable with the system and concepts.  
 
@@ -206,8 +202,7 @@ The toplevel is explained on [https://www.metalevel.at/prolog/concepts](https://
 
 ### Instantiation Error
 
-Above we recommended staying away for (is)/2, for now.  And that recommendation still holds.  It is useful though to identify 
-and understand some of the errors you will experience in Scryer Prolog (and most other Prolog systems).
+Above we recommended staying away from (is)/2, for now.  And that recommendation still holds.  It is useful, though, to identify and understand some of the errors you will experience in Scryer Prolog (and most other Prolog systems).
 
 
 ```prolog
@@ -225,7 +220,7 @@ and understand some of the errors you will experience in Scryer Prolog (and most
 
 ```
 
-clpz:(#=) is smore friendly.
+clpz:(#=) is more friendly.
 
 ```prolog
 ?- 3 #= X.
@@ -257,13 +252,13 @@ ce(h).
 ?- 
 
 ```
-If you can't eyball where the error is, introduce a syntax error 
+If you can't eyeball where the error is, introduce a syntax error 
 in your program and move it around until you locate the warning.
 
 
 ### : instead of :-
 
-Writing : instead of :- can result in difficult to find 
+Writing : instead of :- can result in difficult-to-find 
  errors, even when you know the cause:
 
 colon.pl:
@@ -283,8 +278,8 @@ a(_) :-  X#>12.
 ```
 
 In a longer file, you may not be able to detect the missing - visually.
-You can try deliberately introducing a syntax error in 
-your Prolog program to help locate the line where the error ocurrs.
+You can try deliberately introducing a syntax error in your Prolog program to help locate the line where the error occurs.  Keep adjusting the location
+of the deliberate syntax error until you find the line where the permission_error occurs.
 
 ```prolog
 a(-1) :- true.
@@ -319,3 +314,4 @@ is_python_rust :- false.
 ?- 
 
 ```
+// ...existing code...
