@@ -8,8 +8,8 @@ It is not intended to teach you Prolog concepts.  The [Power of Prolog](https://
 ## Avoid or Unlearn Legacy Predicates 
 
 Many tutorials or lessons you will teach facets of Prolog that are best avoided, at least while you are at the early 
-stages of the learning the language.  Prolog has improved over its lifetime,  but many recorded lectures or tutorials ignore
-tose advancements.
+stages of the learning the language.  Prolog has improved over its lifetime,  but many recorded lectures or tutorials ignore or predate
+those advancements.
 
 As a beginner, these legacy prolog predicates are sharp corners you may wish to avoid.  
 For more information see [Prolog Patterns:  How Not to Do It](https://www.youtube.com/watch?v=6G-3DqyJ_l8).
