@@ -180,6 +180,27 @@ to install [testing.pl](https://github.com/bakaq/testing.pl).
 
 Otherwise, learn Prolog until you are somewhat comfortable with the system and concepts.  
 
+## Load a Prolog Module
+
+In the earlier example of hello world, the hello.pl Prolog module was 'consulted' from the
+current working directory.
+
+```bash
+$ scryer-prolog 
+?- [hello].
+Hello, world!
+   true.
+?- hello_prolog.
+Hello, Prolog world!
+   true.
+?- 
+```
+
+There are more ways to consult a Prolog module, and much more you can do in the toplevel.
+
+The toplevel is explained on [https://www.metalevel.at/prolog/concepts](https://www.metalevel.at/prolog/concepts).
+
+
 
 ## Errors and Warnings
 
@@ -239,24 +260,6 @@ ce(h).
 If you can't eyball where the error is, introduce a syntax error 
 in your program and move it around until you locate the warning.
 
-
-
-### Toplevel Syntax Problems.
-
-Sometimes pasting valid code into the Scryer toplevel from a text editor fails.  
-
-```prolog
-?- [user]
-a(3):-  3#>4.
-a(_):-  X#>12.
-.
-   error(syntax_error(incomplete_reduction),read_term/3:2).
-?- 
-
-```
-
-If you can't solve something like this, 
-load your prolog from a file instead. 
 
 ### : instead of :-
 
