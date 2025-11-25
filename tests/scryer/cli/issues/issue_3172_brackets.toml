@@ -1,0 +1,4 @@
+# issue #3172 - mismatched bracket detection
+# Tests that ([), ({), {([)}, etc. throw syntax_error
+# ISO/IEC 13211-1:1995: Each bracket type must close with its matching delimiter
+args = ["-f", "--no-add-history", "-g", "run", "test.pl"]
