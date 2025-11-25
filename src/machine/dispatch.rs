@@ -630,11 +630,13 @@ impl Machine {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             try_numeric_result!(add(n1, n2, &mut self.machine_st.arena), stub_gen)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Sub(ref a1, ref a2, t) => {
@@ -643,11 +645,13 @@ impl Machine {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             try_numeric_result!(sub(n1, n2, &mut self.machine_st.arena), stub_gen)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Mul(ref a1, ref a2, t) => {
@@ -656,59 +660,68 @@ impl Machine {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             try_numeric_result!(mul(n1, n2, &mut self.machine_st.arena), stub_gen)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Max(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] =
-                            try_or_throw_gen!(&mut self.machine_st, max(n1, n2));
+                        let value = try_or_throw_gen!(&mut self.machine_st, max(n1, n2));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Min(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] =
-                            try_or_throw_gen!(&mut self.machine_st, min(n1, n2));
+                        let value = try_or_throw_gen!(&mut self.machine_st, min(n1, n2));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::IntPow(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
-
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             int_pow(n1, n2, &mut self.machine_st.arena)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Gcd(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             gcd(n1, n2, &mut self.machine_st.arena)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Pow(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] =
+                        let value =
                             try_or_throw_gen!(&mut self.machine_st, pow(n1, n2, atom!("**")));
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
 
                         self.machine_st.p += 1;
                     }
@@ -724,299 +737,375 @@ impl Machine {
                             self.machine_st.get_rational(a2, stub_gen)
                         );
 
-                        self.machine_st.interms[t - 1] = Number::Rational(arena_alloc!(
+                        let value = Number::Rational(arena_alloc!(
                             try_or_throw_gen!(&mut self.machine_st, rdiv(r1, r2)),
                             &mut self.machine_st.arena
                         ));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::IntFloorDiv(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             int_floor_div(n1, n2, &mut self.machine_st.arena)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::IDiv(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             idiv(n1, n2, &mut self.machine_st.arena)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Abs(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = abs(n1, &mut self.machine_st.arena);
+                        let value = abs(n1, &mut self.machine_st.arena);
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Sign(ref a1, t) => {
                         let n = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
+                        let value = n.sign();
 
-                        self.machine_st.interms[t - 1] = n.sign();
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Neg(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = neg(n1, &mut self.machine_st.arena);
+                        let value = neg(n1, &mut self.machine_st.arena);
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::BitwiseComplement(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             bitwise_complement(n1, &mut self.machine_st.arena)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Div(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] =
-                            try_or_throw_gen!(&mut self.machine_st, div(n1, n2));
-
+                        let value = try_or_throw_gen!(&mut self.machine_st, div(n1, n2));
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Shr(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             shr(n1, n2, &mut self.machine_st.arena)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Shl(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             shl(n1, n2, &mut self.machine_st.arena)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Xor(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             xor(n1, n2, &mut self.machine_st.arena)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::And(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             and(n1, n2, &mut self.machine_st.arena)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Or(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             or(n1, n2, &mut self.machine_st.arena)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Mod(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             modulus(n1, n2, &mut self.machine_st.arena)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Rem(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             remainder(n1, n2, &mut self.machine_st.arena)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Cos(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, cos(n1)),
-                        ));
+                        let value = Number::Float(OrderedFloat(try_or_throw_gen!(
+                            &mut self.machine_st,
+                            cos(n1)
+                        )));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Sin(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, sin(n1)),
-                        ));
+                        let value = Number::Float(OrderedFloat(try_or_throw_gen!(
+                            &mut self.machine_st,
+                            sin(n1)
+                        )));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Tan(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, tan(n1)),
-                        ));
+                        let value = Number::Float(OrderedFloat(try_or_throw_gen!(
+                            &mut self.machine_st,
+                            tan(n1)
+                        )));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Sqrt(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, sqrt(n1)),
-                        ));
+                        let value = Number::Float(OrderedFloat(try_or_throw_gen!(
+                            &mut self.machine_st,
+                            sqrt(n1)
+                        )));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Log(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, log(n1)),
-                        ));
+                        let value = Number::Float(OrderedFloat(try_or_throw_gen!(
+                            &mut self.machine_st,
+                            log(n1)
+                        )));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Exp(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, exp(n1)),
-                        ));
+                        let value = Number::Float(OrderedFloat(try_or_throw_gen!(
+                            &mut self.machine_st,
+                            exp(n1)
+                        )));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::ACos(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, acos(n1)),
-                        ));
+                        let value = Number::Float(OrderedFloat(try_or_throw_gen!(
+                            &mut self.machine_st,
+                            acos(n1)
+                        )));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::ASin(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, asin(n1)),
-                        ));
+                        let value = Number::Float(OrderedFloat(try_or_throw_gen!(
+                            &mut self.machine_st,
+                            asin(n1)
+                        )));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::ATan(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, atan(n1)),
-                        ));
+                        let value = Number::Float(OrderedFloat(try_or_throw_gen!(
+                            &mut self.machine_st,
+                            atan(n1)
+                        )));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::ATan2(ref a1, ref a2, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
 
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, atan2(n1, n2)),
-                        ));
+                        let value = Number::Float(OrderedFloat(try_or_throw_gen!(
+                            &mut self.machine_st,
+                            atan2(n1, n2)
+                        )));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Float(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, float(n1)),
-                        ));
+                        let value = Number::Float(OrderedFloat(try_or_throw_gen!(
+                            &mut self.machine_st,
+                            float(n1)
+                        )));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Truncate(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = truncate(n1, &mut self.machine_st.arena);
+                        let value = truncate(n1, &mut self.machine_st.arena);
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Round(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = try_or_throw_gen!(
+                        let value = try_or_throw_gen!(
                             &mut self.machine_st,
                             round(n1, &mut self.machine_st.arena)
                         );
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Ceiling(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = ceiling(n1, &mut self.machine_st.arena);
+                        let value = ceiling(n1, &mut self.machine_st.arena);
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Floor(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = floor(n1, &mut self.machine_st.arena);
+                        let value = floor(n1, &mut self.machine_st.arena);
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::FloatFractionalPart(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, float_fractional_part(n1)),
-                        ));
+                        let value = Number::Float(OrderedFloat(try_or_throw_gen!(
+                            &mut self.machine_st,
+                            float_fractional_part(n1)
+                        )));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::FloatIntegerPart(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, float_integer_part(n1)),
-                        ));
+                        let value = Number::Float(OrderedFloat(try_or_throw_gen!(
+                            &mut self.machine_st,
+                            float_integer_part(n1)
+                        )));
 
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((value, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::Plus(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                        self.machine_st.interms[t - 1] = n1;
+                        self.machine_st.registers[t] =
+                            HeapCellValue::from((n1, &mut self.machine_st.arena));
                         self.machine_st.p += 1;
                     }
                     &Instruction::DynamicElse(..) => {

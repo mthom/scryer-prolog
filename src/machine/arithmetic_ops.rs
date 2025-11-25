@@ -21,7 +21,6 @@ use ordered_float::{Float, OrderedFloat};
 use std::cmp;
 use std::convert::TryFrom;
 use std::f64;
-use std::mem;
 
 macro_rules! try_numeric_result {
     ($e: expr, $stub_gen: expr) => {
@@ -1120,23 +1119,18 @@ pub(crate) fn bitwise_complement(n1: Number, arena: &mut Arena) -> Result<Number
 impl MachineState {
     #[inline]
     pub fn get_number(&mut self, at: &ArithmeticTerm) -> Result<Number, MachineStub> {
-        match at {
-            &ArithmeticTerm::Reg(r) => {
-                let value = self.store(self.deref(self[r]));
+        let value = match at {
+            &ArithmeticTerm::Reg(r) => self.store(self.deref(self[r])),
+            &ArithmeticTerm::IntermReg(i) => self.registers[i],
+            ArithmeticTerm::Number(n) => return Ok(*n),
+        };
 
-                match Number::try_from((value, &self.arena.f64_tbl)) {
-                    Ok(n) => Ok(n),
-                    Err(_) => {
-                        self.heap[0] = value;
-                        self.arith_eval_by_metacall(0)
-                    }
-                }
+        match Number::try_from((value, &self.arena.f64_tbl)) {
+            Ok(n) => Ok(n),
+            Err(_) => {
+                self.heap[0] = value;
+                self.arith_eval_by_metacall(0)
             }
-            &ArithmeticTerm::Interm(i) => Ok(mem::replace(
-                &mut self.interms[i - 1],
-                Number::Fixnum(Fixnum::build_with(0)),
-            )),
-            ArithmeticTerm::Number(n) => Ok(*n),
         }
     }
 
@@ -1158,6 +1152,7 @@ impl MachineState {
         term_loc: usize,
     ) -> Result<Number, MachineStub> {
         let stub_gen = || functor_stub(atom!("is"), 2);
+        let mut interms = vec![];
         let mut iter =
             stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, term_loc);
 
@@ -1194,38 +1189,38 @@ impl MachineState {
             read_heap_cell!(value,
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     if arity == 2 {
-                        let a2 = self.interms.pop().unwrap();
-                        let a1 = self.interms.pop().unwrap();
+                        let a2 = interms.pop().unwrap();
+                        let a1 = interms.pop().unwrap();
 
                         match name {
-                            atom!("+") => self.interms.push(drop_iter_on_err!(
+                            atom!("+") => interms.push(drop_iter_on_err!(
                                 self,
                                 iter,
                                 try_numeric_result!(add(a1, a2, &mut self.arena), stub_gen)
                             )),
-                            atom!("-") => self.interms.push(drop_iter_on_err!(
+                            atom!("-") => interms.push(drop_iter_on_err!(
                                 self,
                                 iter,
                                 try_numeric_result!(sub(a1, a2, &mut self.arena), stub_gen)
                             )),
-                            atom!("*") => self.interms.push(drop_iter_on_err!(
+                            atom!("*") => interms.push(drop_iter_on_err!(
                                 self,
                                 iter,
                                 try_numeric_result!(mul(a1, a2, &mut self.arena), stub_gen)
                             )),
-                            atom!("/") => self.interms.push(
+                            atom!("/") => interms.push(
                                 drop_iter_on_err!(self, iter, div(a1, a2))
                             ),
-                            atom!("**") => self.interms.push(
+                            atom!("**") => interms.push(
                                 drop_iter_on_err!(self, iter, pow(a1, a2, atom!("is")))
                             ),
-                            atom!("^") => self.interms.push(
+                            atom!("^") => interms.push(
                                 drop_iter_on_err!(self, iter, int_pow(a1, a2, &mut self.arena))
                             ),
-                            atom!("max") => self.interms.push(
+                            atom!("max") => interms.push(
                                 drop_iter_on_err!(self, iter, max(a1, a2))
                             ),
-                            atom!("min") => self.interms.push(
+                            atom!("min") => interms.push(
                                 drop_iter_on_err!(self, iter, min(a1, a2))
                             ),
                             atom!("rdiv") => {
@@ -1246,39 +1241,39 @@ impl MachineState {
                                     &mut self.arena
                                 );
 
-                                self.interms.push(Number::Rational(result));
+                                interms.push(Number::Rational(result));
                             }
-                            atom!("//") => self.interms.push(
+                            atom!("//") => interms.push(
                                 drop_iter_on_err!(self, iter, idiv(a1, a2, &mut self.arena))
                             ),
-                            atom!("div") => self.interms.push(
+                            atom!("div") => interms.push(
                                 drop_iter_on_err!(self, iter, int_floor_div(a1, a2, &mut self.arena))
                             ),
-                            atom!(">>") => self.interms.push(
+                            atom!(">>") => interms.push(
                                 drop_iter_on_err!(self, iter, shr(a1, a2, &mut self.arena))
                             ),
-                            atom!("<<") => self.interms.push(
+                            atom!("<<") => interms.push(
                                 drop_iter_on_err!(self, iter, shl(a1, a2, &mut self.arena))
                             ),
-                            atom!("/\\") => self.interms.push(
+                            atom!("/\\") => interms.push(
                                 drop_iter_on_err!(self, iter, and(a1, a2, &mut self.arena))
                             ),
-                            atom!("\\/") => self.interms.push(
+                            atom!("\\/") => interms.push(
                                 drop_iter_on_err!(self, iter, or(a1, a2, &mut self.arena))
                             ),
-                            atom!("xor") => self.interms.push(
+                            atom!("xor") => interms.push(
                                 drop_iter_on_err!(self, iter, xor(a1, a2, &mut self.arena))
                             ),
-                            atom!("mod") => self.interms.push(
+                            atom!("mod") => interms.push(
                                 drop_iter_on_err!(self, iter, modulus(a1, a2, &mut self.arena))
                             ),
-                            atom!("rem") => self.interms.push(
+                            atom!("rem") => interms.push(
                                 drop_iter_on_err!(self, iter, remainder(a1, a2, &mut self.arena))
                             ),
-                            atom!("atan2") => self.interms.push(Number::Float(OrderedFloat(
+                            atom!("atan2") => interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, atan2(a1, a2))
                             ))),
-                            atom!("gcd") => self.interms.push(
+                            atom!("gcd") => interms.push(
                                 drop_iter_on_err!(self, iter, gcd(a1, a2, &mut self.arena))
                             ),
                             _ => {
@@ -1294,56 +1289,56 @@ impl MachineState {
 
                         continue;
                     } else if arity == 1 {
-                        let a1 = self.interms.pop().unwrap();
+                        let a1 = interms.pop().unwrap();
 
                         match name {
-                            atom!("-") => self.interms.push(neg(a1, &mut self.arena)),
-                            atom!("+") => self.interms.push(a1),
-                            atom!("cos") => self.interms.push(Number::Float(OrderedFloat(
+                            atom!("-") => interms.push(neg(a1, &mut self.arena)),
+                            atom!("+") => interms.push(a1),
+                            atom!("cos") => interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, cos(a1))
                             ))),
-                            atom!("sin") => self.interms.push(Number::Float(OrderedFloat(
+                            atom!("sin") => interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, sin(a1))
                             ))),
-                            atom!("tan") => self.interms.push(Number::Float(OrderedFloat(
+                            atom!("tan") => interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, tan(a1))
                             ))),
-                            atom!("float_fractional_part") => self.interms.push(Number::Float(OrderedFloat(
+                            atom!("float_fractional_part") => interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, float_fractional_part(a1))
                             ))),
-                            atom!("float_integer_part") => self.interms.push(Number::Float(OrderedFloat(
+                            atom!("float_integer_part") => interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, float_integer_part(a1))
                             ))),
-                            atom!("sqrt") => self.interms.push(Number::Float(OrderedFloat(
+                            atom!("sqrt") => interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, sqrt(a1))
                             ))),
-                            atom!("log") => self.interms.push(Number::Float(OrderedFloat(
+                            atom!("log") => interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, log(a1))
                             ))),
-                            atom!("exp") => self.interms.push(Number::Float(OrderedFloat(
+                            atom!("exp") => interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, exp(a1))
                             ))),
-                            atom!("acos") => self.interms.push(Number::Float(OrderedFloat(
+                            atom!("acos") => interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, acos(a1))
                             ))),
-                            atom!("asin") => self.interms.push(Number::Float(OrderedFloat(
+                            atom!("asin") => interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, asin(a1))
                             ))),
-                            atom!("atan") => self.interms.push(Number::Float(OrderedFloat(
+                            atom!("atan") => interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, atan(a1))
                             ))),
-                            atom!("abs") => self.interms.push(abs(a1, &mut self.arena)),
-                            atom!("float") => self.interms.push(Number::Float(OrderedFloat(
+                            atom!("abs") => interms.push(abs(a1, &mut self.arena)),
+                            atom!("float") => interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, float(a1))
                             ))),
-                            atom!("truncate") => self.interms.push(truncate(a1, &mut self.arena)),
-                            atom!("round") => self.interms.push(drop_iter_on_err!(self, iter, round(a1, &mut self.arena))),
-                            atom!("ceiling") => self.interms.push(ceiling(a1, &mut self.arena)),
-                            atom!("floor") => self.interms.push(floor(a1, &mut self.arena)),
-                            atom!("\\") => self.interms.push(
+                            atom!("truncate") => interms.push(truncate(a1, &mut self.arena)),
+                            atom!("round") => interms.push(drop_iter_on_err!(self, iter, round(a1, &mut self.arena))),
+                            atom!("ceiling") => interms.push(ceiling(a1, &mut self.arena)),
+                            atom!("floor") => interms.push(floor(a1, &mut self.arena)),
+                            atom!("\\") => interms.push(
                                 drop_iter_on_err!(self, iter, bitwise_complement(a1, &mut self.arena))
                             ),
-                            atom!("sign") => self.interms.push(a1.sign()),
+                            atom!("sign") => interms.push(a1.sign()),
                             _ => {
                                 let evaluable_stub = functor_stub(name, 1);
                                 std::mem::drop(iter);
@@ -1362,15 +1357,15 @@ impl MachineState {
                     } else if arity == 0 {
                         match name {
                             atom!("pi") => {
-                                self.interms.push(Number::Float(OrderedFloat(f64::consts::PI)));
+                                interms.push(Number::Float(OrderedFloat(f64::consts::PI)));
                                 continue;
                             }
                             atom!("e") => {
-                                self.interms.push(Number::Float(OrderedFloat(f64::consts::E)));
+                                interms.push(Number::Float(OrderedFloat(f64::consts::E)));
                                 continue;
                             }
                             atom!("epsilon") => {
-                                self.interms.push(Number::Float(OrderedFloat(f64::EPSILON)));
+                                interms.push(Number::Float(OrderedFloat(f64::EPSILON)));
                                 continue;
                             }
                             _ => {
@@ -1386,19 +1381,19 @@ impl MachineState {
                     return Err(self.error_form(evaluable_error, stub));
                 }
                 (HeapCellValueTag::Fixnum, n) => {
-                    self.interms.push(Number::Fixnum(n));
+                    interms.push(Number::Fixnum(n));
                 }
                 (HeapCellValueTag::F64Offset, offset) => {
                     let fl = self.arena.f64_tbl.get_entry(offset);
-                    self.interms.push(Number::Float(fl));
+                    interms.push(Number::Float(fl));
                 }
                 (HeapCellValueTag::Cons, ptr) => {
                     match_untyped_arena_ptr!(ptr,
                          (ArenaHeaderTag::Integer, n) => {
-                             self.interms.push(Number::Integer(n));
+                             interms.push(Number::Integer(n));
                          }
                          (ArenaHeaderTag::Rational, r) => {
-                             self.interms.push(Number::Rational(r));
+                             interms.push(Number::Rational(r));
                          }
                          _ => {
                              std::mem::drop(iter);
@@ -1429,7 +1424,7 @@ impl MachineState {
             )
         }
 
-        Ok(self.interms.pop().unwrap())
+        Ok(interms.pop().unwrap())
     }
 }
 

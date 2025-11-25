@@ -85,7 +85,6 @@ pub struct MachineState {
     pub(super) ball: Ball,
     pub(super) ball_stack: Vec<Ball>, // save current ball before jumping via, e.g., verify_attr interrupt.
     pub(super) lifted_heap: Heap,
-    pub(super) interms: Vec<Number>, // intermediate numbers.
     // locations of cleaners, cut points, the previous scc_block. for setup_call_cleanup/3.
     pub(super) cont_pts: Vec<(HeapCellValue, usize, usize)>,
     pub(super) cwil: CWIL,
@@ -124,7 +123,6 @@ impl fmt::Debug for MachineState {
             .field("ball", &self.ball)
             .field("ball_stack", &self.ball_stack)
             .field("lifted_heap", &self.lifted_heap)
-            .field("interms", &self.interms)
             .field("flags", &self.flags)
             .field("cc", &self.cc)
             .field("global_clock", &self.global_clock)

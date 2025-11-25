@@ -951,8 +951,8 @@ fn generate_instruction_preface() -> TokenStream {
             fn into_functor(self, arena: &mut Arena) -> MachineStub {
                 match self {
                     ArithmeticTerm::Reg(r) => reg_type_into_functor(r),
-                    ArithmeticTerm::Interm(i) => {
-                        functor!(atom!("intermediate"), [fixnum(i)])
+                    ArithmeticTerm::IntermReg(i) => {
+                        functor!(atom!("x"), [fixnum(i)])
                     }
                     ArithmeticTerm::Number(n) => {
                         functor!(atom!("number"), [number(n, arena)])

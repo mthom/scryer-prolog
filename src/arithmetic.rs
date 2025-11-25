@@ -22,7 +22,7 @@ use num_order::NumOrd;
 use ordered_float::{Float, OrderedFloat};
 
 use std::cell::Cell;
-use std::cmp::{max, min, Ordering};
+use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::f64;
 use std::num::FpCategory;
@@ -31,19 +31,9 @@ use std::vec::Vec;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ArithmeticTerm {
+    IntermReg(usize),
     Reg(RegType),
-    Interm(usize),
     Number(Number),
-}
-
-impl ArithmeticTerm {
-    pub(crate) fn interm_or(&self, interm: usize) -> usize {
-        if let &ArithmeticTerm::Interm(interm) = self {
-            interm
-        } else {
-            interm
-        }
-    }
 }
 
 impl Default for ArithmeticTerm {
@@ -57,7 +47,7 @@ pub(crate) struct ArithInstructionIterator<'a> {
     state_stack: Vec<TermIterState<'a>>,
 }
 
-pub(crate) type ArithCont = (CodeDeque, Option<ArithmeticTerm>);
+pub(crate) type ArithCont = (CodeDeque, ArithmeticTerm);
 
 impl<'a> ArithInstructionIterator<'a> {
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
@@ -90,7 +80,7 @@ impl<'a> ArithInstructionIterator<'a> {
 #[derive(Debug)]
 pub(crate) enum ArithTermRef<'a> {
     Literal(Literal),
-    Op(Atom, usize), // name, arity.
+    Op(Level, &'a Cell<RegType>, Atom, usize), // name, arity.
     Var(Level, &'a Cell<VarReg>, VarPtr),
 }
 
@@ -105,7 +95,7 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
                     let arity = subterms.len();
 
                     if child_num == arity {
-                        return Some(Ok(ArithTermRef::Op(name, arity)));
+                        return Some(Ok(ArithTermRef::Op(lvl, cell, name, arity)));
                     } else {
                         self.state_stack.push(TermIterState::Clause(
                             lvl,
@@ -139,7 +129,6 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
 pub(crate) struct ArithmeticEvaluator<'a> {
     marker: &'a mut DebrayAllocator,
     interm: Vec<ArithmeticTerm>,
-    interm_c: usize,
 }
 
 pub(crate) trait ArithmeticTermIter<'a> {
@@ -180,11 +169,10 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), Ari
 }
 
 impl<'a> ArithmeticEvaluator<'a> {
-    pub(crate) fn new(marker: &'a mut DebrayAllocator, target_int: usize) -> Self {
+    pub(crate) fn new(marker: &'a mut DebrayAllocator) -> Self {
         ArithmeticEvaluator {
             marker,
             interm: Vec::new(),
-            interm_c: target_int,
         }
     }
 
@@ -252,56 +240,37 @@ impl<'a> ArithmeticEvaluator<'a> {
         }
     }
 
-    fn incr_interm(&mut self) -> usize {
-        let temp = self.interm_c;
-
-        self.interm.push(ArithmeticTerm::Interm(temp));
-        self.interm_c += 1;
-
-        temp
+    fn try_add_to_free_list(&mut self, a1: ArithmeticTerm) {
+        if let ArithmeticTerm::IntermReg(t) = a1 {
+            self.marker.add_reg_to_free_list(RegType::Temp(t));
+        }
     }
 
     fn instr_from_clause(
         &mut self,
         name: Atom,
         arity: usize,
+        arg: usize,
     ) -> Result<Instruction, ArithmeticError> {
         match arity {
             1 => {
                 let a1 = self.interm.pop().unwrap();
 
-                let ninterm = if a1.interm_or(0) == 0 {
-                    self.incr_interm()
-                } else {
-                    self.interm.push(a1);
-                    a1.interm_or(0)
-                };
+                self.interm.push(ArithmeticTerm::IntermReg(arg));
+                self.try_add_to_free_list(a1);
 
-                self.get_unary_instr(name, a1, ninterm)
+                self.get_unary_instr(name, a1, arg)
             }
             2 => {
                 let a2 = self.interm.pop().unwrap();
                 let a1 = self.interm.pop().unwrap();
 
-                let min_interm = min(a1.interm_or(0), a2.interm_or(0));
+                self.interm.push(ArithmeticTerm::IntermReg(arg));
 
-                let ninterm = if min_interm == 0 {
-                    let max_interm = max(a1.interm_or(0), a2.interm_or(0));
+                self.try_add_to_free_list(a1);
+                self.try_add_to_free_list(a2);
 
-                    if max_interm == 0 {
-                        self.incr_interm()
-                    } else {
-                        self.interm.push(ArithmeticTerm::Interm(max_interm));
-                        self.interm_c = max_interm + 1;
-                        max_interm
-                    }
-                } else {
-                    self.interm.push(ArithmeticTerm::Interm(min_interm));
-                    self.interm_c = min_interm + 1;
-                    min_interm
-                };
-
-                self.get_binary_instr(name, a1, a2, ninterm)
+                self.get_binary_instr(name, a1, a2, arg)
             }
             _ => Err(ArithmeticError::NonEvaluableFunctor(
                 Literal::Atom(name),
@@ -346,13 +315,20 @@ impl<'a> ArithmeticEvaluator<'a> {
 
                     self.interm.push(ArithmeticTerm::Reg(r));
                 }
-                ArithTermRef::Op(name, arity) => {
-                    code.push_back(self.instr_from_clause(name, arity)?);
+                ArithTermRef::Op(lvl, cell, name, arity) => {
+                    self.marker
+                        .mark_non_var::<QueryInstruction>(lvl, term_loc, cell, &mut code);
+
+                    if let RegType::Temp(t) = cell.get() {
+                        code.push_back(self.instr_from_clause(name, arity, t)?);
+                    } else {
+                        unreachable!()
+                    }
                 }
             }
         }
 
-        Ok((code, self.interm.pop()))
+        Ok((code, self.interm.pop().unwrap()))
     }
 }
 
