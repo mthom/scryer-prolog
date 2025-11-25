@@ -824,6 +824,17 @@ impl<'a, R: CharRead> Parser<'a, R> {
             return Ok(false);
         }
 
+        // Fix for issue #3172: Reject mismatched brackets
+        // When closing with ), we must not have an unclosed [ or { on the stack
+        // Example: ([) has stack [Open, OpenList] when ) arrives - this is invalid
+        // ISO/IEC 13211-1:1995: Each bracket type must close with its matching closer
+        if let Some(TokenType::OpenList | TokenType::OpenCurly) = self.stack.last().map(|token| token.tt) {
+            return Err(ParserError::IncompleteReduction(
+                self.lexer.line_num,
+                self.lexer.col_num,
+            ));
+        }
+
         let idx = self.stack.len() - 2;
         let td = self.stack.remove(idx);
 

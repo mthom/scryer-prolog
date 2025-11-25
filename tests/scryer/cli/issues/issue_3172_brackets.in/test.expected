@@ -1,0 +1,22 @@
+Test 1 (([) should error): PASS
+Test 2 (({) should error): PASS
+Test 3 ({([)} should error): PASS
+Test 4 ([(]) should error): PASS
+Test 5 ({(}) should error): PASS
+Test 6 ({[} should error): PASS
+Test 7 ([{] should error): PASS
+Test 8 (((]) should error): PASS
+Test 9 ([) should error): PASS
+Test 10 ({) should error): PASS
+Test 11 ((] should error): PASS
+Test 12 ((} should error): PASS
+Test 13 (([]) valid): PASS
+Test 14 (({}) valid): PASS
+Test 15 ({[]} valid): PASS
+Test 17 ({([])} valid): PASS
+Test 18 ([{}] valid): PASS
+Test 19 (([a]) valid): PASS
+Test 20 (({a}) valid): PASS
+Test 21 ({[a,b]} valid): PASS
+Test 22 ([a,[b],c] valid): PASS
+Test 23 ({a,{b},c} valid): PASS
