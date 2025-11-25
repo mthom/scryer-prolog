@@ -34,6 +34,7 @@ There are prebuilt downloads for Debian, macOS, and Windows on [www.scryer.pl](h
 
 You may find you wish to build Scryer from source to incorporate the latest features and bug fixes.  It isn't terribly difficult.  Some tips:
 
+* install rust via rustup rather than a linux distributions package manager, as those tend to be outdated
 * keep your Rust current.
 * build Scryer for release, not debug.   The debug builds take a long time to load and run. 
 
@@ -207,23 +208,15 @@ The toplevel is explained on [https://www.metalevel.at/prolog/concepts](https://
 
 ### Instantiation Error
 
-Above we recommended staying away from (is)/2, for now.  And that recommendation still holds.  It is useful, though, to identify and understand some of the errors you will experience in Scryer Prolog (and most other Prolog systems).
-
 
 ```prolog
-?- A is 3.
-   A = 3.
-?- 3 is  A.
-   error(instantiation_error,(is)/2).
-?- 
-```
-
-```prolog
-?- X is "hello".
-   error(type_error(evaluable,[]/0),(is)/2).
+?- X.
+   error(instantiation_error,repl/0).
 ?- 
 
 ```
+
+
 
 clpz:(#=) is more friendly.
 
