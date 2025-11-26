@@ -141,9 +141,8 @@ mod libraries {
 }
 
 pub static BREAK_FROM_DISPATCH_LOOP_LOC: usize = 0;
-pub static INSTALL_VERIFY_ATTR_INTERRUPT: usize = 1;
-pub static VERIFY_ATTR_INTERRUPT_LOC: usize = 2;
-pub static LIB_QUERY_SUCCESS: usize = 3;
+pub static VERIFY_ATTR_INTERRUPT_LOC: usize = 1;
+pub static LIB_QUERY_SUCCESS: usize = 2;
 
 pub struct MachinePreludeView<'a> {
     pub indices: &'a mut IndexStore,
@@ -414,12 +413,11 @@ impl Machine {
     }
 
     pub(crate) fn add_impls_to_indices(&mut self) {
-        let impls_offset = self.code.len() + 4;
+        let impls_offset = self.code.len() + 3;
 
         self.code.extend(vec![
             Instruction::BreakFromDispatchLoop,
-            Instruction::InstallVerifyAttr,
-            Instruction::VerifyAttrInterrupt(0),
+            Instruction::RunVerifyAttr,
             Instruction::BreakFromDispatchLoop, // the location of LIB_QUERY_SUCCESS
             Instruction::ExecuteTermGreaterThan,
             Instruction::ExecuteTermLessThan,

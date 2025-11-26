@@ -834,12 +834,9 @@ enum InstructionTemplate {
     // break from loop instruction.
     #[strum_discriminants(strum(props(Arity = "0", Name = "break_from_dispatch")))]
     BreakFromDispatchLoop,
-    // swap the verify attr interrupt instruction with the next control instruction.
-    #[strum_discriminants(strum(props(Arity = "0", Name = "install_verify_attr")))]
-    InstallVerifyAttr,
-    // call verify_attrs.
-    #[strum_discriminants(strum(props(Arity = "1", Name = "verify_attr_interrupt")))]
-    VerifyAttrInterrupt(usize),
+    // run verify_attr, eventually.
+    #[strum_discriminants(strum(props(Arity = "0", Name = "run_verify_attr")))]
+    RunVerifyAttr,
     // procedures
     CallClause(ClauseType, usize, usize, bool, bool), // ClauseType,
                                                       // arity,
@@ -1169,33 +1166,6 @@ fn generate_instruction_preface() -> TokenStream {
 
         impl Instruction {
             #[inline]
-            pub fn registers(&self) -> Vec<RegType> {
-                match *self {
-                    Instruction::GetConstant(_, _, r) => vec![r],
-                    Instruction::GetList(_, r) => vec![r],
-                    Instruction::GetPartialString(_, _, r) => vec![r],
-                    Instruction::GetStructure(_, _, _, r) => vec![r],
-                    Instruction::GetVariable(r, t) => vec![r, temp_v!(t)],
-                    Instruction::GetValue(r, t) => vec![r, temp_v!(t)],
-                    Instruction::UnifyLocalValue(r) => vec![r],
-                    Instruction::UnifyVariable(r) => vec![r],
-                    Instruction::PutConstant(_, _, r) => vec![r],
-                    Instruction::PutList(_, r) => vec![r],
-                    Instruction::PutPartialString(_, _, r) => vec![r],
-                    Instruction::PutStructure(_, _, r) => vec![r],
-                    Instruction::PutValue(r, t) => vec![r, temp_v!(t)],
-                    Instruction::PutVariable(r, t) => vec![r, temp_v!(t)],
-                    Instruction::SetLocalValue(r) => vec![r],
-                    Instruction::SetVariable(r) => vec![r],
-                    Instruction::SetValue(r) => vec![r],
-                    Instruction::GetLevel(r) => vec![r],
-                    Instruction::GetPrevLevel(r) => vec![r],
-                    Instruction::GetCutPoint(r) => vec![r],
-                    _ => vec![],
-                }
-            }
-
-            #[inline]
             pub fn to_indexing_line_mut(&mut self) -> Option<&mut Vec<IndexingLine>> {
                 match self {
                     Instruction::IndexingCode(ref mut indexing_code) => Some(indexing_code),
@@ -1209,38 +1179,6 @@ fn generate_instruction_preface() -> TokenStream {
                     Instruction::IndexingCode(ref indexing_code) => Some(indexing_code),
                     _ => None,
                 }
-            }
-
-            #[inline]
-            pub fn is_head_instr(&self) -> bool {
-                matches!(self,
-                    Instruction::Deallocate |
-                    Instruction::GetConstant(..) |
-                    Instruction::GetList(..) |
-                    Instruction::GetPartialString(..) |
-                    Instruction::GetStructure(..) |
-                    Instruction::GetValue(..) |
-                    Instruction::UnifyConstant(..) |
-                    Instruction::UnifyLocalValue(..) |
-                    Instruction::UnifyVariable(..) |
-                    Instruction::UnifyValue(..) |
-                    Instruction::UnifyVoid(..) |
-                    Instruction::GetVariable(..) |
-                    Instruction::PutConstant(..) |
-                    Instruction::PutList(..) |
-                    Instruction::PutPartialString(..) |
-                    Instruction::PutStructure(..) |
-                    Instruction::PutUnsafeValue(..) |
-                    Instruction::PutValue(..) |
-                    Instruction::PutVariable(..) |
-                    Instruction::SetConstant(..) |
-                    Instruction::SetLocalValue(..) |
-                    Instruction::SetVariable(..) |
-                    Instruction::SetValue(..) |
-                    Instruction::SetVoid(..) |
-                    Instruction::GetLevel(..) |
-                    Instruction::GetPrevLevel(..) |
-                    Instruction::GetCutPoint(..))
             }
 
             pub fn enqueue_functors(
@@ -1278,11 +1216,8 @@ fn generate_instruction_preface() -> TokenStream {
 
             fn to_functor(&self, arena: &mut Arena) -> MachineStub {
                 match self {
-                    &Instruction::InstallVerifyAttr => {
-                        functor!(atom!("install_verify_attr"))
-                    }
-                    &Instruction::VerifyAttrInterrupt(arity) => {
-                        functor!(atom!("verify_attr_interrupt"), [fixnum(arity)])
+                    &Instruction::RunVerifyAttr => {
+                        functor!(atom!("run_verify_attr"))
                     }
                     &Instruction::DynamicElse(birth, death, next_or_fail) => {
                         match (death, next_or_fail) {

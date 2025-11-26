@@ -24,7 +24,7 @@ use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
-use crate::machine::{get_structure_index, Machine, VERIFY_ATTR_INTERRUPT_LOC};
+use crate::machine::{get_structure_index, Machine};
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
@@ -6255,6 +6255,7 @@ impl Machine {
         self.machine_st.heap[var.get_value() as usize] = value;
     }
 
+    /*
     #[inline(always)]
     pub(super) fn restore_instr_at_verify_attr_interrupt(&mut self) {
         match &self.code[VERIFY_ATTR_INTERRUPT_LOC] {
@@ -6269,10 +6270,11 @@ impl Machine {
             }
         }
     }
+    */
 
     #[inline(always)]
     pub(crate) fn reset_attr_var_state(&mut self, queue_len: usize) {
-        self.restore_instr_at_verify_attr_interrupt();
+        // self.restore_instr_at_verify_attr_interrupt();
         self.machine_st.attr_var_init.reset(queue_len);
     }
 
@@ -6303,7 +6305,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn return_from_verify_attr(&mut self) {
-        self.restore_instr_at_verify_attr_interrupt();
+        // self.restore_instr_at_verify_attr_interrupt();
 
         let e = self.machine_st.e;
         let frame_len = self.machine_st.stack.index_and_frame(e).prelude.num_cells;
