@@ -50,60 +50,31 @@ Copy this into hello.pl:
 
 ```prolog
 :- use_module(library(format)).
-:- initialization(main).
+:- use_module(library(pio)).
 
-main :-
-    format("Hello, world!~n", []).
+% Define a DCG that produces the phrase
+hello_phrase --> 
+    "Hello, Prolog world!\n".
 
-hello_prolog :-
-    format("Hello, Prolog world!~n", []).
+%write something to the user output stream.
+hello_world :-
+        phrase_to_stream(hello_phrase, user_output).
 ```
-
-The line 
-
-```prolog
-:- initialization(main).
-```
-queries the main/0 predicate when the script loads.
 
 Run it like this:
 
 ```bash
-$ scryer-prolog hello
-Hello, world!
-?- 
-```
-Scryer queries main and then waits for input in the toplevel.
-
-You can query main again in the toplevel.
-
-```bash
-$ scryer-prolog hello
-Hello, world!
-?- main.
-Hello, world!
-   true.
-?- 
-```
-
-You can query another goal as a command line 
-argument:
-
-```bash
-$ scryer-prolog hello -g hello_prolog
-Hello, world!
+$ scryer-prolog hello -g hello_world
 Hello, Prolog world!
-?- 
-```
-or in the toplevel:
-
-```bash
-$ scryer-prolog hello 
-Hello, world!
-?- hello_prolog.
+?- hello_world.
 Hello, Prolog world!
    true.
 ?- 
+```
+
+The -g command queries the goal when Scryer starts up.  You can query the goal
+in the toplevel as well.
+
 
 ```
 
@@ -113,9 +84,8 @@ in the toplevel.
 ```bash
 $ scryer-prolog 
 ?- [hello].
-Hello, world!
    true.
-?- hello_prolog.
+?- hello_world.
 Hello, Prolog world!
    true.
 ?- 
@@ -249,7 +219,10 @@ ce(h).
 
 ```
 If you can't eyeball where the error is, introduce a syntax error 
-in your program and move it around until you locate the warning.
+in your program and move it around until you locate the warning. 
+
+Of course, it would be better to have Scryer report the line numbers for these warnings.  But it 
+doesn't, at least not yet.
 
 
 ### : instead of :-
@@ -291,6 +264,10 @@ a(_) :-  X#>12.
 ```
 
 The error .../read_term/*3:4* indicates the syntax error is at column 3 (the column is reported first), line 4.
+
+Of course, it would be better to have Scryer report the line numbers for these errors.  But it 
+doesn't, at least not yet.
+
 
 ### Prolog isn't Python
 

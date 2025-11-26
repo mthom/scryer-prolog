@@ -1,8 +1,10 @@
 :- use_module(library(format)).
-:- initialization(main).
+:- use_module(library(pio)).
 
-main :-
-    format("Hello, world!~n", []).
+% Define a DCG that produces the phrase
+hello_phrase --> 
+    "Hello, Prolog world!\n".
 
-hello_prolog :-
-    format("Hello, Prolog world!~n", []).
+%write something to the user output stream.
+hello_world :-
+        phrase_to_stream(hello_phrase, user_output).
