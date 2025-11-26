@@ -204,25 +204,28 @@ will have learned a little Prolog by then and will be able to solve them.
 Pay attention to these warnings. It can be hard to identify the cause, but the warning likely indicates a problem.
 
 ```prolog
-?- [user].
+- [user].
 ce(a).
-ce(b).
+cd(b).
 ce(c).
-ce(d).
-cd(e).
-ce(f).
-ce(g).
-ce(h).
 
 % Warning: overwriting ce/1 because the clauses are discontiguous
 ?- 
-
 ```
 If you can't eyeball where the error is, introduce a syntax error 
 in your program and move it around until you locate the warning. 
 
 Of course, it would be better to have Scryer report the line numbers for these warnings.  But it 
 doesn't, at least not yet.
+
+You will experience the same warning if you write - instead of :-.  
+
+```prolog
+a(-1) :- true.
+a(3) :-  3#>4.
+a(2) - true.
+a(X) :-  X#>12.
+```
 
 
 ### : instead of :-
@@ -236,7 +239,8 @@ colon.pl:
 a(-1) :- true.
 a(3) :-  3#>4.
 a(2) : true.
-a(_) :-  X#>12.
+a(X) :-  X#>12.
+
 ```
 
 ```prolog
@@ -255,7 +259,7 @@ a(-1) :- true.
 a(3) :-  3#>4.
 deliberate syntax error
 a(2) : true.
-a(_) :-  X#>12.
+a(X) :-  X#>12.
 ```
 
 ```
