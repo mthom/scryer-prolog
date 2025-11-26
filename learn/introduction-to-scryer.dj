@@ -72,14 +72,14 @@ Hello, Prolog world!
 ?- 
 ```
 
-The -g command queries the goal when Scryer starts up.  You can query the goal
+The -g command queries the goal hello_world when Scryer starts up.  You can query the goal
 in the toplevel as well.
 
 
 ```
 
 You will frequently start Scryer and then load your Prolog program 
-in the toplevel.
+in the toplevel:
 
 ```bash
 $ scryer-prolog 
