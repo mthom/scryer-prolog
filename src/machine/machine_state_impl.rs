@@ -64,8 +64,7 @@ impl MachineState {
             cc: 0,
             global_clock: 0,
             dynamic_mode: FirstOrNext::First,
-            unify_fn: MachineState::unify,
-            bind_fn: MachineState::bind,
+            occurs_check: &Nsto,
             run_cleaners_fn: |_| false,
         }
     }
@@ -951,7 +950,7 @@ impl MachineState {
             }
         };
 
-        (self.bind_fn)(self, r, f_a);
+        self.occurs_check.bind(self, r, f_a);
         Ok(())
     }
 

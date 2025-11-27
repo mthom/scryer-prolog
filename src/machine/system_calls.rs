@@ -9213,36 +9213,25 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn is_sto_enabled(&mut self) {
-        if self.machine_st.unify_fn as usize == MachineState::unify_with_occurs_check as usize {
-            self.machine_st
-                .unify_atom(atom!("true"), self.machine_st.registers[1]);
-        } else if self.machine_st.unify_fn as usize
-            == MachineState::unify_with_occurs_check_with_error as usize
-        {
-            self.machine_st
-                .unify_atom(atom!("error"), self.machine_st.registers[1]);
-        } else {
-            self.machine_st
-                .unify_atom(atom!("false"), self.machine_st.registers[1]);
-        }
+        self.machine_st.unify_atom(
+            self.machine_st.occurs_check.flag_value(),
+            self.machine_st.registers[1],
+        );
     }
 
     #[inline(always)]
     pub(crate) fn set_sto_as_unify(&mut self) {
-        self.machine_st.unify_fn = MachineState::unify_with_occurs_check;
-        self.machine_st.bind_fn = MachineState::bind_with_occurs_check_wrapper;
+        self.machine_st.occurs_check = &Sto;
     }
 
     #[inline(always)]
     pub(crate) fn set_nsto_as_unify(&mut self) {
-        self.machine_st.unify_fn = MachineState::unify;
-        self.machine_st.bind_fn = MachineState::bind;
+        self.machine_st.occurs_check = &Nsto;
     }
 
     #[inline(always)]
     pub(crate) fn set_sto_with_error_as_unify(&mut self) {
-        self.machine_st.unify_fn = MachineState::unify_with_occurs_check_with_error;
-        self.machine_st.bind_fn = MachineState::bind_with_occurs_check_with_error_wrapper;
+        self.machine_st.occurs_check = &StoError;
     }
 
     #[inline(always)]
