@@ -10,24 +10,6 @@ It is not intended to teach you Prolog concepts.  The [Power of Prolog](https://
 As a Prolog learner, you should consider Linux or Mac OSX;  Windows is not as widely used in the Scyrer community.  Windows users 
  are likely to run into problems with Scryer Linux or Mac users do not exerience.    
 
-## Avoid or Unlearn Legacy Predicates 
-
-Many tutorials or lessons will teach facets of Prolog that are best avoided, at least while you are at the early stages of learning the language.  Prolog has improved over its lifetime, but many recorded lectures or tutorials ignore or predate those advancements.
-
-As a beginner, these legacy Prolog predicates are sharp corners you may wish to avoid.  
-
-```prolog
-- (!) cut.  
-- (->) if.  
-(is).  
-(\+).
-include/3.
-exclude/3.
-```
-
-For more information see [Prolog Patterns:  How Not to Do It](https://www.youtube.com/watch?v=6G-3DqyJ_l8).
-
-
 ## Install Scryer Prolog
 
 There are prebuilt downloads for Debian, macOS, and Windows on [www.scryer.pl](https://www.scryer.pl/).  This is the fastest way to get started.
@@ -154,8 +136,8 @@ Otherwise, learn Prolog until you are somewhat comfortable with the system and c
 
 ## Load a Prolog Module
 
-In the earlier example of hello world, the hello.pl Prolog module was 'consulted' from the
-current working directory.
+In the earlier example of hello world, the hello.pl Prolog module was 'consulted' from command line.
+It is common to consult modules from the toplevel.
 
 ```bash
 $ scryer-prolog 
@@ -173,7 +155,6 @@ There are more ways to consult a Prolog module, and much more you can do in the 
 The toplevel is explained on [https://www.metalevel.at/prolog/concepts](https://www.metalevel.at/prolog/concepts).
 
 
-
 ## Errors and Warnings
 
 ### Instantiation Error
@@ -184,16 +165,6 @@ The toplevel is explained on [https://www.metalevel.at/prolog/concepts](https://
    error(instantiation_error,repl/0).
 ?- 
 
-```
-
-
-
-clpz:(#=) is more friendly.
-
-```prolog
-?- 3 #= X.
-   X = 3.
-?- 
 ```
 
 You will eventually run into other instantiation_errors. Hopefully you
@@ -254,6 +225,7 @@ In a longer file, you may not be able to detect the missing - visually.
 You can try deliberately introducing a syntax error in your Prolog program to help locate the line where the error occurs.  Keep adjusting the location
 of the deliberate syntax error until you find the line where the permission_error occurs.
 
+
 ```prolog
 a(-1) :- true.
 a(3) :-  3#>4.
@@ -280,8 +252,8 @@ you will eventually make this mistake. And staring at this, the problem is not o
 remember that % is for line comments in Prolog.  Then the problem and solution will be obvious.
 
 ```prolog
-is_prolog_prolog :- true.
-is_prolog_python :-  false.  #of course it is_prolog_python
+is_prolog_prolog. 
+is_prolog_python :-  false.  #of course it is Prolog, not Python!
 is_python_rust :- false.
 
 ```
