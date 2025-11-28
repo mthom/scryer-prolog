@@ -599,7 +599,6 @@ impl MachineState {
     #[inline(always)]
     fn cos_instr(&mut self, a1: &ArithmeticTerm, t: usize) {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
-
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, cos(n1))));
 
         self.registers[t] = HeapCellValue::from((value, &mut self.arena));
@@ -609,7 +608,6 @@ impl MachineState {
     #[inline(always)]
     fn sin_instr(&mut self, a1: &ArithmeticTerm, t: usize) {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
-
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, sin(n1))));
 
         self.registers[t] = HeapCellValue::from((value, &mut self.arena));
@@ -619,7 +617,6 @@ impl MachineState {
     #[inline(always)]
     fn tan_instr(&mut self, a1: &ArithmeticTerm, t: usize) {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
-
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, tan(n1))));
 
         self.registers[t] = HeapCellValue::from((value, &mut self.arena));
@@ -629,7 +626,6 @@ impl MachineState {
     #[inline(always)]
     fn sqrt_instr(&mut self, a1: &ArithmeticTerm, t: usize) {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
-
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, sqrt(n1))));
 
         self.registers[t] = HeapCellValue::from((value, &mut self.arena));
@@ -639,7 +635,6 @@ impl MachineState {
     #[inline(always)]
     fn log_instr(&mut self, a1: &ArithmeticTerm, t: usize) {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
-
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, log(n1))));
 
         self.registers[t] = HeapCellValue::from((value, &mut self.arena));
@@ -649,7 +644,6 @@ impl MachineState {
     #[inline(always)]
     fn exp_instr(&mut self, a1: &ArithmeticTerm, t: usize) {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
-
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, exp(n1))));
 
         self.registers[t] = HeapCellValue::from((value, &mut self.arena));
@@ -659,7 +653,6 @@ impl MachineState {
     #[inline(always)]
     fn acos_instr(&mut self, a1: &ArithmeticTerm, t: usize) {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
-
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, acos(n1))));
 
         self.registers[t] = HeapCellValue::from((value, &mut self.arena));
@@ -669,7 +662,6 @@ impl MachineState {
     #[inline(always)]
     fn asin_instr(&mut self, a1: &ArithmeticTerm, t: usize) {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
-
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, asin(n1))));
 
         self.registers[t] = HeapCellValue::from((value, &mut self.arena));
@@ -679,7 +671,6 @@ impl MachineState {
     #[inline(always)]
     fn atan_instr(&mut self, a1: &ArithmeticTerm, t: usize) {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
-
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, atan(n1))));
 
         self.registers[t] = HeapCellValue::from((value, &mut self.arena));
@@ -700,7 +691,6 @@ impl MachineState {
     #[inline(always)]
     fn float_instr(&mut self, a1: &ArithmeticTerm, t: usize) {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
-
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, float(n1))));
 
         self.registers[t] = HeapCellValue::from((value, &mut self.arena));
@@ -719,7 +709,6 @@ impl MachineState {
     #[inline(always)]
     fn round_instr(&mut self, a1: &ArithmeticTerm, t: usize) {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
-
         let value = try_or_throw_gen!(self, round(n1, &mut self.arena));
 
         self.registers[t] = HeapCellValue::from((value, &mut self.arena));
@@ -888,87 +877,59 @@ impl MachineState {
 
         while let Some(c) = string_cursor.chars().next() {
             read_heap_cell!(self.heap[h],
-            (HeapCellValueTag::PStrLoc, pstr_loc) => {
-                        let heap_slice = &self.heap.as_slice()[pstr_loc ..];
+                (HeapCellValueTag::PStrLoc, pstr_loc) => {
+                    let heap_slice = &self.heap.as_slice()[pstr_loc ..];
 
-                        match compare_pstr_slices(heap_slice, string_cursor.as_bytes()) {
-                            PStrSegmentCmpResult::Continue(v1, v2) => {
-                                // for v2, the value of a TailIndex mustn't ever be read
-                                // since string does not lie in the heap.
-                                match (v1, v2) {
-                                    (PStrContinuable::TailIndex(tail_idx), PStrContinuable::TailIndex(_)) => {
-                                        self.s = HeapPtr::HeapCell(tail_idx + cell_index!(pstr_loc));
-                                        self.s_offset = 0;
-                                        self.mode = MachineMode::Read;
+                    match compare_pstr_slices(heap_slice, string_cursor.as_bytes()) {
+                        PStrSegmentCmpResult::Continue(v1, v2) => {
+                            // for v2, the value of a TailIndex mustn't ever be read
+                            // since string does not lie in the heap.
+                            match (v1, v2) {
+                                (PStrContinuable::TailIndex(tail_idx), PStrContinuable::TailIndex(_)) => {
+                                    self.s = HeapPtr::HeapCell(tail_idx + cell_index!(pstr_loc));
+                                    self.s_offset = 0;
+                                    self.mode = MachineMode::Read;
 
-                                        break;
-                                    }
-                                    (PStrContinuable::TailIndex(tail_idx), PStrContinuable::PStrOffset(pos)) => {
-                                        h = tail_idx + cell_index!(pstr_loc);
-                                        string_cursor = &string_cursor[pos ..];
-                                    }
-                                    (PStrContinuable::PStrOffset(pos), PStrContinuable::TailIndex(_)) => {
-                                        self.s = HeapPtr::PStr(pstr_loc);
-                                        self.s_offset = pos;
-                                        self.mode = MachineMode::Read;
-
-                                        break;
-                                    }
-                                    _ => unreachable!(),
+                                    break;
                                 }
-                            }
-                            _ => {
-                                self.fail = true;
-                                break;
+                                (PStrContinuable::TailIndex(tail_idx), PStrContinuable::PStrOffset(pos)) => {
+                                    h = tail_idx + cell_index!(pstr_loc);
+                                    string_cursor = &string_cursor[pos ..];
+                                }
+                                (PStrContinuable::PStrOffset(pos), PStrContinuable::TailIndex(_)) => {
+                                    self.s = HeapPtr::PStr(pstr_loc);
+                                    self.s_offset = pos;
+                                    self.mode = MachineMode::Read;
+
+                                    break;
+                                }
+                                _ => unreachable!(),
                             }
                         }
-                    }
-                    (HeapCellValueTag::Lis, l) => {
-                        let cell = self.store(self.deref(self.heap[l]));
-
-                        if let Some(d) = cell.as_char() {
-                            if c != d {
-                                self.fail = true;
-                                break;
-                            }
-                        } else if let Some(r) = cell.as_var() {
-                            self.bind(r, char_as_cell!(c));
-                        } else {
+                        _ => {
                             self.fail = true;
-                        }
-
-                        if self.fail {
-                            break;
-                        } else {
-                            h = l+1;
-                            string_cursor = &string_cursor[c.len_utf8() ..];
-
-                            if string_cursor.is_empty() {
-                                self.s = HeapPtr::HeapCell(h);
-                                self.s_offset = 0;
-                                self.mode = MachineMode::Read;
-                            }
-                        }
-                    }
-                    (HeapCellValueTag::Str, s) => {
-                        let cell = self.store(self.deref(self.heap[s+1]));
-
-                        if let Some(d) = cell.as_char() {
-                            if c != d {
-                                self.fail = true;
-                                break;
-                            }
-                        } else if let Some(r) = cell.as_var() {
-                            self.bind(r, char_as_cell!(c));
-                        } else {
-                            self.fail = true;
-                        }
-
-                        if self.fail {
                             break;
                         }
+                    }
+                }
+                (HeapCellValueTag::Lis, l) => {
+                    let cell = self.store(self.deref(self.heap[l]));
 
-                        h = s+2;
+                    if let Some(d) = cell.as_char() {
+                        if c != d {
+                            self.fail = true;
+                            break;
+                        }
+                    } else if let Some(r) = cell.as_var() {
+                        self.bind(r, char_as_cell!(c));
+                    } else {
+                        self.fail = true;
+                    }
+
+                    if self.fail {
+                        break;
+                    } else {
+                        h = l+1;
                         string_cursor = &string_cursor[c.len_utf8() ..];
 
                         if string_cursor.is_empty() {
@@ -977,30 +938,55 @@ impl MachineState {
                             self.mode = MachineMode::Read;
                         }
                     }
-                    (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, v) => {
-                        if h == v {
-                            let target_cell = backtrack_on_resource_error!(
-                                self,
-                                self.heap.allocate_pstr(string_cursor),
-                    return
-                            );
+                }
+                (HeapCellValueTag::Str, s) => {
+                    let cell = self.store(self.deref(self.heap[s+1]));
 
-                            self.bind(
-                                self.heap[h].as_var().unwrap(),
-                                target_cell,
-                            );
-
-                            self.mode = MachineMode::Write;
+                    if let Some(d) = cell.as_char() {
+                        if c != d {
+                            self.fail = true;
                             break;
-                        } else {
-                            h = v;
                         }
-                    }
-                    _ => {
+                    } else if let Some(r) = cell.as_var() {
+                        self.bind(r, char_as_cell!(c));
+                    } else {
                         self.fail = true;
                         break;
                     }
-                );
+
+                    h = s+2;
+                    string_cursor = &string_cursor[c.len_utf8() ..];
+
+                    if string_cursor.is_empty() {
+                        self.s = HeapPtr::HeapCell(h);
+                        self.s_offset = 0;
+                        self.mode = MachineMode::Read;
+                    }
+                }
+                (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, v) => {
+                    if h == v {
+                        let target_cell = backtrack_on_resource_error!(
+                            self,
+                            self.heap.allocate_pstr(string_cursor),
+                            return
+                        );
+
+                        self.bind(
+                            self.heap[h].as_var().unwrap(),
+                            target_cell,
+                        );
+
+                        self.mode = MachineMode::Write;
+                        break;
+                    } else {
+                        h = v;
+                    }
+                }
+                _ => {
+                    self.fail = true;
+                    break;
+                }
+            );
         }
 
         step_or_fail!(self, self.p += 1);
@@ -1014,19 +1000,19 @@ impl MachineState {
         read_heap_cell!(store_v,
             (HeapCellValueTag::Str, a) => {
                 read_heap_cell!(self.heap[a],
-            (HeapCellValueTag::Atom, (result_name, result_arity)) => {
-            if arity == result_arity && name == result_name {
-                self.s = HeapPtr::HeapCell(a + 1);
-                self.s_offset = 0;
-                self.mode = MachineMode::Read;
-            } else {
-                self.backtrack();
-                return;
-            }
-            }
-                _ => {
-            unreachable!();
-            }
+                    (HeapCellValueTag::Atom, (result_name, result_arity)) => {
+                        if arity == result_arity && name == result_name {
+                            self.s = HeapPtr::HeapCell(a + 1);
+                            self.s_offset = 0;
+                            self.mode = MachineMode::Read;
+                        } else {
+                            self.backtrack();
+                            return;
+                        }
+                    }
+                    _ => {
+                        unreachable!();
+                    }
                 );
             }
             (HeapCellValueTag::AttrVar | HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
@@ -1040,7 +1026,7 @@ impl MachineState {
             }
             _ => {
                 self.backtrack();
-        return;
+                return;
             }
         );
 
@@ -1225,7 +1211,6 @@ impl MachineState {
     #[inline(always)]
     fn put_partial_string_instr(&mut self, string: &str, r: RegType) {
         self[r] = backtrack_on_resource_error!(self, self.heap.allocate_pstr(string), return);
-
         self.p += 1;
     }
 
@@ -1567,59 +1552,6 @@ impl Machine {
                     &Instruction::BreakFromDispatchLoop => {
                         break 'outer;
                     }
-                    &Instruction::Add(ref a1, ref a2, t) => self.machine_st.add_instr(a1, a2, t),
-                    &Instruction::Sub(ref a1, ref a2, t) => self.machine_st.sub_instr(a1, a2, t),
-                    &Instruction::Mul(ref a1, ref a2, t) => self.machine_st.mul_instr(a1, a2, t),
-                    &Instruction::Max(ref a1, ref a2, t) => self.machine_st.max_instr(a1, a2, t),
-                    &Instruction::Min(ref a1, ref a2, t) => self.machine_st.min_instr(a1, a2, t),
-                    &Instruction::IntPow(ref a1, ref a2, t) => {
-                        self.machine_st.int_pow_instr(a1, a2, t)
-                    }
-                    &Instruction::Gcd(ref a1, ref a2, t) => self.machine_st.gcd_instr(a1, a2, t),
-                    &Instruction::Pow(ref a1, ref a2, t) => self.machine_st.pow_instr(a1, a2, t),
-                    &Instruction::RDiv(ref a1, ref a2, t) => self.machine_st.rdiv_instr(a1, a2, t),
-                    &Instruction::IntFloorDiv(ref a1, ref a2, t) => {
-                        self.machine_st.int_floor_div_instr(a1, a2, t)
-                    }
-                    &Instruction::IDiv(ref a1, ref a2, t) => self.machine_st.idiv_instr(a1, a2, t),
-                    &Instruction::Abs(ref a1, t) => self.machine_st.abs_instr(a1, t),
-                    &Instruction::Sign(ref a1, t) => self.machine_st.sign_instr(a1, t),
-                    &Instruction::Neg(ref a1, t) => self.machine_st.neg_instr(a1, t),
-                    &Instruction::BitwiseComplement(ref a1, t) => {
-                        self.machine_st.bitwise_complement_instr(a1, t)
-                    }
-                    &Instruction::Div(ref a1, ref a2, t) => self.machine_st.div_instr(a1, a2, t),
-                    &Instruction::Shr(ref a1, ref a2, t) => self.machine_st.shr_instr(a1, a2, t),
-                    &Instruction::Shl(ref a1, ref a2, t) => self.machine_st.shl_instr(a1, a2, t),
-                    &Instruction::Xor(ref a1, ref a2, t) => self.machine_st.xor_instr(a1, a2, t),
-                    &Instruction::And(ref a1, ref a2, t) => self.machine_st.and_instr(a1, a2, t),
-                    &Instruction::Or(ref a1, ref a2, t) => self.machine_st.or_instr(a1, a2, t),
-                    &Instruction::Mod(ref a1, ref a2, t) => self.machine_st.mod_instr(a1, a2, t),
-                    &Instruction::Rem(ref a1, ref a2, t) => self.machine_st.rem_instr(a1, a2, t),
-                    &Instruction::Cos(ref a1, t) => self.machine_st.cos_instr(a1, t),
-                    &Instruction::Sin(ref a1, t) => self.machine_st.sin_instr(a1, t),
-                    &Instruction::Tan(ref a1, t) => self.machine_st.tan_instr(a1, t),
-                    &Instruction::Sqrt(ref a1, t) => self.machine_st.sqrt_instr(a1, t),
-                    &Instruction::Log(ref a1, t) => self.machine_st.log_instr(a1, t),
-                    &Instruction::Exp(ref a1, t) => self.machine_st.exp_instr(a1, t),
-                    &Instruction::ACos(ref a1, t) => self.machine_st.acos_instr(a1, t),
-                    &Instruction::ASin(ref a1, t) => self.machine_st.asin_instr(a1, t),
-                    &Instruction::ATan(ref a1, t) => self.machine_st.atan_instr(a1, t),
-                    &Instruction::ATan2(ref a1, ref a2, t) => {
-                        self.machine_st.atan2_instr(a1, a2, t)
-                    }
-                    &Instruction::Float(ref a1, t) => self.machine_st.float_instr(a1, t),
-                    &Instruction::Truncate(ref a1, t) => self.machine_st.truncate_instr(a1, t),
-                    &Instruction::Round(ref a1, t) => self.machine_st.round_instr(a1, t),
-                    &Instruction::Ceiling(ref a1, t) => self.machine_st.ceiling_instr(a1, t),
-                    &Instruction::Floor(ref a1, t) => self.machine_st.floor_instr(a1, t),
-                    &Instruction::FloatFractionalPart(ref a1, t) => {
-                        self.machine_st.float_fractional_part_instr(a1, t)
-                    }
-                    &Instruction::FloatIntegerPart(ref a1, t) => {
-                        self.machine_st.float_integer_part_instr(a1, t)
-                    }
-                    &Instruction::Plus(ref a1, t) => self.machine_st.plus_instr(a1, t),
                     &Instruction::GetLevel(r) => self.machine_st.get_level_instr(r),
                     &Instruction::GetPrevLevel(r) => self.machine_st.get_prev_level_instr(r),
                     &Instruction::GetCutPoint(r) => self.machine_st.get_cut_point_instr(r),
@@ -1704,7 +1636,16 @@ impl Machine {
                             return exit_code;
                         }
 
-                        if self.machine_st.fail {
+                        if matches!(
+                            self.code[self.machine_st.p],
+                            Instruction::RetryMeElse(_)
+                                | Instruction::TrustMe(_)
+                                | Instruction::DefaultRetryMeElse(_)
+                                | Instruction::DefaultTrustMe(_)
+                                | Instruction::DynamicElse(..)
+                                | Instruction::DynamicInternalElse(..)
+                                | Instruction::IndexingCode(_)
+                        ) {
                             continue;
                         }
 

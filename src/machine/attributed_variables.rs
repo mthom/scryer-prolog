@@ -15,7 +15,6 @@ pub(super) struct AttrVarInitializer {
     pub(super) bindings: Bindings,
     pub(super) p: usize,
     pub(super) cp: usize,
-    // pub(super) instigating_p: usize,
     pub(super) verify_attrs_loc: usize,
 }
 
@@ -116,7 +115,7 @@ impl MachineState {
         let e = self.e;
         let and_frame = self.stack.index_and_frame_mut(e);
 
-        for i in 1..arity + 1 {
+        for i in 1..=arity {
             and_frame[i] = self.registers[i];
         }
 
