@@ -561,11 +561,6 @@ impl CodeGenerator {
                 self.marker.reset_arg(2);
 
                 let (mut lcode, at_1) = self.compile_arith_expr(&terms[0], term_loc, 1)?;
-
-                if !matches!(terms[0], Term::Var(..)) {
-                    self.marker.advance_arg();
-                }
-
                 let (mut rcode, at_2) = self.compile_arith_expr(&terms[1], term_loc, 2)?;
 
                 code.append(&mut lcode);
@@ -855,16 +850,18 @@ impl CodeGenerator {
                 }
             }
             Term::Literal(
-                _,
+                ref cell,
                 c @ Literal::Integer(_)
                 | c @ Literal::F64(..)
                 | c @ Literal::Rational(_)
                 | c @ Literal::Fixnum(_),
             ) => {
                 let v = HeapCellValue::from(c);
-                code.push_back(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
 
-                self.marker.advance_arg();
+                self.marker
+                    .mark_non_var::<QueryInstruction>(Level::Shallow, term_loc, &cell, code);
+
+                code.push_back(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
                 compile_expr!(self, &terms[1], term_loc, code)
             }
             _ => {
