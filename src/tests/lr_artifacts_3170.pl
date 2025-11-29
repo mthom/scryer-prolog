@@ -86,10 +86,8 @@ test("bar_incomplete_right_errors", (
     op(0, xfy, '|')
 )).
 
-test("quoted_bar_in_curly_succeeds", (
-    op(1105, xfy, '|'),
-    read_from_chars("{(|)}.", T),
-    op(0, xfy, '|'),
+test("quoted_bar_atom_in_curly_succeeds", (
+    read_from_chars("{'|'}.", T),
     T == '{}'('|')
 )).
 
@@ -100,10 +98,8 @@ test("valid_bar_expression_succeeds", (
     T == '{}'('|'(a,b))
 )).
 
-test("quoted_bar_in_expression_succeeds", (
-    op(1105, xfy, '|'),
-    read_from_chars("{a*(|)}.", T),
-    op(0, xfy, '|'),
+test("quoted_bar_atom_in_expression_succeeds", (
+    read_from_chars("{a*'|'}.", T),
     T == '{}'(a*'|')
 )).
 

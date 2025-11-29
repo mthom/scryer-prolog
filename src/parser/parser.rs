@@ -812,7 +812,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         Ok(false)
     }
 
-    fn reduce_brackets(&mut self, op_dir: &CompositeOpDir) -> bool {
+    fn reduce_brackets(&mut self) -> bool {
         if self.stack.is_empty() {
             return false;
         }
@@ -835,17 +835,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 // Reject incomplete reductions and ISO-forbidden syntax
                 // See: https://www.complang.tuwien.ac.at/ulrich/iso-prolog/dtc2#C2
                 match self.stack[idx].tt {
-                    TokenType::Comma => {
+                    TokenType::Comma | TokenType::HeadTailSeparator => {
+                        // ISO: (,) and (|) are NEVER valid syntax.
+                        // Bar and comma are solo characters but NOT atoms.
+                        // Use '|' or ',' (quoted) to write them as atoms.
+                        // See conformity test s#360: even with op(1105,xfy,'|'), (|) must error.
                         return false;
-                    }
-                    TokenType::HeadTailSeparator => {
-                        // ISO TC2 C2: (|) is only valid when | IS an operator
-                        // When | is not an operator, bar is "not an atom" so (|) is invalid
-                        // When | IS an operator, bar is "equivalent to atom '|'" so (|) is valid
-                        if get_op_desc(atom!("|"), op_dir).is_none() {
-                            return false;
-                        }
-                        // Fall through - | is an operator, allow (|)
                     }
                     _ => {}
                 }
@@ -1013,7 +1008,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::Open => self.shift(Token::Open, 1300, DELIMITER),
             Token::OpenCT => self.shift(Token::OpenCT, 1300, DELIMITER),
             Token::Close => {
-                if !self.reduce_term() && !self.reduce_brackets(op_dir) {
+                if !self.reduce_term() && !self.reduce_brackets() {
                     return Err(ParserError::IncompleteReduction(
                         self.lexer.line_num,
                         self.lexer.col_num,

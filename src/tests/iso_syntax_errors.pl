@@ -15,6 +15,25 @@ test("single_bar_in_parens_should_error", (
     )
 )).
 
+%% Conformity test s#360: (|) must error even when | IS an operator
+%% https://www.complang.tuwien.ac.at/ulrich/iso-prolog/conformity_testing#360
+test("single_bar_in_parens_with_op_defined_should_error", (
+    op(1105, xfy, '|'),
+    catch(
+        (read_from_chars("(|).", _), false),
+        error(syntax_error(_), _),
+        true
+    ),
+    op(0, xfy, '|')
+)).
+
+%% ISO: The only valid way to write bar as an atom is '|' (quoted)
+%% Per Cor.2 8.14.3.4: permission_error(create, operator, '|')
+test("quoted_bar_atom_is_valid", (
+    read_from_chars("'|'.", T),
+    T == '|'
+)).
+
 test("op_create_empty_curly_should_error", (
     catch(
         (op(500, xfy, {}), false),
