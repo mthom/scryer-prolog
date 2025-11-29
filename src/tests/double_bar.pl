@@ -1,6 +1,7 @@
 :- module(double_bar_tests, []).
 
 :- use_module(test_framework).
+:- discontiguous(test/2).
 
 % Tests for the double bar || operator
 % Based on: https://www.complang.tuwien.ac.at/ulrich/iso-prolog/double_bar
