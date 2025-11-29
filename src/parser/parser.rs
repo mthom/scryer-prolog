@@ -778,7 +778,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
         if self.stack.len() > 1 {
             if let Some(td) = self.stack.pop() {
                 if let Some(ref mut oc) = self.stack.last_mut() {
-                    if td.tt != TokenType::Term {
+                    // Issue #3170: Check that td is a proper term, not an unreduced operator.
+                    // Operators are stored with tt=Term but spec contains operator bits (XFX, YFX, etc).
+                    // A proper term has spec containing TERM bit (0x1000) without operator bits.
+                    if td.tt != TokenType::Term || is_op!(td.spec) {
                         return Ok(false);
                     }
 
@@ -809,7 +812,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         Ok(false)
     }
 
-    fn reduce_brackets(&mut self) -> bool {
+    fn reduce_brackets(&mut self, op_dir: &CompositeOpDir) -> bool {
         if self.stack.is_empty() {
             return false;
         }
@@ -836,8 +839,13 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         return false;
                     }
                     TokenType::HeadTailSeparator => {
-                        // (|) is forbidden by ISO spec
-                        return false;
+                        // ISO TC2 C2: (|) is only valid when | IS an operator
+                        // When | is not an operator, bar is "not an atom" so (|) is invalid
+                        // When | IS an operator, bar is "equivalent to atom '|'" so (|) is valid
+                        if get_op_desc(atom!("|"), op_dir).is_none() {
+                            return false;
+                        }
+                        // Fall through - | is an operator, allow (|)
                     }
                     _ => {}
                 }
@@ -1005,7 +1013,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::Open => self.shift(Token::Open, 1300, DELIMITER),
             Token::OpenCT => self.shift(Token::OpenCT, 1300, DELIMITER),
             Token::Close => {
-                if !self.reduce_term() && !self.reduce_brackets() {
+                if !self.reduce_term() && !self.reduce_brackets(op_dir) {
                     return Err(ParserError::IncompleteReduction(
                         self.lexer.line_num,
                         self.lexer.col_num,
