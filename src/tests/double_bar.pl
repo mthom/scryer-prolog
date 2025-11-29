@@ -130,19 +130,6 @@ test("multiple comments around bars", (
     L = [a,b]
 )).
 
-% Note: These invalid cases are tested at parse time, not runtime
-% They cannot be included as test/2 predicates because they fail at read_term
-% The parser correctly rejects them with syntax_error(incomplete_reduction)
-%
-% Invalid cases (verified separately):
-% - [1,2,3]||K => syntax_error
-% - [_]||Rs => syntax_error
-% - [a,b,c]||S => syntax_error
-% - K||[] => syntax_error
-% - ("a")||[] => syntax_error
-
-
-
 test("double bar chars mode empty at start of chain", (
     L = ""||"abc"||"de",
     L = [a,b,c,d,e]
