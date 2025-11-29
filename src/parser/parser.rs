@@ -1094,10 +1094,14 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         }
                     }
 
+                    // Check that the last term is a string literal (CompleteString, PartialString, or Cons from codes mode)
+                    // Must match the validation for compact || below
                     let is_valid = if let Some(last_term) = self.terms.last() {
                         match last_term {
                             Term::CompleteString(_, _) => true,
                             Term::PartialString(_, _, _) => true,
+                            Term::Cons(_, _, _) => true,  // Allows codes mode: "abc" becomes [97,98,99]
+                            Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true,  // Empty string in codes mode
                             _ => false,
                         }
                     } else {
