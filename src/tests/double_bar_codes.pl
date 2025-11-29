@@ -1,3 +1,22 @@
+% Tests for the double bar || operator in codes mode
+% Spec: https://www.complang.tuwien.ac.at/ulrich/iso-prolog/double_bar
+%
+% Abstract syntax (from spec):
+%   term = double quoted list, bar, bar, term ;
+%   Priority: 0, 0, 0
+%
+% The LEFT side must be a double quoted list.
+% The RIGHT side (tail) can be any term at priority 0, including:
+%   - Variables: "abc"||K
+%   - Strings (chained): "a"||"b"||"c"
+%   - Atoms: "abc"||xyz (valid per abstract syntax)
+%   - Numbers: "abc"||123
+%
+% WG17 2025-06-02: Accepts option 1 (only after double quotes)
+%
+% Note: Format helpers defined BEFORE set_prolog_flag so format strings
+% are parsed as chars (format/2 requires char lists, not code lists).
+
 :- use_module(library(format)).
 
 run_test(Name, Goal) :-
