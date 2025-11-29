@@ -11,34 +11,34 @@
 %% Issue #3170: Parser produced garbage {/} instead of error for unreduced operators
 test("issue_3170_unreduced_op_in_curly_errors", (
     op(1105, xfy, '|'),
-    catch(read_from_chars("{!*!(|)/}.", _), _, true),
+    catch((read_from_chars("{!*!(|)/}.", _), false), _, true),
     op(0, xfy, '|')
 )).
 
 %% Bare operators in curlies must error (no operands)
 test("bare_slash_in_curly_errors", (
-    catch(read_from_chars("{/}.", _), _, true)
+    catch((read_from_chars("{/}.", _), false), _, true)
 )).
 
 test("bare_plus_in_curly_errors", (
-    catch(read_from_chars("{+}.", _), _, true)
+    catch((read_from_chars("{+}.", _), false), _, true)
 )).
 
 test("bare_star_in_curly_errors", (
-    catch(read_from_chars("{*}.", _), _, true)
+    catch((read_from_chars("{*}.", _), false), _, true)
 )).
 
 %% Incomplete operator expressions must error
 test("trailing_slash_errors", (
-    catch(read_from_chars("{a/}.", _), _, true)
+    catch((read_from_chars("{a/}.", _), false), _, true)
 )).
 
 test("leading_slash_errors", (
-    catch(read_from_chars("{/b}.", _), _, true)
+    catch((read_from_chars("{/b}.", _), false), _, true)
 )).
 
 test("juxtaposed_terms_error", (
-    catch(read_from_chars("{!*!a}.", _), _, true)
+    catch((read_from_chars("{!*!a}.", _), false), _, true)
 )).
 
 %% Quoted operators in curlies must succeed
@@ -76,13 +76,13 @@ test("bang_star_bang_succeeds", (
 %% Bar operator cases (with | defined as operator)
 test("bar_incomplete_left_errors", (
     op(1105, xfy, '|'),
-    catch(read_from_chars("{a|}.", _), _, true),
+    catch((read_from_chars("{a|}.", _), false), _, true),
     op(0, xfy, '|')
 )).
 
 test("bar_incomplete_right_errors", (
     op(1105, xfy, '|'),
-    catch(read_from_chars("{|b}.", _), _, true),
+    catch((read_from_chars("{|b}.", _), false), _, true),
     op(0, xfy, '|')
 )).
 
@@ -109,7 +109,7 @@ test("quoted_bar_in_expression_succeeds", (
 
 %% Nested curlies
 test("nested_curly_with_bare_op_errors", (
-    catch(read_from_chars("{{/}}.", _), _, true)
+    catch((read_from_chars("{{/}}.", _), false), _, true)
 )).
 
 test("nested_curly_with_quoted_op_succeeds", (

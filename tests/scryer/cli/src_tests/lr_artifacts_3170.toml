@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/lr_artifacts_3170.pl", "-f", "-g", "use_module(library(lr_artifacts_3170_tests)), lr_artifacts_3170_tests:main_quiet(lr_artifacts_3170_tests)"]
