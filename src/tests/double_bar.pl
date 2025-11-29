@@ -3,7 +3,20 @@
 :- use_module(test_framework).
 
 % Tests for the double bar || operator
-% Based on: https://www.complang.tuwien.ac.at/ulrich/iso-prolog/double_bar
+% Spec: https://www.complang.tuwien.ac.at/ulrich/iso-prolog/double_bar
+%
+% Abstract syntax (from spec):
+%   term = double quoted list, bar, bar, term ;
+%   Priority: 0, 0, 0
+%
+% The LEFT side must be a double quoted list.
+% The RIGHT side (tail) can be any term at priority 0, including:
+%   - Variables: "abc"||K
+%   - Strings (chained): "a"||"b"||"c"
+%   - Atoms: "hello"||world (valid per abstract syntax)
+%   - Numbers: "abc"||123
+%
+% WG17 2025-06-02: Accepts option 1 (only after double quotes)
 
 test("basic double bar with variable tail", (
     L = "abc"||K,
@@ -20,6 +33,8 @@ test("empty string double bar unifies with tail", (
     L == K
 )).
 
+% Atom tail: valid per abstract syntax "term = dql, bar, bar, term"
+% The right-hand term can be any term at priority 0, including atoms.
 test("double bar with atom tail", (
     L = "hello"||world,
     L = [h,e,l,l,o|world]
@@ -163,6 +178,7 @@ test("double bar chars mode nested unification", (
     X = [c]
 )).
 
+% Numeric tail: valid per abstract syntax (right-hand term can be any term)
 test("double bar chars mode with numeric tail", (
     L = "abc"||123,
     L = [a,b,c|123]
