@@ -357,7 +357,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                             Term::PartialString(Cell::default(), s, Box::new(arg2))
                         }
                     }
-                    Term::Literal(_, Literal::Atom(atom)) if atom == atom!("[]") => {
+                    Term::Literal(_, Literal::Atom(atom!("[]"))) => {
                         // Empty string in codes mode: ""||K => K
                         arg2
                     }
@@ -365,7 +365,6 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         self.replace_cons_tail(&mut arg1, arg2);
                         arg1
                     }
-                    Term::Literal(_, Literal::Atom(atom!("[]"))) => arg2,
                     _ => Term::Clause(Cell::default(), name, vec![arg1, arg2]),
                 }
             } else {
@@ -694,6 +693,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     continue;
                 }
                 return None;
+            } else if desc.tt == TokenType::DoubleBar {
+                return None;
             } else if desc.tt == TokenType::OpenList {
                 return Some(arity);
             } else if desc.tt != TokenType::Comma {
@@ -712,7 +713,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         if let Some(td) = self.stack.last_mut()
             && td.tt == TokenType::OpenList
         {
-            td.spec = TERM;
+            td.spec = LIST_TERM;
             td.tt = TokenType::Term;
             td.priority = 0;
 
@@ -1054,8 +1055,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         match last_term {
                             Term::CompleteString(_, _) => true,
                             Term::PartialString(_, _, _) => true,
-                            Term::Cons(_, _, _) => true,  // Allows codes mode: "abc" becomes [97,98,99]
-                            Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true,  // Empty string in codes mode
+                            Term::Cons(_, _, _) => true, // Allows codes mode: "abc" becomes [97,98,99]
+                            Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true, // Empty string in codes mode
                             _ => false,
                         }
                     } else {
