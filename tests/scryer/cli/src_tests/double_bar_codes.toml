@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/double_bar_codes.pl", "-g", "main"]
