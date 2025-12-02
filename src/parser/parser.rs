@@ -778,7 +778,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
         if self.stack.len() > 1 {
             if let Some(td) = self.stack.pop() {
                 if let Some(ref mut oc) = self.stack.last_mut() {
-                    if td.tt != TokenType::Term {
+                    // Issue #3170: Check that td is a proper term, not an unreduced operator.
+                    // Operators are stored with tt=Term but spec contains operator bits (XFX, YFX, etc).
+                    // A proper term has spec containing TERM bit (0x1000) without operator bits.
+                    if td.tt != TokenType::Term || is_op!(td.spec) {
                         return Ok(false);
                     }
 
@@ -829,8 +832,17 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
         match td.tt {
             TokenType::Open | TokenType::OpenCT => {
-                if self.stack[idx].tt == TokenType::Comma {
-                    return false;
+                // Reject incomplete reductions and ISO-forbidden syntax
+                // See: https://www.complang.tuwien.ac.at/ulrich/iso-prolog/dtc2#C2
+                match self.stack[idx].tt {
+                    TokenType::Comma | TokenType::HeadTailSeparator => {
+                        // ISO: (,) and (|) are NEVER valid syntax.
+                        // Bar and comma are solo characters but NOT atoms.
+                        // Use '|' or ',' (quoted) to write them as atoms.
+                        // See conformity test s#360: even with op(1105,xfy,'|'), (|) must error.
+                        return false;
+                    }
+                    _ => {}
                 }
 
                 if let Some(atom) = self.stack[idx].tt.sep_to_atom() {
