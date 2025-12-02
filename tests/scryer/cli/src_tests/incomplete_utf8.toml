@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/incomplete_utf8.pl", "-f", "-g", "use_module(library(incomplete_utf8_tests)), incomplete_utf8_tests:main_quiet(incomplete_utf8_tests)"]
