@@ -2,7 +2,7 @@
 List manipulation predicates
 */
 
-:- module(lists, [member/2, select/3, append/2, append/3, foldl/4, foldl/5,
+:- module(lists, [member/2, select/3, append/2, append/3, foldl/4, foldl/5, foldl/6,
 		          memberchk/2, reverse/2, length/2, maplist/2,
 		          maplist/3, maplist/4, maplist/5, maplist/6,
 		          maplist/7, maplist/8, maplist/9, same_length/2, nth0/3, nth0/4, nth1/3, nth1/4,
@@ -313,6 +313,16 @@ foldl(_, [], [], A, A).
 foldl(G_4, [X|Xs], [Y|Ys], A0, A) :-
         call(G_4, X, Y, A0, A1),
         foldl(G_4, Xs, Ys, A1, A).
+
+
+%% foldl(+Goal, ?Ls0, ?Ls1, ?Ls2, +A0, ?A).
+%
+% Like `foldl/4`, with 2 additional lists.
+
+foldl(_, [], [], [], A, A).
+foldl(G_5, [X|Xs], [Y|Ys], [Z|Zs], A0, A) :-
+        call(G_5, X, Y, Z, A0, A1),
+        foldl(G_5, Xs, Ys, Zs, A1, A).
 
 %% transpose(?Ls, ?Ts).
 %
