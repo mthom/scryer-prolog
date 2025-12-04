@@ -6,7 +6,8 @@ omit(["ops_and_meta_predicates.pl", "tabling"]).
 learn_pages_source_folder("learn").
 learn_pages_categories(["First steps", "Tutorials"]).
 learn_pages([
-		   page("Let's play Brisca", "Tutorials", "lets-play-brisca.dj")
+		   page("Let's play Brisca", "Tutorials", "lets-play-brisca.dj"),
+		   page("Introduction to Scryer Prolog", "Tutorials", "introduction-to-scryer.dj")
 ]).
 copy_file("logo/scryer.png", "scryer.png").
 copy_file("learn/Spanish_deck_Fournier.jpg", "learn/Spanish_deck_Fournier.jpg").
