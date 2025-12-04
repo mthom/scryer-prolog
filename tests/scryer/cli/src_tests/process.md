@@ -36,24 +36,24 @@ use_module(library(process)),process_create([],[],[stdin(invalid),process(P)]),p
 
 ```trycmd
 $ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_wait(50, _Status), halt'
-use_module(library(process)),process_wait(50,_Status),halt causes: error(type_error(process,50),[predicate-process_wait/2,predicate-process_wait/3|process_wait/3])
+use_module(library(process)),process_wait(50,_Status),halt causes: error(type_error(process,50),[predicate-process_wait/2,predicate-process_wait/3|.(predicate-process_wait/3,[])])
 
 ```
 
 ```trycmd
 $ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_kill(50), halt'
-use_module(library(process)),process_kill(50),halt causes: error(type_error(process,50),[predicate-process_kill/1|process_kill/1])
+use_module(library(process)),process_kill(50),halt causes: error(type_error(process,50),[predicate-process_kill/1|.(predicate-process_kill/1,[])])
 
 ```
 
 ```trycmd
 $ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_id(50,_Pid), halt'
-use_module(library(process)),process_id(50,_Pid),halt causes: error(type_error(process,50),[predicate-process_id/2|process_id/2])
+use_module(library(process)),process_id(50,_Pid),halt causes: error(type_error(process,50),[predicate-process_id/2|.(predicate-process_id/2,[])])
 
 ```
 
 ```trycmd
 $ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_release(50), halt'
-use_module(library(process)),process_release(50),halt causes: error(type_error(process,50),[predicate-process_release/1,predicate-process_wait/2,predicate-process_wait/3|process_wait/3])
+use_module(library(process)),process_release(50),halt causes: error(type_error(process,50),[predicate-process_release/1,predicate-process_wait/2,predicate-process_wait/3|.(predicate-process_wait/3,[])])
 
 ```

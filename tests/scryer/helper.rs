@@ -31,6 +31,7 @@ impl Expectable for &[u8] {
 
 /// Tests whether the file can be successfully loaded
 /// and produces the expected output during it
+#[track_caller]
 pub(crate) fn load_module_test<T: Expectable>(file: &str, expected: T) {
     use scryer_prolog::MachineBuilder;
 
@@ -40,6 +41,7 @@ pub(crate) fn load_module_test<T: Expectable>(file: &str, expected: T) {
 
 /// Same as `load_module_test` with tokio runtime
 #[cfg(not(target_arch = "wasm32"))]
+#[track_caller]
 pub(crate) fn load_module_test_with_tokio_runtime<T: Expectable>(file: &str, expected: T) {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -52,6 +54,7 @@ pub(crate) fn load_module_test_with_tokio_runtime<T: Expectable>(file: &str, exp
     });
 }
 
+#[track_caller]
 pub(crate) fn load_module_test_with_input<T: Expectable>(
     file: &str,
     input: impl Into<Cow<'static, str>>,

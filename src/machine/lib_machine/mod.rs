@@ -332,12 +332,22 @@ impl Term {
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     if arity == 0 {
-                        let atom_name = name.as_str().to_string();
+                        let atom_name = &*name.as_str();
                         if atom_name == "[]" {
                             term_stack.push(Term::List(vec![]));
                         } else {
-                            term_stack.push(Term::Atom(atom_name));
+                            term_stack.push(Term::Atom(atom_name.to_string()));
                         }
+                    } else if arity == 2 && "." == &*name.as_str() {
+                        let cons_tail = term_stack.pop().unwrap();
+                        let cons_head = term_stack.pop().unwrap();
+                        let new_term = if let Term::List(mut list) = cons_tail {
+                            list.insert(0, cons_head);
+                            Term::List(list)
+                        } else {
+                            Term::Compound(String::from("."), vec![cons_head, cons_tail])
+                        };
+                        term_stack.push(new_term);
                     } else {
                         let subterms = term_stack
                             .drain(term_stack.len() - arity ..)
