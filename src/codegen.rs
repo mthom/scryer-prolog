@@ -560,19 +560,11 @@ impl CodeGenerator {
             &InlinedClauseType::CompareNumber(mut cmp) => {
                 self.marker.reset_arg(2);
 
-                let (mut lcode, at_1) = self.compile_arith_expr(&terms[0], 1, term_loc, 1)?;
-
-                if !matches!(terms[0], Term::Var(..)) {
-                    self.marker.advance_arg();
-                }
-
-                let (mut rcode, at_2) = self.compile_arith_expr(&terms[1], 2, term_loc, 2)?;
+                let (mut lcode, at_1) = self.compile_arith_expr(&terms[0], term_loc, 1)?;
+                let (mut rcode, at_2) = self.compile_arith_expr(&terms[1], term_loc, 2)?;
 
                 code.append(&mut lcode);
                 code.append(&mut rcode);
-
-                let at_1 = at_1.unwrap_or(interm!(1));
-                let at_2 = at_2.unwrap_or(interm!(2));
 
                 compare_number_instr!(cmp, at_1, at_2)
             }
@@ -787,11 +779,10 @@ impl CodeGenerator {
     fn compile_arith_expr(
         &mut self,
         term: &Term,
-        target_int: usize,
         term_loc: GenContext,
         arg: usize,
     ) -> Result<ArithCont, ArithmeticError> {
-        let mut evaluator = ArithmeticEvaluator::new(&mut self.marker, target_int);
+        let mut evaluator = ArithmeticEvaluator::new(&mut self.marker);
         evaluator.compile_is(term, term_loc, arg)
     }
 
@@ -804,7 +795,7 @@ impl CodeGenerator {
     ) -> Result<(), CompilationError> {
         macro_rules! compile_expr {
             ($self:expr, $terms:expr, $term_loc:expr, $code:expr) => {{
-                let (acode, at) = $self.compile_arith_expr($terms, 1, $term_loc, 2)?;
+                let (acode, at) = $self.compile_arith_expr($terms, $term_loc, 2)?;
                 $code.extend(acode.into_iter());
                 at
             }};
@@ -859,16 +850,18 @@ impl CodeGenerator {
                 }
             }
             Term::Literal(
-                _,
+                ref cell,
                 c @ Literal::Integer(_)
                 | c @ Literal::F64(..)
                 | c @ Literal::Rational(_)
                 | c @ Literal::Fixnum(_),
             ) => {
                 let v = HeapCellValue::from(c);
-                code.push_back(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
 
-                self.marker.advance_arg();
+                self.marker
+                    .mark_non_var::<QueryInstruction>(Level::Shallow, term_loc, &cell, code);
+
+                code.push_back(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
                 compile_expr!(self, &terms[1], term_loc, code)
             }
             _ => {
@@ -877,7 +870,6 @@ impl CodeGenerator {
             }
         };
 
-        let at = at.unwrap_or(interm!(1));
         self.add_call(code, instr!("is", temp_v!(1), at), call_policy);
         Ok(())
     }

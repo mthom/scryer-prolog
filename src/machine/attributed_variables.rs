@@ -15,7 +15,6 @@ pub(super) struct AttrVarInitializer {
     pub(super) bindings: Bindings,
     pub(super) p: usize,
     pub(super) cp: usize,
-    // pub(super) instigating_p: usize,
     pub(super) verify_attrs_loc: usize,
 }
 
@@ -41,13 +40,13 @@ impl MachineState {
     pub(super) fn push_attr_var_binding(&mut self, h: usize, addr: HeapCellValue) {
         if self.attr_var_init.bindings.is_empty() {
             // save self.p and self.cp and ensure that the next
-            // instruction is InstallVerifyAttrInterrupt.
+            // instruction is RunVerifyAttrInterrupt.
 
             self.attr_var_init.p = self.p;
             self.attr_var_init.cp = self.cp;
 
-            self.p = INSTALL_VERIFY_ATTR_INTERRUPT - 1;
-            self.cp = INSTALL_VERIFY_ATTR_INTERRUPT;
+            self.p = VERIFY_ATTR_INTERRUPT_LOC - 1;
+            self.cp = VERIFY_ATTR_INTERRUPT_LOC;
         }
 
         debug_assert_eq!(self.heap[h].get_tag(), HeapCellValueTag::AttrVar);
@@ -122,7 +121,7 @@ impl MachineState {
         let e = self.e;
         let and_frame = self.stack.index_and_frame_mut(e);
 
-        for i in 1..arity + 1 {
+        for i in 1..=arity {
             and_frame[i] = self.registers[i];
         }
 

@@ -59,7 +59,7 @@ get_attrs_var_check(Module) -->
                              !,
                              '$get_attr_list'(Var, Ls),
                              nonvar(Ls),
-			                 atts:'$copy_attr_list'(Ls, Module, Attr))].
+			     atts:'$copy_attr_list'(Ls, Module, Attr))].
 
 put_attrs(Name/Arity, Module) -->
     put_attr(Name, Arity, Module),

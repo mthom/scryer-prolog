@@ -369,12 +369,6 @@ macro_rules! compare_number_instr {
     }};
 }
 
-macro_rules! interm {
-    ($n: expr) => {
-        ArithmeticTerm::Interm($n)
-    };
-}
-
 macro_rules! ar_reg {
     ($r: expr) => {
         ArithmeticTerm::Reg($r)

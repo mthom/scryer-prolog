@@ -58,7 +58,6 @@ impl MachineState {
             ball: Ball::new(),
             ball_stack: vec![],
             lifted_heap: Heap::new(),
-            interms: vec![Number::default(); 256],
             cont_pts: Vec::with_capacity(256),
             cwil: CWIL::new(),
             flags: MachineFlags::default(),
