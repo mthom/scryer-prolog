@@ -1051,7 +1051,10 @@ impl Machine {
                                                     });
 
                                                 self.machine_st.num_of_args += 1;
-                                                self.try_me_else(next_i);
+                                                backtrack_on_resource_error!(
+                                                    self.machine_st,
+                                                    self.try_me_else(next_i)
+                                                );
                                                 self.machine_st.num_of_args -= 1;
                                             }
                                             None => {
@@ -1130,7 +1133,10 @@ impl Machine {
                                                 );
 
                                                 self.machine_st.num_of_args += 1;
-                                                self.try_me_else(next_i);
+                                                backtrack_on_resource_error!(
+                                                    self.machine_st,
+                                                    self.try_me_else(next_i)
+                                                );
                                                 self.machine_st.num_of_args -= 1;
                                             }
                                             None => {
@@ -1183,7 +1189,7 @@ impl Machine {
                         }
                     }
                     &Instruction::TryMeElse(offset) => {
-                        self.try_me_else(offset);
+                        backtrack_on_resource_error!(self.machine_st, self.try_me_else(offset));
                     }
                     &Instruction::DefaultRetryMeElse(offset) => {
                         self.retry_me_else(offset);
@@ -1265,7 +1271,10 @@ impl Machine {
                         self.machine_st.p += 1;
                     }
                     &Instruction::Allocate(num_cells) => {
-                        self.machine_st.allocate(num_cells);
+                        backtrack_on_resource_error!(
+                            self.machine_st,
+                            self.machine_st.allocate(num_cells)
+                        );
                     }
                     &Instruction::DefaultCallAcyclicTerm => {
                         let addr = self.deref_register(1);
@@ -3155,7 +3164,10 @@ impl Machine {
                             IndexingLine::IndexedChoice(ref indexed_choice) => {
                                 match indexed_choice[self.machine_st.iip as usize] {
                                     IndexedChoiceInstruction::Try(offset) => {
-                                        self.indexed_try(offset);
+                                        backtrack_on_resource_error!(
+                                            self.machine_st,
+                                            self.indexed_try(offset)
+                                        );
                                     }
                                     IndexedChoiceInstruction::Retry(l) => {
                                         self.retry(l);
@@ -3208,7 +3220,10 @@ impl Machine {
                                                         );
 
                                                         self.machine_st.num_of_args += 1;
-                                                        self.indexed_try(offset);
+                                                        backtrack_on_resource_error!(
+                                                            self.machine_st,
+                                                            self.indexed_try(offset)
+                                                        );
                                                         self.machine_st.num_of_args -= 1;
                                                     }
                                                     None => {

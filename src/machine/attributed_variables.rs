@@ -54,7 +54,9 @@ impl MachineState {
         self.attr_var_init.bindings.push((h, addr));
     }
 
-    fn populate_var_and_value_lists(&mut self) -> Result<(HeapCellValue, HeapCellValue), usize> {
+    fn populate_var_and_value_lists(
+        &mut self,
+    ) -> Result<(HeapCellValue, HeapCellValue), AllocError> {
         let size = self.attr_var_init.bindings.len();
 
         let iter = self
@@ -70,7 +72,7 @@ impl MachineState {
         Ok((var_list_addr, value_list_addr))
     }
 
-    fn verify_attributes(&mut self) -> Result<(), usize> {
+    fn verify_attributes(&mut self) -> Result<(), AllocError> {
         for (h, _) in &self.attr_var_init.bindings {
             self.heap[*h] = attr_var_as_cell!(*h);
         }
@@ -110,8 +112,12 @@ impl MachineState {
         attr_vars
     }
 
-    pub(super) fn verify_attr_interrupt(&mut self, p: usize, arity: usize) -> Result<(), usize> {
-        self.allocate(arity + 3);
+    pub(super) fn verify_attr_interrupt(
+        &mut self,
+        p: usize,
+        arity: usize,
+    ) -> Result<(), AllocError> {
+        self.allocate(arity + 3)?;
 
         let e = self.e;
         let and_frame = self.stack.index_and_frame_mut(e);

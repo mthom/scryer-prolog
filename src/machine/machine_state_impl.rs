@@ -4,6 +4,7 @@ use crate::forms::*;
 use crate::heap_iter::*;
 use crate::machine::attributed_variables::*;
 use crate::machine::copier::*;
+use crate::machine::heap::AllocError;
 use crate::machine::heap::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
@@ -30,8 +31,8 @@ impl MachineState {
         heap.store_resource_error();
 
         MachineState {
-            arena: Arena::new(),
-            atom_tbl: AtomTable::new(),
+            arena: Arena::new().unwrap(),
+            atom_tbl: AtomTable::new().unwrap(),
             pdl: Vec::with_capacity(1024),
             s: HeapPtr::default(),
             s_offset: 0,
@@ -47,7 +48,7 @@ impl MachineState {
             fail: false,
             heap,
             mode: MachineMode::Write,
-            stack: Stack::new(),
+            stack: Stack::new().unwrap(),
             registers: [heap_loc_as_cell!(0); MAX_ARITY + 1], // self.registers[0] is never used.
             trail: vec![],
             tr: 0,
@@ -174,8 +175,8 @@ impl MachineState {
         }
     }
 
-    pub fn allocate(&mut self, num_cells: usize) {
-        let e = self.stack.allocate_and_frame(num_cells);
+    pub fn allocate(&mut self, num_cells: usize) -> Result<(), AllocError> {
+        let e = self.stack.allocate_and_frame(num_cells)?;
         let and_frame = self.stack.index_and_frame_mut(e);
 
         and_frame.prelude.e = self.e;
@@ -183,6 +184,8 @@ impl MachineState {
 
         self.e = e;
         self.p += 1;
+
+        Ok(())
     }
 
     pub fn bind(&mut self, r1: Ref, a2: HeapCellValue) {
@@ -922,7 +925,7 @@ impl MachineState {
         name: Atom,
         arity: usize,
         r: Ref,
-    ) -> Result<(), usize> {
+    ) -> Result<(), AllocError> {
         let h = self.heap.cell_len();
         let mut writer = self.heap.reserve(arity + 1)?;
 

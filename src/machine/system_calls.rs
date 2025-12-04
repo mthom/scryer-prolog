@@ -17,6 +17,7 @@ use crate::instructions::*;
 use crate::machine;
 use crate::machine::code_walker::*;
 use crate::machine::copier::*;
+use crate::machine::heap::AllocError;
 use crate::machine::heap::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
@@ -635,7 +636,7 @@ impl MachineState {
     pub(crate) fn get_attr_var_list(
         &mut self,
         attr_var: HeapCellValue,
-    ) -> Result<Option<usize>, usize> {
+    ) -> Result<Option<usize>, AllocError> {
         read_heap_cell!(attr_var,
             (HeapCellValueTag::AttrVar, h) => {
                 Ok(Some(h + 1))
@@ -903,7 +904,7 @@ impl MachineState {
         &mut self,
         lh_offset: usize,
         copy_target: HeapCellValue,
-    ) -> Result<FindallCopyInfo, usize> {
+    ) -> Result<FindallCopyInfo, AllocError> {
         let threshold = self.lifted_heap.cell_len() - lh_offset;
         let mut writer = self.lifted_heap.reserve(5)?;
 
@@ -1041,7 +1042,7 @@ impl MachineState {
         &mut self,
         chunk: HeapCellValue,
         return_p: usize,
-    ) -> usize {
+    ) -> Result<usize, AllocError> {
         let chunk = self.store(self.deref(chunk));
 
         let s = chunk.get_value() as usize;
@@ -1053,7 +1054,7 @@ impl MachineState {
         let cp = to_local_code_ptr(&self.heap, p_functor).unwrap();
         let prev_e = self.e;
 
-        let e = self.stack.allocate_and_frame(num_cells);
+        let e = self.stack.allocate_and_frame(num_cells)?;
         let and_frame = self.stack.index_and_frame_mut(e);
 
         and_frame.prelude.e = prev_e;
@@ -1084,7 +1085,7 @@ impl MachineState {
         }
 
         self.e = e;
-        self.p
+        Ok(self.p)
     }
 
     pub fn value_to_str_like(&mut self, value: HeapCellValue) -> Option<AtomOrString> {
@@ -2458,7 +2459,14 @@ impl Machine {
                 self.machine_st.p = return_p;
 
                 for chunk in cont_chunks.into_iter().rev() {
-                    return_p = self.machine_st.call_continuation_chunk(chunk, return_p);
+                    match self.machine_st.call_continuation_chunk(chunk, return_p) {
+                        Ok(ret_p) => {
+                            return_p = ret_p;
+                        }
+                        Err(err) => {
+                            self.machine_st.throw_resource_error(err);
+                        }
+                    }
                 }
 
                 Ok(())
@@ -3303,7 +3311,7 @@ impl Machine {
                     bytes.push(c as u8);
                 }
             } else {
-                bytes = string.as_str().bytes().collect();
+                bytes = string.as_str().as_bytes().to_vec();
             }
 
             match stream.write_all(&bytes) {
@@ -4092,7 +4100,7 @@ impl Machine {
         fn write_op_functors_to_heap(
             heap: &mut Heap,
             op_descs: impl Iterator<Item = (Atom, OpDesc)>,
-        ) -> Result<usize, usize> {
+        ) -> Result<usize, AllocError> {
             let mut num_functors = 0;
 
             for (name, op_desc) in op_descs {
@@ -4420,7 +4428,7 @@ impl Machine {
         let address_data = self.deref_register(5);
         let mut bytes: Vec<u8> = Vec::new();
         if let Some(string) = self.machine_st.value_to_str_like(address_data) {
-            bytes = string.as_str().bytes().collect();
+            bytes = string.as_str().as_bytes().to_vec();
         }
         let stub_gen = || functor_stub(atom!("http_open"), 3);
 
@@ -5130,7 +5138,11 @@ impl Machine {
     }
 
     #[cfg(feature = "ffi")]
-    fn build_struct(&mut self, name: Atom, mut args: Vec<Value>) -> Result<HeapCellValue, usize> {
+    fn build_struct(
+        &mut self,
+        name: Atom,
+        mut args: Vec<Value>,
+    ) -> Result<HeapCellValue, AllocError> {
         args.insert(0, Value::CString(CString::new(&*name.as_str()).unwrap()));
 
         let cells: Vec<_> = args
@@ -5150,7 +5162,7 @@ impl Machine {
                     Value::Struct(name, struct_args) => self.build_struct(name, struct_args)?,
                 })
             })
-            .collect::<Result<_, usize>>()?;
+            .collect::<Result<_, AllocError>>()?;
 
         sized_iter_to_heap_list(&mut self.machine_st.heap, cells.len(), cells.into_iter())
     }
@@ -7579,7 +7591,7 @@ impl Machine {
         false
     }
 
-    fn walk_code_at_ptr(&mut self, index_ptr: usize) -> Result<HeapCellValue, usize> {
+    fn walk_code_at_ptr(&mut self, index_ptr: usize) -> Result<HeapCellValue, AllocError> {
         let orig_h = self.machine_st.heap.cell_len();
         let mut h = orig_h;
 
@@ -8400,7 +8412,7 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn load_html(&mut self) -> Result<(), usize> {
+    pub(crate) fn load_html(&mut self) -> Result<(), AllocError> {
         if let Some(string) = self
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
@@ -8429,7 +8441,7 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn load_xml(&mut self) -> Result<(), usize> {
+    pub(crate) fn load_xml(&mut self) -> Result<(), AllocError> {
         if let Some(string) = self
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
@@ -8965,8 +8977,8 @@ impl Machine {
                         Ok(loc) => {
                             unify!(self.machine_st, status_r, loc);
                         }
-                        Err(resource_err_loc) => {
-                            self.machine_st.throw_resource_error(resource_err_loc);
+                        Err(err) => {
+                            self.machine_st.throw_resource_error(err);
                         }
                     }
                     Ok(())
@@ -8983,8 +8995,8 @@ impl Machine {
                                 Ok(loc) => {
                                     unify!(self.machine_st, status_r, loc);
                                 }
-                                Err(resource_err_loc) => {
-                                    self.machine_st.throw_resource_error(resource_err_loc);
+                                Err(err) => {
+                                    self.machine_st.throw_resource_error(err);
                                 }
                             }
                             Ok(())
@@ -9309,7 +9321,7 @@ impl Machine {
         let data = self.machine_st.value_to_str_like(data_arg).unwrap();
 
         match encoding {
-            atom!("utf8") => data.as_str().bytes().collect(),
+            atom!("utf8") => data.as_str().as_bytes().to_vec(),
             atom!("octet") => data.as_str().chars().map(|c| c as u8).collect(),
             _ => {
                 unreachable!()
@@ -9320,7 +9332,7 @@ impl Machine {
     pub(super) fn xml_node_to_term(
         &mut self,
         node: roxmltree::Node,
-    ) -> Result<HeapCellValue, usize> {
+    ) -> Result<HeapCellValue, AllocError> {
         if node.is_text() {
             self.machine_st.heap.allocate_cstr(node.text().unwrap())
         } else {
@@ -9371,7 +9383,7 @@ impl Machine {
     pub(super) fn html_node_to_term(
         &mut self,
         node: ego_tree::NodeRef<'_, scraper::Node>,
-    ) -> Result<HeapCellValue, usize> {
+    ) -> Result<HeapCellValue, AllocError> {
         match node.value() {
             scraper::Node::Document | scraper::Node::Fragment => {
                 unreachable!("we never iterate the root itself only its children")
@@ -9476,7 +9488,7 @@ impl Machine {
         }
     }
 
-    pub(super) fn u8s_to_string(&mut self, data: &[u8]) -> Result<HeapCellValue, usize> {
+    pub(super) fn u8s_to_string(&mut self, data: &[u8]) -> Result<HeapCellValue, AllocError> {
         let buffer = String::from_iter(data.iter().map(|b| *b as char));
 
         if buffer.is_empty() {

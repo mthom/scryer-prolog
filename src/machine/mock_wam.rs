@@ -168,7 +168,7 @@ impl<'a> CopierTarget for TermCopyingMockWAM<'a> {
     }
 
     #[inline(always)]
-    fn copy_pstr_to_threshold(&mut self, pstr_loc: usize) -> Result<usize, usize> {
+    fn copy_pstr_to_threshold(&mut self, pstr_loc: usize) -> Result<usize, AllocError> {
         self.wam.machine_st.heap.copy_pstr_within(pstr_loc)
     }
 
@@ -178,12 +178,12 @@ impl<'a> CopierTarget for TermCopyingMockWAM<'a> {
     }
 
     #[inline(always)]
-    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, usize> {
+    fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, AllocError> {
         self.wam.machine_st.heap.reserve(num_cells)
     }
 
     #[inline(always)]
-    fn copy_slice_to_end(&mut self, bounds: Range<usize>) -> Result<(), usize> {
+    fn copy_slice_to_end(&mut self, bounds: Range<usize>) -> Result<(), AllocError> {
         self.wam.machine_st.heap.copy_slice_to_end(bounds)
     }
 }

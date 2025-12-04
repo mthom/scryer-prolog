@@ -1842,9 +1842,7 @@ impl Machine {
             let err = self.machine_st.permission_error(
                 Permission::Modify,
                 atom!("static_procedure"),
-                functor_stub(atom!(":"), 2)
-                    .into_iter()
-                    .collect::<MachineStub>(),
+                functor_stub(atom!(":"), 2),
             );
 
             self.machine_st
@@ -2361,8 +2359,8 @@ impl Machine {
 
                 let mut writer = match self.machine_st.heap.reserve(3 + meta_specs.len()) {
                     Ok(writer) => writer,
-                    Err(err_loc) => {
-                        self.machine_st.throw_resource_error(err_loc);
+                    Err(err) => {
+                        self.machine_st.throw_resource_error(err);
                         return;
                     }
                 };

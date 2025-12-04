@@ -1,5 +1,7 @@
 use core::marker::PhantomData;
+use std::ptr::NonNull;
 
+use crate::machine::heap::AllocError;
 use crate::raw_block::*;
 use crate::types::*;
 
@@ -159,45 +161,42 @@ impl OrFrame {
 }
 
 impl Stack {
-    pub(crate) fn new() -> Self {
-        Stack {
-            buf: RawBlock::new(),
+    pub(crate) fn new() -> Result<Self, AllocError> {
+        Ok(Stack {
+            buf: RawBlock::new()?,
             _marker: PhantomData,
-        }
+        })
     }
 
     #[inline(always)]
-    unsafe fn alloc(&mut self, frame_size: usize) -> *mut u8 {
+    unsafe fn alloc(&mut self, frame_size: usize) -> Result<NonNull<u8>, AllocError> {
         loop {
             let ptr = self.buf.alloc(frame_size);
-
-            if ptr.is_null() {
-                if !self.buf.grow() {
-                    panic!("growing the stack failed")
-                }
-            } else {
-                return ptr;
+            if let Some(ptr) = NonNull::new(ptr) {
+                return Ok(ptr);
             }
+            self.buf.grow()?;
         }
     }
 
-    pub(crate) fn allocate_and_frame(&mut self, num_cells: usize) -> usize {
+    pub(crate) fn allocate_and_frame(&mut self, num_cells: usize) -> Result<usize, AllocError> {
         let frame_size = AndFrame::size_of(num_cells);
 
         unsafe {
             let e = (*self.buf.ptr.get_mut()).addr() - self.buf.base.addr();
-            let new_ptr = self.alloc(frame_size);
+            let new_ptr = self.alloc(frame_size)?;
             let mut offset = prelude_size::<AndFramePrelude>();
 
             for idx in 0..num_cells {
-                let cell_ptr = new_ptr.add(offset) as *mut HeapCellValue;
-                ptr::write(cell_ptr, stack_loc_as_cell!(AndFrame, e, idx + 1));
+                let cell_ptr = new_ptr.add(offset).cast::<HeapCellValue>();
+                ptr::write(cell_ptr.as_ptr(), stack_loc_as_cell!(AndFrame, e, idx + 1));
 
                 // Because in the Index and IndexMut inplementations we need to get this from
                 // exposed provenance, we need to expose the provenance here, even though we don't
                 // actually use the value for anything. This is a reminder that `expose_provenance`
                 // isn't just a cast from a pointer to an integer but has actual side effects.
-                cell_ptr.expose_provenance();
+                // FIXME(msrv) remove the as_ptr() call once MSRV reaches 1.89.0
+                cell_ptr.as_ptr().expose_provenance();
 
                 offset += mem::size_of::<HeapCellValue>();
             }
@@ -205,7 +204,7 @@ impl Stack {
             let and_frame = self.index_and_frame_mut(e);
             and_frame.prelude.num_cells = num_cells;
 
-            e
+            Ok(e)
         }
     }
 
@@ -213,23 +212,24 @@ impl Stack {
         unsafe { (*self.buf.ptr.get()).addr() - self.buf.base.addr() }
     }
 
-    pub(crate) fn allocate_or_frame(&mut self, num_cells: usize) -> usize {
+    pub(crate) fn allocate_or_frame(&mut self, num_cells: usize) -> Result<usize, AllocError> {
         let frame_size = OrFrame::size_of(num_cells);
 
         unsafe {
             let b = (*self.buf.ptr.get_mut()).addr() - self.buf.base.addr();
-            let new_ptr = self.alloc(frame_size);
+            let new_ptr = self.alloc(frame_size)?;
             let mut offset = prelude_size::<OrFramePrelude>();
 
             for idx in 0..num_cells {
-                let cell_ptr = new_ptr.byte_add(offset) as *mut HeapCellValue;
-                ptr::write(cell_ptr, stack_loc_as_cell!(OrFrame, b, idx));
+                let cell_ptr = new_ptr.byte_add(offset).cast::<HeapCellValue>();
+                ptr::write(cell_ptr.as_ptr(), stack_loc_as_cell!(OrFrame, b, idx));
 
                 // Because in the Index and IndexMut inplementations we need to get this from
                 // exposed provenance, we need to expose the provenance here, even though we don't
                 // actually use the value for anything. This is a reminder that `expose_provenance`
                 // isn't just a cast from a pointer to an integer but has actual side effects.
-                cell_ptr.expose_provenance();
+                // FIXME(msrv) remove as_ptr() call once msrv reaches 1.89.0
+                cell_ptr.as_ptr().expose_provenance();
 
                 offset += mem::size_of::<HeapCellValue>();
             }
@@ -237,7 +237,7 @@ impl Stack {
             let or_frame = self.index_or_frame_mut(b);
             or_frame.prelude.num_cells = num_cells;
 
-            b
+            Ok(b)
         }
     }
 
@@ -285,7 +285,7 @@ mod tests {
     fn stack_tests() {
         let mut wam = MockWAM::new();
 
-        let e = wam.machine_st.stack.allocate_and_frame(10); // create an AND frame!
+        let e = wam.machine_st.stack.allocate_and_frame(10).unwrap(); // create an AND frame!
         let and_frame = wam.machine_st.stack.index_and_frame_mut(e);
 
         assert_eq!(
@@ -303,7 +303,7 @@ mod tests {
 
         assert_eq!(and_frame[5], empty_list_as_cell!());
 
-        let b = wam.machine_st.stack.allocate_or_frame(5);
+        let b = wam.machine_st.stack.allocate_or_frame(5).unwrap();
 
         let or_frame = wam.machine_st.stack.index_or_frame_mut(b);
 
@@ -311,7 +311,7 @@ mod tests {
             assert_eq!(or_frame[idx], stack_loc_as_cell!(OrFrame, b, idx));
         }
 
-        let next_e = wam.machine_st.stack.allocate_and_frame(9); // create an AND frame!
+        let next_e = wam.machine_st.stack.allocate_and_frame(9).unwrap(); // create an AND frame!
         let and_frame = wam.machine_st.stack.index_and_frame_mut(next_e);
 
         for idx in 0..9 {
