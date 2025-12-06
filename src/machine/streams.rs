@@ -29,10 +29,13 @@ use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem::ManuallyDrop;
 use std::net::{Shutdown, TcpStream};
 use std::ops::{Deref, DerefMut};
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 use std::ptr;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::TryRecvError;
+use std::time::Duration;
 
 #[cfg(feature = "tls")]
 use native_tls::TlsStream;
@@ -172,6 +175,41 @@ impl StreamLayout<CharReader<InputFileStream>> {
             .stream_position()
             .map(|pos| pos - self.stream.rem_buf_len() as u64)
             .ok()
+    }
+}
+
+impl StreamLayout<CharReader<PipeReader>> {
+    fn load_incomplete_utf8(&mut self) {
+        let bytes = self.incomplete_utf8.borrow().clone();
+        if !bytes.is_empty() {
+            self.stream.prepend_bytes(&bytes);
+            self.incomplete_utf8.borrow_mut().clear();
+        }
+    }
+
+    pub fn read_char(&mut self) -> Option<std::io::Result<char>> {
+        self.load_incomplete_utf8();
+        self.stream.read_char()
+    }
+
+    pub fn peek_char(&mut self) -> Option<std::io::Result<char>> {
+        self.load_incomplete_utf8();
+        self.stream.peek_char()
+    }
+
+    pub fn put_back_char(&mut self, c: char) {
+        self.stream.put_back_char(c)
+    }
+
+    pub fn consume(&mut self, nread: usize) {
+        self.stream.consume(nread)
+    }
+}
+
+impl Read for StreamLayout<CharReader<PipeReader>> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.load_incomplete_utf8();
+        self.stream.read(buf)
     }
 }
 
@@ -509,12 +547,13 @@ impl Default for StreamOptions {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct StreamLayout<T> {
     pub options: StreamOptions,
     pub lines_read: usize,
     past_end_of_stream: bool,
     stream: T,
+    pub(crate) incomplete_utf8: std::cell::RefCell<Vec<u8>>,
 }
 
 impl<T> StreamLayout<T> {
@@ -525,6 +564,7 @@ impl<T> StreamLayout<T> {
             lines_read: 0,
             past_end_of_stream: false,
             stream,
+            incomplete_utf8: std::cell::RefCell::new(Vec::new()),
         }
     }
 }
@@ -1263,6 +1303,80 @@ impl Stream {
             Stream::PipeReader(stream) => stream.past_end_of_stream = value,
             Stream::PipeWriter(stream) => stream.past_end_of_stream = value,
         }
+    }
+
+    #[inline]
+    pub(crate) fn set_read_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()> {
+        match self {
+            Stream::NamedTcp(stream) => {
+                stream.stream.inner_mut().tcp_stream.set_read_timeout(timeout)
+            }
+            Stream::PipeReader(_stream) => {
+                // Pipe timeout is handled via poll_read_ready() at the read level
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn poll_read_ready(&mut self, timeout: Duration) -> std::io::Result<bool> {
+        match self {
+            Stream::PipeReader(stream) => {
+                let fd = stream.stream.inner_mut().as_raw_fd();
+
+                let mut pollfd = libc::pollfd {
+                    fd,
+                    events: libc::POLLIN,
+                    revents: 0,
+                };
+
+                let timeout_ms = timeout.as_millis().min(i32::MAX as u128) as i32;
+
+                let result = unsafe {
+                    libc::poll(&mut pollfd as *mut libc::pollfd, 1, timeout_ms)
+                };
+
+                if result < 0 {
+                    Err(std::io::Error::last_os_error())
+                } else if result == 0 {
+                    // Timeout
+                    Ok(false)
+                } else {
+                    // Data available
+                    Ok(true)
+                }
+            }
+            Stream::NamedTcp(stream) => {
+                let fd = stream.stream.inner_mut().tcp_stream.as_raw_fd();
+
+                let mut pollfd = libc::pollfd {
+                    fd,
+                    events: libc::POLLIN,
+                    revents: 0,
+                };
+
+                let timeout_ms = timeout.as_millis().min(i32::MAX as u128) as i32;
+
+                let result = unsafe {
+                    libc::poll(&mut pollfd as *mut libc::pollfd, 1, timeout_ms)
+                };
+
+                if result < 0 {
+                    Err(std::io::Error::last_os_error())
+                } else if result == 0 {
+                    Ok(false)
+                } else {
+                    Ok(true)
+                }
+            }
+            _ => Ok(true), // Other streams don't need polling
+        }
+    }
+
+    #[cfg(not(unix))]
+    pub(crate) fn poll_read_ready(&mut self, _timeout: Duration) -> std::io::Result<bool> {
+        Ok(true)
     }
 
     #[inline]

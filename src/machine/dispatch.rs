@@ -4161,6 +4161,14 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.get_n_chars(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallGetNCharsWithTimeout => {
+                        try_or_throw!(self.machine_st, self.get_n_chars_with_timeout());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteGetNCharsWithTimeout => {
+                        try_or_throw!(self.machine_st, self.get_n_chars_with_timeout());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallGetCode => {
                         try_or_throw!(self.machine_st, self.get_code(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
