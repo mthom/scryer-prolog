@@ -49,6 +49,9 @@ expand_term(Term, ExpandedTerm) :-
              loader:'$print_message_and_fail'(E)) ->
        (  var(ExpandedTerm0) ->
           error:instantiation_error(term_expansion/2)
+       ;  ExpandedTerm0 == [] ->
+          % Empty list means remove the term entirely (insert nothing)
+          ExpandedTerm = []
        ;  ExpandedTerm0 = [_|_] ->
           term_expansion_list(ExpandedTerm0, ExpandedTerm, [])
        ;  expand_term(ExpandedTerm0, ExpandedTerm)
@@ -260,6 +263,9 @@ compile_term(Term, Evacuable) :-
     !,
     (  var(Terms) ->
        instantiation_error(load/1)
+    ;  Terms == [] ->
+       % Empty list means term_expansion removed the term, do nothing
+       true
     ;  Terms = [_|_] ->
        compile_dispatch_or_clause_on_list(list(Term), Terms, Evacuable)
     ;  compile_dispatch_or_clause(term(Term), Terms, Evacuable)
