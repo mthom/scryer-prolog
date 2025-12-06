@@ -524,6 +524,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
         if self.stack.len() > 2 * arity {
             let idx = self.stack.len() - 2 * arity - 1;
 
+            // Reject BTERM (bracketed term) used as functor
+            // This prevents patterns like ((a)(b) from being parsed as a(b)
+            if self.stack[idx].spec == BTERM {
+                return false;
+            }
+
             if is_infix!(self.stack[idx].spec)
                 && idx > 0
                 && !is_op!(self.stack[idx - 1].spec)
