@@ -645,7 +645,9 @@ impl<'a, R: CharRead> Parser<'a, R> {
         for (i, desc) in self.stack.iter().rev().enumerate() {
             if i % 2 == 0 {
                 // expect a term or non-comma operator.
-                if let TokenType::Comma = desc.tt {
+                // HeadTailSeparator at a term position means [|...] with nothing before |
+                // which is invalid regardless of whether | is an operator.
+                if desc.tt == TokenType::Comma || desc.tt == TokenType::HeadTailSeparator {
                     return None;
                 } else if is_term!(desc.spec) || is_op!(desc.spec) || is_negate!(desc.spec) {
                     arity += 1;
