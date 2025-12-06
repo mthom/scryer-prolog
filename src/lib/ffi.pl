@@ -1,4 +1,4 @@
-:- module(ffi, [use_foreign_module/2, foreign_struct/2, with_locals/2, allocate/4, deallocate/3, read_ptr/3, array_type/3]).
+:- module(ffi, [use_foreign_module/2, use_foreign_module/3, foreign_struct/2, with_locals/2, allocate/4, deallocate/3, read_ptr/3, array_type/3]).
 
 /** Foreign Function Interface
 
@@ -7,9 +7,45 @@ It uses [libffi](https://sourceware.org/libffi/) under the hood. The bridge is v
 and is very unsafe and should be used with care. FFI isn't the only way to communicate with
 the outside world in Prolog: sockets, pipes and HTTP may be good enough for your use case.
 
-The main predicate is `use_foreign_module/2`. It takes a library name (which depending on the
-operating system could be a `.so`, `.dylib` or `.dll` file). and a list of functions. Each
-function is defined by its name, a list of the type of the arguments, and the return argument.
+The main predicate is `use_foreign_module/2` or `use_foreign_module/3` (with options).
+It takes a library name (which depending on the operating system could be a `.so`, `.dylib`
+or `.dll` file), a list of functions, and optionally a list of options. Each function is
+defined by its name, a list of the type of the arguments, and the return argument.
+
+## Library Loading Options
+
+### Scope Option (POSIX only)
+
+The scope option controls symbol visibility. Libraries are always loaded with lazy binding
+(`RTLD_LAZY` - symbols resolved as needed).
+
+- **`scope(local)`** (default): `RTLD_LOCAL` - Symbols not available to subsequently loaded
+  libraries. Prevents symbol pollution and conflicts. Use this for most libraries.
+
+- **`scope(global)`**: `RTLD_GLOBAL` - Symbols available for resolution by subsequently loaded
+  libraries. Required for certain use cases:
+  - **Python C extensions**: When embedding Python, C extension modules (NumPy, SciPy, pandas,
+    standard library modules like `math`, `socket`, etc.) need to resolve symbols from libpython.
+    Without RTLD_GLOBAL, these imports fail with "undefined symbol" errors.
+  - **Plugin architectures**: Libraries that dynamically load plugins which depend on symbols
+    from the main library.
+
+### Examples
+
+```prolog
+% Default (local scope with lazy binding)
+use_foreign_module('/path/libmath.so', [...]).
+
+% Python C library - needs global scope for C extensions
+use_foreign_module('/path/libpython3.11.so', [...], [scope(global)]).
+
+% Explicit local scope
+use_foreign_module('/path/lib.so', [...], [scope(local)]).
+```
+
+**Note**: On Windows, the scope option has no effect as Windows uses a different library
+loading model. Using `scope(global)` can cause symbol conflicts if multiple libraries export
+the same symbol names - only use it when necessary.
 
 For each function in the list a predicate of the same name is generated in the ffi module which
 can then be used to call the native code.
@@ -86,7 +122,7 @@ This creates a `'InitWindow'` predicate under the ffi module. Now, we can call i
 And a new window should pop up!
 */
 
-:- use_module(library(lists)).
+:- use_module(library(lists), [member/2, maplist/2, append/2, length/2]).
 :- use_module(library(error)).
 :- use_module(library(format)).
 :- use_module(library(dcgs)).
@@ -111,21 +147,87 @@ foreign_struct(Name, Elements) :-
 
 %% use_foreign_module(+LibName, +Predicates)
 %
-% - LibName the path to the shared library to load/bind
-% - Predicates list of function definitions
+%   Load a foreign library with default options and register predicates.
+%   Uses POSIX defaults: scope(local) with lazy binding (RTLD_LAZY).
+%
+%   @arg LibName The path to the shared library to load/bind (e.g. '/path/to/lib.so')
+%   @arg Predicates List of function definitions (functors of arity 2: Name(Args, ReturnType))
+%
+use_foreign_module(LibName, Predicates) :-
+    use_foreign_module(LibName, Predicates, []).
+
+%% use_foreign_module(+LibName, +Predicates, +Options)
+%
+%   Load a foreign library with specified options and register predicates.
+%
+%   @arg LibName The path to the shared library to load/bind (e.g. '/path/to/lib.so')
+%   @arg Predicates List of function definitions (functors of arity 2: Name(Args, ReturnType))
+%   @arg Options List of loading options. Supported options:
+%     - scope(Scope): Symbol visibility - `local` (default) or `global`
 %
 %   Each function definition is a functor of arity 2.
 %   The functor name is the name of the function to bind,
 %   the first argument is the list of arguments of the function,
 %   the second argument is the return type of the function.
 %
-%   This will define a predicate in the ffi module with the defined name,
-%   for void and bool return type functions the arity will match the length of the arguments list,
+%   This will define a predicate in the ffi module with the defined name.
+%   For void and bool return type functions the arity will match the length of the arguments list,
 %   for other return types there will be an additional out parameter.
 %
-use_foreign_module(LibName, Predicates) :-
-    '$load_foreign_lib'(LibName, Predicates),
+%   Libraries are always loaded with lazy binding (RTLD_LAZY - symbols resolved as needed).
+%   Default scope is local (RTLD_LOCAL).
+%
+%   Examples:
+%   ```
+%   % Default options (local scope, lazy binding)
+%   use_foreign_module('lib.so', [foo([int], void)]).
+%
+%   % Python library - needs global scope for C extension modules
+%   use_foreign_module('/path/libpython3.11.so', [...], [scope(global)]).
+%
+%   % Explicit local scope
+%   use_foreign_module('lib.so', [...], [scope(local)]).
+%   ```
+%
+use_foreign_module(LibName, Predicates, Options) :-
+    call_with_error_context(use_foreign_module_(LibName, Predicates, Options), predicate-use_foreign_module/3).
+
+use_foreign_module_(LibName, Predicates, Options) :-
+    must_be(list, Predicates),
+    must_be(list, Options),
+    validate_ffi_options(Options, Scope),
+    '$load_foreign_lib'(LibName, Predicates, Scope),
     maplist(assert_predicate, Predicates).
+
+%% validate_ffi_options(+Options, -Scope)
+%
+%  Validate FFI loading options and extract scope value.
+%  Throws domain_error for unknown or duplicate options.
+%  Default scope is 'local'.
+%
+validate_ffi_options(Options, Scope) :-
+    validate_ffi_options_(Options, [], local, Scope).
+
+validate_ffi_options_([], _Seen, Scope, Scope).
+validate_ffi_options_([Option|Rest], Seen, _CurrentScope, FinalScope) :-
+    ( Option = scope(Value) ->
+        ( member(scope, Seen) ->
+            domain_error(non_duplicate_options, scope, [])
+        ; valid_scope(Value) ->
+            validate_ffi_options_(Rest, [scope|Seen], Value, FinalScope)
+        ; domain_error(ffi_scope, Value, [])
+        )
+    ; functor(Option, Name, 1) ->
+        domain_error(ffi_option, Name, [])
+    ; domain_error(ffi_option, Option, [])
+    ).
+
+%% valid_scope(+Scope)
+%
+%  Check if Scope is a valid scope value (local or global).
+%
+valid_scope(local).
+valid_scope(global).
 
 assert_predicate(PredicateDefinition) :-
     PredicateDefinition =.. [Name, Inputs, void],
