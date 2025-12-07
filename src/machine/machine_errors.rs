@@ -778,9 +778,47 @@ impl MachineState {
 
     // throw an error pre-allocated in the heap
     pub(super) fn throw_resource_error(&mut self, err: AllocError) {
-        self.registers[1] = str_loc_as_cell!(err.resource_error_offset(&mut self.heap));
-        self.set_ball();
-        self.unwind_stack();
+        struct RecursionGuard<'state> {
+            machine_state: &'state mut MachineState,
+        }
+
+        impl<'state> RecursionGuard<'state> {
+            fn new(machine_state: &'state mut MachineState) -> Self {
+                if machine_state.throwing_resource_error {
+                    panic!("attempted to throw `error(resource_error(memory), [])` while attempting to throw `error(resource_error(memory), [])`");
+                }
+                machine_state.throwing_resource_error = true;
+                Self { machine_state }
+            }
+        }
+
+        impl Drop for RecursionGuard<'_> {
+            fn drop(&mut self) {
+                self.machine_state.throwing_resource_error = false;
+            }
+        }
+
+        impl std::ops::Deref for RecursionGuard<'_> {
+            type Target = MachineState;
+
+            fn deref(&self) -> &MachineState {
+                self.machine_state
+            }
+        }
+
+        impl std::ops::DerefMut for RecursionGuard<'_> {
+            fn deref_mut(&mut self) -> &mut MachineState {
+                self.machine_state
+            }
+        }
+
+        let mut guard = RecursionGuard::new(self);
+
+        let state = &mut *guard;
+
+        state.registers[1] = str_loc_as_cell!(err.resource_error_offset(&mut state.heap));
+        state.set_ball();
+        state.unwind_stack();
     }
 
     pub(super) fn throw_exception(&mut self, err: MachineStub) {
