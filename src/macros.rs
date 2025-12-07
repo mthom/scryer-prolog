@@ -471,11 +471,16 @@ macro_rules! resource_error_call_result {
 }
 
 macro_rules! heap_index {
-    ($idx:expr) => {
+    ($idx:expr) => {{
+        let idx = $idx;
         std::mem::size_of::<HeapCellValue>()
-            .checked_mul($idx)
-            .unwrap()
-    };
+            .checked_mul(idx)
+            .expect(&format!(
+                "overflow while calculating heap index {idx} * {} > {}",
+                std::mem::size_of::<HeapCellValue>(),
+                usize::MAX,
+            ))
+    }};
 }
 
 macro_rules! cell_index {
