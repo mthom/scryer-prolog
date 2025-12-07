@@ -599,7 +599,7 @@ impl Heap {
     pub(crate) fn with_cell_capacity(cap: usize) -> Result<Self, AllocError> {
         let ptr = unsafe {
             let layout = alloc::Layout::from_size_align(
-                cap * size_of::<HeapCellValue>(),
+                heap_index_checked!(cap).ok_or(AllocError)?,
                 size_of::<HeapCellValue>(),
             )
             .unwrap();
