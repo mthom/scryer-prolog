@@ -470,16 +470,22 @@ macro_rules! resource_error_call_result {
     };
 }
 
+macro_rules! heap_index_checked {
+    ($idx:expr) => {
+        std::mem::size_of::<HeapCellValue>().checked_mul($idx)
+    };
+}
+
+pub(crate) use heap_index_checked;
+
 macro_rules! heap_index {
     ($idx:expr) => {{
         let idx = $idx;
-        std::mem::size_of::<HeapCellValue>()
-            .checked_mul(idx)
-            .expect(&format!(
-                "overflow while calculating heap index {idx} * {} > {}",
-                std::mem::size_of::<HeapCellValue>(),
-                usize::MAX,
-            ))
+        $crate::macros::heap_index_checked!(idx).expect(&format!(
+            "overflow while calculating heap index {idx} * {} > {}",
+            std::mem::size_of::<HeapCellValue>(),
+            usize::MAX,
+        ))
     }};
 }
 

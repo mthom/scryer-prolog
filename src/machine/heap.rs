@@ -623,7 +623,7 @@ impl Heap {
 
     pub fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, AllocError> {
         let section;
-        let len = heap_index!(num_cells);
+        let len = heap_index_checked!(num_cells).ok_or(AllocError)?;
 
         loop {
             unsafe {
