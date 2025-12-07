@@ -639,7 +639,10 @@ impl CodeGenerator {
                 }
             },
             InlinedClauseType::IsRational(..) => match terms[0] {
-                Term::Literal(_, Literal::Rational(_)) => {
+                Term::Literal(
+                    _,
+                    Literal::Rational(_) | Literal::Fixnum(_) | Literal::Integer(_),
+                ) => {
                     instr!("$succeed")
                 }
                 Term::Var(ref vr, ref name) => {
@@ -679,10 +682,13 @@ impl CodeGenerator {
                 }
             },
             InlinedClauseType::IsNumber(..) => match terms[0] {
-                Term::Literal(_, Literal::F64(..))
-                | Term::Literal(_, Literal::Rational(_))
-                | Term::Literal(_, Literal::Integer(_))
-                | Term::Literal(_, Literal::Fixnum(_)) => {
+                Term::Literal(
+                    _,
+                    Literal::F64(..)
+                    | Literal::Rational(_)
+                    | Literal::Integer(_)
+                    | Literal::Fixnum(_),
+                ) => {
                     instr!("$succeed")
                 }
                 Term::Var(ref vr, ref name) => {

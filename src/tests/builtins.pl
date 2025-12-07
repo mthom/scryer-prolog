@@ -46,7 +46,7 @@ test_queries_on_builtins :-
     \+ float([1,2,_]),
     \+ (X is 3 rdiv 4, float(X)),
     \+ \+ (X is 3 rdiv 4, rational(X)),
-    \+ rational(3),
+    rational(3),
     \+ rational(f(_)),
     \+ rational("sdfa"),
     \+ rational(atom),
