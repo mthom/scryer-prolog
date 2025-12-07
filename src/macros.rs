@@ -481,11 +481,13 @@ pub(crate) use heap_index_checked;
 macro_rules! heap_index {
     ($idx:expr) => {{
         let idx = $idx;
-        $crate::macros::heap_index_checked!(idx).expect(&format!(
-            "overflow while calculating heap index {idx} * {} > {}",
-            std::mem::size_of::<HeapCellValue>(),
-            usize::MAX,
-        ))
+        $crate::macros::heap_index_checked!(idx).unwrap_or_else(|| {
+            panic!(
+                "overflow while calculating heap index {idx} * {} > {}",
+                std::mem::size_of::<HeapCellValue>(),
+                usize::MAX,
+            )
+        })
     }};
 }
 
