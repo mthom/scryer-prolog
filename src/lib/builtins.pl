@@ -1466,7 +1466,7 @@ op(Priority, OpSpec, Op) :-
           lists:member(OpSpec, [xfx, xfy, yfx]),
           ( Priority >= 1001 ; Priority == 0 )
        -> '$op'(Priority, OpSpec, Op)
-       ;  throw(error(permission_error(create, operator, (|)), op/3))) % www.complang.tuwien.ac.at/ulrich/iso-prolog/conformity_testing#72
+       ;  throw(error(permission_error(create, operator, '|'), op/3))) % www.complang.tuwien.ac.at/ulrich/iso-prolog/conformity_testing#72
     ;  valid_op(Op), op_priority(Priority), op_specifier(OpSpec) ->
        '$op'(Priority, OpSpec, Op)
     ;  list_of_op_atoms(Op), op_priority(Priority), op_specifier(OpSpec) ->
