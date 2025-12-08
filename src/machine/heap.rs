@@ -1148,7 +1148,9 @@ pub fn sized_iter_to_heap_list<SrcT: Into<HeapCellValue>>(
 ) -> Result<HeapCellValue, AllocError> {
     if size > 0 {
         let h = heap.cell_len();
-        let mut writer = heap.reserve(1 + 2 * size)?;
+        // not using checked_add for 1 + as the result of multiplying by 2 will be even and the largest representable usize is odd,
+        // so the addition cannot overflow
+        let mut writer = heap.reserve(1 + size.checked_mul(2).ok_or(AllocError)?)?;
 
         writer.write_with(|section| {
             for (idx, value) in values.enumerate() {
