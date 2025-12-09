@@ -5,13 +5,42 @@ use crate::machine::machine_errors::CycleSearchResult;
 use crate::machine::system_calls::BrentAlgState;
 use crate::types::*;
 
+trait StepperImpl {
+    fn step<'a>(&self, iter: &mut HeapPStrIter<'a>) -> Option<PStrIteratee>;
+    fn is_cyclic(&self) -> bool;
+}
+
+struct PreCycleDiscoverStepper;
+
+impl StepperImpl for PreCycleDiscoverStepper {
+    fn step<'a>(&self, iter: &mut HeapPStrIter<'a>) -> Option<PStrIteratee> {
+        iter.pre_cycle_discovery_stepper()
+    }
+
+    fn is_cyclic(&self) -> bool {
+        false
+    }
+}
+
+struct PostCycleDiscoverStepper;
+
+impl StepperImpl for PostCycleDiscoverStepper {
+    fn step<'a>(&self, iter: &mut HeapPStrIter<'a>) -> Option<PStrIteratee> {
+        iter.post_cycle_discovery_stepper()
+    }
+
+    fn is_cyclic(&self) -> bool {
+        true
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct HeapPStrIter<'a> {
     pub heap: &'a Heap,
     // pub focus: HeapCellValue,
     orig_focus: usize,
     brent_st: BrentAlgState,
-    stepper: fn(&mut HeapPStrIter<'a>) -> Option<PStrIteratee>,
+    stepper: &'static dyn StepperImpl,
 }
 
 struct PStrIterStep {
@@ -33,7 +62,7 @@ impl<'a> HeapPStrIter<'a> {
             heap,
             orig_focus,
             brent_st: BrentAlgState::new(orig_focus),
-            stepper: HeapPStrIter::pre_cycle_discovery_stepper,
+            stepper: &PreCycleDiscoverStepper,
         }
     }
 
@@ -161,7 +190,7 @@ impl<'a> HeapPStrIter<'a> {
                 debug_assert!(matches!(cycle_result, CycleSearchResult::Cyclic { .. }));
 
                 self.walk_hare_to_cycle_end();
-                self.stepper = HeapPStrIter::post_cycle_discovery_stepper;
+                self.stepper = &PostCycleDiscoverStepper;
             }
             None => {
                 // self.focus = self.heap[next_hare];
@@ -194,7 +223,7 @@ impl<'a> HeapPStrIter<'a> {
     }
 
     pub(crate) fn is_cyclic(&self) -> bool {
-        self.stepper as usize == Self::post_cycle_discovery_stepper as usize
+        self.stepper.is_cyclic()
     }
 }
 
@@ -203,7 +232,7 @@ impl<'a> Iterator for HeapPStrIter<'a> {
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
-        (self.stepper)(self)
+        self.stepper.step(self)
     }
 }
 
