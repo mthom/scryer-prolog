@@ -74,6 +74,7 @@ pub struct MachineState {
     pub(super) cp: usize,
     pub(super) attr_var_init: AttrVarInitializer,
     pub(super) fail: bool,
+    pub throwing_resource_error: bool,
     pub heap: Heap,
     pub(super) mode: MachineMode,
     pub(crate) stack: Stack,
