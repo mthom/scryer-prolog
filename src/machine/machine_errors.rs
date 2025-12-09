@@ -76,7 +76,6 @@ impl ValidType {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ResourceError {
-    FiniteMemory(HeapCellValue),
     OutOfFiles,
 }
 
@@ -330,12 +329,6 @@ impl MachineState {
 
     pub(super) fn resource_error(err: ResourceError) -> MachineError {
         let stub = match err {
-            ResourceError::FiniteMemory(size_requested) => {
-                functor!(
-                    atom!("resource_error"),
-                    [atom_as_cell((atom!("finite_memory"))), cell(size_requested)]
-                )
-            }
             ResourceError::OutOfFiles => {
                 functor!(
                     atom!("resource_error"),
