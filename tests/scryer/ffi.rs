@@ -57,7 +57,7 @@ fn ffi_f64_nan() {
     load_module_test_with_input(
         "tests-pl/ffi_f64_nan.pl",
         format!("LIB={dynlib_path:?}."),
-        "   error(evaluation_error(undefined),round/1).\n",
+        "   error(evaluation_error(undefined),'.'(predicate-round/1,[])).\n",
     );
 }
 
