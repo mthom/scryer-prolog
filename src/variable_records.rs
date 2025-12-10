@@ -1,9 +1,11 @@
-use crate::forms::GenContext;
+use crate::forms::{BranchNumber, GenContext};
 use crate::parser::ast::*;
 
 use bit_set::*;
 use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
+use num_order::NumOrd;
+
 use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, Clone)]
@@ -13,20 +15,19 @@ pub struct TempVarData {
     pub(crate) conflict_set: BitSet<usize>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BranchDesignator {
-    pub branch_stack_num: usize,
-    pub branch_num: usize,
+    pub branch_num: BranchNumber,
 }
 
 impl BranchDesignator {
     #[inline]
     pub fn is_sub_branch(&self) -> bool {
-        self.branch_stack_num > 0
+        self.branch_num.branch_num.num_gt(&0)
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum VarSafetyStatus {
     Needed,
     // which branch planted the last unsafe guarded instruction? It may still be needed.
@@ -35,27 +36,27 @@ pub enum VarSafetyStatus {
 }
 
 impl VarSafetyStatus {
-    pub(crate) fn unneeded(current_branch: BranchDesignator) -> Self {
+    pub(crate) fn unneeded(current_branch: &BranchDesignator) -> Self {
         if current_branch.is_sub_branch() {
-            VarSafetyStatus::LocallyUnneeded(current_branch)
+            VarSafetyStatus::LocallyUnneeded(current_branch.clone())
         } else {
             VarSafetyStatus::GloballyUnneeded
         }
     }
 
     #[inline]
-    pub(crate) fn needed_if(needed: bool, branch_designator: BranchDesignator) -> Self {
+    pub(crate) fn needed_if(needed: bool, branch_designator: &BranchDesignator) -> Self {
         if needed {
             VarSafetyStatus::Needed
-        } else if branch_designator.branch_stack_num == 0 {
+        } else if branch_designator.branch_num.branch_num.num_eq(&0) {
             VarSafetyStatus::GloballyUnneeded
         } else {
-            VarSafetyStatus::LocallyUnneeded(branch_designator)
+            VarSafetyStatus::LocallyUnneeded(branch_designator.clone())
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum PermVarAllocation {
     Done {
         shallow_safety: VarSafetyStatus,

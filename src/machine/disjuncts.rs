@@ -6,78 +6,15 @@ use crate::machine::loader::*;
 use crate::machine::machine_errors::CompilationError;
 use crate::machine::preprocessor::*;
 use crate::parser::ast::*;
-use crate::parser::dashu::Rational;
 use crate::variable_records::*;
 
 use dashu::Integer;
 use indexmap::{IndexMap, IndexSet};
 
 use std::cell::Cell;
-use std::cmp::Ordering;
 use std::collections::VecDeque;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
-
-#[derive(Debug, Clone)] //, PartialOrd, PartialEq, Eq, Hash)]
-pub struct BranchNumber {
-    branch_num: Rational,
-    delta: Rational,
-}
-
-impl Default for BranchNumber {
-    fn default() -> Self {
-        Self {
-            branch_num: Rational::from(1u64 << 63),
-            delta: Rational::from(1),
-        }
-    }
-}
-
-impl PartialEq<BranchNumber> for BranchNumber {
-    #[inline]
-    fn eq(&self, rhs: &BranchNumber) -> bool {
-        self.branch_num == rhs.branch_num
-    }
-}
-
-impl Eq for BranchNumber {}
-
-impl Hash for BranchNumber {
-    #[inline(always)]
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        self.branch_num.hash(hasher)
-    }
-}
-
-impl PartialOrd<BranchNumber> for BranchNumber {
-    #[inline]
-    fn partial_cmp(&self, rhs: &BranchNumber) -> Option<Ordering> {
-        self.branch_num.partial_cmp(&rhs.branch_num)
-    }
-}
-
-impl BranchNumber {
-    fn split(&self) -> BranchNumber {
-        BranchNumber {
-            branch_num: self.branch_num.clone() + &self.delta / Rational::from(2),
-            delta: &self.delta / Rational::from(4),
-        }
-    }
-
-    fn incr_by_delta(&self) -> BranchNumber {
-        BranchNumber {
-            branch_num: self.branch_num.clone() + &self.delta,
-            delta: self.delta.clone(),
-        }
-    }
-
-    fn halve_delta(&self) -> BranchNumber {
-        BranchNumber {
-            branch_num: self.branch_num.clone(),
-            delta: &self.delta / Rational::from(2),
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VarInfo {
@@ -140,12 +77,13 @@ pub struct ClassifyInfo {
 }
 
 enum TraversalState {
-    // construct a QueryTerm::Branch with number of disjuncts, reset
-    // the chunk type to that of the chunk preceding the disjunct and the chunk_num.
+    // pop the latest branch number from the root set and use it to construct a QueryTerm::Branch
+    // with number of disjuncts, reset the chunk type to that of the chunk preceding the disjunct
+    // and the chunk_num.
     BuildDisjunct(usize),
+    BuildFinalDisjunct(usize),
     // add the last disjunct to a QueryTerm::Branch, continuing from
     // where it leaves off.
-    BuildFinalDisjunct(usize),
     Fail,
     GetCutPoint { var_num: usize, prev_b: bool },
     Cut { var_num: usize, is_global: bool },
@@ -154,7 +92,6 @@ enum TraversalState {
     Term(Term),
     OverrideGlobalCutVar(usize),
     ResetGlobalCutVarOverride(Option<usize>),
-    RemoveBranchNum,            // pop the current_branch_num and from the root set.
     AddBranchNum(BranchNumber), // set current_branch_num, add it to the root set
     RepBranchNum(BranchNumber), // replace current_branch_num and the latest in the root set
 }
@@ -199,7 +136,7 @@ impl VarData {
                 VarAlloc::Perm(0, PermVarAllocation::Pending);
 
             match build_stack.front_mut() {
-                Some(ChunkedTerms::Branch(_)) => {
+                Some(ChunkedTerms::Branch { .. }) => {
                     build_stack.push_front(ChunkedTerms::Chunk {
                         terms: VecDeque::from(vec![term]),
                     });
@@ -232,11 +169,16 @@ fn merge_branch_seq(branches: impl Iterator<Item = BranchInfo>) -> BranchInfo {
     branch_info
 }
 
-fn flatten_into_disjunct(build_stack: &mut ChunkedTermVec, preceding_len: usize) {
+fn flatten_into_disjunct(
+    build_stack: &mut ChunkedTermVec,
+    branch_num: BranchNumber,
+    preceding_len: usize,
+) {
     let branch_vec = build_stack.drain(preceding_len + 1..).collect();
 
-    if let ChunkedTerms::Branch(ref mut disjuncts) = &mut build_stack[preceding_len] {
-        disjuncts.push(branch_vec);
+    if let ChunkedTerms::Branch { branch_nums, arms } = &mut build_stack[preceding_len] {
+        branch_nums.push(branch_num);
+        arms.push(branch_vec);
     } else {
         unreachable!();
     }
@@ -477,9 +419,6 @@ impl VariableClassifier {
                     self.root_set.insert(branch_num.clone());
                     self.current_branch_num = branch_num;
                 }
-                TraversalState::RemoveBranchNum => {
-                    self.root_set.pop();
-                }
                 TraversalState::RepBranchNum(branch_num) => {
                     self.root_set.pop();
                     self.root_set.insert(branch_num.clone());
@@ -488,14 +427,9 @@ impl VariableClassifier {
                 TraversalState::ResetCallPolicy(call_policy) => {
                     self.call_policy = call_policy;
                 }
-                TraversalState::BuildDisjunct(preceding_len) => {
-                    flatten_into_disjunct(&mut build_stack, preceding_len);
-
-                    self.current_chunk_type = ChunkType::Mid;
-                    self.current_chunk_num += 1;
-                }
-                TraversalState::BuildFinalDisjunct(preceding_len) => {
-                    flatten_into_disjunct(&mut build_stack, preceding_len);
+                TraversalState::BuildDisjunct(preceding_len) | TraversalState::BuildFinalDisjunct(preceding_len) => {
+                    let branch_num = self.root_set.pop().unwrap();
+                    flatten_into_disjunct(&mut build_stack, branch_num, preceding_len);
 
                     self.current_chunk_type = ChunkType::Mid;
                     self.current_chunk_num += 1;
@@ -632,11 +566,10 @@ impl VariableClassifier {
                             ));
 
                             let iter = branches.into_iter().zip(branch_numbers.into_iter());
-                            let final_disjunct_loc = state_stack.len();
+			    let final_disjunct_loc = state_stack.len();
 
                             for (term, branch_num) in iter.rev() {
                                 state_stack.push(TraversalState::BuildDisjunct(build_stack_len));
-                                state_stack.push(TraversalState::RemoveBranchNum);
                                 state_stack.push(TraversalState::Term(term));
                                 state_stack.push(TraversalState::AddBranchNum(branch_num));
                             }
@@ -655,23 +588,18 @@ impl VariableClassifier {
                             let then_term = terms.pop().unwrap();
                             let if_term = terms.pop().unwrap();
 
-                            let prev_b = if matches!(
-                                state_stack.last(),
-                                Some(TraversalState::RemoveBranchNum)
-                            ) {
-                                // check if the second-to-last element
-                                // is a regular BuildDisjunct, as we
-                                // don't want to add GetPrevLevel in
-                                // case of a TrustMe.
-                                match state_stack.iter().rev().nth(1) {
-                                    Some(&TraversalState::BuildDisjunct(preceding_len)) => {
-                                        preceding_len + 1 == build_stack.len()
-                                    }
-                                    _ => false,
-                                }
-                            } else {
-                                false
-                            };
+                            let prev_b =
+                                if let Some(&TraversalState::BuildDisjunct(preceding_len)) =
+                                    state_stack.last()
+                                {
+                                    // check if the second-to-last element
+                                    // is a regular BuildDisjunct, as we
+                                    // don't want to add GetPrevLevel in
+                                    // case of a TrustMe.
+                                    preceding_len + 1 == build_stack.len()
+                                } else {
+                                    false
+                                };
 
                             state_stack.push(TraversalState::Term(then_term));
                             state_stack.push(TraversalState::Cut {
@@ -690,14 +618,21 @@ impl VariableClassifier {
                             let not_term = terms.pop().unwrap();
                             let build_stack_len = build_stack.len();
 
+                            let first_branch_num = self.current_branch_num.split();
+                            let second_branch_num = first_branch_num.incr_by_delta();
+
                             build_stack.reserve_branch(2);
 
+			    state_stack.push(TraversalState::RepBranchNum(
+                                self.current_branch_num.halve_delta(),
+                            ));
                             state_stack.push(TraversalState::BuildFinalDisjunct(build_stack_len));
                             state_stack.push(TraversalState::Term(Term::Clause(
                                 Cell::default(),
                                 atom!("$succeed"),
                                 vec![],
                             )));
+                            state_stack.push(TraversalState::AddBranchNum(second_branch_num));
                             state_stack.push(TraversalState::BuildDisjunct(build_stack_len));
                             state_stack.push(TraversalState::Fail);
                             state_stack.push(TraversalState::CutPrev(self.var_num));
@@ -710,6 +645,7 @@ impl VariableClassifier {
                                 var_num: self.var_num,
                                 prev_b: false,
                             });
+                            state_stack.push(TraversalState::AddBranchNum(first_branch_num));
 
                             self.current_chunk_type = ChunkType::Mid;
                             self.current_chunk_num += 1;

@@ -994,20 +994,27 @@ impl CodeGenerator {
                     self.marker.in_tail_position = false;
                     self.marker.reset_contents();
                 }
-                ClauseItem::FirstBranch(num_branches) => {
+                ClauseItem::FirstBranch {
+                    branch_num,
+                    num_branches,
+                } => {
                     branch_code_stack.add_new_branch_stack();
                     branch_code_stack.add_new_branch();
 
-                    self.marker.branch_stack.add_branch_stack(num_branches);
+                    self.marker
+                        .branch_stack
+                        .add_branch_stack(branch_num.clone(), num_branches);
                     self.marker.add_branch();
                 }
-                ClauseItem::NextBranch => {
+                ClauseItem::NextBranch { branch_num } => {
                     branch_code_stack.add_new_branch();
 
                     self.marker.add_branch();
-                    self.marker.branch_stack.incr_current_branch();
+                    self.marker
+                        .branch_stack
+                        .incr_current_branch(branch_num.clone());
                 }
-                ClauseItem::BranchEnd(depth) => {
+                ClauseItem::BranchEnd { depth } => {
                     if !clause_iter.in_tail_position() {
                         let subsumed_hits =
                             branch_code_stack.push_missing_vars(depth, &mut self.marker);
