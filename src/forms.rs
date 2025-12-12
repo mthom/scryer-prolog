@@ -170,13 +170,9 @@ impl PartialOrd<BranchNumber> for BranchNumber {
 
 impl BranchNumber {
     pub(crate) fn has_as_subbranch(&self, other: &Self) -> bool {
-	let delta_ratio = &self.delta / &other.delta;
-
-	if !delta_ratio.denominator().is_one() {
-            return false;
-	}
-
-	other.branch_num >= self.branch_num && other.branch_num < &self.branch_num + &self.delta
+	other.delta <= self.delta &&
+	    other.branch_num >= self.branch_num &&
+	    other.branch_num < &self.branch_num + &self.delta
     }
 
     pub(crate) fn split(&self) -> BranchNumber {

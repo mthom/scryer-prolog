@@ -103,9 +103,8 @@ impl MachineState {
                 .collect()
         };
 
-        attr_vars.sort_unstable_by(|a1, a2| {
-            compare_term_test!(self, *a1, *a2).unwrap_or(Ordering::Less)
-        });
+        attr_vars
+            .sort_unstable_by(|a1, a2| self.compare_term_test(*a1, *a2).unwrap_or(Ordering::Less));
 
         attr_vars.dedup();
         attr_vars

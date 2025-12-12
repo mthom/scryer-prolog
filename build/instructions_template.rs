@@ -643,15 +643,12 @@ enum SystemClauseType {
     UnattributedVar,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$get_db_refs")))]
     GetDBRefs,
-    #[strum_discriminants(strum(props(
-        Arity = "2",
-        Name = "$keysort_with_constant_var_ordering"
-    )))]
-    KeySortWithConstantVarOrdering,
     #[strum_discriminants(strum(props(Arity = "0", Name = "$inference_limit_exceeded")))]
     InferenceLimitExceeded,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$argv")))]
     Argv,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$variant")))]
+    IsVariant,
     Repl(ReplCodePtr),
 }
 

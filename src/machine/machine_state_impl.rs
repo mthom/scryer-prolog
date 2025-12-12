@@ -7,7 +7,6 @@ use crate::machine::copier::*;
 use crate::machine::heap::AllocError;
 use crate::machine::heap::*;
 use crate::machine::machine_errors::*;
-use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
 use crate::machine::stack::*;
@@ -16,8 +15,6 @@ use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
-
-use indexmap::IndexSet;
 
 use std::cmp::Ordering;
 use std::convert::TryFrom;
@@ -380,347 +377,6 @@ impl MachineState {
         }
     }
 
-    pub fn compare_term_test(&mut self, var_comparison: VarComparison) -> Option<Ordering> {
-        let mut tabu_list = IndexSet::new();
-
-        while let Some(s1) = self.pdl.pop() {
-            let s1 = self.deref(s1);
-
-            let s2 = self.pdl.pop().unwrap();
-            let s2 = self.deref(s2);
-
-            if s1 == s2 {
-                continue;
-            }
-
-            let v1 = self.store(s1);
-            let v2 = self.store(s2);
-
-            let order_cat_v1 = v1.order_category(&self.heap);
-            let order_cat_v2 = v2.order_category(&self.heap);
-
-            if order_cat_v1 != order_cat_v2 {
-                self.pdl.clear();
-                return Some(order_cat_v1.cmp(&order_cat_v2));
-            }
-
-            match order_cat_v1 {
-                Some(TermOrderCategory::Variable) => {
-                    if let VarComparison::Distinct = var_comparison {
-                        let v1 = v1.as_var().unwrap();
-                        let v2 = v2.as_var().unwrap();
-
-                        if v1 != v2 {
-                            self.pdl.clear();
-                            return Some(v1.cmp(&v2));
-                        }
-                    }
-                }
-                Some(TermOrderCategory::FloatingPoint) => {
-                    let v1 = cell_as_f64_offset!(v1);
-                    let v2 = cell_as_f64_offset!(v2);
-
-                    let v1 = self.arena.f64_tbl.get_entry(v1);
-                    let v2 = self.arena.f64_tbl.get_entry(v2);
-
-                    if v1 != v2 {
-                        self.pdl.clear();
-                        return Some(v1.cmp(&v2));
-                    }
-                }
-                Some(TermOrderCategory::Integer) => {
-                    let v1 = Number::try_from((v1, &self.arena.f64_tbl)).unwrap();
-                    let v2 = Number::try_from((v2, &self.arena.f64_tbl)).unwrap();
-
-                    if v1 != v2 {
-                        self.pdl.clear();
-                        return Some(v1.cmp(&v2));
-                    }
-                }
-                Some(TermOrderCategory::Atom) => {
-                    read_heap_cell!(v1,
-                        (HeapCellValueTag::Atom, (n1, _a1)) => {
-                            read_heap_cell!(v2,
-                                (HeapCellValueTag::Atom, (n2, _a2)) => {
-                                    if n1 != n2 {
-                                        self.pdl.clear();
-                                        return Some(n1.cmp(&n2));
-                                    }
-                                }
-                                (HeapCellValueTag::Str, s) => {
-                                    let n2 = cell_as_atom_cell!(self.heap[s])
-                                        .get_name();
-
-                                    if n1 != n2 {
-                                        self.pdl.clear();
-                                        return Some(n1.cmp(&n2));
-                                    }
-                                }
-                                _ => {
-                                    unreachable!();
-                                }
-                            )
-                        }
-                        (HeapCellValueTag::Str, s) => {
-                            let n1 = cell_as_atom_cell!(self.heap[s])
-                                .get_name();
-
-                            read_heap_cell!(v2,
-                                (HeapCellValueTag::Atom, (n2, _a2)) => {
-                                    if n1 != n2 {
-                                        self.pdl.clear();
-                                        return Some(n1.cmp(&n2));
-                                    }
-                                }
-                                (HeapCellValueTag::Str, s) => {
-                                    let n2 = cell_as_atom_cell!(self.heap[s])
-                                        .get_name();
-
-                                    if n1 != n2 {
-                                        self.pdl.clear();
-                                        return Some(n1.cmp(&n2));
-                                    }
-                                }
-                                _ => {
-                                    unreachable!();
-                                }
-                            )
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    )
-                }
-                Some(TermOrderCategory::Compound) => {
-                    read_heap_cell!(v1,
-                        (HeapCellValueTag::Lis, l1) => {
-                            read_heap_cell!(v2,
-                                (HeapCellValueTag::PStrLoc, l2) => {
-                                    if tabu_list.contains(&(l1, l2)) {
-                                        continue;
-                                    }
-
-                                    tabu_list.insert((l1, l2));
-
-                                    // like the action of
-                                    // partial_string_to_pdl here but
-                                    // the ordering of PDL pushes is
-                                    // (crucially for comparison
-                                    // correctness) different.
-                                    let (c, succ_cell) = self.heap.last_str_char_and_tail(l2);
-
-                                    self.pdl.push(succ_cell);
-                                    self.pdl.push(heap_loc_as_cell!(l1 + 1));
-
-                                    self.pdl.push(char_as_cell!(c));
-                                    self.pdl.push(heap_loc_as_cell!(l1));
-                                }
-                                (HeapCellValueTag::Lis, l2) => {
-                                    if tabu_list.contains(&(l1, l2)) {
-                                        continue;
-                                    }
-
-                                    tabu_list.insert((l1, l2));
-
-                                    self.pdl.push(self.heap[l2 + 1]);
-                                    self.pdl.push(self.heap[l1 + 1]);
-
-                                    self.pdl.push(self.heap[l2]);
-                                    self.pdl.push(self.heap[l1]);
-                                }
-                                (HeapCellValueTag::Str, s2) => {
-                                    if tabu_list.contains(&(l1, s2)) {
-                                        continue;
-                                    }
-
-                                    let (name, arity) = cell_as_atom_cell!(self.heap[s2])
-                                        .get_name_and_arity();
-
-                                    match (2, atom!(".")).cmp(&(arity, name)) {
-                                        Ordering::Equal => {
-                                            tabu_list.insert((l1, s2));
-
-                                            self.pdl.push(self.heap[s2 + 2]);
-                                            self.pdl.push(self.heap[l1 + 1]);
-
-                                            self.pdl.push(self.heap[s2 + 1]);
-                                            self.pdl.push(self.heap[l1]);
-                                        }
-                                        ordering => {
-                                            self.pdl.clear();
-                                            return Some(ordering);
-                                        }
-                                    }
-                                }
-                                _ => {
-                                    unreachable!();
-                                }
-                            )
-                        }
-                        (HeapCellValueTag::PStrLoc, l1) => {
-                            read_heap_cell!(v2,
-                                (HeapCellValueTag::PStrLoc, l2) => {
-                                    if tabu_list.contains(&(l1, l2)) {
-                                        continue;
-                                    }
-
-                                    tabu_list.insert((l1, l2));
-
-                                    match self.heap.compare_pstr_segments(l1, l2) {
-                                        PStrSegmentCmpResult::Continue(v1, v2) => {
-                                            self.pdl.push(v1.offset_by(l1));
-                                            self.pdl.push(v2.offset_by(l2));
-                                        }
-                                        PStrSegmentCmpResult::Less => {
-                                            self.pdl.clear();
-                                            return Some(Ordering::Less);
-                                        }
-                                        PStrSegmentCmpResult::Greater => {
-                                            self.pdl.clear();
-                                            return Some(Ordering::Greater);
-                                        }
-                                    }
-                                }
-                                (HeapCellValueTag::Lis, l2) => {
-                                    if tabu_list.contains(&(l1, l2)) {
-                                        continue;
-                                    }
-
-                                    tabu_list.insert((l1, l2));
-
-                                    let (c, succ_cell) = self.heap.last_str_char_and_tail(l1);
-
-                                    self.pdl.push(succ_cell);
-                                    self.pdl.push(heap_loc_as_cell!(l2 + 1));
-
-                                    self.pdl.push(char_as_cell!(c));
-                                    self.pdl.push(heap_loc_as_cell!(l2));
-                                }
-                                (HeapCellValueTag::Str, s2) => {
-                                    if tabu_list.contains(&(l1, s2)) {
-                                        continue;
-                                    }
-
-                                    tabu_list.insert((l1, s2));
-
-                                    let (n2, a2) = cell_as_atom_cell!(self.heap[s2])
-                                        .get_name_and_arity();
-
-                                    match (2, atom!(".")).cmp(&(a2,n2)) {
-                                        Ordering::Equal => {
-                                            let (c, succ_cell) = self.heap.last_str_char_and_tail(l1);
-
-                                            self.pdl.push(heap_loc_as_cell!(s2+2));
-                                            self.pdl.push(succ_cell);
-
-                                            self.pdl.push(heap_loc_as_cell!(s2+1));
-                                            self.pdl.push(char_as_cell!(c));
-                                        }
-                                        ordering => {
-                                            self.pdl.clear();
-                                            return Some(ordering);
-                                        }
-                                    }
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
-                            );
-                        }
-                        (HeapCellValueTag::Str, s1) => {
-                            read_heap_cell!(v2,
-                                (HeapCellValueTag::Str, s2) => {
-                                    if tabu_list.contains(&(s1, s2)) {
-                                        continue;
-                                    }
-
-                                    let (n1, a1) = cell_as_atom_cell!(self.heap[s1])
-                                        .get_name_and_arity();
-
-                                    let (n2, a2) = cell_as_atom_cell!(self.heap[s2])
-                                        .get_name_and_arity();
-
-                                    match (a1,n1).cmp(&(a2, n2)) {
-                                        Ordering::Equal => {
-                                            tabu_list.insert((s1, s2));
-
-                                            for idx in (1 .. a1+1).rev() {
-                                                self.pdl.push(self.heap[s2+idx]);
-                                                self.pdl.push(self.heap[s1+idx]);
-                                            }
-                                        }
-                                        ordering => {
-                                            self.pdl.clear();
-                                            return Some(ordering);
-                                        }
-                                    }
-                                }
-                                (HeapCellValueTag::Lis, l2) => {
-                                    if tabu_list.contains(&(s1, l2)) {
-                                        continue;
-                                    }
-
-                                    tabu_list.insert((s1, l2));
-
-                                    let (n1, a1) = cell_as_atom_cell!(self.heap[s1])
-                                        .get_name_and_arity();
-
-                                    match (a1,n1).cmp(&(2, atom!("."))) {
-                                        Ordering::Equal => {
-                                            self.pdl.push(self.heap[l2]);
-                                            self.pdl.push(self.heap[s1+1]);
-
-                                            self.pdl.push(self.heap[l2+1]);
-                                            self.pdl.push(self.heap[s1+2]);
-                                        }
-                                        ordering => {
-                                            self.pdl.clear();
-                                            return Some(ordering);
-                                        }
-                                    }
-                                }
-                                (HeapCellValueTag::PStrLoc, l2) => {
-                                    let (n1, a1) = cell_as_atom_cell!(self.heap[s1])
-                                        .get_name_and_arity();
-
-                                    match (a1,n1).cmp(&(2, atom!("."))) {
-                                        Ordering::Equal => {
-                                            let (c, succ_cell) = self.heap.last_str_char_and_tail(l2);
-
-                                            self.pdl.push(succ_cell);
-                                            self.pdl.push(heap_loc_as_cell!(s1+2));
-
-                                            self.pdl.push(char_as_cell!(c));
-                                            self.pdl.push(heap_loc_as_cell!(s1+1));
-                                        }
-                                        ordering => {
-                                            self.pdl.clear();
-                                            return Some(ordering);
-                                        }
-                                    }
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
-                            )
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    );
-                }
-                None => {
-                    if v1 != v2 {
-                        self.pdl.clear();
-                        return None;
-                    }
-                }
-            }
-        }
-
-        Some(Ordering::Equal)
-    }
-
     pub(crate) fn setup_call_n_init_goal_info(
         &mut self,
         goal: HeapCellValue,
@@ -891,14 +547,30 @@ impl MachineState {
     }
 
     // returns true on failure, false on success.
-    pub fn eq_test(&mut self, h1: HeapCellValue, h2: HeapCellValue) -> bool {
+    pub fn eq_test(&self, h1: HeapCellValue, h2: HeapCellValue) -> bool {
         if h1 == h2 {
             return false;
         }
 
-        compare_term_test!(self, h1, h2)
+        self.compare_term_test(h1, h2)
             .map(|o| o != Ordering::Equal)
             .unwrap_or(true)
+    }
+
+    pub fn compare_term_test(&self, h1: HeapCellValue, h2: HeapCellValue) -> Option<Ordering> {
+        for term_pair in ParallelHeapIter::from(self, h1, h2) {
+            match term_pair {
+                TermPair::Vars(v1_offset, v2_offset) if v1_offset != v2_offset => {
+                    return Some(v1_offset.cmp(&v2_offset));
+                }
+                TermPair::Less(..) => return Some(Ordering::Less),
+                TermPair::Greater(..) => return Some(Ordering::Greater),
+                TermPair::Unordered(cell_1, cell_2) if cell_1 != cell_2 => return None,
+                _ => {}
+            }
+        }
+
+        Some(Ordering::Equal)
     }
 
     #[inline(always)]
