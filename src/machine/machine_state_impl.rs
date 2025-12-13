@@ -553,7 +553,7 @@ impl MachineState {
         }
 
         self.compare_term_test(h1, h2)
-            .map(|o| o != Ordering::Equal)
+            .map(|o| !o.is_eq())
             .unwrap_or(true)
     }
 
@@ -934,7 +934,7 @@ impl MachineState {
     }
 
     // see 8.4.4.3 of Draft Technical Corrigendum 2 for an error guide.
-    pub fn project_onto_key(&mut self, value: HeapCellValue) -> Result<HeapCellValue, MachineStub> {
+    pub fn key_val_pair(&mut self, value: HeapCellValue) -> Result<(HeapCellValue, HeapCellValue), MachineStub> {
         let stub_gen = || functor_stub(atom!("keysort"), 2);
         let store_v = self.store(self.deref(value));
 
@@ -948,7 +948,7 @@ impl MachineState {
                 let (name, arity) = cell_as_atom_cell!(self.heap[s]).get_name_and_arity();
 
                 if name == atom!("-") && arity == 2 {
-                    Ok(heap_loc_as_cell!(s + 1))
+                    Ok((heap_loc_as_cell!(s+1), heap_loc_as_cell!(s+2)))
                 } else {
                     let err = self.type_error(ValidType::Pair, self.heap[s]);
                     Err(self.error_form(err, stub_gen()))

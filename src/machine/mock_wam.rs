@@ -632,12 +632,12 @@ mod tests {
         });
 
         assert_eq!(
-            wam.compare_term_test(heap_loc_as_cell!(0), heap_loc_as_cell!(0)),
+            wam.compare_term_test(str_loc_as_cell!(0), str_loc_as_cell!(0)),
             Some(Ordering::Equal)
         );
 
         assert_eq!(
-            wam.compare_term_test(heap_loc_as_cell!(0), atom_as_cell!(atom!("a"))),
+            wam.compare_term_test(str_loc_as_cell!(0), atom_as_cell!(atom!("a"))),
             Some(Ordering::Greater)
         );
 

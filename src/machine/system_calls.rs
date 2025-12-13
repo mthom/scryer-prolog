@@ -574,53 +574,6 @@ pub(crate) struct FindallCopyInfo {
 }
 
 impl MachineState {
-    // determine whether two terms are variants, i.e. if there exists
-    // a bijection between their variable sets such that applying it
-    // to h1 produces h2 (ISO Prolog standard section 7.1.6.1).
-    // return true on failure and false on success.
-    #[inline(always)]
-    pub fn is_not_variant(&self) -> bool {
-	let h1 = self.registers[1];
-	let h2 = self.registers[2];
-
-	let mut a_to_b = IndexMap::with_hasher(FxBuildHasher::default());
-	let mut b_to_a = IndexMap::with_hasher(FxBuildHasher::default());
-
-        for term_pair in ParallelHeapIter::from(self, h1, h2) {
-            match term_pair {
-                TermPair::Vars(v1_offset, v2_offset) => {
-		    match a_to_b.entry(v1_offset) {
-			indexmap::map::Entry::Occupied(stored_v2_offset) => {
-			    if v2_offset != *stored_v2_offset.get() {
-				return true;
-			    }
-			}
-			indexmap::map::Entry::Vacant(entry) => {
-			    entry.insert_entry(v2_offset);
-			}
-		    }
-
-		    match b_to_a.entry(v2_offset) {
-			indexmap::map::Entry::Occupied(stored_v1_offset) => {
-			    if v1_offset != *stored_v1_offset.get() {
-				return true;
-			    }
-			}
-			indexmap::map::Entry::Vacant(entry) => {
-			    entry.insert_entry(v1_offset);
-			}
-		    }
-                }
-                TermPair::Less(..) => return true,
-                TermPair::Greater(..) => return true,
-                TermPair::Unordered(cell_1, cell_2) if cell_1 != cell_2 => return true,
-                _ => {}
-            }
-        }
-
-	false
-    }
-
     fn copy_lifted_heap_from_offset(&mut self, offset: usize, lh_offset: usize) {
         let reserve_size = self.lifted_heap.cell_len() - lh_offset;
         let mut writer = step_or_resource_error!(self, self.heap.reserve(reserve_size));

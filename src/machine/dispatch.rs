@@ -156,7 +156,7 @@ impl MachineState {
 
         let heap_addr = resource_error_call_result!(
             self,
-            sized_iter_to_heap_list(&mut self.heap, list.len(), list.into_iter(),)
+            sized_iter_to_heap_list(&mut self.heap, list.len(), list.into_iter())
         );
 
         let target_addr = self.registers[2];
@@ -173,7 +173,7 @@ impl MachineState {
         let mut key_pairs = Vec::with_capacity(list.len());
 
         for val in list {
-            let key = self.project_onto_key(val)?;
+            let (key, _) = self.key_val_pair(val)?;
             key_pairs.push((key, val));
         }
 
@@ -2544,26 +2544,6 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallKeySortWithConstantVarOrdering => {
-                        try_or_throw!(self.machine_st, self.machine_st.keysort(), continue);
-
-                        if self.machine_st.fail {
-                            self.machine_st.backtrack();
-                        } else {
-                            increment_call_count!(self.machine_st);
-                            self.machine_st.p += 1;
-                        }
-                    }
-                    &Instruction::ExecuteKeySortWithConstantVarOrdering => {
-                        try_or_throw!(self.machine_st, self.machine_st.keysort(), continue);
-
-                        if self.machine_st.fail {
-                            self.machine_st.backtrack();
-                        } else {
-                            increment_call_count!(self.machine_st);
-                            self.machine_st.p = self.machine_st.cp;
-                        }
-                    }
                     &Instruction::CallIs(r, at) => {
                         try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
 
@@ -4781,11 +4761,25 @@ impl Machine {
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
 		    &Instruction::CallIsVariant => {
-			self.machine_st.fail = self.machine_st.is_not_variant();
+			self.machine_st.fail = self.machine_st.is_non_variant(
+			    self.machine_st.registers[1],
+			    self.machine_st.registers[2],
+			);
 			step_or_fail!(self.machine_st, self.machine_st.p += 1);
 		    }
 		    &Instruction::ExecuteIsVariant => {
-			self.machine_st.fail = self.machine_st.is_not_variant();
+			self.machine_st.fail = self.machine_st.is_non_variant(
+			    self.machine_st.registers[1],
+			    self.machine_st.registers[2],
+			);
+			step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
+		    }
+		    &Instruction::CallGroupByVariant => {
+			try_or_throw!(self.machine_st, self.machine_st.group_by_variant(), continue);
+			step_or_fail!(self.machine_st, self.machine_st.p += 1);
+		    }
+		    &Instruction::ExecuteGroupByVariant => {
+			try_or_throw!(self.machine_st, self.machine_st.group_by_variant(), continue);
 			step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
 		    }
                     &Instruction::CallCurrentTime => {

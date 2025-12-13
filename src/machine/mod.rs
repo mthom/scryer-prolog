@@ -27,6 +27,7 @@ pub mod streams;
 pub mod system_calls;
 pub mod term_stream;
 pub mod unify;
+pub mod variant_hashing;
 
 use crate::arena::*;
 use crate::arithmetic::*;

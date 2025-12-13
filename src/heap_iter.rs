@@ -47,6 +47,7 @@ impl<'a> ParallelHeapIter<'a> {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum TermPair {
     Vars(usize, usize),
     Less(HeapCellValue, HeapCellValue),
@@ -96,10 +97,6 @@ impl Iterator for ParallelHeapIter<'_> {
 
             let s2 = self.stack.pop().unwrap();
             let s2 = heap_bound_deref(self.heap, s2);
-
-            if s1 == s2 {
-                continue;
-            }
 
             let v1 = heap_bound_store(self.heap, s1);
             let v2 = heap_bound_store(self.heap, s2);
@@ -392,7 +389,7 @@ pub struct EagerStackfulPreOrderHeapIter<'a> {
     start_value: HeapCellValue,
     iter_stack: Vec<HeapCellValue>,
     mark_phase: bool,
-    heap: &'a mut Heap,
+    pub heap: &'a mut Heap,
 }
 
 impl<'a> Drop for EagerStackfulPreOrderHeapIter<'a> {

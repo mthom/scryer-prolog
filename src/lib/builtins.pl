@@ -956,54 +956,6 @@ set_difference([], _, []) :- !.
 set_difference(Xs, [], Xs).
 
 
-% variant/2 checks whether X is a variant of Y per the definition in
-% 7.1.6.1 of the ISO standard.
-
-:- non_counted_backtracking variant/4.
-
-variant(X,Y,VPs,VPs0) :-
-    (  var(X) ->
-       var(Y),
-       VPs = [X-Y|VPs0]
-    ;  var(Y) ->
-       false
-    ;  X =.. [FX | XArgs],
-       Y =.. [FX | YArgs],
-       lists:foldl('$call'(builtins:variant), XArgs, YArgs, VPs, VPs0)
-    ).
-
-:- non_counted_backtracking variant/2.
-
-singleton([_]).
-
-variant(X, Y) :-
-    variant(X,Y, VPs, []),
-    keysort(VPs, SVPs),
-    pairs:group_pairs_by_key(SVPs, SVPKs),
-    pairs:pairs_values(SVPKs, Vals),
-    lists:maplist('$call'(builtins:term_variables), Vals, Vs),
-    lists:maplist('$call'(builtins:singleton), Vs),
-    term_variables(Vs, YVars),
-    lists:length(SVPKs, N),
-    lists:length(YVars, N).
-
-
-:- non_counted_backtracking group_by_variant/4.
-
-group_by_variant([V2-S2 | Pairs], V1-S1, [S2 | Solutions], Pairs0) :-
-    variant(V1, V2),
-    !,
-    V1 = V2,
-    group_by_variant(Pairs, V2-S2, Solutions, Pairs0).
-group_by_variant(Pairs, _, [], Pairs).
-
-:- non_counted_backtracking group_by_variants/2.
-
-group_by_variants([V-S|Pairs], [V-Solution|Solutions]) :-
-    group_by_variant([V-S|Pairs], V-S, Solution, Pairs0),
-    group_by_variants(Pairs0, Solutions).
-group_by_variants([], []).
-
 :- non_counted_backtracking iterate_variants/3.
 
 iterate_variants([V-Solution|GroupSolutions], V, Solution) :-
@@ -1074,9 +1026,8 @@ bagof(Template, Goal, Solution) :-
     term_variables(Goal, GoalVars),
     term_variables(TemplateVars+GoalVars, TGVs),
     lists:append(TemplateVars, Witnesses0, TGVs),
-    findall_with_existential(Template, Goal, PairedSolutions0, Witnesses0, Witnesses),
-    keysort(PairedSolutions0, PairedSolutions),
-    group_by_variants(PairedSolutions, GroupedSolutions),
+    findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses),
+    '$group_by_variant'(PairedSolutions, GroupedSolutions),
     iterate_variants(GroupedSolutions, Witnesses, Solution).
 
 :- non_counted_backtracking iterate_variants_and_sort/3.
@@ -1089,7 +1040,6 @@ iterate_variants_and_sort([V-Solution0|GroupSolutions], V, Solution) :-
     ).
 iterate_variants_and_sort([_|GroupSolutions], Ws, Solution) :-
     iterate_variants_and_sort(GroupSolutions, Ws, Solution).
-
 
 :- meta_predicate(setof(?, 0, ?)).
 
@@ -1112,9 +1062,8 @@ setof(Template, Goal, Solution) :-
     term_variables(Goal, GoalVars),
     term_variables(TemplateVars+GoalVars, TGVs),
     lists:append(TemplateVars, Witnesses0, TGVs),
-    findall_with_existential(Template, Goal, PairedSolutions0, Witnesses0, Witnesses),
-    '$keysort_with_constant_var_ordering'(PairedSolutions0, PairedSolutions), % see 7.2.1
-    group_by_variants(PairedSolutions, GroupedSolutions),
+    findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses),
+    '$group_by_variant'(PairedSolutions, GroupedSolutions),
     iterate_variants_and_sort(GroupedSolutions, Witnesses, Solution).
 
 % Clause retrieval and information.
