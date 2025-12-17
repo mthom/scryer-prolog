@@ -500,6 +500,21 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         }
                         Err(e) => return Err(e),
                     };
+
+                    // Check for digit separator
+                    if c == '_' {
+                        self.skip_char(c);
+                        self.scan_for_layout()?;
+                        c = self.lookahead_char()?;
+
+                        if !hexadecimal_digit_char!(c) {
+                            return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                        }
+                    } else {
+                        if !hexadecimal_digit_char!(c) {
+                            break;
+                        }
+                    }
                 } else {
                     break;
                 }
@@ -531,6 +546,21 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         }
                         Err(e) => return Err(e),
                     };
+
+                    // Check for digit separator
+                    if c == '_' {
+                        self.skip_char(c);
+                        self.scan_for_layout()?;
+                        c = self.lookahead_char()?;
+
+                        if !octal_digit_char!(c) {
+                            return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                        }
+                    } else {
+                        if !octal_digit_char!(c) {
+                            break;
+                        }
+                    }
                 } else {
                     break;
                 }
@@ -562,6 +592,21 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         }
                         Err(e) => return Err(e),
                     };
+
+                    // Check for digit separator
+                    if c == '_' {
+                        self.skip_char(c);
+                        self.scan_for_layout()?;
+                        c = self.lookahead_char()?;
+
+                        if !binary_digit_char!(c) {
+                            return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                        }
+                    } else {
+                        if !binary_digit_char!(c) {
+                            break;
+                        }
+                    }
                 } else {
                     break;
                 }
@@ -675,21 +720,36 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         Ok((offset, OrderedFloat(n)))
     }
 
-    fn skip_underscore_in_number(&mut self) -> Result<char, ParserError> {
+    fn skip_underscore_in_number(&mut self) -> Result<(char, bool), ParserError> {
         let mut c = self.lookahead_char()?;
+        let had_underscore;
 
         if c == '_' {
+            had_underscore = true;
             self.skip_char(c);
-            self.scan_for_layout()?;
-            c = self.lookahead_char()?;
+
+            // Try to scan for layout - EOF here means trailing underscore
+            if let Err(_) = self.scan_for_layout() {
+                return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+            }
+
+            // After underscore and layout, must have a digit (not EOF or non-digit)
+            c = match self.lookahead_char() {
+                Ok(c) => c,
+                Err(_) => {
+                    // EOF or error after underscore+layout is invalid
+                    return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                }
+            };
 
             if decimal_digit_char!(c) {
-                Ok(c)
+                Ok((c, had_underscore))
             } else {
                 Err(ParserError::ParseBigInt(self.line_num, self.col_num))
             }
         } else {
-            Ok(c)
+            had_underscore = false;
+            Ok((c, had_underscore))
         }
     }
 
@@ -719,15 +779,21 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
     fn number_token(&mut self, leading_c: char) -> Result<NumberToken, ParserError> {
         let mut token = String::with_capacity(16);
+        let mut had_separator = false;
 
         self.skip_char(leading_c);
         token.push(leading_c);
-        let mut c = try_nt!(token, self.skip_underscore_in_number());
+
+        let result = try_nt!(token, self.skip_underscore_in_number());
+        let mut c = result.0;
+        had_separator |= result.1;
 
         while decimal_digit_char!(c) {
             token.push(c);
             self.skip_char(c);
-            c = try_nt!(token, self.skip_underscore_in_number());
+            let result = try_nt!(token, self.skip_underscore_in_number());
+            c = result.0;
+            had_separator |= result.1;
         }
 
         if decimal_point_char!(c) {
@@ -737,6 +803,12 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 self.return_char('.');
                 self.parse_integer(&token).map(NumberToken::Integer)
             } else if decimal_digit_char!(self.lookahead_char()?) {
+                // Reject option 9: digit separators in float (before decimal point)
+                // Per WG17 decision, options 9-11 (float digit separators) are rejected
+                if had_separator {
+                    return Err(ParserError::ParseBigInt(self.line_num, self.col_num));
+                }
+
                 token.push('.');
                 token.push(self.read_char()?);
 
