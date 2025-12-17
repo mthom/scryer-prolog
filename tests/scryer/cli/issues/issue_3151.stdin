@@ -1,0 +1,2 @@
+countall(p(_),M), countall(setof(t,p(L),_),N), write((M,N)), nl.
+halt.
