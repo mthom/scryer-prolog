@@ -4371,7 +4371,6 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn det_length_rundown(&mut self) -> CallResult {
-        let stub_gen = || functor_stub(atom!("length"), 2);
         let len = self.deref_register(2);
 
         let n = match Number::try_from((len, &self.machine_st.arena.f64_tbl)) {
@@ -4379,8 +4378,8 @@ impl Machine {
             Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
                 Ok(n) => n,
                 Err(_) => {
-                    let err = MachineState::resource_error(ResourceError::FiniteMemory(len));
-                    return Err(self.machine_st.error_form(err, stub_gen()));
+                    self.machine_st.throw_resource_error(AllocError);
+                    return Ok(());
                 }
             },
             _ => {

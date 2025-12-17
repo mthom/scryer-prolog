@@ -67,6 +67,7 @@ impl MachineState {
             unify_fn: MachineState::unify,
             bind_fn: MachineState::bind,
             run_cleaners_fn: |_| false,
+            throwing_resource_error: false,
         }
     }
 

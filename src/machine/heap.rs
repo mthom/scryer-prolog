@@ -599,7 +599,7 @@ impl Heap {
     pub(crate) fn with_cell_capacity(cap: usize) -> Result<Self, AllocError> {
         let ptr = unsafe {
             let layout = alloc::Layout::from_size_align(
-                cap * size_of::<HeapCellValue>(),
+                heap_index_checked!(cap).ok_or(AllocError)?,
                 size_of::<HeapCellValue>(),
             )
             .unwrap();
@@ -623,7 +623,7 @@ impl Heap {
 
     pub fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, AllocError> {
         let section;
-        let len = heap_index!(num_cells);
+        let len = heap_index_checked!(num_cells).ok_or(AllocError)?;
 
         loop {
             unsafe {
@@ -1148,7 +1148,9 @@ pub fn sized_iter_to_heap_list<SrcT: Into<HeapCellValue>>(
 ) -> Result<HeapCellValue, AllocError> {
     if size > 0 {
         let h = heap.cell_len();
-        let mut writer = heap.reserve(1 + 2 * size)?;
+        // not using checked_add for 1 + as the result of multiplying by 2 will be even and the largest representable usize is odd,
+        // so the addition cannot overflow
+        let mut writer = heap.reserve(1 + size.checked_mul(2).ok_or(AllocError)?)?;
 
         writer.write_with(|section| {
             for (idx, value) in values.enumerate() {

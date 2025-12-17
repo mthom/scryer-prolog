@@ -76,7 +76,6 @@ impl ValidType {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ResourceError {
-    FiniteMemory(HeapCellValue),
     OutOfFiles,
 }
 
@@ -330,12 +329,6 @@ impl MachineState {
 
     pub(super) fn resource_error(err: ResourceError) -> MachineError {
         let stub = match err {
-            ResourceError::FiniteMemory(size_requested) => {
-                functor!(
-                    atom!("resource_error"),
-                    [atom_as_cell((atom!("finite_memory"))), cell(size_requested)]
-                )
-            }
             ResourceError::OutOfFiles => {
                 functor!(
                     atom!("resource_error"),
@@ -778,9 +771,16 @@ impl MachineState {
 
     // throw an error pre-allocated in the heap
     pub(super) fn throw_resource_error(&mut self, err: AllocError) {
+        if self.throwing_resource_error {
+            panic!("attempted to throw `error(resource_error(memory), [])` while attempting to throw `error(resource_error(memory), [])`");
+        }
+        self.throwing_resource_error = true;
+
         self.registers[1] = str_loc_as_cell!(err.resource_error_offset(&mut self.heap));
         self.set_ball();
         self.unwind_stack();
+
+        self.throwing_resource_error = false;
     }
 
     pub(super) fn throw_exception(&mut self, err: MachineStub) {
