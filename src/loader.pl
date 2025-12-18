@@ -201,8 +201,14 @@ warn_about_singletons([Singleton|Singletons], LinesRead) :-
 
 stream_next_term(Stream, Term, LinesRead, Singletons) :-
     (  '$devour_whitespace'(Stream) ->
-       stream_property(Stream, position(position_and_lines_read(_, LinesRead))),
-       read_term(Stream, Term, [singletons(Singletons)])
+       stream_property(Stream, position(position_and_lines_read(Pos0, LinesRead))),
+       (  prolog_load_context(file, File) ->
+          call_with_error_context(
+              read_term(Stream, Term, [singletons(Singletons)]),
+              file-File
+          )
+       ;  read_term(Stream, Term, [singletons(Singletons)])
+       )
     ;  Term = end_of_file
     ).
 
