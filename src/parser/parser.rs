@@ -22,6 +22,7 @@ enum TokenType {
     OpenList,          // '['
     OpenCurly,         // '{'
     HeadTailSeparator, // '|'
+    DoubleBar,         // '||'
     Comma,             // ','
     Close,
     CloseList,  // ']'
@@ -44,6 +45,7 @@ impl TokenType {
         matches!(
             self,
             TokenType::HeadTailSeparator
+                | TokenType::DoubleBar
                 | TokenType::OpenCT
                 | TokenType::Open
                 | TokenType::Close
@@ -315,6 +317,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
     fn get_term_name(&mut self, td: TokenDesc) -> Option<Atom> {
         match td.tt {
             TokenType::HeadTailSeparator => Some(atom!("|")),
+            TokenType::DoubleBar => Some(atom!("||")),
             TokenType::Comma => Some(atom!(",")),
             TokenType::Term => match self.terms.pop() {
                 Some(Term::Literal(_, Literal::Atom(atom))) => Some(atom),
@@ -328,11 +331,57 @@ impl<'a, R: CharRead> Parser<'a, R> {
         }
     }
 
+    // Helper function to replace the tail of a Cons list with a new tail
+    fn replace_cons_tail(cons: Term, new_tail: Term) -> Term {
+        match cons {
+            Term::Cons(cell, head, tail) => {
+                match *tail {
+                    Term::Literal(_, Literal::Atom(atom)) if atom == atom!("[]") => {
+                        // Found the empty list tail, replace it
+                        Term::Cons(cell, head, Box::new(new_tail))
+                    }
+                    _ => {
+                        // Recurse on the tail
+                        Term::Cons(cell, head, Box::new(Self::replace_cons_tail(*tail, new_tail)))
+                    }
+                }
+            }
+            _ => cons,  // Not a Cons, return as-is (shouldn't happen)
+        }
+    }
+
     fn push_binary_op(&mut self, td: TokenDesc, spec: Specifier) {
         if let Some(arg2) = self.terms.pop() {
             if let Some(name) = self.get_term_name(td) {
                 if let Some(arg1) = self.terms.pop() {
-                    let term = Term::Clause(Cell::default(), name, vec![arg1, arg2]);
+                    let term = if name == atom!("||") {
+                        match arg1 {
+                            Term::CompleteString(_, s) | Term::PartialString(_, s, _) => {
+                                if s.is_empty() {
+                                    // Empty string collapses: ""||K => K
+                                    arg2
+                                } else {
+                                    // Create/extend partial string: "abc"||K => [a,b,c|K]
+                                    Term::PartialString(Cell::default(), s, Box::new(arg2))
+                                }
+                            }
+                            Term::Literal(_, Literal::Atom(atom)) if atom == atom!("[]") => {
+                                // Empty string in codes mode: ""||K => K
+                                arg2
+                            }
+                            Term::Cons(_, _, _) => {
+                                // Handle codes mode: "abc" becomes Term::Cons([97,98,99])
+                                // Replace the [] tail with arg2
+                                Self::replace_cons_tail(arg1, arg2)
+                            }
+                            _ => {
+                                // Should never reach here due to validation, but handle gracefully
+                                Term::Clause(Cell::default(), name, vec![arg1, arg2])
+                            }
+                        }
+                    } else {
+                        Term::Clause(Cell::default(), name, vec![arg1, arg2])
+                    };
 
                     self.terms.push(term);
                     self.stack.push(TokenDesc {
@@ -422,6 +471,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::Close => TokenType::Close,
             Token::OpenCT => TokenType::OpenCT,
             Token::HeadTailSeparator => TokenType::HeadTailSeparator,
+            Token::DoubleBar => TokenType::DoubleBar,
             Token::OpenList => TokenType::OpenList,
             Token::CloseList => TokenType::CloseList,
             Token::OpenCurly => TokenType::OpenCurly,
@@ -657,6 +707,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     continue;
                 }
                 return None;
+            } else if desc.tt == TokenType::DoubleBar {
+                return None;
             } else if desc.tt == TokenType::OpenList {
                 return Some(arity);
             } else if desc.tt != TokenType::Comma {
@@ -674,7 +726,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
         if let Some(ref mut td) = self.stack.last_mut() {
             if td.tt == TokenType::OpenList {
-                td.spec = TERM;
+                td.spec = LIST_TERM;
                 td.tt = TokenType::Term;
                 td.priority = 0;
 
@@ -735,7 +787,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         self.stack.push(TokenDesc {
             tt: TokenType::Term,
             priority: 0,
-            spec: TERM,
+            spec: LIST_TERM,
             unfold_bounds: 0,
         });
 
@@ -1022,24 +1074,118 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 }
             }
             Token::HeadTailSeparator => {
-                /* '|' as an operator must have priority > 1000 and can only be infix.
-                 * See: http://www.complang.tuwien.ac.at/ulrich/iso-prolog/dtc2#Res_A78
-                 */
-                let (priority, spec) = get_op_desc(atom!("|"), op_dir)
-                    .map(|CompositeOpDesc { inf, spec, .. }| (inf, spec))
-                    .unwrap_or((1000, DELIMITER));
+                // Check if next token is also HeadTailSeparator (i.e., "| |" with space)
+                // This allows both "||" and "| |" syntax per spec
+                if matches!(self.tokens.last(), Some(Token::HeadTailSeparator)) {
+                    // Pop the second | and treat as DoubleBar
+                    self.tokens.pop();
 
-                let old_stack_len = self.stack.len();
+                    // Handle as DoubleBar - check validation constraints
+                    if let Some(last_stack) = self.stack.last() {
+                        if last_stack.tt == TokenType::Term && last_stack.spec == BTERM {
+                            return Err(ParserError::IncompleteReduction(
+                                self.lexer.line_num,
+                                self.lexer.col_num,
+                            ));
+                        }
+                        if last_stack.tt == TokenType::Term && last_stack.spec == LIST_TERM {
+                            return Err(ParserError::IncompleteReduction(
+                                self.lexer.line_num,
+                                self.lexer.col_num,
+                            ));
+                        }
+                    }
 
-                self.reduce_op(priority);
+                    // Check that the last term is a string literal (CompleteString, PartialString, or Cons from codes mode)
+                    // Must match the validation for compact || below
+                    let is_valid = if let Some(last_term) = self.terms.last() {
+                        match last_term {
+                            Term::CompleteString(_, _) => true,
+                            Term::PartialString(_, _, _) => true,
+                            Term::Cons(_, _, _) => true,  // Allows codes mode: "abc" becomes [97,98,99]
+                            Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true,  // Empty string in codes mode
+                            _ => false,
+                        }
+                    } else {
+                        false
+                    };
 
-                let new_stack_len = self.stack.len();
+                    if !is_valid {
+                        return Err(ParserError::IncompleteReduction(
+                            self.lexer.line_num,
+                            self.lexer.col_num,
+                        ));
+                    }
 
-                if let Some(term_desc) = self.stack.last_mut() {
-                    term_desc.unfold_bounds = old_stack_len - new_stack_len;
+                    self.reduce_op(1);
+                    self.shift(Token::DoubleBar, 1, XFY as u32);
+                } else {
+                    // Handle as regular HeadTailSeparator
+                    /* '|' as an operator must have priority > 1000 and can only be infix.
+                     * See: http://www.complang.tuwien.ac.at/ulrich/iso-prolog/dtc2#Res_A78
+                     */
+                    let (priority, spec) = get_op_desc(atom!("|"), op_dir)
+                        .map(|CompositeOpDesc { inf, spec, .. }| (inf, spec))
+                        .unwrap_or((1000, DELIMITER));
+
+                    let old_stack_len = self.stack.len();
+
+                    self.reduce_op(priority);
+
+                    let new_stack_len = self.stack.len();
+
+                    if let Some(term_desc) = self.stack.last_mut() {
+                        term_desc.unfold_bounds = old_stack_len - new_stack_len;
+                    }
+
+                    self.shift(Token::HeadTailSeparator, priority, spec);
+                }
+            }
+            Token::DoubleBar => {
+                // Double bar operator only valid after string literals
+                // NOT valid after parenthesized expressions or variables
+
+                // Check that the last stack element is not from brackets or list syntax
+                if let Some(last_stack) = self.stack.last() {
+                    if last_stack.tt == TokenType::Term && last_stack.spec == BTERM {
+                        // Term came from parentheses like ("a"), reject it
+                        return Err(ParserError::IncompleteReduction(
+                            self.lexer.line_num,
+                            self.lexer.col_num,
+                        ));
+                    }
+                    if last_stack.tt == TokenType::Term && last_stack.spec == LIST_TERM {
+                        // Term came from list syntax like [a,b,c], reject it
+                        return Err(ParserError::IncompleteReduction(
+                            self.lexer.line_num,
+                            self.lexer.col_num,
+                        ));
+                    }
                 }
 
-                self.shift(Token::HeadTailSeparator, priority, spec);
+                // Check that the last term is a string literal (CompleteString, PartialString, or Cons from codes mode)
+                // NOT arbitrary lists like [1,2,3] or variables from list syntax
+                let is_valid = if let Some(last_term) = self.terms.last() {
+                    match last_term {
+                        Term::CompleteString(_, _) => true,
+                        Term::PartialString(_, _, _) => true,
+                        Term::Cons(_, _, _) => true,  // Allows codes mode: "abc" becomes [97,98,99]
+                        Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true,  // Empty string in codes mode
+                        _ => false,
+                    }
+                } else {
+                    false
+                };
+
+                if !is_valid {
+                    return Err(ParserError::IncompleteReduction(
+                        self.lexer.line_num,
+                        self.lexer.col_num,
+                    ));
+                }
+
+                self.reduce_op(1);
+                self.shift(Token::DoubleBar, 1, XFY as u32);
             }
             Token::Comma => {
                 self.reduce_op(1000);
@@ -1051,6 +1197,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 | Some(TokenType::OpenList)
                 | Some(TokenType::OpenCurly)
                 | Some(TokenType::HeadTailSeparator)
+                | Some(TokenType::DoubleBar)
                 | Some(TokenType::Comma) => {
                     return Err(ParserError::IncompleteReduction(
                         self.lexer.line_num,
