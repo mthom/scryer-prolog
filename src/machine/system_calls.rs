@@ -4922,13 +4922,34 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn load_foreign_lib(&mut self) -> CallResult {
         fn stub_gen() -> MachineStub {
-            functor_stub(atom!("$load_foreign_lib"), 2)
+            functor_stub(atom!("$load_foreign_lib"), 3)
         }
 
         #[cfg(feature = "ffi")]
         {
             let library_name = self.deref_register(1);
             let args_reg = self.deref_register(2);
+            let scope_reg = self.deref_register(3);
+
+            // Expect scope to be a simple atom: 'local' or 'global'
+            // Options validation is done on the Prolog side
+            let scope = read_heap_cell!(scope_reg,
+                (HeapCellValueTag::Atom, (name, arity)) => {
+                    debug_assert_eq!(arity, 0);
+                    match name {
+                        atom!("global") => RtldScope::Global,
+                        atom!("local") => RtldScope::Local,
+                        _ => {
+                            self.machine_st.fail = true;
+                            return Ok(());
+                        }
+                    }
+                }
+                _ => {
+                    self.machine_st.fail = true;
+                    return Ok(());
+                }
+            );
             if let Some(library_name) = self.machine_st.value_to_str_like(library_name) {
                 match self.machine_st.try_from_list(args_reg, stub_gen) {
                     Ok(addrs) => {
@@ -4962,7 +4983,7 @@ impl Machine {
                         }
                         if self
                             .foreign_function_table
-                            .load_library(&library_name.as_str(), &functions)
+                            .load_library(&library_name.as_str(), &functions, scope)
                             .is_err()
                         {
                             self.machine_st.fail = true;

@@ -603,7 +603,7 @@ enum SystemClauseType {
     HttpAccept,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$http_answer")))]
     HttpAnswer,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$load_foreign_lib")))]
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$load_foreign_lib")))]
     LoadForeignLib,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$foreign_call")))]
     ForeignCall,

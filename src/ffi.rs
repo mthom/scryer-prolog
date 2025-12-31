@@ -45,6 +45,15 @@ pub struct FunctionDefinition {
     pub args: Vec<Atom>,
 }
 
+/// Symbol visibility scope for loaded libraries (Unix only)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RtldScope {
+    /// RTLD_LOCAL: Symbols not available to subsequently loaded libraries (default)
+    Local,
+    /// RTLD_GLOBAL: Symbols available for resolution by subsequently loaded libraries
+    Global,
+}
+
 #[derive(Debug)]
 pub struct FunctionImpl {
     cif: Cif,
@@ -676,9 +685,30 @@ impl ForeignFunctionTable {
         &mut self,
         library_name: &str,
         functions: &Vec<FunctionDefinition>,
+        scope: RtldScope,
     ) -> Result<(), Box<dyn Error>> {
         let mut ff_table: ForeignFunctionTable = Default::default();
-        let library = unsafe { Library::new(library_name) }?;
+
+        let library = unsafe {
+            #[cfg(unix)]
+            {
+                use libloading::os::unix;
+                let scope_flag = match scope {
+                    RtldScope::Local => unix::RTLD_LOCAL,
+                    RtldScope::Global => unix::RTLD_GLOBAL,
+                };
+                // Always use RTLD_LAZY (standard, faster loading)
+                let unix_lib = unix::Library::open(
+                    Some(library_name),
+                    unix::RTLD_LAZY | scope_flag
+                )?;
+                Library::from(unix_lib)
+            }
+            #[cfg(not(unix))]
+            {
+                Library::new(library_name)?
+            }
+        };
         for function in functions {
             let symbol_name: CString = CString::new(&*function.name.as_str())?;
             let code_ptr: Symbol<*mut c_void> =
