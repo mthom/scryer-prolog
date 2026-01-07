@@ -14,7 +14,10 @@ read and write chars.
                     read_from_chars/2,
                     read_term_from_chars/3,
                     write_term_to_chars/3,
-                    chars_base64/3]).
+                    chars_base64/3,
+                    chars_stream/1,
+                    chars_to_stream/2,
+                    chars_to_stream/3]).
 
 :- use_module(library(dcgs)).
 :- use_module(library(iso_ext)).
@@ -22,6 +25,7 @@ read and write chars.
 :- use_module(library(lists)).
 :- use_module(library(between)).
 :- use_module(library(iso_ext), [partial_string/1,partial_string/3]).
+:- use_module(library(charsio/memory_stream_utils)).
 
 fabricate_var_name(VarType, VarName, N) :-
     char_code('A', AC),
@@ -305,7 +309,7 @@ continuation(Code, Chars, Nb) --> [Byte],
 
 % invalid continuation byte
 % each remaining continuation byte (if any) will raise 0xFFFD too
-continuation(_, ['\xFFFD\'|T], _) --> [_], decode_utf8(T).
+continuation(_, ['\xFFFD\'|T], _) --> [_], decode_utf8(T). %'
 
 %% get_line_to_chars(+Stream, -Chars, +InitialChars).
 %
@@ -393,3 +397,56 @@ chars_base64(Cs, Bs, Options) :-
             ;   '$chars_base64'(Cs, Bs, Padding, Charset)
             )
         ).
+
+%% chars_stream(-Stream)
+% Stream is a character stream.
+
+chars_stream(Stream) :-
+        '$memory_stream'(Stream).
+
+%% chars_to_stream(+Chars, -Stream) :-
+% Convert a list of characters into a character stream.
+
+chars_to_stream(Chars, Stream) :-
+        chars_to_stream(Chars, Stream, []).
+
+%% chars_to_stream(+Chars, -Stream, +Options) :-
+% Creates a stream from a list of characters or bytes.
+%
+% Chars is the list of characters (or bytes for binary streams) that the stream will yield.
+% Stream is the created character stream (a memory stream).
+% Options may include:
+%   - type(text) (default): Chars must be a list of characters
+%   - type(binary): Chars may be either a list of characters (converted to UTF-8 bytes)
+%                   or a list of bytes (0-255)
+%   - reposition(Bool): Whether the stream can be repositioned (default: false)
+%   - alias(Atom): An alias for the stream
+%   - eof_action(Action): Action to take at end of file (default: eof_code)
+%
+% Examples:
+%
+% ```
+% ?- chars_to_stream("hello", Stream, []).
+%    Stream = stream('$memory_stream'(2048)).
+%
+% ?- chars_to_stream("💜", S, [type(binary)]), get_byte(S, B1).
+%    S = stream('$memory_stream'(2048)), B1 = 240.
+%
+% ?- chars_to_stream([97,98,99], S, [type(binary)]), get_byte(S, B).
+%    S = stream('$memory_stream'(2048)), B = 97.
+% ```
+
+chars_to_stream(Chars, Stream, StreamOpts) :-
+        parse_stream_options_list(StreamOpts, [Alias, EOFAction, Reposition, Type]),
+        validate_chars(Chars, Type),
+        '$memory_stream'(Stream),
+        '$set_stream_options'(Stream, Alias ,EOFAction, Reposition, Type),
+        (   Type=binary
+        ->  (   is_char_list(Chars)
+            ->  chars_utf8bytes(Chars, Bytes),
+                maplist(put_byte(Stream), Bytes)
+            ;   maplist(put_byte(Stream), Chars)
+            )
+        ;   maplist(put_char(Stream), Chars)
+        ).
+
