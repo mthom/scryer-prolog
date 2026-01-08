@@ -997,6 +997,47 @@ findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses)
     ).
 
 
+:- non_counted_backtracking split_by_variant/4.
+
+:- non_counted_backtracking split_by_variant/3.
+
+:- non_counted_backtracking unify_variant_variables/2.
+
+:- non_counted_backtracking sort_without_dedup/2.
+
+:- non_counted_backtracking tag_pairs/2.
+
+split_by_variant([V2-S2 | Pairs], V1-S1, Solutions, Rest) :-
+    (  V1 == V2 ->
+       Solutions = [S2 | Solutions1],
+       split_by_variant(Pairs, V1-S1, Solutions1, Rest)
+    ;  Solutions = [],
+       Rest = [V2-S2 | Pairs]
+    ).
+split_by_variant([], _, [], []).
+
+split_by_variant([V-S|Pairs], Ws, Solutions) :-
+    split_by_variant(Pairs, V-S, Solutions0, Rest),
+    (  Rest == [] ->  V = Ws, Solutions = [S|Solutions0]
+    ;  V = Ws, Solutions = [S|Solutions0]
+    ;  split_by_variant(Rest, Ws, Solutions)
+    ).
+
+unify_variant_variables([], _Dict).
+unify_variant_variables([V-_S|Pairs], Dict) :-
+    term_variables(V, VVars),
+    lists:append(VVars, _, Dict),
+    unify_variant_variables(Pairs, Dict).
+
+tag_pairs([], []) :- !.
+tag_pairs([V-S|UntaggedPairs], [V-S-_I|TaggedPairs]) :-
+    tag_pairs(UntaggedPairs, TaggedPairs).
+
+sort_without_dedup(UnsortedPairs, SortedPairs) :-
+    tag_pairs(UnsortedPairs, TaggedUnsortedPairs),
+    sort(TaggedUnsortedPairs, TaggedSortedPairs),
+    tag_pairs(SortedPairs, TaggedSortedPairs).
+
 :- meta_predicate(bagof(?, 0, ?)).
 
 :- non_counted_backtracking bagof/3.
@@ -1027,19 +1068,9 @@ bagof(Template, Goal, Solution) :-
     term_variables(TemplateVars+GoalVars, TGVs),
     lists:append(TemplateVars, Witnesses0, TGVs),
     findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses),
-    '$group_by_variant'(PairedSolutions, GroupedSolutions),
-    iterate_variants(GroupedSolutions, Witnesses, Solution).
-
-:- non_counted_backtracking iterate_variants_and_sort/3.
-
-iterate_variants_and_sort([V-Solution0|GroupSolutions], V, Solution) :-
-    sort(Solution0, Solution1),
-    Solution1 = Solution,
-    (  GroupSolutions == [] -> !
-    ;  true
-    ).
-iterate_variants_and_sort([_|GroupSolutions], Ws, Solution) :-
-    iterate_variants_and_sort(GroupSolutions, Ws, Solution).
+    unify_variant_variables(PairedSolutions, _Dict),
+    sort_without_dedup(PairedSolutions, PairedSolutions1),
+    split_by_variant(PairedSolutions1, Witnesses, Solution).
 
 :- meta_predicate(setof(?, 0, ?)).
 
@@ -1063,8 +1094,9 @@ setof(Template, Goal, Solution) :-
     term_variables(TemplateVars+GoalVars, TGVs),
     lists:append(TemplateVars, Witnesses0, TGVs),
     findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses),
-    '$group_by_variant'(PairedSolutions, GroupedSolutions),
-    iterate_variants_and_sort(GroupedSolutions, Witnesses, Solution).
+    unify_variant_variables(PairedSolutions, _Dict),
+    sort(PairedSolutions, PairedSolutions1),
+    split_by_variant(PairedSolutions1, Witnesses, Solution).
 
 % Clause retrieval and information.
 
