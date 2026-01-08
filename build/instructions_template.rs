@@ -647,10 +647,6 @@ enum SystemClauseType {
     InferenceLimitExceeded,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$argv")))]
     Argv,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$variant")))]
-    IsVariant,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$group_by_variant")))]
-    GroupByVariant,
     Repl(ReplCodePtr),
 }
 

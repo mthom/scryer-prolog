@@ -4760,28 +4760,6 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.argv(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-		    &Instruction::CallIsVariant => {
-			self.machine_st.fail = self.machine_st.is_non_variant(
-			    self.machine_st.registers[1],
-			    self.machine_st.registers[2],
-			);
-			step_or_fail!(self.machine_st, self.machine_st.p += 1);
-		    }
-		    &Instruction::ExecuteIsVariant => {
-			self.machine_st.fail = self.machine_st.is_non_variant(
-			    self.machine_st.registers[1],
-			    self.machine_st.registers[2],
-			);
-			step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
-		    }
-		    &Instruction::CallGroupByVariant => {
-			try_or_throw!(self.machine_st, self.machine_st.group_by_variant(), continue);
-			step_or_fail!(self.machine_st, self.machine_st.p += 1);
-		    }
-		    &Instruction::ExecuteGroupByVariant => {
-			try_or_throw!(self.machine_st, self.machine_st.group_by_variant(), continue);
-			step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
-		    }
                     &Instruction::CallCurrentTime => {
                         self.current_time();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
