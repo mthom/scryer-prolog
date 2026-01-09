@@ -1003,10 +1003,6 @@ findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses)
 
 :- non_counted_backtracking unify_variant_variables/2.
 
-:- non_counted_backtracking sort_without_dedup/2.
-
-:- non_counted_backtracking tag_pairs/2.
-
 split_by_variant([V2-S2 | Pairs], V1-S1, Solutions, Rest) :-
     (  V1 == V2 ->
        Solutions = [S2 | Solutions1],
@@ -1028,15 +1024,6 @@ unify_variant_variables([V-_S|Pairs], Dict) :-
     term_variables(V, VVars),
     lists:append(VVars, _, Dict),
     unify_variant_variables(Pairs, Dict).
-
-tag_pairs([], []) :- !.
-tag_pairs([V-S|UntaggedPairs], [V-S-_I|TaggedPairs]) :-
-    tag_pairs(UntaggedPairs, TaggedPairs).
-
-sort_without_dedup(UnsortedPairs, SortedPairs) :-
-    tag_pairs(UnsortedPairs, TaggedUnsortedPairs),
-    sort(TaggedUnsortedPairs, TaggedSortedPairs),
-    tag_pairs(SortedPairs, TaggedSortedPairs).
 
 :- meta_predicate(bagof(?, 0, ?)).
 
@@ -1069,7 +1056,7 @@ bagof(Template, Goal, Solution) :-
     lists:append(TemplateVars, Witnesses0, TGVs),
     findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses),
     unify_variant_variables(PairedSolutions, _Dict),
-    sort_without_dedup(PairedSolutions, PairedSolutions1),
+    keysort(PairedSolutions, PairedSolutions1),
     split_by_variant(PairedSolutions1, Witnesses, Solution).
 
 :- meta_predicate(setof(?, 0, ?)).
