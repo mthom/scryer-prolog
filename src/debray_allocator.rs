@@ -85,9 +85,9 @@ impl BranchStack {
     ) -> bool {
         match safety {
             VarSafetyStatus::Needed => false,
-            VarSafetyStatus::LocallyUnneeded(planter_branch) => {
-		planter_branch.branch_num.has_as_subbranch(&branch.branch_num)
-            }
+            VarSafetyStatus::LocallyUnneeded(planter_branch) => planter_branch
+                .branch_num
+                .has_as_subbranch(&branch.branch_num),
             VarSafetyStatus::GloballyUnneeded => true,
         }
     }
@@ -108,9 +108,7 @@ impl BranchStack {
             .map(|occurrences| occurrences.current_branch_num.clone())
             .unwrap_or_else(|| BranchNumber::default());
 
-        BranchDesignator {
-            branch_num,
-        }
+        BranchDesignator { branch_num }
     }
 
     #[inline]

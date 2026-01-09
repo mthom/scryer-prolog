@@ -934,7 +934,10 @@ impl MachineState {
     }
 
     // see 8.4.4.3 of Draft Technical Corrigendum 2 for an error guide.
-    pub fn key_val_pair(&mut self, value: HeapCellValue) -> Result<(HeapCellValue, HeapCellValue), MachineStub> {
+    pub fn key_val_pair(
+        &mut self,
+        value: HeapCellValue,
+    ) -> Result<(HeapCellValue, HeapCellValue), MachineStub> {
         let stub_gen = || functor_stub(atom!("keysort"), 2);
         let store_v = self.store(self.deref(value));
 

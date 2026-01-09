@@ -427,7 +427,8 @@ impl VariableClassifier {
                 TraversalState::ResetCallPolicy(call_policy) => {
                     self.call_policy = call_policy;
                 }
-                TraversalState::BuildDisjunct(preceding_len) | TraversalState::BuildFinalDisjunct(preceding_len) => {
+                TraversalState::BuildDisjunct(preceding_len)
+                | TraversalState::BuildFinalDisjunct(preceding_len) => {
                     let branch_num = self.root_set.pop().unwrap();
                     flatten_into_disjunct(&mut build_stack, branch_num, preceding_len);
 
@@ -566,7 +567,7 @@ impl VariableClassifier {
                             ));
 
                             let iter = branches.into_iter().zip(branch_numbers.into_iter());
-			    let final_disjunct_loc = state_stack.len();
+                            let final_disjunct_loc = state_stack.len();
 
                             for (term, branch_num) in iter.rev() {
                                 state_stack.push(TraversalState::BuildDisjunct(build_stack_len));
@@ -623,7 +624,7 @@ impl VariableClassifier {
 
                             build_stack.reserve_branch(2);
 
-			    state_stack.push(TraversalState::RepBranchNum(
+                            state_stack.push(TraversalState::RepBranchNum(
                                 self.current_branch_num.halve_delta(),
                             ));
                             state_stack.push(TraversalState::BuildFinalDisjunct(build_stack_len));
