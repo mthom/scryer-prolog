@@ -1570,7 +1570,7 @@ pub fn generate_instructions_rs() -> TokenStream {
     let instr_macro_arms: Vec<_> = instr_data
         .instr_variants
         .iter()
-        .rev()
+        .rev() // produce default, execute & default & execute cases first.
         .map(|(name, arity, _, variant)| {
             let variant_ident = variant.ident.clone();
             let variant_string = variant.ident.to_string();
