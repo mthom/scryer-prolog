@@ -1570,12 +1570,11 @@ pub fn generate_instructions_rs() -> TokenStream {
     let instr_macro_arms: Vec<_> = instr_data
         .instr_variants
         .iter()
-        .rev() // produce default, execute & default & execute cases first.
-        .cloned()
+        .rev()
         .map(|(name, arity, _, variant)| {
             let variant_ident = variant.ident.clone();
             let variant_string = variant.ident.to_string();
-            let arity = match arity {
+            let arity = match *arity {
                 Arity::Static(arity) => arity,
                 _ => 1,
             };

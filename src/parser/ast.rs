@@ -250,6 +250,7 @@ pub enum GInteger {
 
 impl GInteger {
     #[inline]
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_literal(self) -> Literal {
         match self {
             GInteger::Integer(integer) => Literal::Integer(integer),
