@@ -975,7 +975,7 @@ pub enum FfiError {
     ArgCountMismatch {
         name: Atom, // ffi function or struct
         kind: ArgCountMismatchKind,
-        
+
         #[allow(dead_code, reason = "will be used by PR 3173")]
         expected: usize,
         got: usize,

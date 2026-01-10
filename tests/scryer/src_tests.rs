@@ -57,7 +57,6 @@ fn rules() {
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn setup_call_cleanup_load() {
-    
     load_module_test(
         "src/tests/setup_call_cleanup.pl",
         // spellchecker:ignore-next-line

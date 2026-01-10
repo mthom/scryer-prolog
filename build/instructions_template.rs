@@ -1683,7 +1683,6 @@ pub fn generate_instructions_rs() -> TokenStream {
         })
         .collect();
 
-
     quote! {
         #[allow(clippy::enum_variant_names)]
         #[derive(Clone, Debug)]
