@@ -23,7 +23,7 @@ The rules for knowing which players takes the round are the following:
 
 First, we need to decide a representation of our cards. Coming from another languages we can think that a good representation might be a class or a struct, with two fields, one for the number and the other for the suite, but Prolog doesn't have objects. We can use a list with two elements. But lists are better when we're dealing with variable length data. We could also use a compound term. This is the right choice if our fields are fixed.
 
-A compound term is defined by an atom, followed by the data itself enclosed by parenthesis and separated by comma. Like this: `card(oros, 4)`. Yes, very similar to predicates. In fact the only difference is how we use them, because they're the same. If we pass a compund term in the first level of a query, or inside a call/N, Prolog will treat it as code instead of data. This is one the the examples of Prolog being a homoiconic language.
+A compound term is defined by an atom, followed by the data itself enclosed by parenthesis and separated by comma. Like this: `card(oros, 4)`. Yes, very similar to predicates. In fact the only difference is how we use them, because they're the same. If we pass a compound term in the first level of a query, or inside a call/N, Prolog will treat it as code instead of data. This is one the the examples of Prolog being a homoiconic language.
 
 We can go further, Prolog is very flexible and we can define custom operators easily if we want. Those are also compound terms, but with a different syntax. There's an operator already defined that is very useful for us: the dash. We can just join two pieces of data with a dash, and they'll be together in the same structure. This is usually called "pair".
 
@@ -98,7 +98,7 @@ cards_score_(X) -->
     cards_score_(X1).
 ```
 
-In DCGs, to match an item of the sequence, we use brackets. We use braces to introduce normal Prolog code. Calling other DCGs (in this case, the same, as it's a recursive one), it's just calling it again. Notice in this code that we are doing the addition of X0 and X1 when we still don't know the value of X1. This would be an error in the traditional arithmethic system of Prolog, but it's valid with clpz. clpz allows us to have a more declarative arithmethic, at least with integers.
+In DCGs, to match an item of the sequence, we use brackets. We use braces to introduce normal Prolog code. Calling other DCGs (in this case, the same, as it's a recursive one), it's just calling it again. Notice in this code that we are doing the addition of X0 and X1 when we still don't know the value of X1. This would be an error in the traditional arithmetic system of Prolog, but it's valid with clpz. clpz allows us to have a more declarative arithmetic, at least with integers.
 
 Now we can try this code using `phrase/2` which is needed to jump to a DCG.
 
@@ -276,7 +276,7 @@ Let's ask ourselves what is a procedure. It's a sequence. And we have already se
 
 The basic idea however is having _explicit_ states. The predicates that we're going to write will take an state (a view of the world at a certain point) and will give us the next state.
 
-Let's define the state first. In a game of Brisca we have players. Each player has the three cards he can choose to put (less if we're running out of cards) and the cards he has got from winning rounds. Aditionally we have a stock, a trump suite and the order to play, which is usually from the player who won the last round and going to the right.  We could store the data in a list, with different compound terms:
+Let's define the state first. In a game of Brisca we have players. Each player has the three cards he can choose to put (less if we're running out of cards) and the cards he has got from winning rounds. Additionally we have a stock, a trump suite and the order to play, which is usually from the player who won the last round and going to the right.  We could store the data in a list, with different compound terms:
 
 ```
 [players([player(Name, PlayableCards, WonCards), player(Name, PlayableCards, WonCards), ...]), stock(Cards), trump(Trump)]

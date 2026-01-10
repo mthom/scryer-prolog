@@ -13,7 +13,7 @@ use to_syn_value_derive::ToDeriveInput;
  * This crate exists to generate the Instruction enum in
  * src/instructions.rs and its adjoining impl functions. The types
  * defined in it are empty and serve only as schema for the generation
- * of Instruction. They mimick most of the structure of the previous
+ * of Instruction. They mimic most of the structure of the previous
  * Line instruction type. The strum crate is used to provide reflection
  * on each of the node types to the tree walker.
 */

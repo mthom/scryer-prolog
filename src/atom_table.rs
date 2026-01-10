@@ -540,7 +540,7 @@ impl AtomTable {
                 table.insert(atom);
                 block_epoch.table.replace(table);
 
-                // expicit drop to ensure we don't accidentally drop it early
+                // explicit drop to ensure we don't accidentally drop it early
                 drop(update_guard);
 
                 return atom;

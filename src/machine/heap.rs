@@ -445,7 +445,7 @@ impl Index<usize> for ReservedHeapSection {
 
 /// Computes the number of bytes required to pad a string of length `chunk_len`
 /// with zeroes, such that `chunk_len + pstr_sentinel_length(chunk_len)` is a
-/// multiple of `Heap::heap_cell_alignement()`.
+/// multiple of `Heap::heap_cell_alignment()`.
 fn pstr_sentinel_length(chunk_len: usize) -> usize {
     let res = chunk_len.next_multiple_of(ALIGN) - chunk_len;
 

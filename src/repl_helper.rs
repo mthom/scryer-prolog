@@ -10,14 +10,14 @@ use crate::atom_table::{AtomString, AtomTable, STATIC_ATOMS_MAP};
 
 // TODO: Maybe add validation to the helper
 pub struct Helper {
-    highligher: MatchingBracketHighlighter,
+    highlighter: MatchingBracketHighlighter,
     pub atoms: Weak<AtomTable>,
 }
 
 impl Helper {
     pub fn new() -> Self {
         Self {
-            highligher: MatchingBracketHighlighter::new(),
+            highlighter: MatchingBracketHighlighter::new(),
             atoms: Weak::new(),
         }
     }
@@ -90,11 +90,11 @@ impl Completer for Helper {
 
 impl Highlighter for Helper {
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> std::borrow::Cow<'l, str> {
-        self.highligher.highlight(line, pos)
+        self.highlighter.highlight(line, pos)
     }
 
     fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
-        self.highligher.highlight_char(line, pos, forced)
+        self.highlighter.highlight_char(line, pos, forced)
     }
 }
 

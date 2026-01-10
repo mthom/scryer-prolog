@@ -9,7 +9,7 @@ disallowed-macros = [
 disallowed-methods = [
     # https://rust-lang.github.io/rust-clippy/master/#disallowed_method
 
-    # list of methods that may panic on allocation failue 
+    # list of methods that may panic on allocation failure 
     # though not including things that can be used correctly by reversing ahead of time (i.e. std::vec::Vec::try_reserve + std::iter::Extend::extend ).
 
     # "std::iter::Iter::collect",

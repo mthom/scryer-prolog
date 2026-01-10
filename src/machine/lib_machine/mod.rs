@@ -415,7 +415,7 @@ pub struct QueryState<'a> {
 
 impl Drop for QueryState<'_> {
     fn drop(&mut self) {
-        // FIXME: This may be wrong if the iterator is not fully consumend, but from testing it
+        // FIXME: This may be wrong if the iterator is not fully consumed, but from testing it
         // seems fine. Is this really ok?
         self.machine.trust_me();
     }

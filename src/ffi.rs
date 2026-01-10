@@ -981,7 +981,7 @@ pub enum FfiError {
         got: usize,
     },
     AllocationFailed,
-    // LayoutError should never occour
+    // LayoutError should never occur
     LayoutError,
     UnsupportedTypedef,
     UnsupportedAbi,

@@ -1,0 +1,31 @@
+# config for https://github.com/crate-ci/typos
+
+[default]
+# example from https://github.com/crate-ci/typos/blob/master/docs/reference.md#example-configurations
+extend-ignore-re = [
+    "(#|//)\\s*spellchecker:ignore-next-line\\n.*"
+]
+
+# correct word key to value 
+# can be used to ignore a typo by adding an entry <typo> = "<typo>"
+[default.extend-words]
+
+# correct identifier key to value 
+# can be used to ignore a typo by adding an entry <typo> = "<typo>"
+[default.extend-identifiers]
+interm = "interm"
+IntermReg = "IntermReg"
+
+
+
+[type.prolog]
+extend-glob = ["*.pl"]
+check-file = false
+
+[type.stdout]
+extend-glob = ["*.stdout"]
+check-file = false
+
+
+[files]
+extend-exclude = ["lib_integration_test_commands.txt"]

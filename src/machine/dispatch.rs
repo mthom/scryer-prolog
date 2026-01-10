@@ -310,7 +310,7 @@ impl MachineState {
                     self.throw_interrupt_exception();
                     self.backtrack();
 
-                    // We have extracted controll over the Tokio runtime to the calling context for enabling library use case
+                    // We have extracted control over the Tokio runtime to the calling context for enabling library use case
                     // (see https://github.com/mthom/scryer-prolog/pull/1880)
                     // So we only have access to a runtime handle in here and can't shut it down.
                     // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880

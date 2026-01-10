@@ -59,7 +59,7 @@ $ scryer-prolog -f --no-add-history tests-pl/invalid_decl10.pl -g halt
 
 ```
 
-FIXME I belive the following test should result in a `error(instantiation_error,load/1)` error instead of the current error.
+FIXME I believe the following test should result in a `error(instantiation_error,load/1)` error instead of the current error.
 
 ```trycmd
 $ scryer-prolog -f --no-add-history tests-pl/invalid_decl11.pl -g halt
