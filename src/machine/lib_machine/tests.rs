@@ -3,7 +3,7 @@ use crate::MachineBuilder;
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn programatic_query() {
+fn programmatic_query() {
     let mut machine = MachineBuilder::default().build();
 
     machine.load_module_string(

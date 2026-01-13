@@ -782,7 +782,7 @@ impl UntypedArenaPtr {
     }
 
     /// # Safety
-    /// - this UntypedArenaPtr actuall pointee type is T
+    /// - this UntypedArenaPtr actual pointee type is T
     /// - the pointer must be non-null
     #[inline]
     pub unsafe fn as_typed_ptr<T: ?Sized + ArenaAllocated>(self) -> TypedArenaPtr<T>

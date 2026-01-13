@@ -310,7 +310,7 @@ impl MachineState {
                     self.throw_interrupt_exception();
                     self.backtrack();
 
-                    // We have extracted controll over the Tokio runtime to the calling context for enabling library use case
+                    // We have extracted control over the Tokio runtime to the calling context for enabling library use case
                     // (see https://github.com/mthom/scryer-prolog/pull/1880)
                     // So we only have access to a runtime handle in here and can't shut it down.
                     // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880
@@ -847,11 +847,11 @@ impl MachineState {
     }
 
     #[inline(always)]
-    fn get_partial_string_instr(&mut self, string: &String, r: RegType) {
+    fn get_partial_string_instr(&mut self, string: &str, r: RegType) {
         self.heap[0] = self[r];
 
         let mut h = 0;
-        let mut string_cursor = string.as_str();
+        let mut string_cursor = string;
 
         if self.heap[0].is_stack_var() {
             let cell = self.store(self.deref(self.heap[0]));
@@ -1548,63 +1548,63 @@ impl Machine {
     fn verify_attr_dispatch_loop(&mut self) -> Option<std::process::ExitCode> {
         'outer: loop {
             for _ in 0..INSTRUCTIONS_PER_INTERRUPT_POLL {
-                match &self.code[self.machine_st.p] {
-                    &Instruction::BreakFromDispatchLoop => {
+                match self.code[self.machine_st.p] {
+                    Instruction::BreakFromDispatchLoop => {
                         break 'outer;
                     }
-                    &Instruction::GetLevel(r) => self.machine_st.get_level_instr(r),
-                    &Instruction::GetPrevLevel(r) => self.machine_st.get_prev_level_instr(r),
-                    &Instruction::GetCutPoint(r) => self.machine_st.get_cut_point_instr(r),
-                    &Instruction::Deallocate => self.machine_st.deallocate(),
-                    &Instruction::JmpByCall(offset) => {
+                    Instruction::GetLevel(r) => self.machine_st.get_level_instr(r),
+                    Instruction::GetPrevLevel(r) => self.machine_st.get_prev_level_instr(r),
+                    Instruction::GetCutPoint(r) => self.machine_st.get_cut_point_instr(r),
+                    Instruction::Deallocate => self.machine_st.deallocate(),
+                    Instruction::JmpByCall(offset) => {
                         self.machine_st.p += offset;
                     }
-                    &Instruction::RevJmpBy(offset) => {
+                    Instruction::RevJmpBy(offset) => {
                         self.machine_st.p -= offset;
                     }
-                    &Instruction::GetConstant(_, c, reg) => {
+                    Instruction::GetConstant(_, c, reg) => {
                         self.machine_st.get_constant_instr(c, reg)
                     }
-                    &Instruction::GetList(_, reg) => self.machine_st.get_list_instr(reg),
-                    &Instruction::GetPartialString(_, ref string, reg) => {
+                    Instruction::GetList(_, reg) => self.machine_st.get_list_instr(reg),
+                    Instruction::GetPartialString(_, ref string, reg) => {
                         self.machine_st.get_partial_string_instr(string, reg)
                     }
-                    &Instruction::GetStructure(_lvl, name, arity, reg) => {
+                    Instruction::GetStructure(_lvl, name, arity, reg) => {
                         self.machine_st.get_structure_instr(name, arity, reg)
                     }
-                    &Instruction::GetVariable(norm, arg) => {
+                    Instruction::GetVariable(norm, arg) => {
                         self.machine_st.get_variable_instr(norm, arg)
                     }
-                    &Instruction::GetValue(norm, arg) => self.machine_st.get_value_instr(norm, arg),
-                    &Instruction::UnifyConstant(v) => self.machine_st.unify_constant_instr(v),
-                    &Instruction::UnifyLocalValue(reg) => {
+                    Instruction::GetValue(norm, arg) => self.machine_st.get_value_instr(norm, arg),
+                    Instruction::UnifyConstant(v) => self.machine_st.unify_constant_instr(v),
+                    Instruction::UnifyLocalValue(reg) => {
                         self.machine_st.unify_local_value_instr(reg)
                     }
-                    &Instruction::UnifyVariable(reg) => self.machine_st.unify_variable_instr(reg),
-                    &Instruction::UnifyValue(reg) => self.machine_st.unify_value_instr(reg),
-                    &Instruction::UnifyVoid(n) => self.machine_st.unify_void_instr(n),
-                    &Instruction::PutConstant(_, cell, reg) => {
+                    Instruction::UnifyVariable(reg) => self.machine_st.unify_variable_instr(reg),
+                    Instruction::UnifyValue(reg) => self.machine_st.unify_value_instr(reg),
+                    Instruction::UnifyVoid(n) => self.machine_st.unify_void_instr(n),
+                    Instruction::PutConstant(_, cell, reg) => {
                         self.machine_st.put_constant_instr(cell, reg)
                     }
-                    &Instruction::PutList(_, reg) => self.machine_st.put_list_instr(reg),
-                    &Instruction::PutPartialString(_, ref string, reg) => {
+                    Instruction::PutList(_, reg) => self.machine_st.put_list_instr(reg),
+                    Instruction::PutPartialString(_, ref string, reg) => {
                         self.machine_st.put_partial_string_instr(string, reg)
                     }
-                    &Instruction::PutStructure(name, arity, reg) => {
+                    Instruction::PutStructure(name, arity, reg) => {
                         self.machine_st.put_structure_instr(name, arity, reg)
                     }
-                    &Instruction::PutUnsafeValue(perm_slot, arg) => {
+                    Instruction::PutUnsafeValue(perm_slot, arg) => {
                         self.machine_st.put_unsafe_value_instr(perm_slot, arg)
                     }
-                    &Instruction::PutValue(norm, arg) => self.machine_st.put_value_instr(norm, arg),
-                    &Instruction::PutVariable(norm, arg) => {
+                    Instruction::PutValue(norm, arg) => self.machine_st.put_value_instr(norm, arg),
+                    Instruction::PutVariable(norm, arg) => {
                         self.machine_st.put_variable_instr(norm, arg)
                     }
-                    &Instruction::SetConstant(c) => self.machine_st.set_constant_instr(c),
-                    &Instruction::SetLocalValue(reg) => self.machine_st.set_local_value_instr(reg),
-                    &Instruction::SetVariable(reg) => self.machine_st.set_variable_instr(reg),
-                    &Instruction::SetValue(reg) => self.machine_st.set_value_instr(reg),
-                    &Instruction::SetVoid(n) => self.machine_st.set_void_instr(n),
+                    Instruction::SetConstant(c) => self.machine_st.set_constant_instr(c),
+                    Instruction::SetLocalValue(reg) => self.machine_st.set_local_value_instr(reg),
+                    Instruction::SetVariable(reg) => self.machine_st.set_variable_instr(reg),
+                    Instruction::SetValue(reg) => self.machine_st.set_value_instr(reg),
+                    Instruction::SetVoid(n) => self.machine_st.set_void_instr(n),
                     _ => return None,
                 }
             }

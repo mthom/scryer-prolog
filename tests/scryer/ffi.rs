@@ -13,7 +13,7 @@ const TMP_DIR: &str = env!("CARGO_TARGET_TMPDIR");
 
 // each test is building its own library so that they can easier run in parallel,
 // i.e. don't need to wait for a large dynamic library to compile,
-// also rusts test infra currently has no functionallity for a setup/befor step
+// also rusts test infra currently has no functionality for a setup/befor step
 fn build_dynamic_library(name: &str, src: &str) -> PathBuf {
     let tmp_dir: &Path = TMP_DIR.as_ref();
 
@@ -79,7 +79,6 @@ fn ffi_f64_minus_zero() {
             "##,
     );
 
-    // note: ouput is currently wrong correct would be 1.0,1.0
     load_module_test_with_input(
         "tests-pl/ffi_f64_minus_zero.pl",
         format!("LIB={dynlib_path:?}."),

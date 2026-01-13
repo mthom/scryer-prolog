@@ -29,10 +29,10 @@ pub(crate) mod heap_print;
 mod http;
 mod indexing;
 mod variable_records;
+
 #[macro_use]
-pub(crate) mod instructions {
-    include!(concat!(env!("OUT_DIR"), "/instructions.rs"));
-}
+pub(crate) mod instructions;
+
 mod iterators;
 pub(crate) mod machine;
 mod raw_block;

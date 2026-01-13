@@ -250,6 +250,7 @@ pub enum GInteger {
 
 impl GInteger {
     #[inline]
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_literal(self) -> Literal {
         match self {
             GInteger::Integer(integer) => Literal::Integer(integer),
@@ -360,7 +361,7 @@ impl OpDesc {
 
     #[inline]
     pub fn get_spec(self) -> OpDeclSpec {
-        OpDeclSpec::try_from(self.spec()).expect("OpDecl always contains a valud OpDeclSpec")
+        OpDeclSpec::try_from(self.spec()).expect("OpDecl always contains a valid OpDeclSpec")
     }
 
     #[inline]

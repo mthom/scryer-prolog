@@ -191,7 +191,7 @@ impl Stack {
                 let cell_ptr = new_ptr.add(offset).cast::<HeapCellValue>();
                 ptr::write(cell_ptr.as_ptr(), stack_loc_as_cell!(AndFrame, e, idx + 1));
 
-                // Because in the Index and IndexMut inplementations we need to get this from
+                // Because in the Index and IndexMut implementations we need to get this from
                 // exposed provenance, we need to expose the provenance here, even though we don't
                 // actually use the value for anything. This is a reminder that `expose_provenance`
                 // isn't just a cast from a pointer to an integer but has actual side effects.
@@ -224,7 +224,7 @@ impl Stack {
                 let cell_ptr = new_ptr.byte_add(offset).cast::<HeapCellValue>();
                 ptr::write(cell_ptr.as_ptr(), stack_loc_as_cell!(OrFrame, b, idx));
 
-                // Because in the Index and IndexMut inplementations we need to get this from
+                // Because in the Index and IndexMut implementations we need to get this from
                 // exposed provenance, we need to expose the provenance here, even though we don't
                 // actually use the value for anything. This is a reminder that `expose_provenance`
                 // isn't just a cast from a pointer to an integer but has actual side effects.

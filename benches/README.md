@@ -49,7 +49,7 @@ once.
 
 ## Adding benchmarks
 
-This design is meant to suppoort defining lots of benchmarks.
+This design is meant to support defining lots of benchmarks.
 
 To add a new benchmark:
 
@@ -77,7 +77,7 @@ Some tips:
   cumbersome to run.
 * Consider that the library runtime actually parses the text output of the top
   level. So don't use custom outputs or it will fail to parse. Also keep the
-  output small so it doesn't just benchmark the ouput parsing code.
+  output small so it doesn't just benchmark the output parsing code.
 * DO test the output of the benchmark run, we don't want to count broken
   benchmarks.
 

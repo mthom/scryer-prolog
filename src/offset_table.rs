@@ -238,6 +238,7 @@ impl<T: RawBlockTraits> SerialOffsetTable<T> {
         &mut *self.block.base.add(offset).cast::<T>().cast_mut()
     }
 
+    #[allow(clippy::wrong_self_convention)]
     fn to_concurrent(&mut self) -> ConcurrentOffsetTable<T>
     where
         T: fmt::Debug,

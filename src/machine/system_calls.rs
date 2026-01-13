@@ -4292,7 +4292,7 @@ impl Machine {
                 }
                 let value = self.rng.gen_range(lower..upper);
                 // Safety:
-                // - lower and uper bounds are Fixnum values
+                // - lower and upper bounds are Fixnum values
                 // - value is inbetween lower and upper
                 // - fixnums value range has no gaps
                 // so value is also a valid Fixnum value
@@ -4812,7 +4812,7 @@ impl Machine {
                                 if interruption {
                                     self.machine_st.throw_interrupt_exception();
                                     self.machine_st.backtrack();
-                                    // We have extracted controll over the Tokio runtime to the calling context for enabling library use case
+                                    // We have extracted control over the Tokio runtime to the calling context for enabling library use case
                                     // (see https://github.com/mthom/scryer-prolog/pull/1880)
                                     // So we only have access to a runtime handle in here and can't shut it down.
                                     // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880

@@ -59,6 +59,7 @@ fn rules() {
 fn setup_call_cleanup_load() {
     load_module_test(
         "src/tests/setup_call_cleanup.pl",
+        // spellchecker:ignore-next-line
         "1+21+31+2>A+B1+G1+2>41+2>B1+2>31+2>31+2>4ba",
     );
 }

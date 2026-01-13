@@ -129,7 +129,7 @@ last argument. Easy fix...
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 When allocating a new choice or environment frame on the stack, one
-should use CP (the continuation pointer) insteads of E+1 (the stored
+should use CP (the continuation pointer) instead of E+1 (the stored
 continuation pointer) to find out the number of Y variables to preserve
 in the previous environment frame. This is because the continuation
 pointer is stored on the stack only if an ALLOCATE instruction is used
@@ -158,7 +158,7 @@ re-loaded. The correct code is:
 
 There is a more subtle related bug that usually doesn't matter very 
 much: both cut and neck_cut should also reset HB. If they do not, 
-some uneccessary trailing will occur. This normally doesnt matter 
+some unnecessary trailing will occur. This normally doesnt matter 
 too much (aside from a small performance penalty), but it does turn 
 out to be a problem if you try to implement Older and Rummel's incremental 
 garbage collection algorithm, because you end up with dangling trail 

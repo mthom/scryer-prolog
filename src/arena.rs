@@ -445,7 +445,7 @@ impl<T: ?Sized + ArenaAllocated> TypedAllocSlab<T> {
     pub fn to_untyped(self: Box<Self>) -> (TypedArenaPtr<T>, UntypedArenaSlab) {
         let raw_box = Box::into_raw(self);
 
-        // safety: the pointer from Box::into_raw fullfills addr_of_mut's saftey requirements
+        // safety: the pointer from Box::into_raw fulfills addr_of_mut's safety requirements
         let payload_ptr = unsafe { addr_of_mut!((*raw_box).payload) };
 
         (

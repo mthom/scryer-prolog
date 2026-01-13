@@ -159,9 +159,9 @@ during the installation of the rust toolchain.
 #### From Crates.io [![Crates.io Version](https://img.shields.io/crates/v/scryer-prolog)](https://crates.io/crates/scryer-prolog) ![Crates.io MSRV](https://img.shields.io/crates/msrv/scryer-prolog)
 
 > [!NOTE]
-> The lates crates.io release can be significantly behind the version available in the git repository
+> The latest crates.io release can be significantly behind the version available in the git repository
 > The crates.io badge in this sections title is a link to the crates.io page.
-> The msrv badge in the section title referece to the minimum rust toolchain version required to compile the latest crates.io release
+> The msrv badge in the section title references the minimum rust toolchain version required to compile the latest crates.io release
 
 `scryer-prolog` is also release on crates.io and can be installed with
 
