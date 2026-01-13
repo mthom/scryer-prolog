@@ -944,17 +944,6 @@ findall(Template, Goal, Solutions0, Solutions1) :-
           builtins:findall_cleanup(LhLength, Error)
          ).
 
-:- non_counted_backtracking set_difference/3.
-
-set_difference([X|Xs], [Y|Ys], Zs) :-
-    X == Y, !, set_difference(Xs, [Y|Ys], Zs).
-set_difference([X|Xs], [Y|Ys], [X|Zs]) :-
-    X @< Y, !, set_difference(Xs, [Y|Ys], Zs).
-set_difference([X|Xs], [Y|Ys], Zs) :-
-    X @> Y, !, set_difference([X|Xs], Ys, Zs).
-set_difference([], _, []) :- !.
-set_difference(Xs, [], Xs).
-
 
 :- non_counted_backtracking iterate_variants/3.
 
@@ -987,9 +976,7 @@ findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses)
        (  Goal1 = _ ^ _  ) ->
        rightmost_power(Goal1, Goal2, ExistentialVars0),
        term_variables(ExistentialVars0, ExistentialVars),
-       sort(Witnesses0, Witnesses1),
-       sort(ExistentialVars, ExistentialVars1),
-       set_difference(Witnesses1, ExistentialVars1, Witnesses),
+       lists:append(Witnesses0, Witnesses, ExistentialVars),
        expand_goal(M:Goal2, M, Goal3),
        findall(Witnesses-Template, Goal3, PairedSolutions)
     ;  Witnesses = Witnesses0,
