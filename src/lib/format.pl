@@ -708,7 +708,6 @@ listing(PI) :-
         ;   type_error(predicate_indicator, PI, listing/1)
         ),
         functor(Head, Name, Arity),
-        \+ \+ clause(Head, _), % only true if there is at least one clause
         (   clause(Head, Body),
             (   Body == true ->
                 portray_clause(Head)
