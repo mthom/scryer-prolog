@@ -118,7 +118,7 @@ impl MachineState {
             }
         );
 
-        let atom = match compare_term_test!(self, a2, a3) {
+        let atom = match self.compare_term_test(a2, a3) {
             Some(Ordering::Greater) => {
                 atom!(">")
             }
@@ -151,15 +151,12 @@ impl MachineState {
         let stub_gen = || functor_stub(atom!("sort"), 2);
         let mut list = self.try_from_list(self.registers[1], stub_gen)?;
 
-        list.sort_unstable_by(|v1, v2| {
-            compare_term_test!(self, *v1, *v2).unwrap_or(Ordering::Less)
-        });
-
-        list.dedup_by(|v1, v2| compare_term_test!(self, *v1, *v2) == Some(Ordering::Equal));
+        list.sort_unstable_by(|v1, v2| self.compare_term_test(*v1, *v2).unwrap_or(Ordering::Less));
+        list.dedup_by(|v1, v2| self.compare_term_test(*v1, *v2) == Some(Ordering::Equal));
 
         let heap_addr = resource_error_call_result!(
             self,
-            sized_iter_to_heap_list(&mut self.heap, list.len(), list.into_iter(),)
+            sized_iter_to_heap_list(&mut self.heap, list.len(), list.into_iter())
         );
 
         let target_addr = self.registers[2];
@@ -167,7 +164,7 @@ impl MachineState {
         Ok(())
     }
 
-    fn keysort(&mut self, var_comparison: VarComparison) -> CallResult {
+    fn keysort(&mut self) -> CallResult {
         self.check_keysort_errors()?;
 
         let stub_gen = || functor_stub(atom!("keysort"), 2);
@@ -176,13 +173,11 @@ impl MachineState {
         let mut key_pairs = Vec::with_capacity(list.len());
 
         for val in list {
-            let key = self.project_onto_key(val)?;
+            let (key, _) = self.key_val_pair(val)?;
             key_pairs.push((key, val));
         }
 
-        key_pairs.sort_by(|a1, a2| {
-            compare_term_test!(self, a1.0, a2.0, var_comparison).unwrap_or(Ordering::Less)
-        });
+        key_pairs.sort_by(|a1, a2| self.compare_term_test(a1.0, a2.0).unwrap_or(Ordering::Less));
 
         let heap_addr = resource_error_call_result!(
             self,
@@ -2034,8 +2029,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        if let Some(Ordering::Greater) = compare_term_test!(self.machine_st, a1, a2)
-                        {
+                        if let Some(Ordering::Greater) = self.machine_st.compare_term_test(a1, a2) {
                             self.machine_st.p += 1;
                         } else {
                             self.machine_st.backtrack();
@@ -2045,8 +2039,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        if let Some(Ordering::Greater) = compare_term_test!(self.machine_st, a1, a2)
-                        {
+                        if let Some(Ordering::Greater) = self.machine_st.compare_term_test(a1, a2) {
                             self.machine_st.p = self.machine_st.cp;
                         } else {
                             self.machine_st.backtrack();
@@ -2056,7 +2049,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        if let Some(Ordering::Less) = compare_term_test!(self.machine_st, a1, a2) {
+                        if let Some(Ordering::Less) = self.machine_st.compare_term_test(a1, a2) {
                             self.machine_st.p += 1;
                         } else {
                             self.machine_st.backtrack();
@@ -2066,7 +2059,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        if let Some(Ordering::Less) = compare_term_test!(self.machine_st, a1, a2) {
+                        if let Some(Ordering::Less) = self.machine_st.compare_term_test(a1, a2) {
                             self.machine_st.p = self.machine_st.cp;
                         } else {
                             self.machine_st.backtrack();
@@ -2076,7 +2069,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        match compare_term_test!(self.machine_st, a1, a2) {
+                        match self.machine_st.compare_term_test(a1, a2) {
                             Some(Ordering::Greater | Ordering::Equal) => {
                                 self.machine_st.p += 1;
                             }
@@ -2089,7 +2082,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        match compare_term_test!(self.machine_st, a1, a2) {
+                        match self.machine_st.compare_term_test(a1, a2) {
                             Some(Ordering::Greater | Ordering::Equal) => {
                                 self.machine_st.p = self.machine_st.cp;
                             }
@@ -2102,7 +2095,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        match compare_term_test!(self.machine_st, a1, a2) {
+                        match self.machine_st.compare_term_test(a1, a2) {
                             Some(Ordering::Less | Ordering::Equal) => {
                                 self.machine_st.p += 1;
                             }
@@ -2115,7 +2108,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        match compare_term_test!(self.machine_st, a1, a2) {
+                        match self.machine_st.compare_term_test(a1, a2) {
                             Some(Ordering::Less | Ordering::Equal) => {
                                 self.machine_st.p = self.machine_st.cp;
                             }
@@ -2188,7 +2181,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        if let Some(Ordering::Equal) = compare_term_test!(self.machine_st, a1, a2) {
+                        if let Some(Ordering::Equal) = self.machine_st.compare_term_test(a1, a2) {
                             self.machine_st.backtrack();
                         } else {
                             self.machine_st.p += 1;
@@ -2198,7 +2191,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        if let Some(Ordering::Equal) = compare_term_test!(self.machine_st, a1, a2) {
+                        if let Some(Ordering::Equal) = self.machine_st.compare_term_test(a1, a2) {
                             self.machine_st.backtrack();
                         } else {
                             self.machine_st.p = self.machine_st.cp;
@@ -2213,19 +2206,11 @@ impl Machine {
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::DefaultCallKeySort => {
-                        try_or_throw!(
-                            self.machine_st,
-                            self.machine_st.keysort(VarComparison::Distinct),
-                            continue
-                        );
+                        try_or_throw!(self.machine_st, self.machine_st.keysort(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
                     &Instruction::DefaultExecuteKeySort => {
-                        try_or_throw!(
-                            self.machine_st,
-                            self.machine_st.keysort(VarComparison::Distinct),
-                            continue
-                        );
+                        try_or_throw!(self.machine_st, self.machine_st.keysort(), continue);
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
@@ -2323,8 +2308,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        if let Some(Ordering::Greater) = compare_term_test!(self.machine_st, a1, a2)
-                        {
+                        if let Some(Ordering::Greater) = self.machine_st.compare_term_test(a1, a2) {
                             increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         } else {
@@ -2335,8 +2319,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        if let Some(Ordering::Greater) = compare_term_test!(self.machine_st, a1, a2)
-                        {
+                        if let Some(Ordering::Greater) = self.machine_st.compare_term_test(a1, a2) {
                             increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         } else {
@@ -2347,7 +2330,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        if let Some(Ordering::Less) = compare_term_test!(self.machine_st, a1, a2) {
+                        if let Some(Ordering::Less) = self.machine_st.compare_term_test(a1, a2) {
                             increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         } else {
@@ -2358,7 +2341,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        if let Some(Ordering::Less) = compare_term_test!(self.machine_st, a1, a2) {
+                        if let Some(Ordering::Less) = self.machine_st.compare_term_test(a1, a2) {
                             increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         } else {
@@ -2369,7 +2352,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        match compare_term_test!(self.machine_st, a1, a2) {
+                        match self.machine_st.compare_term_test(a1, a2) {
                             Some(Ordering::Greater | Ordering::Equal) => {
                                 increment_call_count!(self.machine_st);
                                 self.machine_st.p += 1;
@@ -2383,7 +2366,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        match compare_term_test!(self.machine_st, a1, a2) {
+                        match self.machine_st.compare_term_test(a1, a2) {
                             Some(Ordering::Greater | Ordering::Equal) => {
                                 increment_call_count!(self.machine_st);
                                 self.machine_st.p = self.machine_st.cp;
@@ -2397,7 +2380,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        match compare_term_test!(self.machine_st, a1, a2) {
+                        match self.machine_st.compare_term_test(a1, a2) {
                             Some(Ordering::Less | Ordering::Equal) => {
                                 increment_call_count!(self.machine_st);
                                 self.machine_st.p += 1;
@@ -2411,7 +2394,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        match compare_term_test!(self.machine_st, a1, a2) {
+                        match self.machine_st.compare_term_test(a1, a2) {
                             Some(Ordering::Less | Ordering::Equal) => {
                                 increment_call_count!(self.machine_st);
                                 self.machine_st.p = self.machine_st.cp;
@@ -2503,7 +2486,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        if let Some(Ordering::Equal) = compare_term_test!(self.machine_st, a1, a2) {
+                        if let Some(Ordering::Equal) = self.machine_st.compare_term_test(a1, a2) {
                             self.machine_st.backtrack();
                         } else {
                             increment_call_count!(self.machine_st);
@@ -2514,7 +2497,7 @@ impl Machine {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
-                        if let Some(Ordering::Equal) = compare_term_test!(self.machine_st, a1, a2) {
+                        if let Some(Ordering::Equal) = self.machine_st.compare_term_test(a1, a2) {
                             self.machine_st.backtrack();
                         } else {
                             increment_call_count!(self.machine_st);
@@ -2542,11 +2525,7 @@ impl Machine {
                         }
                     }
                     &Instruction::CallKeySort => {
-                        try_or_throw!(
-                            self.machine_st,
-                            self.machine_st.keysort(VarComparison::Distinct),
-                            continue
-                        );
+                        try_or_throw!(self.machine_st, self.machine_st.keysort(), continue);
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
@@ -2556,39 +2535,7 @@ impl Machine {
                         }
                     }
                     &Instruction::ExecuteKeySort => {
-                        try_or_throw!(
-                            self.machine_st,
-                            self.machine_st.keysort(VarComparison::Distinct),
-                            continue
-                        );
-
-                        if self.machine_st.fail {
-                            self.machine_st.backtrack();
-                        } else {
-                            increment_call_count!(self.machine_st);
-                            self.machine_st.p = self.machine_st.cp;
-                        }
-                    }
-                    &Instruction::CallKeySortWithConstantVarOrdering => {
-                        try_or_throw!(
-                            self.machine_st,
-                            self.machine_st.keysort(VarComparison::Indistinct),
-                            continue
-                        );
-
-                        if self.machine_st.fail {
-                            self.machine_st.backtrack();
-                        } else {
-                            increment_call_count!(self.machine_st);
-                            self.machine_st.p += 1;
-                        }
-                    }
-                    &Instruction::ExecuteKeySortWithConstantVarOrdering => {
-                        try_or_throw!(
-                            self.machine_st,
-                            self.machine_st.keysort(VarComparison::Indistinct),
-                            continue
-                        );
+                        try_or_throw!(self.machine_st, self.machine_st.keysort(), continue);
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();

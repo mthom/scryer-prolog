@@ -1,6 +1,6 @@
 use crate::allocator::*;
 use crate::codegen::SubsumedBranchHits;
-use crate::forms::{GenContext, Level};
+use crate::forms::{BranchNumber, GenContext, Level};
 use crate::instructions::*;
 use crate::machine::disjuncts::VarData;
 use crate::parser::ast::*;
@@ -24,24 +24,26 @@ pub struct BranchOccurrences {
     pub shallow_safety: BitSet<usize>, // unset means safe, set means unsafe (after the branch merge)
     pub deep_safety: BitSet<usize>,
     pub num_branches: usize,
-    pub current_branch: usize,
+    pub current_branch_idx: usize,
+    pub current_branch_num: BranchNumber,
     pub subsumed_hits: SubsumedBranchHits,
 }
 
 impl BranchOccurrences {
-    fn new(num_branches: usize) -> Self {
+    fn new(current_branch_num: BranchNumber, num_branches: usize) -> Self {
         Self {
             hits: BranchHits::with_hasher(FxBuildHasher::default()),
             shallow_safety: BitSet::default(),
             deep_safety: BitSet::default(),
             num_branches,
-            current_branch: 0,
+            current_branch_idx: 0,
+            current_branch_num,
             subsumed_hits: SubsumedBranchHits::with_hasher(FxBuildHasher::default()),
         }
     }
 
     pub(crate) fn add_branch_occurrence(&mut self, var_num: usize) {
-        debug_assert!(self.current_branch < self.num_branches);
+        debug_assert!(self.current_branch_idx < self.num_branches);
         let num_branches = self.num_branches;
 
         let entry = self
@@ -49,7 +51,7 @@ impl BranchOccurrences {
             .entry(var_num)
             .or_insert_with(|| BitVec::repeat(false, num_branches));
 
-        entry.set(self.current_branch, true);
+        entry.set(self.current_branch_idx, true);
         self.subsumed_hits.insert(var_num);
     }
 }
@@ -76,19 +78,6 @@ impl DerefMut for BranchStack {
 }
 
 impl BranchStack {
-    fn branch_subsumes(&self, branch: &BranchDesignator, sub_branch: &BranchDesignator) -> bool {
-        if branch.branch_stack_num < sub_branch.branch_stack_num {
-            if branch.branch_stack_num == 0 {
-                true
-            } else {
-                let idx = branch.branch_stack_num - 1;
-                self[idx].current_branch == branch.branch_num
-            }
-        } else {
-            branch == sub_branch
-        }
-    }
-
     fn safety_unneeded_in_branch(
         &self,
         safety: &VarSafetyStatus,
@@ -96,9 +85,9 @@ impl BranchStack {
     ) -> bool {
         match safety {
             VarSafetyStatus::Needed => false,
-            VarSafetyStatus::LocallyUnneeded(planter_branch) => {
-                self.branch_subsumes(planter_branch, branch)
-            }
+            VarSafetyStatus::LocallyUnneeded(planter_branch) => planter_branch
+                .branch_num
+                .has_as_subbranch(&branch.branch_num),
             VarSafetyStatus::GloballyUnneeded => true,
         }
     }
@@ -109,27 +98,24 @@ impl BranchStack {
         }
     }
 
-    pub(crate) fn add_branch_stack(&mut self, num_branches: usize) {
-        self.push(BranchOccurrences::new(num_branches));
+    pub(crate) fn add_branch_stack(&mut self, branch_num: BranchNumber, num_branches: usize) {
+        self.push(BranchOccurrences::new(branch_num, num_branches));
     }
 
     pub(crate) fn current_branch_designator(&self) -> BranchDesignator {
-        let branch_stack_num = self.len();
         let branch_num = self
             .last()
-            .map(|occurrences| occurrences.current_branch)
-            .unwrap_or(0);
+            .map(|occurrences| occurrences.current_branch_num.clone())
+            .unwrap_or_else(|| BranchNumber::default());
 
-        BranchDesignator {
-            branch_stack_num,
-            branch_num,
-        }
+        BranchDesignator { branch_num }
     }
 
     #[inline]
-    pub(crate) fn incr_current_branch(&mut self) {
+    pub(crate) fn incr_current_branch(&mut self, branch_num: BranchNumber) {
         let branch_occurrences = self.last_mut().unwrap();
-        branch_occurrences.current_branch += 1;
+        branch_occurrences.current_branch_idx += 1;
+        branch_occurrences.current_branch_num = branch_num;
     }
 
     #[inline]
@@ -235,12 +221,12 @@ impl DebrayAllocator {
                 VarAlloc::Perm(_, allocation) => {
                     let shallow_safety = VarSafetyStatus::needed_if(
                         shallow_safety.contains(var_num),
-                        branch_designator,
+                        &branch_designator,
                     );
 
                     let deep_safety = VarSafetyStatus::needed_if(
                         deep_safety.contains(var_num),
-                        branch_designator,
+                        &branch_designator,
                     );
 
                     if running_count < num_occurrences {
@@ -531,11 +517,11 @@ impl DebrayAllocator {
                     ..
                 },
             ) => {
-                *deep_safety = VarSafetyStatus::unneeded(branch_designator);
-                *shallow_safety = VarSafetyStatus::unneeded(branch_designator);
+                *deep_safety = VarSafetyStatus::unneeded(&branch_designator);
+                *shallow_safety = VarSafetyStatus::unneeded(&branch_designator);
             }
             VarAlloc::Temp { safety, .. } => {
-                *safety = VarSafetyStatus::unneeded(branch_designator);
+                *safety = VarSafetyStatus::unneeded(&branch_designator);
             }
             _ => {
                 unreachable!()
@@ -557,8 +543,8 @@ impl DebrayAllocator {
             ) => {
                 // GetVariable in head chunk is considered safe.
                 if lvl == Level::Deep {
-                    *deep_safety = VarSafetyStatus::unneeded(branch_designator);
-                    *shallow_safety = VarSafetyStatus::unneeded(branch_designator);
+                    *deep_safety = VarSafetyStatus::unneeded(&branch_designator);
+                    *shallow_safety = VarSafetyStatus::unneeded(&branch_designator);
                 } else if term_loc == GenContext::Head {
                     *shallow_safety = VarSafetyStatus::GloballyUnneeded;
                 } else if let Some(&temp_var_num) = self.shallow_temp_mappings.get(&self.arg_c) {
@@ -605,7 +591,7 @@ impl DebrayAllocator {
                 {
                     Target::argument_to_value(r, arg_c)
                 } else {
-                    *shallow_safety = VarSafetyStatus::unneeded(branch_designator);
+                    *shallow_safety = VarSafetyStatus::unneeded(&branch_designator);
                     Target::unsafe_argument_to_value(r, arg_c)
                 }
             }
@@ -640,7 +626,7 @@ impl DebrayAllocator {
                 {
                     Target::subterm_to_value(r)
                 } else {
-                    *deep_safety = VarSafetyStatus::unneeded(branch_designator);
+                    *deep_safety = VarSafetyStatus::unneeded(&branch_designator);
                     Target::unsafe_subterm_to_value(r)
                 }
             }
@@ -651,7 +637,7 @@ impl DebrayAllocator {
                 {
                     Target::subterm_to_value(r)
                 } else {
-                    *safety = VarSafetyStatus::unneeded(branch_designator);
+                    *safety = VarSafetyStatus::unneeded(&branch_designator);
                     Target::unsafe_subterm_to_value(r)
                 }
             }

@@ -639,7 +639,10 @@ impl CodeGenerator {
                 }
             },
             InlinedClauseType::IsRational(..) => match terms[0] {
-                Term::Literal(_, Literal::Rational(_)) => {
+                Term::Literal(
+                    _,
+                    Literal::Rational(_) | Literal::Fixnum(_) | Literal::Integer(_),
+                ) => {
                     instr!("$succeed")
                 }
                 Term::Var(ref vr, ref name) => {
@@ -679,10 +682,13 @@ impl CodeGenerator {
                 }
             },
             InlinedClauseType::IsNumber(..) => match terms[0] {
-                Term::Literal(_, Literal::F64(..))
-                | Term::Literal(_, Literal::Rational(_))
-                | Term::Literal(_, Literal::Integer(_))
-                | Term::Literal(_, Literal::Fixnum(_)) => {
+                Term::Literal(
+                    _,
+                    Literal::F64(..)
+                    | Literal::Rational(_)
+                    | Literal::Integer(_)
+                    | Literal::Fixnum(_),
+                ) => {
                     instr!("$succeed")
                 }
                 Term::Var(ref vr, ref name) => {
@@ -988,20 +994,27 @@ impl CodeGenerator {
                     self.marker.in_tail_position = false;
                     self.marker.reset_contents();
                 }
-                ClauseItem::FirstBranch(num_branches) => {
+                ClauseItem::FirstBranch {
+                    branch_num,
+                    num_branches,
+                } => {
                     branch_code_stack.add_new_branch_stack();
                     branch_code_stack.add_new_branch();
 
-                    self.marker.branch_stack.add_branch_stack(num_branches);
+                    self.marker
+                        .branch_stack
+                        .add_branch_stack(branch_num.clone(), num_branches);
                     self.marker.add_branch();
                 }
-                ClauseItem::NextBranch => {
+                ClauseItem::NextBranch { branch_num } => {
                     branch_code_stack.add_new_branch();
 
                     self.marker.add_branch();
-                    self.marker.branch_stack.incr_current_branch();
+                    self.marker
+                        .branch_stack
+                        .incr_current_branch(branch_num.clone());
                 }
-                ClauseItem::BranchEnd(depth) => {
+                ClauseItem::BranchEnd { depth } => {
                     if !clause_iter.in_tail_position() {
                         let subsumed_hits =
                             branch_code_stack.push_missing_vars(depth, &mut self.marker);

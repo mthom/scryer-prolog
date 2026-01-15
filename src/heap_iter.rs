@@ -1,20 +1,374 @@
 #![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
 #![allow(unused_parens)] // see mthom/scryer-prolog#3092 and rust-lang/rust#147126
 
+use crate::arena::Arena;
+use crate::forms::Number;
 #[cfg(test)]
 pub(crate) use crate::machine::gc::StacklessPreOrderHeapIter;
 
 use crate::atom_table::*;
 use crate::machine::cycle_detection::*;
 use crate::machine::heap::*;
+use crate::machine::machine_indices::TermOrderCategory;
 use crate::machine::stack::*;
+use crate::parser::lexer::MachineState;
 use crate::types::*;
 
 use core::marker::PhantomData;
+use fxhash::FxBuildHasher;
+use indexmap::IndexSet;
 use scryer_modular_bitfield::prelude::*;
+use std::cmp::Ordering;
 
 use std::ops::Deref;
 use std::vec::Vec;
+
+// iterate through the subterms of a pair of terms
+// for as long as they structurally agree, reporting
+// the earliest (pre-order) difference before returning
+// None's and pairs of variables as the Iterator Item.
+
+pub struct ParallelHeapIter<'a> {
+    stack: Vec<HeapCellValue>,
+    heap: &'a Heap,
+    arena: &'a Arena,
+    tabu_list: IndexSet<(usize, usize), FxBuildHasher>,
+}
+
+impl<'a> ParallelHeapIter<'a> {
+    pub fn from(machine_st: &'a MachineState, h1: HeapCellValue, h2: HeapCellValue) -> Self {
+        Self {
+            stack: vec![h2, h1],
+            heap: &machine_st.heap,
+            arena: &machine_st.arena,
+            tabu_list: IndexSet::with_hasher(FxBuildHasher::new()),
+        }
+    }
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+pub enum TermPair {
+    Vars(usize, usize),
+    Less(HeapCellValue, HeapCellValue),
+    Greater(HeapCellValue, HeapCellValue),
+    Unordered(HeapCellValue, HeapCellValue),
+}
+
+impl ParallelHeapIter<'_> {
+    #[inline]
+    fn parallel_cmp<Cmp: Ord>(
+        &mut self,
+        v1: Cmp,
+        v2: Cmp,
+        h1: HeapCellValue,
+        h2: HeapCellValue,
+    ) -> Option<TermPair> {
+        match v1.cmp(&v2) {
+            Ordering::Greater => {
+                self.stack.clear();
+                Some(TermPair::Greater(h1, h2))
+            }
+            Ordering::Less => {
+                self.stack.clear();
+                Some(TermPair::Less(h1, h2))
+            }
+            Ordering::Equal => None,
+        }
+    }
+}
+
+macro_rules! some_or_return {
+    ($e:expr) => {
+        if let Some(x) = $e {
+            return Some(x);
+        }
+    };
+}
+
+impl Iterator for ParallelHeapIter<'_> {
+    type Item = TermPair;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        use crate::offset_table::F64Offset;
+
+        while let Some(s1) = self.stack.pop() {
+            let s1 = heap_bound_deref(self.heap, s1);
+
+            let s2 = self.stack.pop().unwrap();
+            let s2 = heap_bound_deref(self.heap, s2);
+
+            let v1 = heap_bound_store(self.heap, s1);
+            let v2 = heap_bound_store(self.heap, s2);
+
+            let order_cat_v1 = v1.order_category(self.heap);
+            let order_cat_v2 = v2.order_category(self.heap);
+
+            some_or_return!(self.parallel_cmp(order_cat_v1, order_cat_v2, v1, v2));
+
+            match order_cat_v1 {
+                Some(TermOrderCategory::Variable) => {
+                    let v1 = v1.get_value() as usize;
+                    let v2 = v2.get_value() as usize;
+
+                    return Some(TermPair::Vars(v1, v2));
+                }
+                Some(TermOrderCategory::FloatingPoint) => {
+                    let v1_offset = cell_as_f64_offset!(v1);
+                    let v2_offset = cell_as_f64_offset!(v2);
+
+                    let v1_f64 = self.arena.f64_tbl.get_entry(v1_offset);
+                    let v2_f64 = self.arena.f64_tbl.get_entry(v2_offset);
+
+                    some_or_return!(self.parallel_cmp(v1_f64, v2_f64, v1, v2));
+                }
+                Some(TermOrderCategory::Integer) => {
+                    let v1_int = Number::try_from((v1, &self.arena.f64_tbl)).unwrap();
+                    let v2_int = Number::try_from((v2, &self.arena.f64_tbl)).unwrap();
+
+                    some_or_return!(self.parallel_cmp(v1_int, v2_int, v1, v2));
+                }
+                Some(TermOrderCategory::Atom) => {
+                    read_heap_cell!(v1,
+                        (HeapCellValueTag::Atom, (n1, _a1)) => {
+                            read_heap_cell!(v2,
+                                (HeapCellValueTag::Atom, (n2, _a2)) => {
+                                    some_or_return!(self.parallel_cmp(n1, n2, v1, v2));
+                                }
+                                (HeapCellValueTag::Str, s) => {
+                                    let n2 = cell_as_atom_cell!(self.heap[s])
+                                        .get_name();
+
+                                    some_or_return!(self.parallel_cmp(n1, n2, v1, v2));
+                                }
+                                _ => {
+                                    unreachable!();
+                                }
+                            )
+                        }
+                        (HeapCellValueTag::Str, s) => {
+                            let n1 = cell_as_atom_cell!(self.heap[s])
+                                .get_name();
+
+                            read_heap_cell!(v2,
+                                (HeapCellValueTag::Atom, (n2, _a2)) => {
+                                    some_or_return!(self.parallel_cmp(n1, n2, v1, v2));
+                                }
+                                (HeapCellValueTag::Str, s) => {
+                                    let n2 = cell_as_atom_cell!(self.heap[s])
+                                        .get_name();
+
+                                    some_or_return!(self.parallel_cmp(n1, n2, v1, v2));
+                                }
+                                _ => {
+                                    unreachable!();
+                                }
+                            )
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    )
+                }
+                Some(TermOrderCategory::Compound) => {
+                    read_heap_cell!(v1,
+                        (HeapCellValueTag::Lis, l1) => {
+                            read_heap_cell!(v2,
+                                (HeapCellValueTag::PStrLoc, l2) => {
+                                    if self.tabu_list.contains(&(l1, l2)) {
+                                        continue;
+                                    }
+
+                                    self.tabu_list.insert((l1, l2));
+
+                                    // like the action of partial_string_to_stack here but the
+                                    // ordering of stack pushes is (crucially for comparison
+                                    // correctness) different.
+                                    let (c, succ_cell) = self.heap.last_str_char_and_tail(l2);
+
+                                    self.stack.push(succ_cell);
+                                    self.stack.push(heap_loc_as_cell!(l1 + 1));
+
+                                    self.stack.push(char_as_cell!(c));
+                                    self.stack.push(heap_loc_as_cell!(l1));
+                                }
+                                (HeapCellValueTag::Lis, l2) => {
+                                    if self.tabu_list.contains(&(l1, l2)) {
+                                        continue;
+                                    }
+
+                                    self.tabu_list.insert((l1, l2));
+
+                                    self.stack.push(self.heap[l2 + 1]);
+                                    self.stack.push(self.heap[l1 + 1]);
+
+                                    self.stack.push(self.heap[l2]);
+                                    self.stack.push(self.heap[l1]);
+                                }
+                                (HeapCellValueTag::Str, s2) => {
+                                    if self.tabu_list.contains(&(l1, s2)) {
+                                        continue;
+                                    }
+
+                                    let (n2, a2) = cell_as_atom_cell!(self.heap[s2])
+                                        .get_name_and_arity();
+
+                                    some_or_return!(self.parallel_cmp((2, atom!(".")), (a2, n2), v1, v2));
+
+                                    self.tabu_list.insert((l1, s2));
+
+                                    self.stack.push(self.heap[s2 + 2]);
+                                    self.stack.push(self.heap[l1 + 1]);
+
+                                    self.stack.push(self.heap[s2 + 1]);
+                                    self.stack.push(self.heap[l1]);
+                                }
+                                _ => {
+                                    unreachable!();
+                                }
+                            )
+                        }
+                        (HeapCellValueTag::PStrLoc, l1) => {
+                            read_heap_cell!(v2,
+                                (HeapCellValueTag::PStrLoc, l2) => {
+                                    if self.tabu_list.contains(&(l1, l2)) {
+                                        continue;
+                                    }
+
+                                    match self.heap.compare_pstr_segments(l1, l2) {
+                                        PStrSegmentCmpResult::Continue(v1, v2) => {
+                                            self.tabu_list.insert((l1, l2));
+
+                                            self.stack.push(v1.offset_by(l1));
+                                            self.stack.push(v2.offset_by(l2));
+                                        }
+                                        PStrSegmentCmpResult::Less => {
+                                            self.stack.clear();
+                                            return Some(TermPair::Less(v1, v2));
+                                        }
+                                        PStrSegmentCmpResult::Greater => {
+                                            self.stack.clear();
+                                            return Some(TermPair::Greater(v1, v2));
+                                        }
+                                    }
+                                }
+                                (HeapCellValueTag::Lis, l2) => {
+                                    if self.tabu_list.contains(&(l1, l2)) {
+                                        continue;
+                                    }
+
+                                    self.tabu_list.insert((l1, l2));
+
+                                    let (c, succ_cell) = self.heap.last_str_char_and_tail(l1);
+
+                                    self.stack.push(succ_cell);
+                                    self.stack.push(heap_loc_as_cell!(l2 + 1));
+
+                                    self.stack.push(char_as_cell!(c));
+                                    self.stack.push(heap_loc_as_cell!(l2));
+                                }
+                                (HeapCellValueTag::Str, s2) => {
+                                    if self.tabu_list.contains(&(l1, s2)) {
+                                        continue;
+                                    }
+
+                                    self.tabu_list.insert((l1, s2));
+
+                                    let (n2, a2) = cell_as_atom_cell!(self.heap[s2])
+                                        .get_name_and_arity();
+
+                                    some_or_return!(self.parallel_cmp((2, atom!(".")), (a2, n2), v1, v2));
+
+                                    let (c, succ_cell) = self.heap.last_str_char_and_tail(l1);
+
+                                    self.stack.push(heap_loc_as_cell!(s2+2));
+                                    self.stack.push(succ_cell);
+
+                                    self.stack.push(heap_loc_as_cell!(s2+1));
+                                    self.stack.push(char_as_cell!(c));
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            );
+                        }
+                        (HeapCellValueTag::Str, s1) => {
+                            read_heap_cell!(v2,
+                                (HeapCellValueTag::Str, s2) => {
+                                    if self.tabu_list.contains(&(s1, s2)) {
+                                        continue;
+                                    }
+
+                                    let (n1, a1) = cell_as_atom_cell!(self.heap[s1])
+                                        .get_name_and_arity();
+
+                                    let (n2, a2) = cell_as_atom_cell!(self.heap[s2])
+                                        .get_name_and_arity();
+
+                                    some_or_return!(self.parallel_cmp((a1, n1), (a2, n2), v1, v2));
+
+                                    self.tabu_list.insert((s1, s2));
+
+                                    for idx in (1 .. a1+1).rev() {
+                                        self.stack.push(self.heap[s2+idx]);
+                                        self.stack.push(self.heap[s1+idx]);
+                                    }
+                                }
+                                (HeapCellValueTag::Lis, l2) => {
+                                    if self.tabu_list.contains(&(s1, l2)) {
+                                        continue;
+                                    }
+
+                                    let (n1, a1) = cell_as_atom_cell!(self.heap[s1])
+                                        .get_name_and_arity();
+
+                                    some_or_return!(self.parallel_cmp((a1, n1), (2, atom!(".")), v1, v2));
+
+                                    self.stack.push(self.heap[l2]);
+                                    self.stack.push(self.heap[s1+1]);
+
+                                    self.stack.push(self.heap[l2+1]);
+                                    self.stack.push(self.heap[s1+2]);
+                                }
+                                (HeapCellValueTag::PStrLoc, l2) => {
+                                    if self.tabu_list.contains(&(s1, l2)) {
+                                        continue;
+                                    }
+
+                                    let (n1, a1) = cell_as_atom_cell!(self.heap[s1])
+                                        .get_name_and_arity();
+
+                                    some_or_return!(self.parallel_cmp((a1, n1), (2, atom!(".")), v1, v2));
+
+                                    self.tabu_list.insert((s1, l2));
+
+                                    let (c, succ_cell) = self.heap.last_str_char_and_tail(l2);
+
+                                    self.stack.push(succ_cell);
+                                    self.stack.push(heap_loc_as_cell!(s1+2));
+
+                                    self.stack.push(char_as_cell!(c));
+                                    self.stack.push(heap_loc_as_cell!(s1+1));
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            )
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    );
+                }
+                None => {
+                    return Some(TermPair::Unordered(v1, v2));
+                }
+            }
+        }
+
+        None
+    }
+}
 
 #[inline(always)]
 pub fn eager_stackful_preorder_iter(
@@ -35,7 +389,7 @@ pub struct EagerStackfulPreOrderHeapIter<'a> {
     start_value: HeapCellValue,
     iter_stack: Vec<HeapCellValue>,
     mark_phase: bool,
-    heap: &'a mut Heap,
+    pub heap: &'a mut Heap,
 }
 
 impl<'a> Drop for EagerStackfulPreOrderHeapIter<'a> {

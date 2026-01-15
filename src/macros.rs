@@ -426,21 +426,6 @@ macro_rules! unify_with_occurs_check {
     }};
 }
 
-macro_rules! compare_term_test {
-    ($machine_st:expr, $e1:expr, $e2:expr) => {{
-        $machine_st.pdl.push($e2);
-        $machine_st.pdl.push($e1);
-
-        $machine_st.compare_term_test(VarComparison::Distinct)
-    }};
-    ($machine_st:expr, $e1:expr, $e2:expr, $var_comparison:expr) => {{
-        $machine_st.pdl.push($e2);
-        $machine_st.pdl.push($e1);
-
-        $machine_st.compare_term_test($var_comparison)
-    }};
-}
-
 macro_rules! step_or_resource_error {
     ($machine_st:expr, $val:expr) => {{
         match $val {

@@ -726,7 +726,6 @@ impl Instruction {
             | &Instruction::CallDeleteAllAttributesFromVar
             | &Instruction::CallUnattributedVar
             | &Instruction::CallGetDBRefs
-            | &Instruction::CallKeySortWithConstantVarOrdering
             | &Instruction::CallInferenceLimitExceeded
             | &Instruction::CallFetchGlobalVar
             | &Instruction::CallFirstStream
@@ -986,7 +985,6 @@ impl Instruction {
             | &Instruction::ExecuteDeleteAllAttributesFromVar
             | &Instruction::ExecuteUnattributedVar
             | &Instruction::ExecuteGetDBRefs
-            | &Instruction::ExecuteKeySortWithConstantVarOrdering
             | &Instruction::ExecuteInferenceLimitExceeded
             | &Instruction::ExecuteFetchGlobalVar
             | &Instruction::ExecuteFirstStream

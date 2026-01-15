@@ -38,7 +38,7 @@ use rand::{Rng, SeedableRng};
 use ordered_float::OrderedFloat;
 
 use fxhash::{FxBuildHasher, FxHasher};
-use indexmap::IndexSet;
+use indexmap::*;
 
 use std::cell::Cell;
 use std::cmp::Ordering;
@@ -925,7 +925,7 @@ impl MachineState {
             &mut self.lifted_heap,
         );
 
-        let pstr_boundary = copy_term(copy_ball_term, copy_target, AttrVarPolicy::DeepCopy)?;
+        let pstr_boundary = copy_term(copy_ball_term, copy_target, AttrVarPolicy::StripAttributes)?;
 
         Ok(FindallCopyInfo {
             offset: threshold + lh_offset + 2,

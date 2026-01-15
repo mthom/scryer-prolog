@@ -581,56 +581,44 @@ mod tests {
         });
 
         assert_eq!(
-            compare_term_test!(wam, wam.heap[0], wam.heap[1]),
+            wam.compare_term_test(wam.heap[0], wam.heap[1]),
             Some(Ordering::Less)
         );
 
         assert_eq!(
-            compare_term_test!(wam, wam.heap[1], wam.heap[0]),
+            wam.compare_term_test(wam.heap[1], wam.heap[0]),
             Some(Ordering::Greater)
         );
 
         assert_eq!(
-            compare_term_test!(wam, wam.heap[0], wam.heap[0]),
+            wam.compare_term_test(wam.heap[0], wam.heap[0]),
             Some(Ordering::Equal)
         );
 
         assert_eq!(
-            compare_term_test!(wam, wam.heap[1], wam.heap[1]),
+            wam.compare_term_test(wam.heap[1], wam.heap[1]),
             Some(Ordering::Equal)
         );
 
         let cstr_cell = wam.heap.allocate_cstr("string").unwrap();
 
         assert_eq!(
-            compare_term_test!(wam, atom_as_cell!(atom!("atom")), cstr_cell),
+            wam.compare_term_test(atom_as_cell!(atom!("atom")), cstr_cell),
             Some(Ordering::Less)
         );
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                atom_as_cell!(atom!("atom")),
-                atom_as_cell!(atom!("atom"))
-            ),
+            wam.compare_term_test(atom_as_cell!(atom!("atom")), atom_as_cell!(atom!("atom"))),
             Some(Ordering::Equal)
         );
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                atom_as_cell!(atom!("atom")),
-                atom_as_cell!(atom!("aaa"))
-            ),
+            wam.compare_term_test(atom_as_cell!(atom!("atom")), atom_as_cell!(atom!("aaa"))),
             Some(Ordering::Greater)
         );
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                fixnum_as_cell!(Fixnum::build_with(6)),
-                heap_loc_as_cell!(1)
-            ),
+            wam.compare_term_test(fixnum_as_cell!(Fixnum::build_with(6)), heap_loc_as_cell!(1)),
             Some(Ordering::Greater)
         );
 
@@ -644,12 +632,12 @@ mod tests {
         });
 
         assert_eq!(
-            compare_term_test!(wam, heap_loc_as_cell!(0), heap_loc_as_cell!(0)),
+            wam.compare_term_test(str_loc_as_cell!(0), str_loc_as_cell!(0)),
             Some(Ordering::Equal)
         );
 
         assert_eq!(
-            compare_term_test!(wam, heap_loc_as_cell!(0), atom_as_cell!(atom!("a"))),
+            wam.compare_term_test(str_loc_as_cell!(0), atom_as_cell!(atom!("a"))),
             Some(Ordering::Greater)
         );
 
@@ -676,23 +664,22 @@ mod tests {
         });
 
         assert_eq!(
-            compare_term_test!(wam, heap_loc_as_cell!(7), heap_loc_as_cell!(7)),
+            wam.compare_term_test(heap_loc_as_cell!(7), heap_loc_as_cell!(7)),
             Some(Ordering::Equal)
         );
 
         assert_eq!(
-            compare_term_test!(wam, heap_loc_as_cell!(0), heap_loc_as_cell!(7)),
+            wam.compare_term_test(heap_loc_as_cell!(0), heap_loc_as_cell!(7)),
             Some(Ordering::Greater)
         );
 
         assert_eq!(
-            compare_term_test!(wam, empty_list_as_cell!(), heap_loc_as_cell!(7)),
+            wam.compare_term_test(empty_list_as_cell!(), heap_loc_as_cell!(7)),
             Some(Ordering::Less)
         );
 
         assert_eq!(
-            compare_term_test!(
-                wam,
+            wam.compare_term_test(
                 empty_list_as_cell!(),
                 fixnum_as_cell!(Fixnum::build_with(1))
             ),
@@ -702,29 +689,29 @@ mod tests {
         let cstr_cell = wam.heap.allocate_cstr("string").unwrap();
 
         assert_eq!(
-            compare_term_test!(wam, empty_list_as_cell!(), cstr_cell),
+            wam.compare_term_test(empty_list_as_cell!(), cstr_cell),
             Some(Ordering::Less)
         );
 
         assert_eq!(
-            compare_term_test!(wam, empty_list_as_cell!(), atom_as_cell!(atom!("atom"))),
+            wam.compare_term_test(empty_list_as_cell!(), atom_as_cell!(atom!("atom"))),
             Some(Ordering::Less)
         );
 
         assert_eq!(
-            compare_term_test!(wam, atom_as_cell!(atom!("atom")), empty_list_as_cell!()),
+            wam.compare_term_test(atom_as_cell!(atom!("atom")), empty_list_as_cell!()),
             Some(Ordering::Greater)
         );
 
         let one_p_one = HeapCellValue::from(float_alloc!(1.1, &mut wam.arena));
 
         assert_eq!(
-            compare_term_test!(wam, one_p_one, fixnum_as_cell!(Fixnum::build_with(1))),
+            wam.compare_term_test(one_p_one, fixnum_as_cell!(Fixnum::build_with(1))),
             Some(Ordering::Less)
         );
 
         assert_eq!(
-            compare_term_test!(wam, fixnum_as_cell!(Fixnum::build_with(1)), one_p_one),
+            wam.compare_term_test(fixnum_as_cell!(Fixnum::build_with(1)), one_p_one),
             Some(Ordering::Greater)
         );
     }

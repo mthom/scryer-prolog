@@ -319,15 +319,28 @@ pub(crate) fn breadth_first_iter(
 #[derive(Debug, Copy, Clone)]
 enum ClauseIteratorState<'a> {
     RemainingChunks(&'a VecDeque<ChunkedTerms>, usize),
-    RemainingBranches(&'a Vec<VecDeque<ChunkedTerms>>, usize),
+    RemainingBranches(
+        &'a Vec<BranchNumber>,
+        &'a Vec<VecDeque<ChunkedTerms>>,
+        usize,
+    ),
 }
 
 #[derive(Debug, Clone)]
 pub(crate) enum ClauseItem<'a> {
-    FirstBranch(usize),
-    NextBranch,
-    BranchEnd(usize),
-    Chunk { terms: &'a VecDeque<QueryTerm> },
+    FirstBranch {
+        branch_num: &'a BranchNumber,
+        num_branches: usize,
+    },
+    NextBranch {
+        branch_num: &'a BranchNumber,
+    },
+    BranchEnd {
+        depth: usize,
+    },
+    Chunk {
+        terms: &'a VecDeque<QueryTerm>,
+    },
 }
 
 #[derive(Debug)]
@@ -338,8 +351,8 @@ pub(crate) struct ClauseIterator<'a> {
 
 fn state_from_chunked_terms(chunk_vec: &VecDeque<ChunkedTerms>) -> ClauseIteratorState<'_> {
     if chunk_vec.len() == 1 {
-        if let Some(ChunkedTerms::Branch(ref branches)) = chunk_vec.front() {
-            return ClauseIteratorState::RemainingBranches(branches, 0);
+        if let Some(ChunkedTerms::Branch { branch_nums, arms }) = chunk_vec.front() {
+            return ClauseIteratorState::RemainingBranches(branch_nums, arms, 0);
         }
     }
 
@@ -370,7 +383,9 @@ impl<'a> ClauseIterator<'a> {
 
         while let Some(state) = self.state_stack.pop() {
             match state {
-                ClauseIteratorState::RemainingBranches(terms, focus) if terms.len() == focus => {
+                ClauseIteratorState::RemainingBranches(_branch_nums, terms, focus)
+                    if terms.len() == focus =>
+                {
                     depth += 1;
                 }
                 _ => {
@@ -399,9 +414,9 @@ impl<'a> Iterator for ClauseIterator<'a> {
                     }
 
                     match &chunks[focus] {
-                        ChunkedTerms::Branch(branches) => {
+                        ChunkedTerms::Branch { branch_nums, arms } => {
                             self.state_stack
-                                .push(ClauseIteratorState::RemainingBranches(branches, 0));
+                                .push(ClauseIteratorState::RemainingBranches(branch_nums, arms, 0));
                         }
                         ChunkedTerms::Chunk { ref terms } => {
                             return Some(ClauseItem::Chunk { terms });
@@ -411,11 +426,15 @@ impl<'a> Iterator for ClauseIterator<'a> {
                 ClauseIteratorState::RemainingChunks(chunks, focus) => {
                     debug_assert_eq!(chunks.len(), focus);
                 }
-                ClauseIteratorState::RemainingBranches(branches, focus)
+                ClauseIteratorState::RemainingBranches(branch_nums, branches, focus)
                     if focus < branches.len() =>
                 {
                     self.state_stack
-                        .push(ClauseIteratorState::RemainingBranches(branches, focus + 1));
+                        .push(ClauseIteratorState::RemainingBranches(
+                            branch_nums,
+                            branches,
+                            focus + 1,
+                        ));
                     let state = state_from_chunked_terms(&branches[focus]);
 
                     if let ClauseIteratorState::RemainingChunks(..) = &state {
@@ -425,14 +444,21 @@ impl<'a> Iterator for ClauseIterator<'a> {
                     self.state_stack.push(state);
 
                     return if focus == 0 {
-                        Some(ClauseItem::FirstBranch(branches.len()))
+                        Some(ClauseItem::FirstBranch {
+                            branch_num: &branch_nums[0],
+                            num_branches: branches.len(),
+                        })
                     } else {
-                        Some(ClauseItem::NextBranch)
+                        Some(ClauseItem::NextBranch {
+                            branch_num: &branch_nums[focus],
+                        })
                     };
                 }
-                ClauseIteratorState::RemainingBranches(branches, focus) => {
+                ClauseIteratorState::RemainingBranches(_branch_nums, branches, focus) => {
                     debug_assert_eq!(branches.len(), focus);
-                    return Some(ClauseItem::BranchEnd(self.branch_end_depth()));
+                    return Some(ClauseItem::BranchEnd {
+                        depth: self.branch_end_depth(),
+                    });
                 }
             }
         }

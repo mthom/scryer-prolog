@@ -18,9 +18,11 @@ use indexmap::{IndexMap, IndexSet};
 use ordered_float::OrderedFloat;
 
 use std::cell::Cell;
+use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::ops::{AddAssign, Deref, DerefMut};
 use std::path::PathBuf;
 
@@ -40,12 +42,6 @@ impl AppendOrPrepend {
             AppendOrPrepend::Prepend => false,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum VarComparison {
-    Indistinct,
-    Distinct,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -128,10 +124,82 @@ impl ChunkType {
     }
 }
 
+#[derive(Debug, Clone)] //, PartialOrd, PartialEq, Eq, Hash)]
+pub(crate) struct BranchNumber {
+    pub(crate) branch_num: Rational,
+    pub(crate) delta: Rational,
+}
+
+impl Default for BranchNumber {
+    fn default() -> Self {
+        Self {
+            branch_num: Rational::from(0),
+            delta: Rational::from(1u64 << 31),
+        }
+    }
+}
+
+impl PartialEq<BranchNumber> for BranchNumber {
+    #[inline]
+    fn eq(&self, rhs: &BranchNumber) -> bool {
+        self.branch_num == rhs.branch_num
+    }
+}
+
+impl Eq for BranchNumber {}
+
+impl Hash for BranchNumber {
+    #[inline(always)]
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.branch_num.hash(hasher)
+    }
+}
+
+impl PartialOrd<BranchNumber> for BranchNumber {
+    #[inline]
+    fn partial_cmp(&self, rhs: &BranchNumber) -> Option<Ordering> {
+        self.branch_num.partial_cmp(&rhs.branch_num)
+    }
+}
+
+impl BranchNumber {
+    pub(crate) fn has_as_subbranch(&self, other: &Self) -> bool {
+        other.delta <= self.delta
+            && other.branch_num >= self.branch_num
+            && other.branch_num < &self.branch_num + &self.delta
+    }
+
+    pub(crate) fn split(&self) -> BranchNumber {
+        BranchNumber {
+            branch_num: self.branch_num.clone() + &self.delta / Rational::from(2),
+            delta: &self.delta / Rational::from(4),
+        }
+    }
+
+    pub(crate) fn incr_by_delta(&self) -> BranchNumber {
+        BranchNumber {
+            branch_num: self.branch_num.clone() + &self.delta,
+            delta: self.delta.clone(),
+        }
+    }
+
+    pub(crate) fn halve_delta(&self) -> BranchNumber {
+        BranchNumber {
+            branch_num: self.branch_num.clone(),
+            delta: &self.delta / Rational::from(2),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ChunkedTerms {
-    Branch(Vec<VecDeque<ChunkedTerms>>),
-    Chunk { terms: VecDeque<QueryTerm> },
+    Branch {
+        branch_nums: Vec<BranchNumber>,
+        arms: Vec<VecDeque<ChunkedTerms>>,
+    },
+    Chunk {
+        terms: VecDeque<QueryTerm>,
+    },
 }
 
 #[derive(Debug)]
@@ -165,21 +233,22 @@ impl ChunkedTermVec {
     }
 
     pub fn reserve_branch(&mut self, capacity: usize) {
-        self.chunk_vec
-            .push_back(ChunkedTerms::Branch(Vec::with_capacity(capacity)));
+        self.chunk_vec.push_back(ChunkedTerms::Branch {
+            branch_nums: Vec::with_capacity(capacity),
+            arms: Vec::with_capacity(capacity),
+        });
     }
 
     #[inline]
     pub fn add_chunk(&mut self) {
-        let chunk = ChunkedTerms::Chunk {
+        self.chunk_vec.push_back(ChunkedTerms::Chunk {
             terms: VecDeque::from(vec![]),
-        };
-        self.chunk_vec.push_back(chunk);
+        });
     }
 
     pub fn push_chunk_term(&mut self, term: QueryTerm) {
         match self.chunk_vec.back_mut() {
-            Some(ChunkedTerms::Branch(_)) => {
+            Some(ChunkedTerms::Branch { .. }) => {
                 let chunk = ChunkedTerms::Chunk {
                     terms: VecDeque::from(vec![term]),
                 };
