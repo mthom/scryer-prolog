@@ -57,7 +57,10 @@ fn issue2725_dcg_without_module() {
 #[cfg(unix)]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn issue_files_delete_directory() {
-    load_module_test("tests-pl/issue-files-delete-directory.pl", "directory_deleted");
+    load_module_test(
+        "tests-pl/issue-files-delete-directory.pl",
+        "directory_deleted",
+    );
 }
 
 #[serial]
@@ -140,7 +143,10 @@ fn issue_files_make_directory_path() {
 #[cfg(unix)]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn issue_files_path_canonical() {
-    load_module_test("tests-pl/issue-files-path-canonical.pl", "path_canonicalized");
+    load_module_test(
+        "tests-pl/issue-files-path-canonical.pl",
+        "path_canonicalized",
+    );
 }
 
 #[serial]
