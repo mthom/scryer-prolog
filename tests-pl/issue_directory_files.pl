@@ -16,7 +16,8 @@ act(TargetDirectory, Files) :-
 main :-
     path_segments(Path, ["directory_files_test_parent", "directory_files_test_file"]),
     call_cleanup(
-       (setenv("TARGET_DIRECTORY", "directory_files_test_parent"),
+       (setenv("SHELL", "/bin/sh"),
+        setenv("TARGET_DIRECTORY", "directory_files_test_parent"),
         shell("test -d directory_files_test_parent || mkdir directory_files_test_parent", 0),
         append(["test -e ", Path, " || touch ", Path], Cmd),
         shell(Cmd, 0),

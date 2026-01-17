@@ -14,7 +14,8 @@ act(TargetFile, Size) :-
 
 main :-
     call_cleanup(
-       (setenv("TARGET_FILE", "file_size_test"),
+       (setenv("SHELL", "/bin/sh"),
+        setenv("TARGET_FILE", "file_size_test"),
         shell("echo '1' > file_size_test", 0),
         check),
         shell("rm -f file_size_test", 0)
