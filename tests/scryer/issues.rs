@@ -55,72 +55,72 @@ fn issue2725_dcg_without_module() {
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn issue_delete_directory() {
-    load_module_test("tests-pl/issue_delete_directory.pl", "directory_deleted");
+fn issue_files_delete_directory() {
+    load_module_test("tests-pl/issue-files-delete-directory.pl", "directory_deleted");
 }
 
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn issue_delete_file() {
-    load_module_test("tests-pl/issue_delete_file.pl", "file_deleted");
+fn issue_files_delete_file() {
+    load_module_test("tests-pl/issue-files-delete-file.pl", "file_deleted");
 }
 
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn issue_directory_exists() {
-    load_module_test("tests-pl/issue_directory_exists.pl", "");
+fn issue_files_directory_exists() {
+    load_module_test("tests-pl/issue-files-directory-exists.pl", "");
 }
 
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn issue_directory_files() {
-    load_module_test("tests-pl/issue_directory_files.pl", "1");
+fn issue_files_directory_files() {
+    load_module_test("tests-pl/issue-files-directory-files.pl", "1");
 }
 
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn issue_file_copy() {
-    load_module_test("tests-pl/issue_file_copy.pl", "file_copied");
+fn issue_files_file_copy() {
+    load_module_test("tests-pl/issue-files-file-copy.pl", "file_copied");
 }
 
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn issue_file_exists() {
-    load_module_test("tests-pl/issue_file_exists.pl", "");
+fn issue_files_file_exists() {
+    load_module_test("tests-pl/issue-files-file-exists.pl", "");
 }
 
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn issue_file_size() {
-    load_module_test("tests-pl/issue_file_size.pl", "");
+fn issue_files_file_size() {
+    load_module_test("tests-pl/issue-files-file-size.pl", "");
 }
 
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn issue_file_time() {
-    load_module_test("tests-pl/issue_file_time.pl", "");
+fn issue_files_file_time() {
+    load_module_test("tests-pl/issue-files-file-time.pl", "");
 }
 
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn issue_make_directory() {
-    load_module_test("tests-pl/issue_make_directory.pl", "directory_made");
+fn issue_files_make_directory() {
+    load_module_test("tests-pl/issue-files-make-directory.pl", "directory_made");
 }
 
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn issue_make_directory_path() {
+fn issue_files_make_directory_path() {
     load_module_test(
-        "tests-pl/issue_make_directory_path.pl",
+        "tests-pl/issue-files-make-directory-path.pl",
         "directory_path_made",
     );
 }
@@ -128,15 +128,15 @@ fn issue_make_directory_path() {
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn issue_path_canonical() {
-    load_module_test("tests-pl/issue_path_canonical.pl", "path_canonicalized");
+fn issue_files_path_canonical() {
+    load_module_test("tests-pl/issue-files-path-canonical.pl", "path_canonicalized");
 }
 
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn issue_rename_file() {
-    load_module_test("tests-pl/issue_rename_file.pl", "file_renamed");
+fn issue_files_rename_file() {
+    load_module_test("tests-pl/issue-files-rename-file.pl", "file_renamed");
 }
 
 #[test]
