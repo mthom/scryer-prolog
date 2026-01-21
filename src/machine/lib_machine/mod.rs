@@ -11,7 +11,8 @@ use crate::machine::{
     ArenaHeaderTag, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS,
 };
 use crate::offset_table::*;
-use crate::parser::ast::{Var, VarPtr};
+pub use crate::parser::ast::ParserError;
+use crate::parser::ast::{Term as ASTTerm, Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};
 use crate::types::UntypedArenaPtr;
@@ -581,16 +582,23 @@ impl Machine {
         Ok(())
     }
 
+    #[deprecated(note = "use non-panicking on parse errors `run_query_string` instead")]
     /// Runs a query.
     pub fn run_query(&mut self, query: impl Into<String>) -> QueryState<'_> {
+        self.run_query_string(query).expect("Failed to parse query")
+    }
+
+    /// Runs query after checking parse errors.
+    fn run_query_string(
+        &mut self,
+        query: impl Into<String>,
+    ) -> Result<QueryState<'_>, ParserError> {
         let mut parser = Parser::new(
             Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
             &mut self.machine_st,
         );
         let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
-        let term = parser
-            .read_term(&op_dir, Tokens::Default)
-            .expect("Failed to parse query");
+        let term = parser.read_term(&op_dir, Tokens::Default)?;
 
         self.allocate_stub_choice_point()
             .expect("failed to allocate stub choice point");
