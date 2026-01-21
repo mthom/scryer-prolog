@@ -426,24 +426,38 @@ pub enum ArithmeticError {
     UninstantiatedVar,
 }
 
+/// Enum for parsing errors
 #[allow(dead_code)]
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum ParserError {
+    /// Backquoted String error found.
     BackQuotedString(usize, usize),
+    /// IO Error error found.
     IO(IOError),
+    /// Incomplete reduction error found.
     IncompleteReduction(usize, usize),
+    /// Infinite float error found.
     InfiniteFloat(usize, usize),
+    /// Invalid single quoted character found.
     InvalidSingleQuotedCharacter(char),
+    /// Lexical error found.
     LexicalError(lexical::Error),
+    /// Missing quote found.
     MissingQuote(usize, usize),
+    /// Non prolog char found.
     NonPrologChar(usize, usize),
+    /// BigInt parsing error found.
     ParseBigInt(usize, usize),
+    /// Unexpected character found.
     UnexpectedChar(char, usize, usize),
     // UnexpectedEOF,
+    /// UTF8 error found.
     Utf8Error(usize, usize),
 }
 
 impl ParserError {
+    /// Get line number and column number for error.
     pub fn line_and_col_num(&self) -> Option<(usize, usize)> {
         match self {
             &ParserError::BackQuotedString(line_num, col_num)
@@ -458,6 +472,7 @@ impl ParserError {
         }
     }
 
+    /// Return error as an atom
     pub fn as_atom(&self) -> Atom {
         match self {
             ParserError::BackQuotedString(..) => atom!("back_quoted_string"),
@@ -484,11 +499,13 @@ impl ParserError {
         }
     }
 
+    /// Unexpected EOF error
     #[inline]
     pub fn unexpected_eof() -> Self {
         ParserError::IO(std::io::Error::from(ErrorKind::UnexpectedEof))
     }
 
+    /// Is an unexpected EOF?
     #[inline]
     pub fn is_unexpected_eof(&self) -> bool {
         if let ParserError::IO(e) = self {
