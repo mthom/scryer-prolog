@@ -57,6 +57,62 @@ pub enum OnEOF {
     Return,
     Continue,
 }
+pub(crate) trait OccursCheckImpl {
+    fn flag_value(&self) -> Atom;
+    fn unify(&self, state: &mut MachineState);
+    fn bind(&self, state: &mut MachineState, r: Ref, h: HeapCellValue);
+}
+
+/// Not subject to occurs-check
+pub(crate) struct Nsto;
+
+impl OccursCheckImpl for Nsto {
+    fn flag_value(&self) -> Atom {
+        atom!("false")
+    }
+
+    fn unify(&self, state: &mut MachineState) {
+        state.unify();
+    }
+
+    fn bind(&self, state: &mut MachineState, r: Ref, h: HeapCellValue) {
+        state.bind(r, h);
+    }
+}
+
+/// Subject to occurs-check
+pub(crate) struct Sto;
+
+impl OccursCheckImpl for Sto {
+    fn flag_value(&self) -> Atom {
+        atom!("true")
+    }
+
+    fn unify(&self, state: &mut MachineState) {
+        state.unify_with_occurs_check();
+    }
+
+    fn bind(&self, state: &mut MachineState, r: Ref, h: HeapCellValue) {
+        state.bind_with_occurs_check_wrapper(r, h);
+    }
+}
+
+/// Subject to occurs-check -> error
+pub(crate) struct StoError;
+
+impl OccursCheckImpl for StoError {
+    fn flag_value(&self) -> Atom {
+        atom!("error")
+    }
+
+    fn unify(&self, state: &mut MachineState) {
+        state.unify_with_occurs_check_with_error();
+    }
+
+    fn bind(&self, state: &mut MachineState, r: Ref, h: HeapCellValue) {
+        state.bind_with_occurs_check_with_error_wrapper(r, h);
+    }
+}
 
 pub struct MachineState {
     pub atom_tbl: Arc<AtomTable>,
@@ -94,8 +150,7 @@ pub struct MachineState {
     pub(crate) cc: usize,
     pub(crate) global_clock: usize,
     pub(crate) dynamic_mode: FirstOrNext,
-    pub(crate) unify_fn: fn(&mut MachineState),
-    pub(crate) bind_fn: fn(&mut MachineState, Ref, HeapCellValue),
+    pub(crate) occurs_check: &'static dyn OccursCheckImpl,
     pub(crate) run_cleaners_fn: fn(&mut Machine) -> bool,
 }
 
@@ -129,28 +184,8 @@ impl fmt::Debug for MachineState {
             .field("cc", &self.cc)
             .field("global_clock", &self.global_clock)
             .field("dynamic_mode", &self.dynamic_mode)
-            .field(
-                "unify_fn",
-                if self.unify_fn as usize == MachineState::unify as usize {
-                    &"MachineState::unify"
-                } else if self.unify_fn as usize == MachineState::unify_with_occurs_check as usize {
-                    &"MachineState::unify_with_occurs_check"
-                } else {
-                    &"MachineState::unify_with_occurs_check_with_error"
-                },
-            )
-            .field(
-                "bind_fn",
-                if self.bind_fn as usize == MachineState::bind as usize {
-                    &"MachineState::bind"
-                } else if self.bind_fn as usize
-                    == MachineState::bind_with_occurs_check_wrapper as usize
-                {
-                    &"MachineState::bind_with_occurs_check"
-                } else {
-                    &"MachineState::bind_with_occurs_check_with_error_wrapper"
-                },
-            )
+            .field("unify_fn", &&*self.occurs_check.flag_value().as_str())
+            .field("bind_fn", &&*self.occurs_check.flag_value().as_str())
             .finish()
     }
 }
