@@ -1016,7 +1016,7 @@ impl MachineState {
                             self.unify_fixnum(n, nx);
                         }
                         _ => {
-                            let err = ParserError::ParseBigInt(0, 0);
+                            let err = parser.lexer.parse_big_int_error();
                             let err = self.syntax_error(err);
 
                             return Err(self.error_form(err, stub_gen()));
@@ -1026,9 +1026,7 @@ impl MachineState {
                     return Ok(());
                 }
                 Ok(c) => {
-                    let (line_num, col_num) = (lexer.line_num, lexer.col_num);
-
-                    let err = ParserError::UnexpectedChar(c, line_num, col_num);
+                    let err = lexer.unexpected_char(c);
                     let err = self.syntax_error(err);
 
                     return Err(self.error_form(err, stub_gen()));
@@ -9196,7 +9194,7 @@ impl Machine {
                 stream.add_lines_read(parser.lines_read());
             }
             Ok(true) => {
-                stream.add_lines_read(parser.lexer.line_num);
+                stream.add_lines_read(parser.lexer.location.line());
                 self.machine_st.fail = true;
             }
             Err(err) => {

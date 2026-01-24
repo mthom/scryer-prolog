@@ -48,12 +48,11 @@ pub(crate) fn error_after_read_term<R>(
     parser: &Parser<R>,
 ) -> CompilationError {
     if err.is_unexpected_eof() {
-        let line_num = parser.lexer.line_num;
-        let col_num = parser.lexer.col_num;
+        let location = &parser.lexer.location;
 
         // rough overlap with errors 8.14.1.3 k) & l) of the ISO standard here
-        if !(line_num == prior_num_lines_read && col_num == 0) {
-            return CompilationError::from(ParserError::IncompleteReduction(line_num, col_num));
+        if !(location.line() == prior_num_lines_read && location.column() == 0) {
+            return CompilationError::from(parser.lexer.incomplete_reduction());
         }
     }
 

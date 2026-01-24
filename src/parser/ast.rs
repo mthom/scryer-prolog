@@ -4,7 +4,6 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::offset_table::*;
-use crate::parser::char_reader::*;
 use crate::types::HeapCellValueTag;
 
 use std::cell::{Cell, Ref, RefCell, RefMut};
@@ -426,72 +425,92 @@ pub enum ArithmeticError {
     UninstantiatedVar,
 }
 
+#[derive(Debug, Clone)]
+pub struct Location {
+    pub(super) line: usize,
+    pub(super) column: usize,
+}
+
+impl Location {
+    // beginning of file
+    pub(crate) const BOF: Self = Self { line: 0, column: 0 };
+
+    pub fn line(&self) -> usize {
+        self.line
+    }
+
+    pub fn column(&self) -> usize {
+        self.column
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug)]
-pub enum ParserError {
-    BackQuotedString(usize, usize),
+pub struct ParserError {
+    pub(crate) location: Option<Location>,
+    pub(crate) kind: ParserErrorKind,
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+#[non_exhaustive]
+pub(crate) enum ParserErrorKind {
+    BackQuotedString,
     IO(IOError),
-    IncompleteReduction(usize, usize),
-    InfiniteFloat(usize, usize),
+    IncompleteReduction,
+    InfiniteFloat,
     InvalidSingleQuotedCharacter(char),
-    LexicalError(lexical::Error),
-    MissingQuote(usize, usize),
-    NonPrologChar(usize, usize),
-    ParseBigInt(usize, usize),
-    UnexpectedChar(char, usize, usize),
+    ParseFloat,
+    MissingQuote,
+    NonPrologChar,
+    ParseBigInt,
+    UnexpectedChar(char),
     // UnexpectedEOF,
-    Utf8Error(usize, usize),
+    Utf8Error,
 }
 
 impl ParserError {
-    pub fn line_and_col_num(&self) -> Option<(usize, usize)> {
-        match self {
-            &ParserError::BackQuotedString(line_num, col_num)
-            | &ParserError::IncompleteReduction(line_num, col_num)
-            | &ParserError::InfiniteFloat(line_num, col_num)
-            | &ParserError::MissingQuote(line_num, col_num)
-            | &ParserError::NonPrologChar(line_num, col_num)
-            | &ParserError::ParseBigInt(line_num, col_num)
-            | &ParserError::UnexpectedChar(_, line_num, col_num)
-            | &ParserError::Utf8Error(line_num, col_num) => Some((line_num, col_num)),
-            _ => None,
-        }
+    pub(crate) fn location(&self) -> Option<Location> {
+        self.location.as_ref().cloned()
     }
 
-    pub fn as_atom(&self) -> Atom {
-        match self {
-            ParserError::BackQuotedString(..) => atom!("back_quoted_string"),
-            ParserError::IncompleteReduction(..) => atom!("incomplete_reduction"),
-            ParserError::InvalidSingleQuotedCharacter(..) => {
+    pub(crate) fn as_atom(&self) -> Atom {
+        match &self.kind {
+            ParserErrorKind::BackQuotedString => atom!("back_quoted_string"),
+            ParserErrorKind::IncompleteReduction => atom!("incomplete_reduction"),
+            ParserErrorKind::InvalidSingleQuotedCharacter(..) => {
                 atom!("invalid_single_quoted_character")
             }
-            ParserError::InfiniteFloat(..) => {
+            ParserErrorKind::InfiniteFloat => {
                 atom!("infinite_float")
             }
-            ParserError::IO(e) if e.kind() == ErrorKind::UnexpectedEof => {
+            ParserErrorKind::IO(e) if e.kind() == ErrorKind::UnexpectedEof => {
                 atom!("unexpected_end_of_file")
             }
-            ParserError::IO(e) if e.kind() == ErrorKind::InvalidData => {
+            ParserErrorKind::IO(e) if e.kind() == ErrorKind::InvalidData => {
                 atom!("invalid_data")
             }
-            ParserError::IO(_) => atom!("input_output_error"),
-            ParserError::LexicalError(_) => atom!("lexical_error"),
-            ParserError::MissingQuote(..) => atom!("missing_quote"),
-            ParserError::NonPrologChar(..) => atom!("non_prolog_character"),
-            ParserError::ParseBigInt(..) => atom!("cannot_parse_big_int"),
-            ParserError::UnexpectedChar(..) => atom!("unexpected_char"),
-            ParserError::Utf8Error(..) => atom!("utf8_conversion_error"),
+            ParserErrorKind::IO(_) => atom!("input_output_error"),
+            ParserErrorKind::ParseFloat => atom!("parse_float"),
+            ParserErrorKind::MissingQuote => atom!("missing_quote"),
+            ParserErrorKind::NonPrologChar => atom!("non_prolog_character"),
+            ParserErrorKind::ParseBigInt => atom!("cannot_parse_big_int"),
+            ParserErrorKind::UnexpectedChar(..) => atom!("unexpected_char"),
+            ParserErrorKind::Utf8Error => atom!("utf8_conversion_error"),
         }
     }
 
     #[inline]
-    pub fn unexpected_eof() -> Self {
-        ParserError::IO(std::io::Error::from(ErrorKind::UnexpectedEof))
+    pub(crate) fn unexpected_eof() -> Self {
+        ParserError {
+            location: None,
+            kind: ParserErrorKind::IO(std::io::Error::from(ErrorKind::UnexpectedEof)),
+        }
     }
 
     #[inline]
-    pub fn is_unexpected_eof(&self) -> bool {
-        if let ParserError::IO(e) = self {
+    pub(crate) fn is_unexpected_eof(&self) -> bool {
+        if let ParserErrorKind::IO(e) = &self.kind {
             e.kind() == ErrorKind::UnexpectedEof
         } else {
             false
@@ -499,24 +518,11 @@ impl ParserError {
     }
 }
 
-impl From<lexical::Error> for ParserError {
-    fn from(e: lexical::Error) -> ParserError {
-        ParserError::LexicalError(e)
-    }
-}
-
 impl From<IOError> for ParserError {
     fn from(e: IOError) -> ParserError {
-        ParserError::IO(e)
-    }
-}
-
-impl From<&IOError> for ParserError {
-    fn from(error: &IOError) -> ParserError {
-        if error.get_ref().filter(|e| e.is::<BadUtf8Error>()).is_some() {
-            ParserError::Utf8Error(0, 0)
-        } else {
-            ParserError::IO(error.kind().into())
+        ParserError {
+            location: None,
+            kind: ParserErrorKind::IO(e),
         }
     }
 }
