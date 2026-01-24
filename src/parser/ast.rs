@@ -426,34 +426,53 @@ pub enum ArithmeticError {
     UninstantiatedVar,
 }
 
+#[derive(Debug, Clone)]
+pub struct Location {
+    pub(super) line: usize,
+    pub(super) column: usize,
+}
+
+impl Location {
+    // beginning of file
+    pub(crate) const BOF: Self = Self { line: 0, column: 0 };
+
+    pub fn line(&self) -> usize {
+        self.line
+    }
+
+    pub fn column(&self) -> usize {
+        self.column
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub enum ParserError {
-    BackQuotedString(usize, usize),
+    BackQuotedString(Location),
     IO(IOError),
-    IncompleteReduction(usize, usize),
-    InfiniteFloat(usize, usize),
+    IncompleteReduction(Location),
+    InfiniteFloat(Location),
     InvalidSingleQuotedCharacter(char),
     LexicalError(lexical::Error),
-    MissingQuote(usize, usize),
-    NonPrologChar(usize, usize),
-    ParseBigInt(usize, usize),
-    UnexpectedChar(char, usize, usize),
+    MissingQuote(Location),
+    NonPrologChar(Location),
+    ParseBigInt(Location),
+    UnexpectedChar(char, Location),
     // UnexpectedEOF,
-    Utf8Error(usize, usize),
+    Utf8Error(Option<Location>),
 }
 
 impl ParserError {
-    pub fn line_and_col_num(&self) -> Option<(usize, usize)> {
+    pub fn location(&self) -> Option<Location> {
         match self {
-            &ParserError::BackQuotedString(line_num, col_num)
-            | &ParserError::IncompleteReduction(line_num, col_num)
-            | &ParserError::InfiniteFloat(line_num, col_num)
-            | &ParserError::MissingQuote(line_num, col_num)
-            | &ParserError::NonPrologChar(line_num, col_num)
-            | &ParserError::ParseBigInt(line_num, col_num)
-            | &ParserError::UnexpectedChar(_, line_num, col_num)
-            | &ParserError::Utf8Error(line_num, col_num) => Some((line_num, col_num)),
+            ParserError::BackQuotedString(location)
+            | ParserError::IncompleteReduction(location)
+            | ParserError::InfiniteFloat(location)
+            | ParserError::MissingQuote(location)
+            | ParserError::NonPrologChar(location)
+            | ParserError::ParseBigInt(location)
+            | ParserError::UnexpectedChar(_, location) => Some(location.clone()),
+            ParserError::Utf8Error(location) => location.as_ref().cloned(),
             _ => None,
         }
     }
@@ -513,8 +532,11 @@ impl From<IOError> for ParserError {
 
 impl From<&IOError> for ParserError {
     fn from(error: &IOError) -> ParserError {
-        if error.get_ref().filter(|e| e.is::<BadUtf8Error>()).is_some() {
-            ParserError::Utf8Error(0, 0)
+        if let Some(_utf8_error) = error
+            .get_ref()
+            .and_then(|e| e.downcast_ref::<BadUtf8Error>())
+        {
+            ParserError::Utf8Error(None)
         } else {
             ParserError::IO(error.kind().into())
         }

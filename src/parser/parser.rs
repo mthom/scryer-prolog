@@ -254,10 +254,7 @@ pub fn read_tokens<R: CharRead>(lexer: &mut Lexer<'_, R>) -> Result<Vec<Token>, 
                 }
             }
             Err(e) if e.is_unexpected_eof() && !tokens.is_empty() => {
-                return Err(ParserError::IncompleteReduction(
-                    lexer.line_num,
-                    lexer.col_num,
-                ));
+                return Err(ParserError::IncompleteReduction(lexer.location.clone()));
             }
             Err(e) => {
                 return Err(e);
@@ -702,8 +699,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 Some(term) => term,
                 _ => {
                     return Err(ParserError::IncompleteReduction(
-                        self.lexer.line_num,
-                        self.lexer.col_num,
+                        self.lexer.location.clone(),
                     ))
                 }
             };
@@ -719,8 +715,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
         if arity > self.terms.len() {
             return Err(ParserError::IncompleteReduction(
-                self.lexer.line_num,
-                self.lexer.col_num,
+                self.lexer.location.clone(),
             ));
         }
 
@@ -791,8 +786,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                             Some(term) => term,
                             _ => {
                                 return Err(ParserError::IncompleteReduction(
-                                    self.lexer.line_num,
-                                    self.lexer.col_num,
+                                    self.lexer.location.clone(),
                                 ))
                             }
                         };
@@ -972,10 +966,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 self.negate_number(n, negate_rat_rc, Literal::Rational)
             }
             Token::Literal(Literal::F64(_offset, n)) if n.is_infinite() => {
-                return Err(ParserError::InfiniteFloat(
-                    self.lexer.line_num,
-                    self.lexer.col_num,
-                ));
+                return Err(ParserError::InfiniteFloat(self.lexer.location.clone()));
             }
             Token::Literal(Literal::F64(offset, n)) => {
                 self.negate_number((offset, n), negate_f64, |(offset, n)| {
@@ -998,8 +989,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::Close => {
                 if !self.reduce_term() && !self.reduce_brackets() {
                     return Err(ParserError::IncompleteReduction(
-                        self.lexer.line_num,
-                        self.lexer.col_num,
+                        self.lexer.location.clone(),
                     ));
                 }
             }
@@ -1007,8 +997,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::CloseList => {
                 if !self.reduce_list()? {
                     return Err(ParserError::IncompleteReduction(
-                        self.lexer.line_num,
-                        self.lexer.col_num,
+                        self.lexer.location.clone(),
                     ));
                 }
             }
@@ -1016,8 +1005,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::CloseCurly => {
                 if !self.reduce_curly()? {
                     return Err(ParserError::IncompleteReduction(
-                        self.lexer.line_num,
-                        self.lexer.col_num,
+                        self.lexer.location.clone(),
                     ));
                 }
             }
@@ -1053,8 +1041,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 | Some(TokenType::HeadTailSeparator)
                 | Some(TokenType::Comma) => {
                     return Err(ParserError::IncompleteReduction(
-                        self.lexer.line_num,
-                        self.lexer.col_num,
+                        self.lexer.location.clone(),
                     ))
                 }
                 _ => {}
@@ -1066,12 +1053,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
     #[inline]
     pub fn add_lines_read(&mut self, lines_read: usize) {
-        self.lexer.line_num += lines_read;
+        self.lexer.location.line += lines_read;
     }
 
     #[inline]
     pub fn lines_read(&self) -> usize {
-        self.lexer.line_num
+        self.lexer.location.line
     }
 
     // on success, returns the parsed term and the number of lines read.
@@ -1093,8 +1080,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
         if self.terms.len() > 1 || self.stack.len() > 1 {
             return Err(ParserError::IncompleteReduction(
-                self.lexer.line_num,
-                self.lexer.col_num,
+                self.lexer.location.clone(),
             ));
         }
 
@@ -1104,14 +1090,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     Ok(term)
                 } else {
                     Err(ParserError::IncompleteReduction(
-                        self.lexer.line_num,
-                        self.lexer.col_num,
+                        self.lexer.location.clone(),
                     ))
                 }
             }
             _ => Err(ParserError::IncompleteReduction(
-                self.lexer.line_num,
-                self.lexer.col_num,
+                self.lexer.location.clone(),
             )),
         }
     }

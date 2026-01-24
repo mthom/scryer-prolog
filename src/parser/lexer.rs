@@ -91,16 +91,14 @@ macro_rules! try_nt {
 pub(crate) struct Lexer<'a, R> {
     pub(crate) reader: R,
     pub(crate) machine_st: &'a mut MachineState,
-    pub(crate) line_num: usize,
-    pub(crate) col_num: usize,
+    pub(crate) location: Location,
 }
 
 impl<'a, R: fmt::Debug> fmt::Debug for Lexer<'a, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LexerParser")
             .field("reader", &"&'a mut R") // Hacky solution.
-            .field("line_num", &self.line_num)
-            .field("col_num", &self.col_num)
+            .field("location", &self.location)
             .finish()
     }
 }
@@ -110,8 +108,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         Self {
             reader: src,
             machine_st,
-            line_num: 0,
-            col_num: 0,
+            location: Location::BOF,
         }
     }
 
@@ -138,10 +135,10 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         self.reader.consume(c.len_utf8());
 
         if new_line_char!(c) {
-            self.line_num += 1;
-            self.col_num = 0;
+            self.location.line += 1;
+            self.location.column = 0;
         } else {
-            self.col_num += 1;
+            self.location.column += 1;
         }
     }
 
@@ -200,10 +197,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
             match comment_loop() {
                 Err(e) if e.is_unexpected_eof() => {
-                    return Err(ParserError::IncompleteReduction(
-                        self.line_num,
-                        self.col_num,
-                    ));
+                    return Err(ParserError::IncompleteReduction(self.location.clone()));
                 }
                 Err(e) => {
                     return Err(e);
@@ -215,7 +209,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 self.skip_char(c);
                 Ok(true)
             } else {
-                Err(ParserError::NonPrologChar(self.line_num, self.col_num))
+                Err(ParserError::NonPrologChar(self.location.clone()))
             }
         } else {
             self.return_char('/');
@@ -232,7 +226,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
             if !back_quote_char!(c2) {
                 self.return_char(c);
-                Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
+                Err(ParserError::UnexpectedChar(c, self.location.clone()))
             } else {
                 self.skip_char(c2);
                 Ok(c2)
@@ -257,7 +251,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 Ok(None)
             } else {
                 self.return_char(c);
-                Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
+                Err(ParserError::UnexpectedChar(c, self.location.clone()))
             }
         } else {
             self.get_back_quoted_char().map(Some)
@@ -279,10 +273,10 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 self.skip_char(c);
                 Ok(token)
             } else {
-                Err(ParserError::MissingQuote(self.line_num, self.col_num))
+                Err(ParserError::MissingQuote(self.location.clone()))
             }
         } else {
-            Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
+            Err(ParserError::UnexpectedChar(c, self.location.clone()))
         }
     }
 
@@ -313,7 +307,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
             if !single_quote_char!(c2) {
                 self.return_char(c);
-                Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
+                Err(ParserError::UnexpectedChar(c, self.location.clone()))
             } else {
                 self.skip_char(c2);
                 Ok(c2)
@@ -354,7 +348,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
             if !double_quote_char!(c2) {
                 self.return_char(c);
-                Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
+                Err(ParserError::UnexpectedChar(c, self.location.clone()))
             } else {
                 self.skip_char(c2);
                 Ok(c2)
@@ -378,7 +372,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             't' => '\t',
             'n' => '\n',
             'r' => '\r',
-            c => return Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num)),
+            c => return Err(ParserError::UnexpectedChar(c, self.location.clone())),
         };
 
         self.skip_char(c);
@@ -396,10 +390,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         if hexadecimal_digit_char!(c) {
             self.escape_sequence_to_char(|c| hexadecimal_digit_char!(c), 16)
         } else {
-            Err(ParserError::IncompleteReduction(
-                self.line_num,
-                self.col_num,
-            ))
+            Err(ParserError::IncompleteReduction(self.location.clone()))
         }
     }
 
@@ -425,17 +416,14 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         if backslash_char!(c) {
             self.skip_char(c);
             u32::from_str_radix(&token, radix).map_or_else(
-                |_| Err(ParserError::ParseBigInt(self.line_num, self.col_num)),
+                |_| Err(ParserError::ParseBigInt(self.location.clone())),
                 |n| {
                     char::try_from(n)
-                        .map_err(|_| ParserError::Utf8Error(self.line_num, self.col_num))
+                        .map_err(|_| ParserError::Utf8Error(Some(self.location.clone())))
                 },
             )
         } else {
-            Err(ParserError::IncompleteReduction(
-                self.line_num,
-                self.col_num,
-            ))
+            Err(ParserError::IncompleteReduction(self.location.clone()))
         }
     }
 
@@ -447,7 +435,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             Ok(c)
         } else {
             if !backslash_char!(c) {
-                return Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num));
+                return Err(ParserError::UnexpectedChar(c, self.location.clone()));
             }
 
             self.skip_char(c);
@@ -478,7 +466,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             self.skip_char(c);
             Ok(token)
         } else {
-            Err(ParserError::MissingQuote(self.line_num, self.col_num))
+            Err(ParserError::MissingQuote(self.location.clone()))
         }
     }
 
@@ -509,7 +497,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 .map(NumberToken::Integer)
         } else {
             self.return_char(start);
-            Err(ParserError::ParseBigInt(self.line_num, self.col_num))
+            Err(ParserError::ParseBigInt(self.location.clone()))
         }
     }
 
@@ -540,7 +528,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 .map(NumberToken::Integer)
         } else {
             self.return_char(start);
-            Err(ParserError::ParseBigInt(self.line_num, self.col_num))
+            Err(ParserError::ParseBigInt(self.location.clone()))
         }
     }
 
@@ -571,7 +559,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 .map(NumberToken::Integer)
         } else {
             self.return_char(start);
-            Err(ParserError::ParseBigInt(self.line_num, self.col_num))
+            Err(ParserError::ParseBigInt(self.location.clone()))
         }
     }
 
@@ -648,7 +636,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             }
         } else {
             match self.get_back_quoted_string() {
-                Ok(_) => return Err(ParserError::BackQuotedString(self.line_num, self.col_num)),
+                Ok(_) => return Err(ParserError::BackQuotedString(self.location.clone())),
                 Err(e) => return Err(e),
             }
         }
@@ -686,7 +674,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             if decimal_digit_char!(c) {
                 Ok(c)
             } else {
-                Err(ParserError::ParseBigInt(self.line_num, self.col_num))
+                Err(ParserError::ParseBigInt(self.location.clone()))
             }
         } else {
             Ok(c)
@@ -708,7 +696,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             .or_else(|_| {
                 Integer::from_str_radix(token, radix)
                     .map(|n| GInteger::Integer(arena_alloc!(n, &mut self.machine_st.arena)))
-                    .map_err(|_| ParserError::ParseBigInt(self.line_num, self.col_num))
+                    .map_err(|_| ParserError::ParseBigInt(self.location.clone()))
             })
     }
 
