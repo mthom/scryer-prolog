@@ -1016,7 +1016,7 @@ impl MachineState {
                             self.unify_fixnum(n, nx);
                         }
                         _ => {
-                            let err = ParserError::ParseBigInt(parser.lexer.location.clone());
+                            let err = parser.lexer.parse_big_int_error();
                             let err = self.syntax_error(err);
 
                             return Err(self.error_form(err, stub_gen()));
@@ -1026,7 +1026,7 @@ impl MachineState {
                     return Ok(());
                 }
                 Ok(c) => {
-                    let err = ParserError::UnexpectedChar(c, lexer.location);
+                    let err = lexer.unexpected_char(c);
                     let err = self.syntax_error(err);
 
                     return Err(self.error_form(err, stub_gen()));

@@ -52,9 +52,7 @@ pub(crate) fn error_after_read_term<R>(
 
         // rough overlap with errors 8.14.1.3 k) & l) of the ISO standard here
         if !(location.line() == prior_num_lines_read && location.column() == 0) {
-            return CompilationError::from(ParserError::IncompleteReduction(
-                parser.lexer.location.clone(),
-            ));
+            return CompilationError::from(parser.lexer.incomplete_reduction());
         }
     }
 

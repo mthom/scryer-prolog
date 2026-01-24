@@ -447,71 +447,71 @@ impl Location {
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub enum ParserError {
-    BackQuotedString(Location),
+pub struct ParserError {
+    pub(crate) location: Option<Location>,
+    pub(crate) kind: ParserErrorKind,
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ParserErrorKind {
+    BackQuotedString,
     IO(IOError),
-    IncompleteReduction(Location),
-    InfiniteFloat(Location),
-    InvalidSingleQuotedCharacter(char, Location),
+    IncompleteReduction,
+    InfiniteFloat,
+    InvalidSingleQuotedCharacter(char),
     LexicalError(lexical::Error),
-    MissingQuote(Location),
-    NonPrologChar(Location),
-    ParseBigInt(Location),
-    UnexpectedChar(char, Location),
+    MissingQuote,
+    NonPrologChar,
+    ParseBigInt,
+    UnexpectedChar(char),
     // UnexpectedEOF,
-    Utf8Error(Option<Location>),
+    Utf8Error,
 }
 
 impl ParserError {
     pub fn location(&self) -> Option<Location> {
-        match self {
-            ParserError::BackQuotedString(location)
-            | ParserError::InvalidSingleQuotedCharacter(_, location)
-            | ParserError::IncompleteReduction(location)
-            | ParserError::InfiniteFloat(location)
-            | ParserError::MissingQuote(location)
-            | ParserError::NonPrologChar(location)
-            | ParserError::ParseBigInt(location)
-            | ParserError::UnexpectedChar(_, location) => Some(location.clone()),
-            ParserError::Utf8Error(location) => location.as_ref().cloned(),
-            ParserError::IO(_) | ParserError::LexicalError(_) => None,
-        }
+        self.location.as_ref().cloned()
     }
 
     pub fn as_atom(&self) -> Atom {
-        match self {
-            ParserError::BackQuotedString(..) => atom!("back_quoted_string"),
-            ParserError::IncompleteReduction(..) => atom!("incomplete_reduction"),
-            ParserError::InvalidSingleQuotedCharacter(..) => {
+        match &self.kind {
+            ParserErrorKind::BackQuotedString => atom!("back_quoted_string"),
+            ParserErrorKind::IncompleteReduction => atom!("incomplete_reduction"),
+            ParserErrorKind::InvalidSingleQuotedCharacter(..) => {
                 atom!("invalid_single_quoted_character")
             }
-            ParserError::InfiniteFloat(..) => {
+            ParserErrorKind::InfiniteFloat => {
                 atom!("infinite_float")
             }
-            ParserError::IO(e) if e.kind() == ErrorKind::UnexpectedEof => {
+            ParserErrorKind::IO(e) if e.kind() == ErrorKind::UnexpectedEof => {
                 atom!("unexpected_end_of_file")
             }
-            ParserError::IO(e) if e.kind() == ErrorKind::InvalidData => {
+            ParserErrorKind::IO(e) if e.kind() == ErrorKind::InvalidData => {
                 atom!("invalid_data")
             }
-            ParserError::IO(_) => atom!("input_output_error"),
-            ParserError::LexicalError(_) => atom!("lexical_error"),
-            ParserError::MissingQuote(..) => atom!("missing_quote"),
-            ParserError::NonPrologChar(..) => atom!("non_prolog_character"),
-            ParserError::ParseBigInt(..) => atom!("cannot_parse_big_int"),
-            ParserError::UnexpectedChar(..) => atom!("unexpected_char"),
-            ParserError::Utf8Error(..) => atom!("utf8_conversion_error"),
+            ParserErrorKind::IO(_) => atom!("input_output_error"),
+            ParserErrorKind::LexicalError(_) => atom!("lexical_error"),
+            ParserErrorKind::MissingQuote => atom!("missing_quote"),
+            ParserErrorKind::NonPrologChar => atom!("non_prolog_character"),
+            ParserErrorKind::ParseBigInt => atom!("cannot_parse_big_int"),
+            ParserErrorKind::UnexpectedChar(..) => atom!("unexpected_char"),
+            ParserErrorKind::Utf8Error => atom!("utf8_conversion_error"),
         }
     }
 
     #[inline]
     pub fn unexpected_eof() -> Self {
-        ParserError::IO(std::io::Error::from(ErrorKind::UnexpectedEof))
+        ParserError {
+            location: None,
+            kind: ParserErrorKind::IO(std::io::Error::from(ErrorKind::UnexpectedEof)),
+        }
     }
 
     #[inline]
     pub fn is_unexpected_eof(&self) -> bool {
-        if let ParserError::IO(e) = self {
+        if let ParserErrorKind::IO(e) = &self.kind {
             e.kind() == ErrorKind::UnexpectedEof
         } else {
             false
@@ -521,25 +521,18 @@ impl ParserError {
 
 impl From<lexical::Error> for ParserError {
     fn from(e: lexical::Error) -> ParserError {
-        ParserError::LexicalError(e)
+        ParserError {
+            location: None,
+            kind: ParserErrorKind::LexicalError(e),
+        }
     }
 }
 
 impl From<IOError> for ParserError {
     fn from(e: IOError) -> ParserError {
-        ParserError::IO(e)
-    }
-}
-
-impl From<&IOError> for ParserError {
-    fn from(error: &IOError) -> ParserError {
-        if let Some(_utf8_error) = error
-            .get_ref()
-            .and_then(|e| e.downcast_ref::<BadUtf8Error>())
-        {
-            ParserError::Utf8Error(None)
-        } else {
-            ParserError::IO(error.kind().into())
+        ParserError {
+            location: None,
+            kind: ParserErrorKind::IO(e),
         }
     }
 }

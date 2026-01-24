@@ -254,7 +254,7 @@ pub fn read_tokens<R: CharRead>(lexer: &mut Lexer<'_, R>) -> Result<Vec<Token>, 
                 }
             }
             Err(e) if e.is_unexpected_eof() && !tokens.is_empty() => {
-                return Err(ParserError::IncompleteReduction(lexer.location.clone()));
+                return Err(lexer.incomplete_reduction());
             }
             Err(e) => {
                 return Err(e);
@@ -697,11 +697,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         } else {
             let term = match self.terms.pop() {
                 Some(term) => term,
-                _ => {
-                    return Err(ParserError::IncompleteReduction(
-                        self.lexer.location.clone(),
-                    ))
-                }
+                _ => return Err(self.lexer.incomplete_reduction()),
             };
 
             if self.stack[idx].priority > 1000 {
@@ -714,9 +710,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         };
 
         if arity > self.terms.len() {
-            return Err(ParserError::IncompleteReduction(
-                self.lexer.location.clone(),
-            ));
+            return Err(self.lexer.incomplete_reduction());
         }
 
         let idx = self.terms.len() - arity;
@@ -784,11 +778,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
                         let term = match self.terms.pop() {
                             Some(term) => term,
-                            _ => {
-                                return Err(ParserError::IncompleteReduction(
-                                    self.lexer.location.clone(),
-                                ))
-                            }
+                            _ => return Err(self.lexer.incomplete_reduction()),
                         };
 
                         self.terms
@@ -966,7 +956,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 self.negate_number(n, negate_rat_rc, Literal::Rational)
             }
             Token::Literal(Literal::F64(_offset, n)) if n.is_infinite() => {
-                return Err(ParserError::InfiniteFloat(self.lexer.location.clone()));
+                return Err(self.lexer.located_error(ParserErrorKind::InfiniteFloat));
             }
             Token::Literal(Literal::F64(offset, n)) => {
                 self.negate_number((offset, n), negate_f64, |(offset, n)| {
@@ -988,25 +978,19 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::OpenCT => self.shift(Token::OpenCT, 1300, DELIMITER),
             Token::Close => {
                 if !self.reduce_term() && !self.reduce_brackets() {
-                    return Err(ParserError::IncompleteReduction(
-                        self.lexer.location.clone(),
-                    ));
+                    return Err(self.lexer.incomplete_reduction());
                 }
             }
             Token::OpenList => self.shift(Token::OpenList, 1300, DELIMITER),
             Token::CloseList => {
                 if !self.reduce_list()? {
-                    return Err(ParserError::IncompleteReduction(
-                        self.lexer.location.clone(),
-                    ));
+                    return Err(self.lexer.incomplete_reduction());
                 }
             }
             Token::OpenCurly => self.shift(Token::OpenCurly, 1300, DELIMITER),
             Token::CloseCurly => {
                 if !self.reduce_curly()? {
-                    return Err(ParserError::IncompleteReduction(
-                        self.lexer.location.clone(),
-                    ));
+                    return Err(self.lexer.incomplete_reduction());
                 }
             }
             Token::HeadTailSeparator => {
@@ -1039,11 +1023,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 | Some(TokenType::OpenList)
                 | Some(TokenType::OpenCurly)
                 | Some(TokenType::HeadTailSeparator)
-                | Some(TokenType::Comma) => {
-                    return Err(ParserError::IncompleteReduction(
-                        self.lexer.location.clone(),
-                    ))
-                }
+                | Some(TokenType::Comma) => return Err(self.lexer.incomplete_reduction()),
                 _ => {}
             },
         }
@@ -1079,9 +1059,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         self.reduce_op(1400);
 
         if self.terms.len() > 1 || self.stack.len() > 1 {
-            return Err(ParserError::IncompleteReduction(
-                self.lexer.location.clone(),
-            ));
+            return Err(self.lexer.incomplete_reduction());
         }
 
         match self.terms.pop() {
@@ -1089,14 +1067,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 if self.terms.is_empty() {
                     Ok(term)
                 } else {
-                    Err(ParserError::IncompleteReduction(
-                        self.lexer.location.clone(),
-                    ))
+                    Err(self.lexer.incomplete_reduction())
                 }
             }
-            _ => Err(ParserError::IncompleteReduction(
-                self.lexer.location.clone(),
-            )),
+            _ => Err(self.lexer.incomplete_reduction()),
         }
     }
 }
