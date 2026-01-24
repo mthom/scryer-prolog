@@ -632,7 +632,10 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                     }
                 }
             } else {
-                return Err(ParserError::InvalidSingleQuotedCharacter(c));
+                return Err(ParserError::InvalidSingleQuotedCharacter(
+                    c,
+                    self.location.clone(),
+                ));
             }
         } else {
             match self.get_back_quoted_string() {

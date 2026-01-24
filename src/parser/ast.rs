@@ -452,7 +452,7 @@ pub enum ParserError {
     IO(IOError),
     IncompleteReduction(Location),
     InfiniteFloat(Location),
-    InvalidSingleQuotedCharacter(char),
+    InvalidSingleQuotedCharacter(char, Location),
     LexicalError(lexical::Error),
     MissingQuote(Location),
     NonPrologChar(Location),
@@ -466,6 +466,7 @@ impl ParserError {
     pub fn location(&self) -> Option<Location> {
         match self {
             ParserError::BackQuotedString(location)
+            | ParserError::InvalidSingleQuotedCharacter(_, location)
             | ParserError::IncompleteReduction(location)
             | ParserError::InfiniteFloat(location)
             | ParserError::MissingQuote(location)
@@ -473,9 +474,7 @@ impl ParserError {
             | ParserError::ParseBigInt(location)
             | ParserError::UnexpectedChar(_, location) => Some(location.clone()),
             ParserError::Utf8Error(location) => location.as_ref().cloned(),
-            ParserError::IO(_)
-            | ParserError::LexicalError(_)
-            | ParserError::InvalidSingleQuotedCharacter(_) => None,
+            ParserError::IO(_) | ParserError::LexicalError(_) => None,
         }
     }
 
