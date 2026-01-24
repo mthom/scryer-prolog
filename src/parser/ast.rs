@@ -4,7 +4,6 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::offset_table::*;
-use crate::parser::char_reader::*;
 use crate::types::HeapCellValueTag;
 
 use std::cell::{Cell, Ref, RefCell, RefMut};
