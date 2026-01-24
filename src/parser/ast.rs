@@ -461,7 +461,7 @@ pub enum ParserErrorKind {
     IncompleteReduction,
     InfiniteFloat,
     InvalidSingleQuotedCharacter(char),
-    LexicalError(lexical::Error),
+    ParseFloat,
     MissingQuote,
     NonPrologChar,
     ParseBigInt,
@@ -492,7 +492,7 @@ impl ParserError {
                 atom!("invalid_data")
             }
             ParserErrorKind::IO(_) => atom!("input_output_error"),
-            ParserErrorKind::LexicalError(_) => atom!("lexical_error"),
+            ParserErrorKind::ParseFloat => atom!("parse_float"),
             ParserErrorKind::MissingQuote => atom!("missing_quote"),
             ParserErrorKind::NonPrologChar => atom!("non_prolog_character"),
             ParserErrorKind::ParseBigInt => atom!("cannot_parse_big_int"),
@@ -515,15 +515,6 @@ impl ParserError {
             e.kind() == ErrorKind::UnexpectedEof
         } else {
             false
-        }
-    }
-}
-
-impl From<lexical::Error> for ParserError {
-    fn from(e: lexical::Error) -> ParserError {
-        ParserError {
-            location: None,
-            kind: ParserErrorKind::LexicalError(e),
         }
     }
 }

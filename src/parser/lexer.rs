@@ -684,7 +684,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
     ) -> Result<(F64Offset, OrderedFloat<f64>), ParserError> {
         self.return_char(token.pop().unwrap());
 
-        let n = parse_float_lossy(&token)?;
+        let n = self.parse_float_lossy(&token)?;
         let offset = float_alloc!(n, self.machine_st.arena);
 
         Ok((offset, OrderedFloat(n)))
@@ -821,7 +821,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                             }
                         }
 
-                        let n = parse_float_lossy(&token)?;
+                        let n = self.parse_float_lossy(&token)?;
                         let offset = float_alloc!(n, self.machine_st.arena);
 
                         Ok(NumberToken::Float(offset, OrderedFloat(n)))
@@ -830,7 +830,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                             .map(|(offset, fl)| NumberToken::Float(offset, fl))
                     }
                 } else {
-                    let n = parse_float_lossy(&token)?;
+                    let n = self.parse_float_lossy(&token)?;
                     let offset = float_alloc!(n, self.machine_st.arena);
                     Ok(NumberToken::Float(offset, OrderedFloat(n)))
                 }
@@ -969,7 +969,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             Ok(NumberToken::Partial(token_string)) => match self.parse_integer(&token_string) {
                 Ok(n) => Ok(Token::Literal(n.to_literal())),
                 Err(_) => {
-                    let n = parse_float_lossy(&token_string)?;
+                    let n = self.parse_float_lossy(&token_string)?;
                     let offset = float_alloc!(n, self.machine_st.arena);
                     Ok(Token::Literal(Literal::F64(offset, OrderedFloat(n))))
                 }
@@ -1083,14 +1083,17 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             Err(e) => Err(e),
         }
     }
-}
 
-fn parse_float_lossy(token: &str) -> Result<f64, ParserError> {
-    const FORMAT: u128 = lexical::format::STANDARD;
-    let options = lexical::ParseFloatOptions::builder()
-        .lossy(true)
-        .build()
-        .unwrap();
-    let n = lexical::parse_with_options::<f64, _, FORMAT>(token.as_bytes(), &options)?;
-    Ok(n)
+    fn parse_float_lossy(&self, token: &str) -> Result<f64, ParserError> {
+        const FORMAT: u128 = lexical::format::STANDARD;
+        let Ok(options) = lexical::ParseFloatOptions::builder().lossy(true).build() else {
+            return Err(self.located_error(ParserErrorKind::ParseFloat));
+        };
+
+        let Ok(n) = lexical::parse_with_options::<f64, _, FORMAT>(token.as_bytes(), &options)
+        else {
+            return Err(self.located_error(ParserErrorKind::ParseFloat));
+        };
+        Ok(n)
+    }
 }
