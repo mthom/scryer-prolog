@@ -454,7 +454,7 @@ pub struct ParserError {
 #[allow(dead_code)]
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum ParserErrorKind {
+pub(crate) enum ParserErrorKind {
     BackQuotedString,
     IO(IOError),
     IncompleteReduction,
@@ -470,11 +470,11 @@ pub enum ParserErrorKind {
 }
 
 impl ParserError {
-    pub fn location(&self) -> Option<Location> {
+    pub(crate) fn location(&self) -> Option<Location> {
         self.location.as_ref().cloned()
     }
 
-    pub fn as_atom(&self) -> Atom {
+    pub(crate) fn as_atom(&self) -> Atom {
         match &self.kind {
             ParserErrorKind::BackQuotedString => atom!("back_quoted_string"),
             ParserErrorKind::IncompleteReduction => atom!("incomplete_reduction"),
@@ -501,7 +501,7 @@ impl ParserError {
     }
 
     #[inline]
-    pub fn unexpected_eof() -> Self {
+    pub(crate) fn unexpected_eof() -> Self {
         ParserError {
             location: None,
             kind: ParserErrorKind::IO(std::io::Error::from(ErrorKind::UnexpectedEof)),
@@ -509,7 +509,7 @@ impl ParserError {
     }
 
     #[inline]
-    pub fn is_unexpected_eof(&self) -> bool {
+    pub(crate) fn is_unexpected_eof(&self) -> bool {
         if let ParserErrorKind::IO(e) = &self.kind {
             e.kind() == ErrorKind::UnexpectedEof
         } else {
