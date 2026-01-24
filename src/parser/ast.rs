@@ -473,7 +473,9 @@ impl ParserError {
             | ParserError::ParseBigInt(location)
             | ParserError::UnexpectedChar(_, location) => Some(location.clone()),
             ParserError::Utf8Error(location) => location.as_ref().cloned(),
-            _ => None,
+            ParserError::IO(_)
+            | ParserError::LexicalError(_)
+            | ParserError::InvalidSingleQuotedCharacter(_) => None,
         }
     }
 
