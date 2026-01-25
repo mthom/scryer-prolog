@@ -1537,6 +1537,7 @@ impl Stream {
             }
             #[cfg(feature = "http")]
             Stream::HttpWrite(mut http_stream) => {
+                http_stream.inner_mut().drop();
                 http_stream.drop_payload();
 
                 Ok(())
