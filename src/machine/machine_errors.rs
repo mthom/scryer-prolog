@@ -20,7 +20,46 @@ pub type MachineStubGen = Box<dyn Fn(&mut MachineState) -> MachineStub>;
 #[derive(Debug)]
 pub(crate) struct MachineError {
     stub: MachineStub,
-    location: Option<(usize, usize)>, // line_num, col_num
+    // !!! context is in reverse order !!!
+    // i.e. the first element in this Vec will be the last entry in the list on the prolog side
+    // this is due to the end of the Vev List that can easily be appended to being different in rust and prolog
+    // rust can easily push to the back of a Vec while prolog can easily push to the front of a List
+    context: Vec<MachineStub>,
+}
+
+impl MachineError {
+    fn new(error_term: MachineStub) -> Self {
+        Self {
+            stub: error_term,
+            context: vec![],
+        }
+    }
+
+    pub(super) fn into_stub(self) -> MachineStub {
+        let mut context = functor!(atom!("[]"));
+
+        for ctx in self.context.into_iter().rev() {
+            context = functor!(atom!("."), [functor(ctx), functor(context)]);
+        }
+
+        functor!(atom!("error"), [functor((self.stub)), functor(context)])
+    }
+}
+
+impl MachineError {
+    /// add additonal context to the front of the machine errors context list
+    /// should usually be a (-)/2 functor
+    /// e.g. line-22 or column-180
+    pub(crate) fn with_context(mut self, stub: MachineStub) -> Self {
+        self.add_context(stub);
+        self
+    }
+
+    /// See `Self::with_context`
+    pub(crate) fn add_context(&mut self, stub: MachineStub) -> &mut Self {
+        self.context.push(stub);
+        self
+    }
 }
 
 // from 7.12.2 b) of 13211-1:1995
@@ -92,7 +131,7 @@ impl TypeError for HeapCellValue {
 
         MachineError {
             stub,
-            location: None,
+            context: vec![],
         }
     }
 }
@@ -106,7 +145,7 @@ impl TypeError for MachineStub {
 
         MachineError {
             stub,
-            location: None,
+            context: vec![],
         }
     }
 }
@@ -123,7 +162,7 @@ impl TypeError for Number {
 
         MachineError {
             stub,
-            location: None,
+            context: vec![],
         }
     }
 }
@@ -155,7 +194,7 @@ impl PermissionError for Atom {
 
         MachineError {
             stub,
-            location: None,
+            context: vec![],
         }
     }
 }
@@ -198,7 +237,7 @@ impl PermissionError for HeapCellValue {
 
         MachineError {
             stub,
-            location: None,
+            context: vec![],
         }
     }
 }
@@ -221,7 +260,7 @@ impl PermissionError for MachineStub {
 
         MachineError {
             stub,
-            location: None,
+            context: vec![],
         }
     }
 }
@@ -237,10 +276,7 @@ impl DomainError for HeapCellValue {
             [atom_as_cell((error.as_atom())), cell(self)]
         );
 
-        MachineError {
-            stub,
-            location: None,
-        }
+        MachineError::new(stub)
     }
 }
 
@@ -254,10 +290,7 @@ impl DomainError for Number {
             ]
         );
 
-        MachineError {
-            stub,
-            location: None,
-        }
+        MachineError::new(stub)
     }
 }
 
@@ -268,10 +301,7 @@ impl DomainError for MachineStub {
             [atom_as_cell((error.as_atom())), functor(self)]
         );
 
-        MachineError {
-            stub,
-            location: None,
-        }
+        MachineError::new(stub)
     }
 }
 
@@ -289,10 +319,7 @@ impl DomainError for ffi::Value {
                     [atom_as_cell((error.as_atom())), string(str)]
                 );
 
-                MachineError {
-                    stub,
-                    location: None,
-                }
+                MachineError::new(stub)
             }
             Value::Struct(atom, _values) => atom_as_cell!(atom).domain_error(machine_st, error),
         }
@@ -309,10 +336,7 @@ impl MachineState {
     pub(super) fn interrupt_error(&mut self) -> MachineError {
         let stub = functor!(atom!("$interrupt_thrown"));
 
-        MachineError {
-            stub,
-            location: None,
-        }
+        MachineError::new(stub)
     }
 
     pub(super) fn evaluation_error(&mut self, eval_error: EvalError) -> MachineError {
@@ -321,10 +345,7 @@ impl MachineState {
             [atom_as_cell((eval_error.as_atom()))]
         );
 
-        MachineError {
-            stub,
-            location: None,
-        }
+        MachineError::new(stub)
     }
 
     pub(super) fn resource_error(err: ResourceError) -> MachineError {
@@ -337,10 +358,7 @@ impl MachineState {
             }
         };
 
-        MachineError {
-            stub,
-            location: None,
-        }
+        MachineError::new(stub)
     }
 
     pub(super) fn type_error<T: TypeError>(
@@ -359,10 +377,7 @@ impl MachineState {
                     [atom_as_cell((atom!("source_sink"))), atom_as_cell(name)]
                 );
 
-                MachineError {
-                    stub,
-                    location: None,
-                }
+                MachineError::new(stub)
             }
             ExistenceError::QualifiedProcedure {
                 module_name,
@@ -377,10 +392,7 @@ impl MachineState {
                     [atom_as_cell((atom!("procedure"))), functor(res_stub)]
                 );
 
-                MachineError {
-                    stub,
-                    location: None,
-                }
+                MachineError::new(stub)
             }
             ExistenceError::Procedure(name, arity) => {
                 let culprit = functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)]);
@@ -390,10 +402,7 @@ impl MachineState {
                     [atom_as_cell((atom!("procedure"))), functor(culprit)]
                 );
 
-                MachineError {
-                    stub,
-                    location: None,
-                }
+                MachineError::new(stub)
             }
             ExistenceError::ModuleSource(source) => {
                 let source_stub = source.as_functor_stub();
@@ -403,10 +412,7 @@ impl MachineState {
                     [atom_as_cell((atom!("source_sink"))), functor(source_stub)]
                 );
 
-                MachineError {
-                    stub,
-                    location: None,
-                }
+                MachineError::new(stub)
             }
             ExistenceError::SourceSink(culprit) => {
                 let stub = functor!(
@@ -414,10 +420,7 @@ impl MachineState {
                     [atom_as_cell((atom!("source_sink"))), cell(culprit)]
                 );
 
-                MachineError {
-                    stub,
-                    location: None,
-                }
+                MachineError::new(stub)
             }
             ExistenceError::Stream(culprit) => {
                 let stub = functor!(
@@ -425,10 +428,7 @@ impl MachineState {
                     [atom_as_cell((atom!("stream"))), cell(culprit)]
                 );
 
-                MachineError {
-                    stub,
-                    location: None,
-                }
+                MachineError::new(stub)
             }
             ExistenceError::Process(culprit) => {
                 let stub = functor!(
@@ -436,10 +436,7 @@ impl MachineState {
                     [atom_as_cell((atom!("process"))), cell(culprit)]
                 );
 
-                MachineError {
-                    stub,
-                    location: None,
-                }
+                MachineError::new(stub)
             }
             ExistenceError::FfiFunction(name, arity) => {
                 let culprit = functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)]);
@@ -448,10 +445,7 @@ impl MachineState {
                     [atom_as_cell((atom!("ffi_function"))), functor(culprit)]
                 );
 
-                MachineError {
-                    stub,
-                    location: None,
-                }
+                MachineError::new(stub)
             }
             ExistenceError::FfiStructConstructor(name, arity) => {
                 let culprit = functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)]);
@@ -463,10 +457,7 @@ impl MachineState {
                     ]
                 );
 
-                MachineError {
-                    stub,
-                    location: None,
-                }
+                MachineError::new(stub)
             }
             ExistenceError::FfiStructType(atom) => {
                 let stub = functor!(
@@ -474,10 +465,7 @@ impl MachineState {
                     [atom_as_cell((atom!("ffi_struct_type"))), atom_as_cell(atom)]
                 );
 
-                MachineError {
-                    stub,
-                    location: None,
-                }
+                MachineError::new(stub)
             }
         }
     }
@@ -554,10 +542,7 @@ impl MachineState {
     pub(super) fn instantiation_error(&mut self) -> MachineError {
         let stub = functor!(atom!("instantiation_error"));
 
-        MachineError {
-            stub,
-            location: None,
-        }
+        MachineError::new(stub)
     }
 
     pub(super) fn session_error(&mut self, err: SessionError) -> MachineError {
@@ -657,7 +642,28 @@ impl MachineState {
 
         let stub = functor!(atom!("syntax_error"), [functor(stub)]);
 
-        MachineError { stub, location }
+        let mut err = MachineError::new(stub);
+
+        if let Some((line, column)) = location {
+            let column = fixnum!(Number, column, &mut self.arena);
+            let line = fixnum!(Number, line, &mut self.arena);
+
+            err.add_context(functor!(
+                atom!("-"),
+                [
+                    atom_as_cell((atom!("column"))),
+                    number(column, (&mut self.arena))
+                ]
+            ))
+            .add_context(functor!(
+                atom!("-"),
+                [
+                    atom_as_cell((atom!("line"))),
+                    number(line, (&mut self.arena))
+                ]
+            ));
+        }
+        err
     }
 
     pub(super) fn representation_error(&self, flag: RepFlag) -> MachineError {
@@ -666,10 +672,7 @@ impl MachineState {
             [atom_as_cell((flag.as_atom()))]
         );
 
-        MachineError {
-            stub,
-            location: None,
-        }
+        MachineError::new(stub)
     }
 
     #[allow(dead_code)] // not used when all features are enabled
@@ -681,19 +684,13 @@ impl MachineState {
             )]
         );
 
-        MachineError {
-            stub,
-            location: None,
-        }
+        MachineError::new(stub)
     }
 
     pub(super) fn unreachable_error(&self) -> MachineError {
         let stub = functor!(atom!("system_error"));
 
-        MachineError {
-            stub,
-            location: None,
-        }
+        MachineError::new(stub)
     }
 
     #[cfg(feature = "ffi")]
@@ -705,10 +702,7 @@ impl MachineState {
                     [atom_as_cell(expected), atom_as_cell(actual)]
                 );
 
-                MachineError {
-                    stub,
-                    location: None,
-                }
+                MachineError::new(stub)
             }
             FfiError::ValueOutOfRange(domain, culprit) => self.domain_error(domain, culprit),
             FfiError::FunctionNotFound(name, arity) => {
@@ -730,10 +724,10 @@ impl MachineState {
                     self.existence_error(ExistenceError::FfiStructConstructor(name, got))
                 }
             },
-            FfiError::AllocationFailed => MachineError {
-                stub: functor!(atom!("resource_error"), [atom_as_cell((atom!("heap")))]),
-                location: None,
-            },
+            FfiError::AllocationFailed => MachineError::new(functor!(
+                atom!("resource_error"),
+                [atom_as_cell((atom!("heap")))]
+            )),
             FfiError::LayoutError => self.representation_error(RepFlag::FfiLayout),
             FfiError::UnsupportedTypedef => self.representation_error(RepFlag::FfiLayout),
             FfiError::UnsupportedAbi => self.representation_error(RepFlag::FfiAbi),
@@ -752,21 +746,12 @@ impl MachineState {
         }
     }
 
-    pub(super) fn error_form(&mut self, err: MachineError, src: MachineStub) -> MachineStub {
-        if let Some((line_num, _col_num)) = err.location {
-            functor!(
-                atom!("error"),
-                [
-                    functor((err.stub)),
-                    functor(
-                        (atom!(":")),
-                        [functor(src), number(line_num, (&mut self.arena))]
-                    )
-                ]
-            )
-        } else {
-            functor!(atom!("error"), [functor((err.stub)), functor(src)])
-        }
+    pub(super) fn error_form(&self, err: MachineError, predicate: MachineStub) -> MachineStub {
+        err.with_context(functor!(
+            atom!("-"),
+            [atom_as_cell((atom!("predicate"))), functor(predicate)]
+        ))
+        .into_stub()
     }
 
     // throw an error pre-allocated in the heap
