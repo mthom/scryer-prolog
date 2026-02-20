@@ -52,7 +52,7 @@ where
     payload_offset - header_offset
 }
 
-#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq)]
+#[derive(Specifier, Copy, Clone, Debug, PartialEq)]
 #[bits = 7]
 pub enum ArenaHeaderTag {
     Integer = 0b10,

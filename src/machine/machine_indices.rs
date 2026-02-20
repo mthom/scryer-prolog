@@ -14,8 +14,8 @@ use crate::offset_table::*;
 
 use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
-use scryer_modular_bitfield::specifiers::*;
-use scryer_modular_bitfield::{bitfield, BitfieldSpecifier};
+use modular_bitfield::specifiers::*;
+use modular_bitfield::{bitfield, Specifier};
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -66,7 +66,7 @@ impl PartialOrd<Ref> for HeapCellValue {
     }
 }
 
-#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq)]
+#[derive(Specifier, Copy, Clone, Debug, PartialEq)]
 #[bits = 7]
 pub enum IndexPtrTag {
     DynamicUndefined = 0b1000101, // a predicate, declared as dynamic, whose location in code is as yet undefined.

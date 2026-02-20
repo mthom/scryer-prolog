@@ -23,7 +23,7 @@ use arcu::rcu_ref::RcuRef;
 use arcu::Rcu;
 use indexmap::IndexSet;
 
-use scryer_modular_bitfield::prelude::*;
+use modular_bitfield::prelude::*;
 
 #[bitfield]
 #[repr(u64)]

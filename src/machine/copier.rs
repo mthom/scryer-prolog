@@ -9,14 +9,14 @@ use crate::machine::heap::*;
 use crate::machine::stack::*;
 use crate::types::*;
 
-use scryer_modular_bitfield::specifiers::*;
-use scryer_modular_bitfield::*;
+use modular_bitfield::specifiers::*;
+use modular_bitfield::*;
 
 use std::collections::BTreeMap;
 use std::mem;
 use std::ops::{IndexMut, Range};
 
-#[derive(BitfieldSpecifier, Copy, Clone, Debug)]
+#[derive(Specifier, Copy, Clone, Debug)]
 #[bits = 6]
 enum TrailRefTag {
     HeapCell = 0b001011,
