@@ -1,5 +1,3 @@
-#![allow(unused_parens)] // see mthom/scryer-prolog#3092 and rust-lang/rust#147126
-
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::functor_macro::*;
