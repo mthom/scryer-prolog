@@ -20,9 +20,9 @@ use dashu::Integer;
 use dashu::Rational;
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
-use ordered_float::OrderedFloat;
 use modular_bitfield::error::OutOfBounds;
 use modular_bitfield::prelude::*;
+use ordered_float::OrderedFloat;
 
 pub type Specifier = u32;
 
