@@ -220,6 +220,46 @@ expand_op_list([Op | OtherOps], Pri, Spec, [(:- op(Pri, Spec, Op)) | OtherResult
     expand_op_list(OtherOps, Pri, Spec, OtherResults).
 
 
+% Implement the include/1 directive via term expansion.
+
+user:term_expansion((:- include(File0)), Clauses) :-
+        (   si:atom_si(File0) ->
+            atom_chars(File0, File),
+            format("% Warning: include/1: atom arguments are deprecated. Use chars for file paths:~n", []),
+            format("% :- include(\"~s\").~n", [File])
+        ;   error:must_be(chars, File0),
+            File = File0
+        ),
+        '$toplevel':gather_clauses_from_file(File, Clauses).
+
+
+gather_clauses_from_file(File, Clauses) :-
+        (   file_exists(File) ->
+            setup_call_cleanup(open(File, read, Stream),
+                               gather_clauses_(Stream, File, Clauses),
+                               close(Stream))
+        ;   format("include/1: ~s does not exist.", [File]),
+            Clauses = []
+        ).
+
+
+gather_clauses_(Stream, _, []) :- at_end_of_stream(Stream), !.
+gather_clauses_(Stream, File, Clauses) :-
+        catch((read(Stream, Clause),
+               Continue = true),
+              Error,
+              (   Error = error(syntax_error(incomplete_reduction),_),
+                  at_end_of_stream(Stream) ->
+                  true
+              ;   format("~s: ~q", [File,Error])
+              )),
+        (   Continue == true ->
+            Clauses = [Clause|Rest],
+            gather_clauses_(Stream, File, Rest)
+        ;   Clauses = []
+        ).
+
+
 read_and_match :-
     '$read_query_term'(_, Term, _, _, VarList),
     instruction_match(Term, VarList).
