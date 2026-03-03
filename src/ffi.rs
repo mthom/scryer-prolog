@@ -88,9 +88,10 @@ impl FunctionImpl {
         };
 
         if let Some(cstr) = ptr {
-            Ok(Value::CString(
-                unsafe { CStr::from_ptr(cstr.as_ptr()) }.to_owned(),
-            ))
+            let string_lossy = unsafe { CStr::from_ptr(cstr.as_ptr()) }.to_string_lossy();
+            let cstring =
+                CString::new(string_lossy.as_ref()).unwrap_or_else(|_| CString::default());
+            Ok(Value::CString(cstring))
         } else {
             Ok(Value::Number(Number::Fixnum(Fixnum::build_with(0))))
         }
@@ -314,7 +315,10 @@ impl StructImpl {
                     }
                     FfiType::CStr => {
                         let ptr = read_primitive::<*mut c_void>(ptr, &mut layout)?;
-                        Ok(Value::CString(CStr::from_ptr(ptr.cast()).to_owned()))
+                        let string_lossy = unsafe { CStr::from_ptr(ptr.cast()) }.to_string_lossy();
+                        let cstring = CString::new(string_lossy.as_ref())
+                            .unwrap_or_else(|_| CString::default());
+                        Ok(Value::CString(cstring))
                     }
                     FfiType::F32 => read_float::<f32>(ptr, &mut layout),
                     FfiType::F64 => read_float::<f64>(ptr, &mut layout),
@@ -838,9 +842,10 @@ impl ForeignFunctionTable {
                 let addr = unsafe { ptr.cast::<*mut c_void>().read() }.expose_provenance();
                 Ok(Value::Number(fixnum!(Number, addr, arena)))
             }
-            FfiType::CStr => Ok(Value::CString(
-                unsafe { CStr::from_ptr(ptr.as_ptr().cast()) }.to_owned(),
-            )),
+            FfiType::CStr => Ok(Value::CString({
+                let string_lossy = unsafe { CStr::from_ptr(ptr.as_ptr().cast()) }.to_string_lossy();
+                CString::new(string_lossy.as_ref()).unwrap_or_else(|_| CString::default())
+            })),
             FfiType::Struct(_) => {
                 let Some(struct_impl) = self.structs.get(&kind) else {
                     return Err(FfiError::StructNotFound(kind));

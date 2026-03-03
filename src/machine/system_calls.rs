@@ -5127,7 +5127,7 @@ impl Machine {
             Value::CString(cstr) => {
                 let str_cell = resource_error_call_result!(
                     self.machine_st,
-                    self.machine_st.heap.allocate_cstr(cstr.to_str().unwrap())
+                    self.machine_st.heap.allocate_cstr(&cstr.to_string_lossy())
                 );
 
                 unify!(self.machine_st, str_cell, return_value);
