@@ -150,3 +150,10 @@ fn http_open_hanging() {
             "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
     );
 }
+
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn serialization_json_segfault() {
+    load_module_test("tests-pl/serialization-json-segfault.pl", "ok");
+}
