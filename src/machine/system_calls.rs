@@ -5125,9 +5125,7 @@ impl Machine {
                 unify!(self.machine_st, return_value, struct_value);
             }
             Value::CString(cstr) => {
-                let bytes = cstr.to_bytes();
-
-                let str_cell = match std::str::from_utf8(bytes) {
+                let str_cell = match cstr.to_str() {
                     Ok(valid_str) => resource_error_call_result!(
                         self.machine_st,
                         self.machine_st.heap.allocate_cstr(valid_str)
