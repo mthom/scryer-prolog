@@ -309,11 +309,11 @@ fn ffi_utf8_panic() {
     let dynlib_path = build_dynamic_library(
         "ffi_utf8_panic",
         r##"
-                #[unsafe(no_mangle)]
-                extern "C" fn ffi_invalid_utf8_cstr() -> *const core::ffi::c_char {
-                    c"Invalid\xFFUTF8".as_ptr()
-                }
-            "##,
+#[unsafe(no_mangle)]
+extern "C" fn ffi_invalid_utf8_cstr() -> *const core::ffi::c_char {
+    c"Invalid\xFFUTF8".as_ptr()
+}
+        "##,
     );
 
     load_module_test_with_input(
