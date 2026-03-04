@@ -150,4 +150,3 @@ fn http_open_hanging() {
             "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
     );
 }
-

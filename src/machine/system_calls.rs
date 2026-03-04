@@ -5131,7 +5131,8 @@ impl Machine {
                         self.machine_st.heap.allocate_cstr(valid_str)
                     ),
                     Err(_) => {
-                        let cells: Vec<_> = cstr.to_bytes()
+                        let cells: Vec<_> = cstr
+                            .to_bytes()
                             .iter()
                             .map(|&b| fixnum_as_cell!(Fixnum::build_with(b)))
                             .collect();
