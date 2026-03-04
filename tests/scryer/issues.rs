@@ -159,7 +159,7 @@ fn ffi_utf8_panic() {
     let src = r##"
         #[unsafe(no_mangle)]
         extern "C" fn ffi_invalid_utf8_cstr() -> *const core::ffi::c_char {
-            b"Invalid\xFFUTF8\x00".as_ptr() as *const _
+            c"Invalid\xFFUTF8".as_ptr()
         }
     "##;
 
