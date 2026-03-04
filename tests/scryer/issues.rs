@@ -150,3 +150,50 @@ fn http_open_hanging() {
             "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
     );
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "ffi")]
+fn ffi_utf8_panic() {
+    let tmp_dir: &std::path::Path = env!("CARGO_TARGET_TMPDIR").as_ref();
+    let name = "ffi_utf8_panic";
+    let src = r##"
+        #[unsafe(no_mangle)]
+        extern "C" fn ffi_invalid_utf8_cstr() -> *const core::ffi::c_char {
+            b"Invalid\xFFUTF8\x00".as_ptr() as *const _
+        }
+    "##;
+
+    let mut child = std::process::Command::new("rustc")
+        .stdin(std::process::Stdio::piped())
+        .args(["--edition", "2024"])
+        .arg(format!("--target={}", current_platform::CURRENT_PLATFORM))
+        .arg("--crate-type=dylib")
+        .arg(format!("--crate-name={name}"))
+        .arg("--out-dir")
+        .arg(tmp_dir)
+        .arg("-")
+        .spawn()
+        .unwrap();
+
+    use std::io::Write;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(src.as_bytes())
+        .unwrap();
+    assert!(child.wait().unwrap().success());
+
+    let dynlib_path = tmp_dir.join(format!(
+        "{}{name}{}",
+        std::env::consts::DLL_PREFIX,
+        std::env::consts::DLL_SUFFIX
+    ));
+
+    crate::helper::load_module_test_with_input(
+        "tests-pl/ffi_utf8_panic.pl",
+        format!("LIB={dynlib_path:?}."),
+        // Evaluates to: 'Invalid\xFFUTF8\n'
+        "[73,110,118,97,108,105,100,255,85,84,70,56]\n",
+    );
+}
