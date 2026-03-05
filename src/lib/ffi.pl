@@ -68,6 +68,11 @@ ffi:FUNCTION_NAME(+InputArg1, ..., +InputArgN). % for void and bool
 
 - When using `cstr` as an argument type the string will be deallocated once the function returns.
 - When using `cstr` as a return type the string will be copied and won't be deallocated.
+- When an ffi function returns bytes that are not a valid utf8-string the bytes will be turned into a list of `codes` (integers)
+  instead of a string (list of `chars`). Note: passing a list of `codes` is not accepted in argument position.
+- In argument position you can also pass a pointer directly instead of a string,
+  e.g. to pass a null-pointer one can provide the integer 0 as the argument.
+- In return position a null-pointer will be returned as the integer 0
 
 ## Example
 
