@@ -251,11 +251,40 @@ gather_clauses_(Stream, File, Clauses) :-
               (   Error = error(syntax_error(incomplete_reduction),_),
                   at_end_of_stream(Stream) ->
                   true
-              ;   format("~s: ~q", [File,Error])
+              ;   format("~s: ~q~n", [File,Error])
               )),
         (   Continue == true ->
-            Clauses = [Clause|Rest],
-            gather_clauses_(Stream, File, Rest)
+            (   var(Clause) ->
+                format("~s: variable clause is ignored.~n", [File]),
+                gather_clauses_(Stream, File, Clauses)
+            ;   Clause = (?- _Query) ->
+                devour_answer_descriptions(Stream, File, Clauses)
+            ;   Clauses = [Clause|Rest],
+                gather_clauses_(Stream, File, Rest)
+            )
+        ;   Clauses = []
+        ).
+
+
+devour_answer_descriptions(Stream, File, Clauses) :-
+        catch((read(Stream, Clause),
+               Continue = true),
+              Error,
+              (   Error = error(syntax_error(incomplete_reduction),_),
+                  at_end_of_stream(Stream) ->
+                  true
+              ;   format("~s: ~q~n", [File,Error])
+              )),
+        (   Continue == true ->
+            (   var(Clause) ->
+                format("~s: variable clause is ignored.~n", [File])
+            ;   Clause = (?- _Query) ->
+                devour_answer_descriptions(Stream, File, Clauses)
+            ;   loader:answer_description(Clause) ->
+                devour_answer_descriptions(Stream, File, Clauses)
+            ;   Clauses = [Clause|Rest],
+                gather_clauses_(Stream, File, Rest)
+            )
         ;   Clauses = []
         ).
 
