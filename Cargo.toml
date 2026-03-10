@@ -29,6 +29,7 @@ crypto-full = []
 unexpected_cfgs = { level = "deny", check-cfg = [
     'cfg(rust_version, values("1.87.0"))',
 ] }
+function_casts_as_integer = "deny"
 
 
 [build-dependencies]

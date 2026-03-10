@@ -1099,7 +1099,7 @@ impl MachineState {
                     }
                     _ => {
                         push_cell!(self, heap_loc_as_cell!(h), return);
-                        (self.bind_fn)(self, Ref::heap_cell(h), value);
+                        self.occurs_check.bind(self, Ref::heap_cell(h), value);
                     }
                 );
             }
@@ -1147,7 +1147,7 @@ impl MachineState {
                 push_cell!(self, heap_loc_as_cell!(h), return);
 
                 let addr = self.store(self[r]);
-                (self.bind_fn)(self, Ref::heap_cell(h), addr);
+                self.occurs_check.bind(self, Ref::heap_cell(h), addr);
 
                 // the former code of this match arm was:
 
@@ -1230,7 +1230,7 @@ impl MachineState {
             let h = self.heap.cell_len();
             push_cell!(self, heap_loc_as_cell!(h), return);
 
-            (self.bind_fn)(self, Ref::heap_cell(h), addr);
+            self.occurs_check.bind(self, Ref::heap_cell(h), addr);
             self.registers[arg] = heap_loc_as_cell!(h);
         }
 
@@ -1276,7 +1276,7 @@ impl MachineState {
         if stored_v.is_stack_var() {
             let h = self.heap.cell_len();
             push_cell!(self, heap_loc_as_cell!(h), return);
-            (self.bind_fn)(self, Ref::heap_cell(h), stored_v);
+            self.occurs_check.bind(self, Ref::heap_cell(h), stored_v);
         } else {
             push_cell!(self, stored_v, return);
         }

@@ -415,7 +415,7 @@ macro_rules! unify {
 macro_rules! unify_fn {
     ($machine_st:expr, $($value:expr),*) => {{
         $($machine_st.pdl.push($value);)*
-        ($machine_st.unify_fn)(&mut $machine_st)
+        $machine_st.occurs_check.unify(&mut $machine_st)
     }};
 }
 
