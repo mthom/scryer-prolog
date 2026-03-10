@@ -1,6 +1,3 @@
-#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
-#![allow(unused_parens)] // see mthom/scryer-prolog#3092 and rust-lang/rust#147126
-
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::offset_table::*;
@@ -22,9 +19,9 @@ use dashu::Integer;
 use dashu::Rational;
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
+use modular_bitfield::error::OutOfBounds;
+use modular_bitfield::prelude::*;
 use ordered_float::OrderedFloat;
-use scryer_modular_bitfield::error::OutOfBounds;
-use scryer_modular_bitfield::prelude::*;
 
 pub type Specifier = u32;
 
@@ -677,7 +674,7 @@ impl Fixnum {
 
     #[inline]
     pub fn get_tag(&self) -> HeapCellValueTag {
-        use scryer_modular_bitfield::Specifier;
+        use modular_bitfield::Specifier;
         HeapCellValueTag::from_bytes(self.tag()).unwrap()
     }
 

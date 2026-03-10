@@ -16,6 +16,10 @@ extend-ignore-re = [
 interm = "interm"
 IntermReg = "IntermReg"
 
+[type.rust]
+extend-glob = [ "*.rs" ]
+[type.rust.extend-identifiers]
+consts = "consts" # std::{f32,f64}::consts
 
 
 [type.prolog]

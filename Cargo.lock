@@ -1793,6 +1793,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "modular-bitfield"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2956e537fc68236d2aa048f55704f231cc93f1c4de42fe1ecb5bd7938061fc4a"
+dependencies = [
+ "modular-bitfield-impl",
+ "static_assertions",
+]
+
+[[package]]
+name = "modular-bitfield-impl"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59b43b4fd69e3437618106f7754f34021b831a514f9e1a98ae863cabcd8d8dad"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
+]
+
+[[package]]
 name = "multer"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2687,27 +2708,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scryer-modular-bitfield"
-version = "0.11.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1f26c70c56d2c94a02545d86384b91994532c2be928c974784b603c2b1f76ac"
-dependencies = [
- "scryer-modular-bitfield-impl",
- "static_assertions",
-]
-
-[[package]]
-name = "scryer-modular-bitfield-impl"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "212164841808ccfccf1b0471d91f8cfe675eeb60dbb96e4ca7a1f37b22570a29"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "scryer-prolog"
 version = "0.10.0"
 dependencies = [
@@ -2744,6 +2744,7 @@ dependencies = [
  "libffi",
  "libloading",
  "maplit",
+ "modular-bitfield",
  "native-tls",
  "num-order",
  "ordered-float",
@@ -2762,7 +2763,6 @@ dependencies = [
  "rustyline",
  "ryu",
  "scraper",
- "scryer-modular-bitfield",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
@@ -3177,7 +3177,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
 dependencies = [
  "proc-macro2",
- "quote",
  "unicode-ident",
 ]
 

@@ -1,6 +1,3 @@
-#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
-#![allow(unused_parens)] // see mthom/scryer-prolog#3092 and rust-lang/rust#147126
-
 use crate::machine::heap::AllocError;
 use crate::parser::ast::MAX_ARITY;
 use crate::raw_block::*;
@@ -23,7 +20,7 @@ use arcu::rcu_ref::RcuRef;
 use arcu::Rcu;
 use indexmap::IndexSet;
 
-use scryer_modular_bitfield::prelude::*;
+use modular_bitfield::prelude::*;
 
 #[bitfield]
 #[repr(u64)]

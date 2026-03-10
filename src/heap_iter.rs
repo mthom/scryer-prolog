@@ -1,6 +1,3 @@
-#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
-#![allow(unused_parens)] // see mthom/scryer-prolog#3092 and rust-lang/rust#147126
-
 use crate::arena::Arena;
 use crate::forms::Number;
 #[cfg(test)]
@@ -17,7 +14,7 @@ use crate::types::*;
 use core::marker::PhantomData;
 use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
-use scryer_modular_bitfield::prelude::*;
+use modular_bitfield::prelude::*;
 use std::cmp::Ordering;
 
 use std::ops::Deref;
@@ -496,7 +493,7 @@ impl<'a> Iterator for EagerStackfulPreOrderHeapIter<'a> {
     }
 }
 
-#[derive(BitfieldSpecifier, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Specifier, Clone, Copy, Debug, PartialEq, Eq)]
 #[bits = 2]
 enum IterStackLocTag {
     Iterable,
@@ -504,7 +501,7 @@ enum IterStackLocTag {
     PendingMark,
 }
 
-#[derive(BitfieldSpecifier, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Specifier, Clone, Copy, Debug, PartialEq, Eq)]
 #[bits = 1]
 pub enum HeapOrStackTag {
     Heap,

@@ -1,6 +1,3 @@
-#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
-#![allow(unused_parens)] // see mthom/scryer-prolog#3092 and rust-lang/rust#147126
-
 #[cfg(feature = "http")]
 use crate::http::{HttpListener, HttpResponse};
 use crate::machine::heap::AllocError;
@@ -52,7 +49,7 @@ where
     payload_offset - header_offset
 }
 
-#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq)]
+#[derive(Specifier, Copy, Clone, Debug, PartialEq)]
 #[bits = 7]
 pub enum ArenaHeaderTag {
     Integer = 0b10,

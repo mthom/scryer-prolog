@@ -1,6 +1,3 @@
-#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
-#![allow(unused_parens)] // see mthom/scryer-prolog#3092 and rust-lang/rust#147126
-
 use crate::parser::ast::*;
 
 use crate::atom_table::*;
@@ -14,8 +11,8 @@ use crate::offset_table::*;
 
 use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
-use scryer_modular_bitfield::specifiers::*;
-use scryer_modular_bitfield::{bitfield, BitfieldSpecifier};
+use modular_bitfield::specifiers::*;
+use modular_bitfield::{bitfield, Specifier};
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -66,7 +63,7 @@ impl PartialOrd<Ref> for HeapCellValue {
     }
 }
 
-#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq)]
+#[derive(Specifier, Copy, Clone, Debug, PartialEq)]
 #[bits = 7]
 pub enum IndexPtrTag {
     DynamicUndefined = 0b1000101, // a predicate, declared as dynamic, whose location in code is as yet undefined.

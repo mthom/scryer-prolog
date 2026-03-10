@@ -1,5 +1,3 @@
-#![allow(unused_parens)] // see mthom/scryer-prolog#3092 and rust-lang/rust#147126
-
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::functor_macro::*;
@@ -14,7 +12,7 @@ use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::types::*;
 
-pub use scryer_modular_bitfield::prelude::*;
+pub use modular_bitfield::prelude::*;
 
 #[cfg(feature = "http")]
 use bytes::{buf::Reader as BufReader, Buf, Bytes};
@@ -43,7 +41,7 @@ use warp::hyper;
 mod compat;
 pub use compat::*;
 
-#[derive(Debug, BitfieldSpecifier, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Specifier, Clone, Copy, PartialEq, Eq, Hash)]
 #[bits = 1]
 pub enum StreamType {
     Binary,
@@ -76,7 +74,7 @@ impl StreamType {
     }
 }
 
-#[derive(Debug, BitfieldSpecifier, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Specifier, Clone, Copy, PartialEq, Eq, Hash)]
 #[bits = 2]
 pub enum EOFAction {
     EOFCode,
@@ -84,7 +82,7 @@ pub enum EOFAction {
     Reset,
 }
 
-#[derive(Debug, BitfieldSpecifier, Copy, Clone, PartialEq)]
+#[derive(Debug, Specifier, Copy, Clone, PartialEq)]
 #[bits = 2]
 pub(crate) enum AtEndOfStream {
     Not,

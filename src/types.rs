@@ -1,6 +1,3 @@
-#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
-#![allow(unused_parens)] // see mthom/scryer-prolog#3092 and rust-lang/rust#147126
-
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
@@ -19,7 +16,7 @@ use std::ops::{Add, Sub, SubAssign};
 
 use dashu::{Integer, Rational};
 
-#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Specifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 #[bits = 6]
 pub enum HeapCellValueTag {
@@ -46,7 +43,7 @@ pub enum HeapCellValueTag {
     TrailedBlackboardOffset = 0b110001,
 }
 
-#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Specifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 #[bits = 6]
 pub enum HeapCellValueView {
@@ -73,7 +70,7 @@ pub enum HeapCellValueView {
     TrailedBlackboardOffset = 0b110001,
 }
 
-#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Specifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[bits = 1]
 pub enum ConsPtrMaskTag {
     Cons = 0b0,
@@ -112,7 +109,7 @@ impl ConsPtr {
     }
 }
 
-#[derive(BitfieldSpecifier, Copy, Clone, Debug)]
+#[derive(Specifier, Copy, Clone, Debug)]
 #[bits = 6]
 pub(crate) enum RefTag {
     HeapCell = 0b001011,
@@ -199,7 +196,7 @@ pub enum TrailRef {
 }
 
 #[allow(clippy::enum_variant_names)] // allow the common "Trailed" prefix
-#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Specifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[bits = 6]
 pub(crate) enum TrailEntryTag {
     TrailedHeapVar = 0b101111,
