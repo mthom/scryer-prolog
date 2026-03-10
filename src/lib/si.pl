@@ -40,6 +40,7 @@
                term_si/1,
                chars_si/1,
                dif_si/2,
+               not_si/1,
                when_si/2]).
 
 :- use_module(library(lists)).
@@ -99,6 +100,17 @@ dif_si(X, Y) :-
    ( X \= Y -> true
    ; throw(error(instantiation_error,dif_si/2))
    ).
+
+%% not_si(+Goal).
+%
+%  True if Goal is not provable. Instantiation error if Goal is not
+%  ground.
+
+:- meta_predicate(not_si(0)).
+
+not_si(Goal) :-
+   term_si(Goal),
+   \+ Goal.
 
 :- meta_predicate(when_si(+, 0)).
 
