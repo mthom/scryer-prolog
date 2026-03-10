@@ -302,3 +302,24 @@ fn ffi_heap() {
         r#"133742"#,
     );
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "ffi")]
+fn ffi_utf8_panic() {
+    let dynlib_path = build_dynamic_library(
+        "ffi_utf8_panic",
+        r##"
+#[unsafe(no_mangle)]
+extern "C" fn ffi_invalid_utf8_cstr() -> *const core::ffi::c_char {
+    c"Invalid\xFFUTF8".as_ptr()
+}
+        "##,
+    );
+
+    load_module_test_with_input(
+        "tests-pl/ffi_utf8_panic.pl",
+        format!("LIB={dynlib_path:?}."),
+        // Evaluates to: 'Invalid\xFFUTF8\n'
+        "[73,110,118,97,108,105,100,255,85,84,70,56]\n",
+    );
+}

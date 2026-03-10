@@ -5125,10 +5125,28 @@ impl Machine {
                 unify!(self.machine_st, return_value, struct_value);
             }
             Value::CString(cstr) => {
-                let str_cell = resource_error_call_result!(
-                    self.machine_st,
-                    self.machine_st.heap.allocate_cstr(cstr.to_str().unwrap())
-                );
+                let str_cell = match cstr.to_str() {
+                    Ok(valid_str) => resource_error_call_result!(
+                        self.machine_st,
+                        self.machine_st.heap.allocate_cstr(valid_str)
+                    ),
+                    Err(_) => {
+                        let cells: Vec<_> = cstr
+                            .to_bytes()
+                            .iter()
+                            .map(|&b| fixnum_as_cell!(Fixnum::build_with(b)))
+                            .collect();
+
+                        resource_error_call_result!(
+                            self.machine_st,
+                            sized_iter_to_heap_list(
+                                &mut self.machine_st.heap,
+                                cells.len(),
+                                cells.into_iter()
+                            )
+                        )
+                    }
+                };
 
                 unify!(self.machine_st, str_cell, return_value);
             }
