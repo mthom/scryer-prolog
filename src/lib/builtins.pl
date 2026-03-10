@@ -1506,7 +1506,7 @@ atom_chars(Atom, List) :-
 %% atom_codes(?Atom, ?Codes).
 %
 % Relates an atom with a string in codes representation. It can be used to convert
-% between atoms and strings. However, codes is not the default representation of double quoutes
+% between atoms and strings. However, codes is not the default representation of double quoted
 % strings in Scryer Prolog. Examples:
 %
 % ```
