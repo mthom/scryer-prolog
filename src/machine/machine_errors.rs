@@ -20,7 +20,7 @@ pub type MachineStubGen = Box<dyn Fn(&mut MachineState) -> MachineStub>;
 #[derive(Debug)]
 pub(crate) struct MachineError {
     stub: MachineStub,
-    location: Option<(usize, usize)>, // line_num, col_num
+    location: Option<Location>,
 }
 
 // from 7.12.2 b) of 13211-1:1995
@@ -753,14 +753,15 @@ impl MachineState {
     }
 
     pub(super) fn error_form(&mut self, err: MachineError, src: MachineStub) -> MachineStub {
-        if let Some((line_num, _col_num)) = err.location {
+        if let Some(location) = err.location {
+            let line = location.line();
             functor!(
                 atom!("error"),
                 [
                     functor((err.stub)),
                     functor(
                         (atom!(":")),
-                        [functor(src), number(line_num, (&mut self.arena))]
+                        [functor(src), number(line, (&mut self.arena))]
                     )
                 ]
             )
@@ -853,9 +854,9 @@ impl From<ParserError> for CompilationError {
 }
 
 impl CompilationError {
-    pub(crate) fn line_and_col_num(&self) -> Option<(usize, usize)> {
+    pub(crate) fn line_and_col_num(&self) -> Option<Location> {
         match self {
-            CompilationError::ParserError(err) => err.line_and_col_num(),
+            CompilationError::ParserError(err) => err.location(),
             _ => None,
         }
     }

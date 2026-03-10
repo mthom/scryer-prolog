@@ -106,7 +106,7 @@ impl BranchStack {
         let branch_num = self
             .last()
             .map(|occurrences| occurrences.current_branch_num.clone())
-            .unwrap_or_else(|| BranchNumber::default());
+            .unwrap_or_default();
 
         BranchDesignator { branch_num }
     }
