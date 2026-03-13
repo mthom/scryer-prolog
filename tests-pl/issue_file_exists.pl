@@ -16,7 +16,8 @@ act(TargetFile) :-
 
 main :-
     call_cleanup(
-       (setenv("TARGET_FILE", "file_exists_test"),
+       (setenv("SHELL", "/bin/sh"),
+        setenv("TARGET_FILE", "file_exists_test"),
         shell("touch file_exists_test", 0),
         check),
         shell("rm -f file_exists_test", 0)
