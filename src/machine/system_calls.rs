@@ -8466,7 +8466,12 @@ impl Machine {
             match roxmltree::Document::parse(&string.as_str()) {
                 Ok(doc) => {
                     let result = self.xml_node_to_term(doc.root_element())?;
-                    unify!(self.machine_st, self.machine_st.registers[2], result);
+                    let list = sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        1, // just one root element
+                        std::iter::once(result),
+                    )?;
+                    unify!(self.machine_st, self.machine_st.registers[2], list);
                 }
                 _ => {
                     self.machine_st.fail = true;
