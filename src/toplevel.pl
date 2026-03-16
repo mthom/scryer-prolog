@@ -222,7 +222,9 @@ expand_op_list([Op | OtherOps], Pri, Spec, [(:- op(Pri, Spec, Op)) | OtherResult
 
 % Implement the include/1 directive via term expansion.
 
-user:term_expansion((:- include(File0)), Clauses) :-
+user:term_expansion((:- Include), Clauses) :-
+        nonvar(Include),
+        Include = include(File0),
         (   si:atom_si(File0) ->
             atom_chars(File0, File),
             format("% Warning: include/1: atom arguments are deprecated. Use chars for file paths:~n", []),
