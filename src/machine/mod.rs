@@ -237,7 +237,6 @@ impl Machine {
         self.machine_st
             .cwil
             .global_count
-            .clone()
             .try_into()
             .unwrap()
     }

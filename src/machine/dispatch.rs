@@ -4256,12 +4256,12 @@ impl Machine {
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallInferenceCount => {
-                        let global_count = self.machine_st.cwil.global_count.clone();
+                        let global_count = self.machine_st.cwil.global_count;
                         self.inference_count(self.machine_st.registers[1], global_count);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
                     &Instruction::ExecuteInferenceCount => {
-                        let global_count = self.machine_st.cwil.global_count.clone();
+                        let global_count = self.machine_st.cwil.global_count;
                         self.inference_count(self.machine_st.registers[1], global_count);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
