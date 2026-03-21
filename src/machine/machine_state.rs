@@ -16,7 +16,6 @@ use crate::parser::ast::*;
 use crate::read::TermWriteResult;
 use crate::types::*;
 
-
 use indexmap::IndexMap;
 
 use std::convert::TryFrom;
