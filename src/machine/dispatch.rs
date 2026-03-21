@@ -77,8 +77,6 @@ macro_rules! push_cell {
     }};
 }
 
-static INSTRUCTIONS_PER_INTERRUPT_POLL: usize = 256;
-
 impl MachineState {
     #[inline(always)]
     fn compare(&mut self) -> CallResult {
@@ -1541,8 +1539,13 @@ impl Machine {
     }
 
     fn verify_attr_dispatch_loop(&mut self) -> Option<std::process::ExitCode> {
+        let mut interrupt_counter = std::num::Wrapping(0u8);
         'outer: loop {
-            for _ in 0..INSTRUCTIONS_PER_INTERRUPT_POLL {
+            loop {
+                interrupt_counter += 1;
+                if interrupt_counter.0 == 0 {
+                    break;
+                }
                 match self.code[self.machine_st.p] {
                     Instruction::BreakFromDispatchLoop => {
                         break 'outer;
@@ -1611,8 +1614,14 @@ impl Machine {
     }
 
     pub(super) fn dispatch_loop(&mut self) -> std::process::ExitCode {
+        let mut interrupt_counter = std::num::Wrapping(0u8);
         'outer: loop {
-            for _ in 0..INSTRUCTIONS_PER_INTERRUPT_POLL {
+            loop {
+                interrupt_counter += 1;
+                if interrupt_counter.0 == 0 {
+                    break;
+                }
+
                 match &self.code[self.machine_st.p] {
                     &Instruction::BreakFromDispatchLoop => {
                         break 'outer;
