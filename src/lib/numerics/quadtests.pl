@@ -1,5 +1,7 @@
 % Efforts toward literate tests with quads
- 
+
+:- module(quadtests, [check_module_quads/2]).
+
 :- use_module(library(iso_ext)).
 :- use_module(library(pio)).
 :- use_module(library(lists)).
@@ -10,9 +12,8 @@
 :- use_module(library(lambda)).
 :- use_module(library(error)).
 :- use_module(library(time)).
-
-:- use_module(testutils).
-:- use_module(special_functions).
+:- use_module(library('numerics/testutils')).
+:- use_module(library('numerics/special_functions')).
 
 portray_term(Stream) :-
     read_term(Stream, Term, []),
@@ -39,7 +40,7 @@ check_module_quads(Module, Quads) :-
     zip(Qs, ADs, Quads),
     length(Qs, NQ),
     format("% Checking ~d quads ..~n", [NQ]),
-    maplist(check_qu_ad, Qs, ADs).
+    maplist(check_qu_ad(Module), Qs, ADs).
 
 read_quads(Module, Quads) :-
     module_terms(Module, Terms),
@@ -70,6 +71,7 @@ term_type(Term-_, Type) :-
     (   Term = (?- _) -> Type = query
     ;   Term = (_,_) -> Type = answer_description
     ;   Term = (_;_) -> Type = answer_description
+    ;   Term = (_ = _) -> Type = answer_description
     ;   Term == true -> Type = answer_description
     ;   Term == false -> Type = answer_description
     ;   Type = clause
@@ -114,22 +116,22 @@ zip([], [], []).
    Xs = [1,2,3], Ys = [4,5,6].
 
 % 3. Demonstrate checking 1 quad, the top two elements of a QAs list.
-check_qu_ad(Q-QVN, A-AVN) :-
+check_qu_ad(Module, Q-QVN, A-AVN) :-
     Q = ?-(G),
     phrase(portray_clause_(Q), LitQ), % NB: LitQ terminates w/ newline
     format("% CHECKING.. ",[]),
-    (   A == true -> call(G)
-    ;   A == false -> (   call(G) -> false
+    (   A == true -> call(Module:G)
+    ;   A == false -> (   call(Module:G) -> false
                       ;   true
                       )
     ;   phrase(unconj(A), As) ->
         (   length(As, N),
             n_answers(N, A, AVN, ADs),
-            n_answers(N, G, QVN, Answers),
+            n_answers(N, Module:G, QVN, Answers),
             maplist(contains, ADs, Answers)
         )
     ;   % Otherwise, we have the ',' case of a solitary answer
-        call(G),
+        call(Module:G),
         call(A),
         QVN == AVN
     ),
@@ -141,7 +143,7 @@ contains(AD, Answer) :- append(Answer, _, AD).
 ?- contains(['Xs'=[C],'L'=1,'_A'=C,'_B'=D], ['Xs'=[A],'L'=1]).
    C = A.
 
-?- check_qu_ad((?-length(_F,_G))-['Xs'=_F,'L'=_G],(_H=[],_I=0;_H=[_J],_I=1;_H=[_J,_K],_I=2;...)-['Xs'=_H,'L'=_I,'_A'=_J,'_B'=_K]).
+?- check_qu_ad(quadtests, (?-length(_F,_G))-['Xs'=_F,'L'=_G],(_H=[],_I=0;_H=[_J],_I=1;_H=[_J,_K],_I=2;...)-['Xs'=_H,'L'=_I,'_A'=_J,'_B'=_K]).
 % CHECKING.. (?-length(A,B)).
    _F = [_A,_B], _G = 2, _H = [_J,_K], _I = 2.
 
@@ -182,6 +184,7 @@ n_answers_(N, G, VN, ADs) :-
     !,
     retract('$anstack'(As)),
     reverse(As, ADs).
-    
+
 ?- n_answers(3, length(Xs, L), ('Xs'=Xs,'Len'=L), ADs).
    Xs = [_A,_B], L = 2, ADs = [('Xs'=[],'Len'=0),('Xs'=[_C],'Len'=1),('Xs'=[_D,_E],'Len'=2)].
+
