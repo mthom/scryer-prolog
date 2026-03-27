@@ -548,7 +548,8 @@ impl MachineState {
             return true;
         }
 
-        self.cwil.global_count += 1;
+        // use strict_add once msrv is >= 1.91.0
+        self.cwil.global_count = self.cwil.global_count.checked_add(1).unwrap();
 
         if let Some(&(ref limit, block)) = self.cwil.limits.last() {
             if self.cwil.local_count == *limit {
@@ -1127,7 +1128,8 @@ impl CWIL {
     }
 
     pub(crate) fn add_limit(&mut self, mut limit: u128, block: usize) -> u128 {
-        limit += &self.local_count;
+        // use strict_add once msrv is >= 1.91.0
+        limit = limit.checked_add(self.local_count).unwrap();
 
         match self.limits.last() {
             Some((ref inner_limit, _)) if *inner_limit <= limit => {}
