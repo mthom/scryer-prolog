@@ -1,3 +1,8 @@
+#[cfg(feature = "repl")]
+pub mod fallback_mode;
+#[cfg(feature = "repl")]
+pub mod user_interaction;
+
 use crate::parser::ast::*;
 use crate::parser::lexer::Lexer;
 use crate::parser::parser::*;

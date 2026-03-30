@@ -69,9 +69,7 @@ use cpu_time::ProcessTime;
 use std::time::{Duration, SystemTime};
 
 #[cfg(feature = "repl")]
-use crossterm::event::{read, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-#[cfg(feature = "repl")]
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use crate::read::user_interaction::{get_key, KeyCode, KeyModifiers};
 
 use blake2::{Blake2b512, Blake2s256};
 use ring::rand::{SecureRandom, SystemRandom};
@@ -146,28 +144,6 @@ impl ModuleQuantification {
             ModuleQuantification::Unspecified => None,
         }
     }
-}
-
-#[cfg(feature = "repl")]
-pub(crate) fn get_key() -> KeyEvent {
-    let key;
-    enable_raw_mode().expect("failed to enable raw mode");
-    loop {
-        let key_ = read();
-        if let Ok(Event::Key(key_)) = key_ {
-            if key_.kind != KeyEventKind::Release {
-                match key_.code {
-                    KeyCode::Char(_) | KeyCode::Enter | KeyCode::Tab => {
-                        key = key_;
-                        break;
-                    }
-                    _ => (),
-                }
-            }
-        }
-    }
-    disable_raw_mode().expect("failed to disable raw mode");
-    key
 }
 
 fn pstr_segment_char_count_and_tail(heap: &Heap, pstr_loc: usize) -> (usize, usize) {
