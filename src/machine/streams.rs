@@ -23,7 +23,7 @@ use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::io;
-use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{Cursor, ErrorKind, IsTerminal, Read, Seek, SeekFrom, Write};
 use std::mem::ManuallyDrop;
 use std::net::{Shutdown, TcpStream};
 use std::ops::{Deref, DerefMut};
@@ -657,10 +657,27 @@ impl Stream {
 
     #[inline]
     pub fn stdin(arena: &mut Arena, add_history: bool) -> Stream {
-        Stream::Readline(arena_alloc!(
-            StreamLayout::new(ReadlineStream::new("", add_history)),
-            arena
-        ))
+        if std::io::stdin().is_terminal() {
+            Stream::Readline(arena_alloc!(
+                StreamLayout::new(ReadlineStream::new("", add_history)),
+                arena
+            ))
+        } else {
+            #[cfg(unix)]
+            {
+                use std::os::unix::io::{FromRawFd, RawFd};
+                // dup fd 0 so the File can be owned (and closed later) without
+                // closing the real stdin.
+                let fd = unsafe { libc::dup(0 as RawFd) };
+                let file = unsafe { File::from_raw_fd(fd) };
+                return Stream::from_file_as_input(atom!("user_input"), file, arena);
+            }
+            #[allow(unreachable_code)]
+            Stream::Readline(arena_alloc!(
+                StreamLayout::new(ReadlineStream::new("", add_history)),
+                arena
+            ))
+        }
     }
 
     pub fn from_tag(tag: ArenaHeaderTag, ptr: UntypedArenaPtr) -> Self {
