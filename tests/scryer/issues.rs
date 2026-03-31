@@ -20,6 +20,13 @@ fn issue2588_load_html() {
     load_module_test("tests-pl/issue2588.pl", "[element(html,[],[element(head,[],[element(title,[],[[H,e,l,l,o,!]])]),element(body,[],[])])]");
 }
 
+// issue #2914
+#[test]
+#[cfg_attr(miri, ignore = "unsupported operation when isolation is enabled")]
+fn issue2914_current_prolog_flag_shared_var() {
+    load_module_test("tests-pl/issue2914.pl", "false");
+}
+
 #[test]
 #[cfg_attr(miri, ignore = "unsupported operation when isolation is enabled")]
 fn issue3256_load_xml_returns_list() {
