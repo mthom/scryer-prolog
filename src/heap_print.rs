@@ -3,7 +3,7 @@ use crate::atom_table::*;
 use crate::parser::ast::*;
 use crate::parser::dashu::base::RemEuclid;
 use crate::parser::dashu::integer::Sign;
-use crate::parser::dashu::{ibig, Integer, Rational};
+use crate::parser::dashu::{Integer, Rational, ibig};
 
 use crate::forms::*;
 use crate::heap_iter::*;

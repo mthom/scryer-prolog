@@ -2,10 +2,10 @@ use std::cell::UnsafeCell;
 use std::sync::Arc;
 use std::{fmt, mem, ptr};
 
+use arcu::Rcu;
 use arcu::atomic::Arcu;
 use arcu::epoch_counters::GlobalEpochCounterPool;
 use arcu::rcu_ref::RcuRef;
-use arcu::Rcu;
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use parking_lot::{Mutex, RwLock};
@@ -210,33 +210,35 @@ impl<T: RawBlockTraits> SerialOffsetTable<T> {
         })
     }
 
-    unsafe fn build_with(&mut self, value: T) -> usize { unsafe {
-        let mut ptr;
+    unsafe fn build_with(&mut self, value: T) -> usize {
+        unsafe {
+            let mut ptr;
 
-        loop {
-            ptr = self.block.alloc(size_of::<T>());
+            loop {
+                ptr = self.block.alloc(size_of::<T>());
 
-            if ptr.is_null() {
-                let new_block = self.block.grow_new().unwrap();
-                self.block = new_block;
-            } else {
-                break;
+                if ptr.is_null() {
+                    let new_block = self.block.grow_new().unwrap();
+                    self.block = new_block;
+                } else {
+                    break;
+                }
             }
+
+            ptr::write(ptr as *mut T, value);
+            ptr.addr() - self.block.base.addr()
         }
-
-        ptr::write(ptr as *mut T, value);
-        ptr.addr() - self.block.base.addr()
-    }}
+    }
 
     #[inline]
-    unsafe fn lookup(&self, offset: usize) -> &T { unsafe {
-        &*self.block.base.add(offset).cast::<T>()
-    }}
+    unsafe fn lookup(&self, offset: usize) -> &T {
+        unsafe { &*self.block.base.add(offset).cast::<T>() }
+    }
 
     #[inline]
-    unsafe fn lookup_mut(&mut self, offset: usize) -> &mut T { unsafe {
-        &mut *self.block.base.add(offset).cast::<T>().cast_mut()
-    }}
+    unsafe fn lookup_mut(&mut self, offset: usize) -> &mut T {
+        unsafe { &mut *self.block.base.add(offset).cast::<T>().cast_mut() }
+    }
 
     #[allow(clippy::wrong_self_convention)]
     fn to_concurrent(&mut self) -> ConcurrentOffsetTable<T>

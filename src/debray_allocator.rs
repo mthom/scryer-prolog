@@ -551,8 +551,7 @@ impl DebrayAllocator {
                 } else if let Some(&temp_var_num) = self.shallow_temp_mappings.get(&self.arg_c) {
                     match &mut self.var_data.records[temp_var_num].allocation {
                         VarAlloc::Temp {
-                            to_perm_var_num,
-                            ..
+                            to_perm_var_num, ..
                         } => {
                             *to_perm_var_num = Some(var_num);
                         }
@@ -578,13 +577,7 @@ impl DebrayAllocator {
         let branch_designator = Arc::new(self.branch_stack.current_branch_designator());
 
         match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(
-                _,
-                PermVarAllocation::Done {
-                    shallow_safety,
-                    ..
-                },
-            ) => {
+            VarAlloc::Perm(_, PermVarAllocation::Done { shallow_safety, .. }) => {
                 if !self.in_tail_position
                     || self
                         .branch_stack
@@ -614,13 +607,7 @@ impl DebrayAllocator {
         let branch_designator = Arc::new(self.branch_stack.current_branch_designator());
 
         match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(
-                _,
-                PermVarAllocation::Done {
-                    deep_safety,
-                    ..
-                },
-            ) => {
+            VarAlloc::Perm(_, PermVarAllocation::Done { deep_safety, .. }) => {
                 if self
                     .branch_stack
                     .safety_unneeded_in_branch(deep_safety, &branch_designator)

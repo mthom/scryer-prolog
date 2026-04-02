@@ -1,14 +1,14 @@
 use std::borrow::Cow;
 use std::io::Write;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng};
 
 use crate::Machine;
 
 use super::{
-    bootstrapping_compile, current_dir, import_builtin_impls, libraries, load_module, Arena, Atom,
-    Callback, CompilationTarget, IndexStore, ListingSource, MachineArgs, MachineState, Stream,
+    Arena, Atom, Callback, CompilationTarget, IndexStore, ListingSource, MachineArgs, MachineState,
+    Stream, bootstrapping_compile, current_dir, import_builtin_impls, libraries, load_module,
 };
 
 #[derive(Default)]

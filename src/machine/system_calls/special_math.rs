@@ -1,5 +1,5 @@
-use crate::machine::Number;
 use crate::Machine;
+use crate::machine::Number;
 use ordered_float::OrderedFloat;
 use puruspe::beta::*;
 use puruspe::error::*;

@@ -37,7 +37,7 @@ fn setup_op_decl(mut terms: Vec<Term>) -> Result<OpDecl, CompilationError> {
         other => {
             return Err(CompilationError::InvalidDirective(
                 DirectiveError::InvalidOpDeclSpecDomain(other),
-            ))
+            ));
         }
     };
 

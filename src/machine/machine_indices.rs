@@ -2,17 +2,17 @@ use crate::parser::ast::*;
 
 use crate::atom_table::*;
 use crate::forms::*;
+use crate::machine::ClauseType;
+use crate::machine::MachineStubGen;
 use crate::machine::loader::*;
 use crate::machine::machine_state::*;
 use crate::machine::streams::{Stream, StreamOptions};
-use crate::machine::ClauseType;
-use crate::machine::MachineStubGen;
 use crate::offset_table::*;
 
 use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
 use modular_bitfield::specifiers::*;
-use modular_bitfield::{bitfield, Specifier};
+use modular_bitfield::{Specifier, bitfield};
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;

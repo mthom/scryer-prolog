@@ -4,7 +4,7 @@
 //
 
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote, ToTokens, TokenStreamExt};
+use quote::{ToTokens, TokenStreamExt, format_ident, quote};
 use strum_macros::{EnumDiscriminants, EnumProperty, EnumString};
 use syn::*;
 use to_syn_value_derive::ToDeriveInput;

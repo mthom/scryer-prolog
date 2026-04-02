@@ -41,49 +41,55 @@ impl<T: RawBlockTraits> RawBlock<T> {
         Ok(block)
     }
 
-    unsafe fn init_at_size(&mut self, cap: usize) -> Result<(), AllocError> { unsafe {
-        let layout = alloc::Layout::from_size_align_unchecked(cap, T::align());
-        let new_base = alloc::alloc(layout).cast_const();
-        if new_base.is_null() {
-            return Err(AllocError);
-        }
-        self.base = new_base;
-        self.top = self.base.add(cap);
-        *self.ptr.get_mut() = self.base.cast_mut();
-        Ok(())
-    }}
-
-    pub unsafe fn grow(&mut self) -> Result<(), AllocError> { unsafe {
-        if self.base.is_null() {
-            self.init_at_size(T::init_size())
-        } else {
-            let size = self.size();
-            let layout = alloc::Layout::from_size_align_unchecked(size, T::align());
-
-            let new_base = alloc::realloc(self.base.cast_mut(), layout, size * 2).cast_const();
+    unsafe fn init_at_size(&mut self, cap: usize) -> Result<(), AllocError> {
+        unsafe {
+            let layout = alloc::Layout::from_size_align_unchecked(cap, T::align());
+            let new_base = alloc::alloc(layout).cast_const();
             if new_base.is_null() {
-                Err(AllocError)
+                return Err(AllocError);
+            }
+            self.base = new_base;
+            self.top = self.base.add(cap);
+            *self.ptr.get_mut() = self.base.cast_mut();
+            Ok(())
+        }
+    }
+
+    pub unsafe fn grow(&mut self) -> Result<(), AllocError> {
+        unsafe {
+            if self.base.is_null() {
+                self.init_at_size(T::init_size())
             } else {
-                self.base = new_base;
-                self.top = self.base.add(size * 2);
-                *self.ptr.get_mut() = self.base.add(size).cast_mut();
-                Ok(())
+                let size = self.size();
+                let layout = alloc::Layout::from_size_align_unchecked(size, T::align());
+
+                let new_base = alloc::realloc(self.base.cast_mut(), layout, size * 2).cast_const();
+                if new_base.is_null() {
+                    Err(AllocError)
+                } else {
+                    self.base = new_base;
+                    self.top = self.base.add(size * 2);
+                    *self.ptr.get_mut() = self.base.add(size).cast_mut();
+                    Ok(())
+                }
             }
         }
-    }}
+    }
 
-    pub unsafe fn grow_new(&self) -> Result<Self, AllocError> { unsafe {
-        if self.base.is_null() {
-            Self::new()
-        } else {
-            let mut new_block = Self::empty_block();
-            new_block.init_at_size(self.size() * 2)?;
-            let allocated = (*self.ptr.get()).addr() - self.base.addr();
-            self.base.copy_to(new_block.base.cast_mut(), allocated);
-            *new_block.ptr.get_mut() = new_block.base.add(allocated).cast_mut();
-            Ok(new_block)
+    pub unsafe fn grow_new(&self) -> Result<Self, AllocError> {
+        unsafe {
+            if self.base.is_null() {
+                Self::new()
+            } else {
+                let mut new_block = Self::empty_block();
+                new_block.init_at_size(self.size() * 2)?;
+                let allocated = (*self.ptr.get()).addr() - self.base.addr();
+                self.base.copy_to(new_block.base.cast_mut(), allocated);
+                *new_block.ptr.get_mut() = new_block.base.add(allocated).cast_mut();
+                Ok(new_block)
+            }
         }
-    }}
+    }
 
     #[inline]
     pub fn size(&self) -> usize {
@@ -91,27 +97,31 @@ impl<T: RawBlockTraits> RawBlock<T> {
     }
 
     #[inline(always)]
-    unsafe fn free_space(&self) -> usize { unsafe {
-        debug_assert!(
-            *self.ptr.get() as *const _ >= self.base,
-            "self.ptr = {:?} < {:?} = self.base",
-            *self.ptr.get(),
-            self.base
-        );
+    unsafe fn free_space(&self) -> usize {
+        unsafe {
+            debug_assert!(
+                *self.ptr.get() as *const _ >= self.base,
+                "self.ptr = {:?} < {:?} = self.base",
+                *self.ptr.get(),
+                self.base
+            );
 
-        self.top.addr() - (*self.ptr.get()).addr()
-    }}
-
-    pub unsafe fn alloc(&self, size: usize) -> *mut u8 { unsafe {
-        let aligned_size = size.next_multiple_of(size);
-        if self.free_space() >= aligned_size {
-            let ptr = *self.ptr.get();
-            *self.ptr.get() = ptr.add(aligned_size) as *mut _;
-            ptr
-        } else {
-            ptr::null_mut()
+            self.top.addr() - (*self.ptr.get()).addr()
         }
-    }}
+    }
+
+    pub unsafe fn alloc(&self, size: usize) -> *mut u8 {
+        unsafe {
+            let aligned_size = size.next_multiple_of(size);
+            if self.free_space() >= aligned_size {
+                let ptr = *self.ptr.get();
+                *self.ptr.get() = ptr.add(aligned_size) as *mut _;
+                ptr
+            } else {
+                ptr::null_mut()
+            }
+        }
+    }
 }
 
 impl<T: RawBlockTraits> Drop for RawBlock<T> {
