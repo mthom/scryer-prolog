@@ -1,4 +1,4 @@
-use bytes::{buf::Reader, Bytes};
+use bytes::{Bytes, buf::Reader};
 use std::sync::{Arc, Condvar, Mutex};
 use tokio::sync::Notify;
 

@@ -61,8 +61,8 @@ use std::env;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::atomic::AtomicBool;
 use std::sync::OnceLock;
+use std::sync::atomic::AtomicBool;
 
 pub static INTERRUPT: AtomicBool = AtomicBool::new(false);
 

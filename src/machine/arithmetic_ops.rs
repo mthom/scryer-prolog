@@ -1,6 +1,6 @@
 use dashu::base::{Abs, Gcd, Signed, UnsignedAbs};
-use dashu::integer::fast_div::ConstDivisor;
 use dashu::integer::IBig;
+use dashu::integer::fast_div::ConstDivisor;
 use divrem::*;
 use num_order::NumOrd;
 

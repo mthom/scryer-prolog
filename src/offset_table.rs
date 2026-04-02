@@ -2,10 +2,10 @@ use std::cell::UnsafeCell;
 use std::sync::Arc;
 use std::{fmt, mem, ptr};
 
+use arcu::Rcu;
 use arcu::atomic::Arcu;
 use arcu::epoch_counters::GlobalEpochCounterPool;
 use arcu::rcu_ref::RcuRef;
-use arcu::Rcu;
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use parking_lot::{Mutex, RwLock};
@@ -211,7 +211,7 @@ impl<T: RawBlockTraits> SerialOffsetTable<T> {
         })
     }
 
-    unsafe fn build_with(&mut self, value: T) -> usize { unsafe {
+    unsafe fn build_with(&mut self, value: T) -> usize {
         let mut ptr;
 
         loop {
@@ -228,17 +228,17 @@ impl<T: RawBlockTraits> SerialOffsetTable<T> {
         ptr::write(ptr as *mut T, value);
         // SAFETY: `ptr` was obtained from `self.block.alloc()`
         self.block.get_offset(ptr)
-    }}
+    }
 
     #[inline]
-    unsafe fn lookup(&self, offset: usize) -> &T { unsafe {
+    unsafe fn lookup(&self, offset: usize) -> &T {
         &*self.block.get_unchecked(offset).cast::<T>()
-    }}
+    }
 
     #[inline]
-    unsafe fn lookup_mut(&mut self, offset: usize) -> &mut T { unsafe {
+    unsafe fn lookup_mut(&mut self, offset: usize) -> &mut T {
         &mut *self.block.get_unchecked(offset).cast::<T>().cast_mut()
-    }}
+    }
 
     #[allow(clippy::wrong_self_convention)]
     fn to_concurrent(&mut self) -> ConcurrentOffsetTable<T>

@@ -491,33 +491,29 @@ impl<'a> IndexingCodeMergingPtr<'a> {
             let indexing_code_len = self.indexing_code.len();
 
             match &mut self.indexing_code[self.offset] {
-                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                    _,
-                    _,
-                    _,
-                    _,
-                    s,
-                )) => match *s {
-                    IndexingCodePtr::Fail if self.is_dynamic => {
-                        *s = IndexingCodePtr::DynamicExternal(index);
-                        break;
+                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, _, s)) => {
+                    match *s {
+                        IndexingCodePtr::Fail if self.is_dynamic => {
+                            *s = IndexingCodePtr::DynamicExternal(index);
+                            break;
+                        }
+                        IndexingCodePtr::Fail => {
+                            *s = IndexingCodePtr::External(index);
+                            break;
+                        }
+                        IndexingCodePtr::DynamicExternal(o) => {
+                            *s = IndexingCodePtr::Internal(indexing_code_len - self.offset);
+                            self.internalize_structure(IndexingCodePtr::DynamicExternal(o));
+                        }
+                        IndexingCodePtr::External(o) => {
+                            *s = IndexingCodePtr::Internal(indexing_code_len - self.offset);
+                            self.internalize_structure(IndexingCodePtr::External(o));
+                        }
+                        IndexingCodePtr::Internal(o) => {
+                            self.offset += o;
+                        }
                     }
-                    IndexingCodePtr::Fail => {
-                        *s = IndexingCodePtr::External(index);
-                        break;
-                    }
-                    IndexingCodePtr::DynamicExternal(o) => {
-                        *s = IndexingCodePtr::Internal(indexing_code_len - self.offset);
-                        self.internalize_structure(IndexingCodePtr::DynamicExternal(o));
-                    }
-                    IndexingCodePtr::External(o) => {
-                        *s = IndexingCodePtr::Internal(indexing_code_len - self.offset);
-                        self.internalize_structure(IndexingCodePtr::External(o));
-                    }
-                    IndexingCodePtr::Internal(o) => {
-                        self.offset += o;
-                    }
-                },
+                }
                 IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(structures)) => {
                     match structures.get(&key).cloned() {
                         None | Some(IndexingCodePtr::Fail) if self.is_dynamic => {
@@ -559,52 +555,50 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         let indexing_code_len = self.indexing_code.len();
 
         match &mut self.indexing_code[self.offset] {
-            IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, l, _)) => {
-                match *l {
-                    IndexingCodePtr::Fail if self.is_dynamic => {
-                        *l = IndexingCodePtr::DynamicExternal(index);
-                    }
-                    IndexingCodePtr::Fail => {
-                        *l = IndexingCodePtr::External(index);
-                    }
-                    IndexingCodePtr::DynamicExternal(o) => {
-                        *l = IndexingCodePtr::Internal(indexing_code_len - self.offset);
-
-                        let third_level_index = if self.append_or_prepend.is_append() {
-                            vec![o, index].into()
-                        } else {
-                            vec![index, o].into()
-                        };
-
-                        self.indexing_code
-                            .push(IndexingLine::DynamicIndexedChoice(third_level_index));
-                    }
-                    IndexingCodePtr::External(o) => {
-                        *l = IndexingCodePtr::Internal(indexing_code_len - self.offset);
-
-                        let third_level_index = if self.append_or_prepend.is_append() {
-                            vec![
-                                IndexedChoiceInstruction::Try(o),
-                                IndexedChoiceInstruction::Trust(index),
-                            ]
-                            .into()
-                        } else {
-                            vec![
-                                IndexedChoiceInstruction::Try(index),
-                                IndexedChoiceInstruction::Trust(o),
-                            ]
-                            .into()
-                        };
-
-                        self.indexing_code
-                            .push(IndexingLine::IndexedChoice(third_level_index));
-                    }
-                    IndexingCodePtr::Internal(o) => {
-                        self.offset += o;
-                        self.extend_indexed_choice(index);
-                    }
+            IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, l, _)) => match *l {
+                IndexingCodePtr::Fail if self.is_dynamic => {
+                    *l = IndexingCodePtr::DynamicExternal(index);
                 }
-            }
+                IndexingCodePtr::Fail => {
+                    *l = IndexingCodePtr::External(index);
+                }
+                IndexingCodePtr::DynamicExternal(o) => {
+                    *l = IndexingCodePtr::Internal(indexing_code_len - self.offset);
+
+                    let third_level_index = if self.append_or_prepend.is_append() {
+                        vec![o, index].into()
+                    } else {
+                        vec![index, o].into()
+                    };
+
+                    self.indexing_code
+                        .push(IndexingLine::DynamicIndexedChoice(third_level_index));
+                }
+                IndexingCodePtr::External(o) => {
+                    *l = IndexingCodePtr::Internal(indexing_code_len - self.offset);
+
+                    let third_level_index = if self.append_or_prepend.is_append() {
+                        vec![
+                            IndexedChoiceInstruction::Try(o),
+                            IndexedChoiceInstruction::Trust(index),
+                        ]
+                        .into()
+                    } else {
+                        vec![
+                            IndexedChoiceInstruction::Try(index),
+                            IndexedChoiceInstruction::Trust(o),
+                        ]
+                        .into()
+                    };
+
+                    self.indexing_code
+                        .push(IndexingLine::IndexedChoice(third_level_index));
+                }
+                IndexingCodePtr::Internal(o) => {
+                    self.offset += o;
+                    self.extend_indexed_choice(index);
+                }
+            },
             _ => {
                 unreachable!()
             }
@@ -676,20 +670,18 @@ pub(crate) fn remove_constant_indices(
     let iter = once(&constant).chain(overlapping_constants.iter());
 
     match &mut indexing_code[index] {
-        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, c, ..)) => {
-            match *c {
-                IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
-                    *c = IndexingCodePtr::Fail;
-                    return;
-                }
-                IndexingCodePtr::Internal(o) => {
-                    index += o;
-                }
-                IndexingCodePtr::Fail => {
-                    return;
-                }
+        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, c, ..)) => match *c {
+            IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
+                *c = IndexingCodePtr::Fail;
+                return;
             }
-        }
+            IndexingCodePtr::Internal(o) => {
+                index += o;
+            }
+            IndexingCodePtr::Fail => {
+                return;
+            }
+        },
         _ => {
             unreachable!()
         }
@@ -700,9 +692,7 @@ pub(crate) fn remove_constant_indices(
     for constant in iter.map(|l| HeapCellValue::from(*l)) {
         loop {
             match &mut indexing_code[index] {
-                IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
-                    constants,
-                )) => {
+                IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(constants)) => {
                     constants_index = index;
 
                     match constants.get(&constant).cloned() {
@@ -819,20 +809,18 @@ pub(crate) fn remove_structure_index(
     let mut index = 0;
 
     match &mut indexing_code[index] {
-        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, _, s)) => {
-            match *s {
-                IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
-                    *s = IndexingCodePtr::Fail;
-                    return;
-                }
-                IndexingCodePtr::Internal(o) => {
-                    index += o;
-                }
-                IndexingCodePtr::Fail => {
-                    return;
-                }
+        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, _, s)) => match *s {
+            IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
+                *s = IndexingCodePtr::Fail;
+                return;
             }
-        }
+            IndexingCodePtr::Internal(o) => {
+                index += o;
+            }
+            IndexingCodePtr::Fail => {
+                return;
+            }
+        },
         _ => {
             unreachable!()
         }
@@ -932,13 +920,7 @@ pub(crate) fn remove_structure_index(
             if structures.is_empty() =>
         {
             match &mut indexing_code[0] {
-                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                    _,
-                    _,
-                    _,
-                    _,
-                    s,
-                )) => {
+                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, _, s)) => {
                     *s = IndexingCodePtr::Fail;
                 }
                 _ => {
@@ -954,20 +936,18 @@ pub(crate) fn remove_list_index(indexing_code: &mut [IndexingLine], offset: usiz
     let mut index = 0;
 
     match &mut indexing_code[index] {
-        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, l, _)) => {
-            match *l {
-                IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
-                    *l = IndexingCodePtr::Fail;
-                    return;
-                }
-                IndexingCodePtr::Internal(o) => {
-                    index += o;
-                }
-                IndexingCodePtr::Fail => {
-                    return;
-                }
+        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, l, _)) => match *l {
+            IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
+                *l = IndexingCodePtr::Fail;
+                return;
             }
-        }
+            IndexingCodePtr::Internal(o) => {
+                index += o;
+            }
+            IndexingCodePtr::Fail => {
+                return;
+            }
+        },
         _ => {
             unreachable!()
         }
