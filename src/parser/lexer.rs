@@ -85,7 +85,7 @@ macro_rules! try_nt {
                     Ok(NumberToken::Partial($token))
                 } else {
                     Err(e)
-                }
+                };
             }
         }
     }};
@@ -771,7 +771,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         Err(_) => {
                             return self
                                 .vacate_with_float(token)
-                                .map(|(offset, fl)| NumberToken::Float(offset, fl))
+                                .map(|(offset, fl)| NumberToken::Float(offset, fl));
                         }
                         Ok(c) => c,
                     };

@@ -89,7 +89,7 @@ impl<'a> QueryIterator<'a> {
             | Term::CompleteString(..) => {
                 return QueryIterator {
                     state_stack: vec![],
-                }
+                };
             }
             Term::Clause(r, name, terms) => TermIterState::Clause(Level::Root, 0, r, *name, terms),
             Term::Var(cell, var_ptr) => TermIterState::Var(Level::Root, cell, var_ptr.clone()),
@@ -142,7 +142,7 @@ impl<'a> Iterator for QueryIterator<'a> {
                                 return match lvl {
                                     Level::Root => None,
                                     lvl => Some(TermRef::Clause(lvl, cell, name, child_terms)),
-                                }
+                                };
                             }
                         };
                     } else {
@@ -292,7 +292,7 @@ impl<'a> Iterator for FactIterator<'a> {
                     return Some(TermRef::CompleteString(lvl, cell, atom));
                 }
                 TermIterState::Literal(lvl, cell, constant) => {
-                    return Some(TermRef::Literal(lvl, cell, constant))
+                    return Some(TermRef::Literal(lvl, cell, constant));
                 }
                 TermIterState::Var(lvl, cell, var_ptr) => {
                     return Some(TermRef::Var(lvl, cell, var_ptr));

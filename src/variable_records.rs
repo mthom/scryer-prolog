@@ -105,9 +105,7 @@ impl VarAlloc {
     pub(crate) fn set_register(&mut self, reg_num: usize) {
         match self {
             VarAlloc::Perm(p, _) => *p = reg_num,
-            VarAlloc::Temp {
-                temp_reg, ..
-            } => *temp_reg = reg_num,
+            VarAlloc::Temp { temp_reg, .. } => *temp_reg = reg_num,
         };
     }
 }

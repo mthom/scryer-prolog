@@ -564,9 +564,7 @@ fn thread_choice_instr_at_to(
 ) {
     loop {
         match &mut code[instr_loc] {
-            Instruction::TryMeElse(o) | Instruction::RetryMeElse(o)
-                if target_loc >= instr_loc =>
-            {
+            Instruction::TryMeElse(o) | Instruction::RetryMeElse(o) if target_loc >= instr_loc => {
                 retraction_info.push_record(RetractionRecord::ReplacedChoiceOffset(instr_loc, *o));
 
                 *o = target_loc - instr_loc;
@@ -1632,8 +1630,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         };
 
         match &mut self.wam_prelude.code[clause_loc] {
-            Instruction::DynamicElse(_, d, _)
-            | Instruction::DynamicInternalElse(_, d, _) => {
+            Instruction::DynamicElse(_, d, _) | Instruction::DynamicInternalElse(_, d, _) => {
                 *d = Death::Finite(LS::machine_st(&mut self.payload).global_clock);
             }
             _ => unreachable!(),

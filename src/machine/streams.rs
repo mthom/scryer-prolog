@@ -15,7 +15,7 @@ use crate::types::*;
 pub use modular_bitfield::prelude::*;
 
 #[cfg(feature = "http")]
-use bytes::{buf::Reader as BufReader, Buf, Bytes};
+use bytes::{Buf, Bytes, buf::Reader as BufReader};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
@@ -2184,8 +2184,8 @@ mod test {
     use crate::*;
     use std::{cell::RefCell, io::Read, io::Write, rc::Rc};
 
-    use crate::machine::config::*;
     use crate::LeafAnswer;
+    use crate::machine::config::*;
 
     use super::{Stream, StreamOptions};
 

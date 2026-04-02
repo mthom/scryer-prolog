@@ -362,11 +362,7 @@ impl OpDesc {
 
     #[inline]
     pub fn arity(self) -> usize {
-        if !self.get_spec().is_infix() {
-            1
-        } else {
-            2
-        }
+        if !self.get_spec().is_infix() { 1 } else { 2 }
     }
 }
 

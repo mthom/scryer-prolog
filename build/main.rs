@@ -7,9 +7,9 @@ use static_string_indexing::index_static_strings;
 use std::env;
 use std::fs::File;
 use std::io::Write;
+use std::path::MAIN_SEPARATOR_STR;
 use std::path::Path;
 use std::path::PathBuf;
-use std::path::MAIN_SEPARATOR_STR;
 use std::process::{Command, Stdio};
 
 fn find_prolog_files(path_prefix: &str, current_dir: &Path) -> Vec<(String, PathBuf)> {

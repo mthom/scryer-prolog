@@ -43,9 +43,9 @@ mod targets;
 pub(crate) mod types;
 
 // Re-exports
+pub use machine::Machine;
 pub use machine::config::*;
 pub use machine::lib_machine::*;
-pub use machine::Machine;
 
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;

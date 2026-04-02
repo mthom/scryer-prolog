@@ -1368,9 +1368,7 @@ impl Machine {
 
         let indexed_choice_instrs = match &self.code[p] {
             Instruction::IndexingCode(indexing_code) => match &indexing_code[oi as usize] {
-                IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
-                    indexed_choice_instrs
-                }
+                IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => indexed_choice_instrs,
                 _ => unreachable!(),
             },
             _ => unreachable!(),

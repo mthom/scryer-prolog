@@ -64,7 +64,7 @@ impl<'a> ArithInstructionIterator<'a> {
                 return Err(ArithmeticError::NonEvaluableFunctor(
                     Literal::Atom(atom!(".")),
                     2,
-                ))
+                ));
             }
             Term::Var(cell, var_ptr) => TermIterState::Var(Level::Shallow, cell, var_ptr.clone()),
         };
@@ -519,26 +519,16 @@ impl PartialEq for Number {
             (&Number::Fixnum(n1), Number::Rational(n2)) => {
                 Integer::from(n1.get_num()).num_eq(&**n2)
             }
-            (Number::Rational(n1), &Number::Fixnum(n2)) => {
-                n1.num_eq(&Integer::from(n2.get_num()))
-            }
+            (Number::Rational(n1), &Number::Fixnum(n2)) => n1.num_eq(&Integer::from(n2.get_num())),
             (&Number::Fixnum(n1), &Number::Float(n2)) => OrderedFloat(n1.get_num() as f64).eq(&n2),
             (&Number::Float(n1), &Number::Fixnum(n2)) => n1.eq(&OrderedFloat(n2.get_num() as f64)),
             (Number::Integer(n1), Number::Integer(n2)) => n1.eq(n2),
-            (Number::Integer(n1), Number::Float(n2)) => {
-                OrderedFloat(n1.to_f64().value()).eq(n2)
-            }
-            (&Number::Float(n1), Number::Integer(n2)) => {
-                n1.eq(&OrderedFloat(n2.to_f64().value()))
-            }
+            (Number::Integer(n1), Number::Float(n2)) => OrderedFloat(n1.to_f64().value()).eq(n2),
+            (&Number::Float(n1), Number::Integer(n2)) => n1.eq(&OrderedFloat(n2.to_f64().value())),
             (Number::Integer(n1), Number::Rational(n2)) => n1.num_eq(&**n2),
             (Number::Rational(n1), Number::Integer(n2)) => n1.num_eq(&**n2),
-            (Number::Rational(n1), &Number::Float(n2)) => {
-                OrderedFloat(n1.to_f64().value()).eq(&n2)
-            }
-            (&Number::Float(n1), Number::Rational(n2)) => {
-                n1.eq(&OrderedFloat(n2.to_f64().value()))
-            }
+            (Number::Rational(n1), &Number::Float(n2)) => OrderedFloat(n1.to_f64().value()).eq(&n2),
+            (&Number::Float(n1), Number::Rational(n2)) => n1.eq(&OrderedFloat(n2.to_f64().value())),
             (&Number::Float(f1), &Number::Float(f2)) => f1.eq(&f2),
             (Number::Rational(r1), Number::Rational(r2)) => r1.eq(r2),
         }
@@ -607,9 +597,7 @@ impl Ord for Number {
             (&Number::Float(n1), &Number::Fixnum(n2)) => n1.cmp(&OrderedFloat(n2.get_num() as f64)),
             (&Number::Integer(n1), &Number::Integer(n2)) => (*n1).cmp(&*n2),
             (&Number::Integer(n1), Number::Float(n2)) => OrderedFloat(n1.to_f64().value()).cmp(n2),
-            (&Number::Float(n1), Number::Integer(n2)) => {
-                n1.cmp(&OrderedFloat(n2.to_f64().value()))
-            }
+            (&Number::Float(n1), Number::Integer(n2)) => n1.cmp(&OrderedFloat(n2.to_f64().value())),
             (&Number::Integer(n1), &Number::Rational(n2)) => {
                 (*n1).num_partial_cmp(&*n2).unwrap_or(Ordering::Less)
             }

@@ -1,5 +1,5 @@
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 #[cfg(not(target_os = "windows"))]

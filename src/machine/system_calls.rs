@@ -25,7 +25,7 @@ use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
-use crate::machine::{get_structure_index, Machine};
+use crate::machine::{Machine, get_structure_index};
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
@@ -49,7 +49,7 @@ use std::ffi::CString;
 use std::fs;
 use std::hash::{BuildHasher, BuildHasherDefault};
 use std::io::{ErrorKind, Read, Write};
-use std::iter::{once, FromIterator};
+use std::iter::{FromIterator, once};
 use std::mem;
 #[cfg(feature = "http")]
 use std::net::{SocketAddr, ToSocketAddrs};
@@ -63,13 +63,13 @@ use std::str::FromStr;
 #[cfg(feature = "http")]
 use std::sync::{Arc, Condvar, Mutex};
 
-use chrono::{offset::Local, DateTime};
+use chrono::{DateTime, offset::Local};
 #[cfg(not(target_arch = "wasm32"))]
 use cpu_time::ProcessTime;
 use std::time::{Duration, SystemTime};
 
 #[cfg(feature = "repl")]
-use crossterm::event::{read, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, read};
 #[cfg(feature = "repl")]
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 

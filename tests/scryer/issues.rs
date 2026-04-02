@@ -17,7 +17,10 @@ fn call_0() {
 #[test]
 #[cfg_attr(miri, ignore = "unsupported operation when isolation is enabled")]
 fn issue2588_load_html() {
-    load_module_test("tests-pl/issue2588.pl", "[element(html,[],[element(head,[],[element(title,[],[[H,e,l,l,o,!]])]),element(body,[],[])])]");
+    load_module_test(
+        "tests-pl/issue2588.pl",
+        "[element(html,[],[element(head,[],[element(title,[],[[H,e,l,l,o,!]])]),element(body,[],[])])]",
+    );
 }
 
 #[test]
@@ -32,7 +35,10 @@ fn issue3256_load_xml_returns_list() {
 #[test]
 #[cfg_attr(miri, ignore = "unsupported operation when isolation is enabled")]
 fn issue2949_load_html() {
-    load_module_test("tests-pl/issue2949.pl", "[doctype([h,t,m,l]),element(html,[],[element(head,[],[element(title,[],[[H,e,l,l,o,!]])]),element(body,[],[])])][doctype([h,t,m,l]),element(html,[],[element(head,[],[element(title,[],[[H,e,l,l,o,!]]),comment([ ,c,o,m,m,e,n,t, ])]),element(body,[],[])])][comment([]),element(html,[],[element(head,[],[]),element(body,[],[])])]");
+    load_module_test(
+        "tests-pl/issue2949.pl",
+        "[doctype([h,t,m,l]),element(html,[],[element(head,[],[element(title,[],[[H,e,l,l,o,!]])]),element(body,[],[])])][doctype([h,t,m,l]),element(html,[],[element(head,[],[element(title,[],[[H,e,l,l,o,!]]),comment([ ,c,o,m,m,e,n,t, ])]),element(body,[],[])])][comment([]),element(html,[],[element(head,[],[]),element(body,[],[])])]",
+    );
 }
 
 // issue #2361
@@ -156,6 +162,6 @@ fn issue_rename_file() {
 fn http_open_hanging() {
     load_module_test_with_tokio_runtime(
         "tests-pl/issue-http_open-hanging.pl",
-            "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
+        "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n",
     );
 }

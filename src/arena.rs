@@ -19,8 +19,8 @@ use std::net::TcpListener;
 use std::ops::{Deref, DerefMut};
 use std::process::Child;
 use std::ptr;
-use std::ptr::addr_of_mut;
 use std::ptr::NonNull;
+use std::ptr::addr_of_mut;
 
 use crate::machine::streams::{PipeReader, PipeWriter};
 
@@ -32,9 +32,7 @@ macro_rules! arena_alloc {
 }
 
 macro_rules! float_alloc {
-    ($e:expr, $arena:expr) => {{
-        $arena.f64_tbl.build_with(OrderedFloat($e))
-    }};
+    ($e:expr, $arena:expr) => {{ $arena.f64_tbl.build_with(OrderedFloat($e)) }};
 }
 
 pub fn header_offset_from_payload<T: ?Sized + ArenaAllocated>() -> usize
@@ -281,11 +279,13 @@ pub trait ArenaAllocated {
     unsafe fn typed_ptr(ptr: UntypedArenaPtr) -> TypedArenaPtr<Self>
     where
         Self::Payload: Sized,
-    { unsafe {
-        TypedArenaPtr(NonNull::new_unchecked(
-            ptr.payload_offset().cast_mut().cast::<Self::Payload>(),
-        ))
-    }}
+    {
+        unsafe {
+            TypedArenaPtr(NonNull::new_unchecked(
+                ptr.payload_offset().cast_mut().cast::<Self::Payload>(),
+            ))
+        }
+    }
 
     #[allow(clippy::missing_safety_doc)]
     fn alloc(arena: &mut Arena, value: Self::Payload) -> TypedArenaPtr<Self>
@@ -493,91 +493,93 @@ impl Arena {
     }
 }
 
-unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) { unsafe {
-    macro_rules! drop_typed_slab_in_place {
-        ($payload: ty, $value: expr) => {
-            <$payload as ArenaAllocated>::dealloc($value.cast::<TypedAllocSlab<$payload>>())
-        };
-    }
+unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {
+    unsafe {
+        macro_rules! drop_typed_slab_in_place {
+            ($payload: ty, $value: expr) => {
+                <$payload as ArenaAllocated>::dealloc($value.cast::<TypedAllocSlab<$payload>>())
+            };
+        }
 
-    match tag {
-        ArenaHeaderTag::Integer => {
-            drop_typed_slab_in_place!(Integer, value);
-        }
-        ArenaHeaderTag::Rational => {
-            drop_typed_slab_in_place!(Rational, value);
-        }
-        ArenaHeaderTag::InputFileStream => {
-            drop_typed_slab_in_place!(InputFileStream, value);
-        }
-        ArenaHeaderTag::OutputFileStream => {
-            drop_typed_slab_in_place!(OutputFileStream, value);
-        }
-        ArenaHeaderTag::NamedTcpStream => {
-            drop_typed_slab_in_place!(NamedTcpStream, value);
-        }
-        ArenaHeaderTag::NamedTlsStream => {
-            #[cfg(feature = "tls")]
-            drop_typed_slab_in_place!(NamedTlsStream, value);
-        }
-        ArenaHeaderTag::HttpReadStream => {
-            #[cfg(feature = "http")]
-            drop_typed_slab_in_place!(HttpReadStream, value);
-        }
-        ArenaHeaderTag::HttpWriteStream => {
-            #[cfg(feature = "http")]
-            drop_typed_slab_in_place!(HttpWriteStream, value);
-        }
-        ArenaHeaderTag::ReadlineStream => {
-            drop_typed_slab_in_place!(ReadlineStream, value);
-        }
-        ArenaHeaderTag::StaticStringStream => {
-            drop_typed_slab_in_place!(StaticStringStream, value);
-        }
-        ArenaHeaderTag::ByteStream => {
-            drop_typed_slab_in_place!(ByteStream, value);
-        }
-        ArenaHeaderTag::CallbackStream => {
-            drop_typed_slab_in_place!(CallbackStream, value);
-        }
-        ArenaHeaderTag::InputChannelStream => {
-            drop_typed_slab_in_place!(InputChannelStream, value);
-        }
-        ArenaHeaderTag::LiveLoadState | ArenaHeaderTag::InactiveLoadState => {
-            drop_typed_slab_in_place!(LiveLoadState, value);
-        }
-        ArenaHeaderTag::Dropped => {}
-        ArenaHeaderTag::TcpListener => {
-            drop_typed_slab_in_place!(TcpListener, value);
-        }
-        ArenaHeaderTag::HttpListener => {
-            #[cfg(feature = "http")]
-            drop_typed_slab_in_place!(HttpListener, value);
-        }
-        ArenaHeaderTag::HttpResponse => {
-            #[cfg(feature = "http")]
-            drop_typed_slab_in_place!(HttpResponse, value);
-        }
-        ArenaHeaderTag::StandardOutputStream => {
-            drop_typed_slab_in_place!(StandardOutputStream, value);
-        }
-        ArenaHeaderTag::StandardErrorStream => {
-            drop_typed_slab_in_place!(StandardErrorStream, value);
-        }
-        ArenaHeaderTag::PipeReader => {
-            drop_typed_slab_in_place!(PipeReader, value);
-        }
-        ArenaHeaderTag::PipeWriter => {
-            drop_typed_slab_in_place!(PipeWriter, value);
-        }
-        ArenaHeaderTag::ChildProcess => {
-            drop_typed_slab_in_place!(Child, value);
-        }
-        ArenaHeaderTag::NullStream => {
-            unreachable!("NullStream is never arena allocated!");
+        match tag {
+            ArenaHeaderTag::Integer => {
+                drop_typed_slab_in_place!(Integer, value);
+            }
+            ArenaHeaderTag::Rational => {
+                drop_typed_slab_in_place!(Rational, value);
+            }
+            ArenaHeaderTag::InputFileStream => {
+                drop_typed_slab_in_place!(InputFileStream, value);
+            }
+            ArenaHeaderTag::OutputFileStream => {
+                drop_typed_slab_in_place!(OutputFileStream, value);
+            }
+            ArenaHeaderTag::NamedTcpStream => {
+                drop_typed_slab_in_place!(NamedTcpStream, value);
+            }
+            ArenaHeaderTag::NamedTlsStream => {
+                #[cfg(feature = "tls")]
+                drop_typed_slab_in_place!(NamedTlsStream, value);
+            }
+            ArenaHeaderTag::HttpReadStream => {
+                #[cfg(feature = "http")]
+                drop_typed_slab_in_place!(HttpReadStream, value);
+            }
+            ArenaHeaderTag::HttpWriteStream => {
+                #[cfg(feature = "http")]
+                drop_typed_slab_in_place!(HttpWriteStream, value);
+            }
+            ArenaHeaderTag::ReadlineStream => {
+                drop_typed_slab_in_place!(ReadlineStream, value);
+            }
+            ArenaHeaderTag::StaticStringStream => {
+                drop_typed_slab_in_place!(StaticStringStream, value);
+            }
+            ArenaHeaderTag::ByteStream => {
+                drop_typed_slab_in_place!(ByteStream, value);
+            }
+            ArenaHeaderTag::CallbackStream => {
+                drop_typed_slab_in_place!(CallbackStream, value);
+            }
+            ArenaHeaderTag::InputChannelStream => {
+                drop_typed_slab_in_place!(InputChannelStream, value);
+            }
+            ArenaHeaderTag::LiveLoadState | ArenaHeaderTag::InactiveLoadState => {
+                drop_typed_slab_in_place!(LiveLoadState, value);
+            }
+            ArenaHeaderTag::Dropped => {}
+            ArenaHeaderTag::TcpListener => {
+                drop_typed_slab_in_place!(TcpListener, value);
+            }
+            ArenaHeaderTag::HttpListener => {
+                #[cfg(feature = "http")]
+                drop_typed_slab_in_place!(HttpListener, value);
+            }
+            ArenaHeaderTag::HttpResponse => {
+                #[cfg(feature = "http")]
+                drop_typed_slab_in_place!(HttpResponse, value);
+            }
+            ArenaHeaderTag::StandardOutputStream => {
+                drop_typed_slab_in_place!(StandardOutputStream, value);
+            }
+            ArenaHeaderTag::StandardErrorStream => {
+                drop_typed_slab_in_place!(StandardErrorStream, value);
+            }
+            ArenaHeaderTag::PipeReader => {
+                drop_typed_slab_in_place!(PipeReader, value);
+            }
+            ArenaHeaderTag::PipeWriter => {
+                drop_typed_slab_in_place!(PipeWriter, value);
+            }
+            ArenaHeaderTag::ChildProcess => {
+                drop_typed_slab_in_place!(Child, value);
+            }
+            ArenaHeaderTag::NullStream => {
+                unreachable!("NullStream is never arena allocated!");
+            }
         }
     }
-}}
+}
 
 impl Drop for Arena {
     fn drop(&mut self) {
