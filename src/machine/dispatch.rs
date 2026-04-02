@@ -1365,8 +1365,8 @@ impl Machine {
         let p = self.machine_st.p;
 
         let indexed_choice_instrs = match &self.code[p] {
-            Instruction::IndexingCode(ref indexing_code) => match &indexing_code[oi as usize] {
-                IndexingLine::DynamicIndexedChoice(ref indexed_choice_instrs) => {
+            Instruction::IndexingCode(indexing_code) => match &indexing_code[oi as usize] {
+                IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
                     indexed_choice_instrs
                 }
                 _ => unreachable!(),
@@ -1376,7 +1376,7 @@ impl Machine {
 
         loop {
             match &indexed_choice_instrs.get(ii as usize) {
-                Some(&offset) => match &self.code[p + offset - 1] {
+                &Some(&offset) => match &self.code[p + offset - 1] {
                     &Instruction::DynamicInternalElse(birth, death, next_or_fail) => {
                         if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death
                         {
@@ -2670,7 +2670,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    Instruction::CallNumberLessThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::CallNumberLessThanOrEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2692,7 +2692,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::ExecuteNumberLessThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberLessThanOrEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2714,7 +2714,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::CallNumberEqual(ref at_1, ref at_2) => {
+                    Instruction::CallNumberEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2736,7 +2736,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::ExecuteNumberEqual(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2758,7 +2758,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::CallNumberNotEqual(ref at_1, ref at_2) => {
+                    Instruction::CallNumberNotEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2780,7 +2780,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::ExecuteNumberNotEqual(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberNotEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2802,7 +2802,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::CallNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::CallNumberGreaterThanOrEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2824,7 +2824,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::ExecuteNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberGreaterThanOrEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2846,7 +2846,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::CallNumberGreaterThan(ref at_1, ref at_2) => {
+                    Instruction::CallNumberGreaterThan(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2868,7 +2868,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::ExecuteNumberGreaterThan(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberGreaterThan(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2890,7 +2890,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::CallNumberLessThan(ref at_1, ref at_2) => {
+                    Instruction::CallNumberLessThan(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2912,7 +2912,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::ExecuteNumberLessThan(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberLessThan(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2934,7 +2934,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::DefaultCallNumberLessThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberLessThanOrEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2955,7 +2955,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::DefaultExecuteNumberLessThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberLessThanOrEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2976,7 +2976,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::DefaultCallNumberNotEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberNotEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -2997,7 +2997,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::DefaultExecuteNumberNotEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberNotEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -3018,7 +3018,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::DefaultCallNumberEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -3039,7 +3039,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::DefaultExecuteNumberEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -3060,7 +3060,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::DefaultCallNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberGreaterThanOrEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -3081,7 +3081,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::DefaultExecuteNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberGreaterThanOrEqual(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -3102,7 +3102,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::DefaultCallNumberGreaterThan(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberGreaterThan(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -3123,7 +3123,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::DefaultExecuteNumberGreaterThan(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberGreaterThan(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -3144,7 +3144,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::DefaultCallNumberLessThan(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberLessThan(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -3165,7 +3165,7 @@ impl Machine {
                             }
                         }
                     }
-                    Instruction::DefaultExecuteNumberLessThan(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberLessThan(at_1, at_2) => {
                         let n1 = try_or_throw!(
                             self.machine_st,
                             self.machine_st.get_number(at_1),
@@ -3640,7 +3640,7 @@ impl Machine {
                     &Instruction::Proceed => {
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    Instruction::IndexingCode(ref indexing_lines) => {
+                    Instruction::IndexingCode(indexing_lines) => {
                         match &indexing_lines[self.machine_st.oip as usize] {
                             IndexingLine::Indexing(_) => {
                                 self.execute_switch_on_term();
@@ -3649,7 +3649,7 @@ impl Machine {
                                     self.machine_st.backtrack();
                                 }
                             }
-                            IndexingLine::IndexedChoice(ref indexed_choice) => {
+                            IndexingLine::IndexedChoice(indexed_choice) => {
                                 match indexed_choice[self.machine_st.iip as usize] {
                                     IndexedChoiceInstruction::Try(offset) => {
                                         backtrack_on_resource_error!(

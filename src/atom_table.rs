@@ -388,10 +388,12 @@ impl Atom {
     }
 }
 
-unsafe fn write_to_ptr(string: &str, ptr: *mut u8) {
-    ptr::write(ptr as *mut _, AtomHeader::build_with(string.len() as u64));
-    let str_ptr = ptr.add(mem::size_of::<AtomHeader>());
-    ptr::copy_nonoverlapping(string.as_ptr(), str_ptr, string.len());
+unsafe fn write_to_ptr(string: &str, ptr: *mut u8) { 
+    unsafe { ptr::write(ptr as *mut _, AtomHeader::build_with(string.len() as u64)); }
+    unsafe {
+        let str_ptr = ptr.add(mem::size_of::<AtomHeader>());
+        ptr::copy_nonoverlapping(string.as_ptr(), str_ptr, string.len());
+    }
 }
 
 impl PartialOrd for Atom {

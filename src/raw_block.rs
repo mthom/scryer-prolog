@@ -41,7 +41,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
         Ok(block)
     }
 
-    unsafe fn init_at_size(&mut self, cap: usize) -> Result<(), AllocError> {
+    unsafe fn init_at_size(&mut self, cap: usize) -> Result<(), AllocError> { unsafe {
         let layout = alloc::Layout::from_size_align_unchecked(cap, T::align());
         let new_base = alloc::alloc(layout).cast_const();
         if new_base.is_null() {
@@ -51,9 +51,9 @@ impl<T: RawBlockTraits> RawBlock<T> {
         self.top = self.base.add(cap);
         *self.ptr.get_mut() = self.base.cast_mut();
         Ok(())
-    }
+    }}
 
-    pub unsafe fn grow(&mut self) -> Result<(), AllocError> {
+    pub unsafe fn grow(&mut self) -> Result<(), AllocError> { unsafe {
         if self.base.is_null() {
             self.init_at_size(T::init_size())
         } else {
@@ -70,9 +70,9 @@ impl<T: RawBlockTraits> RawBlock<T> {
                 Ok(())
             }
         }
-    }
+    }}
 
-    pub unsafe fn grow_new(&self) -> Result<Self, AllocError> {
+    pub unsafe fn grow_new(&self) -> Result<Self, AllocError> { unsafe {
         if self.base.is_null() {
             Self::new()
         } else {
@@ -83,7 +83,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
             *new_block.ptr.get_mut() = new_block.base.add(allocated).cast_mut();
             Ok(new_block)
         }
-    }
+    }}
 
     #[inline]
     pub fn size(&self) -> usize {
@@ -91,7 +91,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
     }
 
     #[inline(always)]
-    unsafe fn free_space(&self) -> usize {
+    unsafe fn free_space(&self) -> usize { unsafe {
         debug_assert!(
             *self.ptr.get() as *const _ >= self.base,
             "self.ptr = {:?} < {:?} = self.base",
@@ -100,9 +100,9 @@ impl<T: RawBlockTraits> RawBlock<T> {
         );
 
         self.top.addr() - (*self.ptr.get()).addr()
-    }
+    }}
 
-    pub unsafe fn alloc(&self, size: usize) -> *mut u8 {
+    pub unsafe fn alloc(&self, size: usize) -> *mut u8 { unsafe {
         let aligned_size = size.next_multiple_of(size);
         if self.free_space() >= aligned_size {
             let ptr = *self.ptr.get();
@@ -111,7 +111,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
         } else {
             ptr::null_mut()
         }
-    }
+    }}
 }
 
 impl<T: RawBlockTraits> Drop for RawBlock<T> {

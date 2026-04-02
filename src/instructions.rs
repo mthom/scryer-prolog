@@ -251,7 +251,7 @@ impl Instruction {
     #[inline]
     pub fn to_indexing_line_mut(&mut self) -> Option<&mut Vec<IndexingLine>> {
         match self {
-            Instruction::IndexingCode(ref mut indexing_code) => Some(indexing_code),
+            Instruction::IndexingCode(indexing_code) => Some(indexing_code),
             _ => None,
         }
     }
@@ -259,7 +259,7 @@ impl Instruction {
     #[inline]
     pub fn to_indexing_line(&self) -> Option<&Vec<IndexingLine>> {
         match self {
-            Instruction::IndexingCode(ref indexing_code) => Some(indexing_code),
+            Instruction::IndexingCode(indexing_code) => Some(indexing_code),
             _ => None,
         }
     }
@@ -1370,12 +1370,12 @@ impl Instruction {
 impl CompareNumber {
     pub fn set_terms(&mut self, l_at_1: ArithmeticTerm, l_at_2: ArithmeticTerm) {
         match self {
-            CompareNumber::NumberGreaterThan(ref mut at_1, ref mut at_2)
-            | CompareNumber::NumberLessThan(ref mut at_1, ref mut at_2)
-            | CompareNumber::NumberGreaterThanOrEqual(ref mut at_1, ref mut at_2)
-            | CompareNumber::NumberLessThanOrEqual(ref mut at_1, ref mut at_2)
-            | CompareNumber::NumberNotEqual(ref mut at_1, ref mut at_2)
-            | CompareNumber::NumberEqual(ref mut at_1, ref mut at_2) => {
+            CompareNumber::NumberGreaterThan(at_1, at_2)
+            | CompareNumber::NumberLessThan(at_1, at_2)
+            | CompareNumber::NumberGreaterThanOrEqual(at_1, at_2)
+            | CompareNumber::NumberLessThanOrEqual(at_1, at_2)
+            | CompareNumber::NumberNotEqual(at_1, at_2)
+            | CompareNumber::NumberEqual(at_1, at_2) => {
                 *at_1 = l_at_1;
                 *at_2 = l_at_2;
             }

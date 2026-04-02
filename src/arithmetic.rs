@@ -361,7 +361,7 @@ pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Result<Number, EvalErro
                 )))
             }
         }
-        Number::Rational(ref r) => {
+        Number::Rational(r) => {
             let floor = r.floor();
 
             if let Ok(value) = Fixnum::build_with_checked(&floor) {
@@ -384,9 +384,9 @@ impl From<Fixnum> for Integer {
 pub(crate) fn rnd_f(n: &Number) -> f64 {
     match n {
         &Number::Fixnum(n) => n.get_num() as f64,
-        Number::Integer(ref n) => n.to_f64().value(),
+        Number::Integer(n) => n.to_f64().value(),
         &Number::Float(OrderedFloat(f)) => f,
-        Number::Rational(ref r) => r.to_f64().value(),
+        Number::Rational(r) => r.to_f64().value(),
     }
 }
 
@@ -514,33 +514,33 @@ impl PartialEq for Number {
     fn eq(&self, rhs: &Self) -> bool {
         match (self, rhs) {
             (&Number::Fixnum(n1), &Number::Fixnum(n2)) => n1.eq(&n2),
-            (&Number::Fixnum(n1), Number::Integer(ref n2)) => n1.get_num().num_eq(&**n2),
-            (Number::Integer(ref n1), &Number::Fixnum(n2)) => n1.num_eq(&n2.get_num()),
-            (&Number::Fixnum(n1), Number::Rational(ref n2)) => {
+            (&Number::Fixnum(n1), Number::Integer(n2)) => n1.get_num().num_eq(&**n2),
+            (Number::Integer(n1), &Number::Fixnum(n2)) => n1.num_eq(&n2.get_num()),
+            (&Number::Fixnum(n1), Number::Rational(n2)) => {
                 Integer::from(n1.get_num()).num_eq(&**n2)
             }
-            (Number::Rational(ref n1), &Number::Fixnum(n2)) => {
+            (Number::Rational(n1), &Number::Fixnum(n2)) => {
                 n1.num_eq(&Integer::from(n2.get_num()))
             }
             (&Number::Fixnum(n1), &Number::Float(n2)) => OrderedFloat(n1.get_num() as f64).eq(&n2),
             (&Number::Float(n1), &Number::Fixnum(n2)) => n1.eq(&OrderedFloat(n2.get_num() as f64)),
-            (Number::Integer(ref n1), Number::Integer(ref n2)) => n1.eq(n2),
-            (Number::Integer(ref n1), Number::Float(n2)) => {
+            (Number::Integer(n1), Number::Integer(n2)) => n1.eq(n2),
+            (Number::Integer(n1), Number::Float(n2)) => {
                 OrderedFloat(n1.to_f64().value()).eq(n2)
             }
-            (&Number::Float(n1), Number::Integer(ref n2)) => {
+            (&Number::Float(n1), Number::Integer(n2)) => {
                 n1.eq(&OrderedFloat(n2.to_f64().value()))
             }
-            (Number::Integer(ref n1), Number::Rational(ref n2)) => n1.num_eq(&**n2),
-            (Number::Rational(ref n1), Number::Integer(ref n2)) => n1.num_eq(&**n2),
-            (Number::Rational(ref n1), &Number::Float(n2)) => {
+            (Number::Integer(n1), Number::Rational(n2)) => n1.num_eq(&**n2),
+            (Number::Rational(n1), Number::Integer(n2)) => n1.num_eq(&**n2),
+            (Number::Rational(n1), &Number::Float(n2)) => {
                 OrderedFloat(n1.to_f64().value()).eq(&n2)
             }
-            (&Number::Float(n1), Number::Rational(ref n2)) => {
+            (&Number::Float(n1), Number::Rational(n2)) => {
                 n1.eq(&OrderedFloat(n2.to_f64().value()))
             }
             (&Number::Float(f1), &Number::Float(f2)) => f1.eq(&f2),
-            (Number::Rational(ref r1), Number::Rational(ref r2)) => r1.eq(r2),
+            (Number::Rational(r1), Number::Rational(r2)) => r1.eq(r2),
         }
     }
 }
@@ -607,7 +607,7 @@ impl Ord for Number {
             (&Number::Float(n1), &Number::Fixnum(n2)) => n1.cmp(&OrderedFloat(n2.get_num() as f64)),
             (&Number::Integer(n1), &Number::Integer(n2)) => (*n1).cmp(&*n2),
             (&Number::Integer(n1), Number::Float(n2)) => OrderedFloat(n1.to_f64().value()).cmp(n2),
-            (&Number::Float(n1), Number::Integer(ref n2)) => {
+            (&Number::Float(n1), Number::Integer(n2)) => {
                 n1.cmp(&OrderedFloat(n2.to_f64().value()))
             }
             (&Number::Integer(n1), &Number::Rational(n2)) => {
