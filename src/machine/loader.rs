@@ -160,7 +160,7 @@ impl fmt::Display for CompilationTarget {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             CompilationTarget::User => write!(f, "user"),
-            CompilationTarget::Module(ref module_name) => write!(f, "{}", module_name.as_str()),
+            CompilationTarget::Module(module_name) => write!(f, "{}", module_name.as_str()),
         }
     }
 }
@@ -821,7 +821,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     {
                         if let IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
                             _,
-                            ref mut v,
+                            v,
                             ..,
                         )) = &mut indexing_code[0]
                         {
@@ -1110,7 +1110,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     }
                 }
             }
-            CompilationTarget::Module(ref module_name) => {
+            CompilationTarget::Module(module_name) => {
                 match self.wam_prelude.indices.modules.get_mut(module_name) {
                     Some(ref mut module) => match module.extensible_predicates.get_mut(&key) {
                         Some(ref mut skeleton) => {
@@ -1364,7 +1364,7 @@ impl<'a> MachinePreludeView<'a> {
     ) -> CompositeOpDir<'_, '_> {
         match compilation_target {
             CompilationTarget::User => CompositeOpDir::new(&self.indices.op_dir, None),
-            CompilationTarget::Module(ref module_name) => {
+            CompilationTarget::Module(module_name) => {
                 match self.indices.modules.get(module_name) {
                     Some(module) => CompositeOpDir::new(&self.indices.op_dir, Some(&module.op_dir)),
                     None => {
@@ -2374,7 +2374,7 @@ impl Machine {
                             MetaSpec::Plus => atom_as_cell!(atom!("-")),
                             MetaSpec::Either => atom_as_cell!(atom!("?")),
                             MetaSpec::Colon => atom_as_cell!(atom!(":")),
-                            MetaSpec::RequiresExpansionWithArgument(ref arg_num) => {
+                            MetaSpec::RequiresExpansionWithArgument(arg_num) => {
                                 fixnum_as_cell!(/* FIXME this is not safe */ unsafe {
                                     Fixnum::build_with_unchecked(*arg_num as i64)
                                 })

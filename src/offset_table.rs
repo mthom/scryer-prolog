@@ -211,7 +211,7 @@ impl<T: RawBlockTraits> SerialOffsetTable<T> {
         })
     }
 
-    unsafe fn build_with(&mut self, value: T) -> usize {
+    unsafe fn build_with(&mut self, value: T) -> usize { unsafe {
         let mut ptr;
 
         loop {
@@ -228,17 +228,17 @@ impl<T: RawBlockTraits> SerialOffsetTable<T> {
         ptr::write(ptr as *mut T, value);
         // SAFETY: `ptr` was obtained from `self.block.alloc()`
         self.block.get_offset(ptr)
-    }
+    }}
 
     #[inline]
-    unsafe fn lookup(&self, offset: usize) -> &T {
+    unsafe fn lookup(&self, offset: usize) -> &T { unsafe {
         &*self.block.get_unchecked(offset).cast::<T>()
-    }
+    }}
 
     #[inline]
-    unsafe fn lookup_mut(&mut self, offset: usize) -> &mut T {
+    unsafe fn lookup_mut(&mut self, offset: usize) -> &mut T { unsafe {
         &mut *self.block.get_unchecked(offset).cast::<T>().cast_mut()
-    }
+    }}
 
     #[allow(clippy::wrong_self_convention)]
     fn to_concurrent(&mut self) -> ConcurrentOffsetTable<T>
