@@ -57,7 +57,7 @@ struct InnerHeap {
 }
 
 impl InnerHeap {
-    unsafe fn grow(&mut self) -> bool {
+    unsafe fn grow(&mut self) -> bool { unsafe {
         let new_cap = if self.byte_cap == 0 {
             256 * 256 * 8
         } else {
@@ -88,7 +88,7 @@ impl InnerHeap {
         } else {
             false
         }
-    }
+    }}
 }
 
 unsafe impl Send for Heap {}
@@ -101,7 +101,7 @@ pub struct HeapStringScan<'a> {
 }
 
 // The heap_slice should be inside the heap
-unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan<'_> {
+unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan<'_> { unsafe {
     let string_len = heap_slice
         .iter()
         .position(|b| *b == 0u8)
@@ -120,11 +120,11 @@ unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan<'_> {
         string: std::str::from_utf8_unchecked(str_slice),
         tail_idx,
     }
-}
+}}
 
 // Same as scan_slice_to_str but assumes that the slice is from the start of a string.
 // Can be used on strings out of the heap.
-unsafe fn scan_slice_to_str_from_start(heap_slice: &[u8]) -> HeapStringScan<'_> {
+unsafe fn scan_slice_to_str_from_start(heap_slice: &[u8]) -> HeapStringScan<'_> { unsafe {
     let string_len = heap_slice
         .iter()
         .position(|b| *b == 0u8)
@@ -142,7 +142,7 @@ unsafe fn scan_slice_to_str_from_start(heap_slice: &[u8]) -> HeapStringScan<'_> 
         string: std::str::from_utf8_unchecked(str_slice),
         tail_idx,
     }
-}
+}}
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum PStrContinuable {
@@ -585,9 +585,9 @@ impl Heap {
     }
 
     #[inline(always)]
-    unsafe fn grow(&mut self) -> bool {
+    unsafe fn grow(&mut self) -> bool { unsafe {
         self.inner.grow()
-    }
+    }}
 
     #[inline]
     fn resource_error_offset(&self) -> usize {

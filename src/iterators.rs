@@ -102,11 +102,11 @@ impl<'a> QueryIterator<'a> {
 
     fn extend_state(&mut self, lvl: Level, term: &'a QueryTerm) {
         match term {
-            QueryTerm::Clause(ref cell, ClauseType::CallN(_), ref terms, _) => {
+            QueryTerm::Clause(cell, ClauseType::CallN(_), terms, _) => {
                 self.state_stack
                     .push(TermIterState::Clause(lvl, 1, cell, atom!("$call"), terms));
             }
-            QueryTerm::Clause(ref cell, ref ct, ref terms, _) => {
+            QueryTerm::Clause(cell, ct, terms, _) => {
                 self.state_stack
                     .push(TermIterState::Clause(lvl, 0, cell, ct.name(), terms));
             }
@@ -418,7 +418,7 @@ impl<'a> Iterator for ClauseIterator<'a> {
                             self.state_stack
                                 .push(ClauseIteratorState::RemainingBranches(branch_nums, arms, 0));
                         }
-                        ChunkedTerms::Chunk { ref terms } => {
+                        ChunkedTerms::Chunk { terms } => {
                             return Some(ClauseItem::Chunk { terms });
                         }
                     }

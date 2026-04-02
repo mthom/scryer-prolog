@@ -387,7 +387,7 @@ fn negated_op_needs_bracketing(
     op_dir: &OpDir,
     op: &Option<DirectedOp>,
 ) -> bool {
-    if let Some(ref op) = op {
+    if let Some(op) = op {
         op.is_negative_sign()
             && iter.leftmost_leaf_has_property(op_dir, |addr| {
                 match Number::try_from((addr, f64_tbl)) {
@@ -1452,7 +1452,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     });
 
                 for op in &[op, parent_op] {
-                    if let Some(ref op) = &op {
+                    if let Some(op) = &op {
                         if op.is_left()
                             && (op.is_prefix() || requires_space(&op.as_atom().as_str(), "("))
                         {

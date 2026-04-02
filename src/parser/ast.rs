@@ -876,7 +876,7 @@ pub enum Term {
 impl Term {
     pub fn first_arg(&self) -> Option<&Term> {
         match self {
-            Term::Clause(_, _, ref terms) => terms.first(),
+            Term::Clause(_, _, terms) => terms.first(),
             _ => None,
         }
     }
@@ -891,14 +891,14 @@ impl Term {
 
     pub fn arity(&self) -> usize {
         match self {
-            Term::Clause(_, _, ref child_terms, ..) => child_terms.len(),
+            Term::Clause(_, _, child_terms, ..) => child_terms.len(),
             _ => 0,
         }
     }
 }
 
 pub(crate) fn unfold_by_str_once(term: &mut Term, s: Atom) -> Option<(Term, Term)> {
-    if let Term::Clause(_, ref name, ref mut subterms) = term {
+    if let &mut Term::Clause(_, ref name, ref mut subterms) = term {
         if let Some(Term::Literal(_, Literal::CodeIndexOffset(_))) = subterms.last() {
             subterms.pop();
         }

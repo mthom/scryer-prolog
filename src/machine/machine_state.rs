@@ -1132,7 +1132,7 @@ impl CWIL {
         limit += &self.local_count;
 
         match self.limits.last() {
-            Some((ref inner_limit, _)) if *inner_limit <= limit => {}
+            Some((inner_limit, _)) if *inner_limit <= limit => {}
             _ => self.limits.push((limit, block)),
         }
 

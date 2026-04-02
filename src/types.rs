@@ -785,9 +785,9 @@ impl UntypedArenaPtr {
     pub unsafe fn as_typed_ptr<T: ?Sized + ArenaAllocated>(self) -> TypedArenaPtr<T>
     where
         T::Payload: Sized,
-    {
+    { unsafe {
         T::typed_ptr(self)
-    }
+    }}
 
     #[inline]
     pub fn get_mark_bit(self) -> bool {

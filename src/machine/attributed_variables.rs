@@ -62,7 +62,7 @@ impl MachineState {
             .attr_var_init
             .bindings
             .iter()
-            .map(|(ref h, _)| attr_var_as_cell!(*h));
+            .map(|(h, _)| attr_var_as_cell!(*h));
 
         let var_list_addr = sized_iter_to_heap_list(&mut self.heap, size, iter)?;
         let iter = self.attr_var_init.bindings.drain(0..).map(|(_, ref v)| *v);

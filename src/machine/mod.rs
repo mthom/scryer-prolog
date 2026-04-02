@@ -1232,7 +1232,7 @@ impl Machine {
                     let key = Atom::from(h as u64);
 
                     match self.indices.global_variables.get_mut(&key) {
-                        Some((_, ref mut loc)) => *loc = None,
+                        Some((_, loc)) => *loc = None,
                         None => unreachable!(),
                     }
                 }
@@ -1241,7 +1241,7 @@ impl Machine {
                     let value_cell = HeapCellValue::from(u64::from(self.machine_st.trail[i + 1]));
 
                     match self.indices.global_variables.get_mut(&key) {
-                        Some((_, ref mut loc)) => *loc = Some(value_cell),
+                        Some((_, loc)) => *loc = Some(value_cell),
                         None => unreachable!(),
                     }
                 }

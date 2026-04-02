@@ -896,7 +896,7 @@ impl CompilationError {
             CompilationError::InvalidUseModuleDecl => {
                 functor!(atom!("invalid_use_module_declaration"))
             }
-            CompilationError::ParserError(ref err) => {
+            CompilationError::ParserError(err) => {
                 functor!(err.as_atom())
             }
             CompilationError::FiniteMemoryInHeap(_) => {

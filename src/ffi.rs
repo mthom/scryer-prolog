@@ -54,27 +54,27 @@ pub struct FunctionImpl {
 }
 
 impl FunctionImpl {
-    unsafe fn call_void(&self, args: &[Arg], _: &mut Arena) -> Result<Value, FfiError> {
+    unsafe fn call_void(&self, args: &[Arg], _: &mut Arena) -> Result<Value, FfiError> { unsafe {
         self.cif.call::<()>(self.code_ptr, args);
         Ok(Value::Number(Number::Fixnum(Fixnum::build_with(0))))
-    }
+    }}
 
     unsafe fn call_int<T>(&self, args: &[Arg], arena: &mut Arena) -> Result<Value, FfiError>
     where
         Integer: From<T>,
         T: Copy + TryInto<i64> + MightNotFitInFixnum,
-    {
+    { unsafe {
         let n = self.cif.call::<T>(self.code_ptr, args);
         Ok(Value::Number(fixnum!(Number, n, arena)))
-    }
+    }}
 
     unsafe fn call_float<T>(&self, args: &[Arg], _: &mut Arena) -> Result<Value, FfiError>
     where
         T: Into<f64>,
-    {
+    { unsafe {
         let n = self.cif.call::<T>(self.code_ptr, args);
         Ok(Value::Number(Number::Float(OrderedFloat(n.into()))))
-    }
+    }}
 
     unsafe fn call_ptr(&self, args: &[Arg], arena: &mut Arena) -> Result<Value, FfiError> {
         let ptr = unsafe { self.cif.call::<*mut c_void>(self.code_ptr, args) };
@@ -202,14 +202,14 @@ impl StructImpl {
             ptr: NonNull<c_void>,
             layout: &mut Layout,
             val: T,
-        ) -> Result<(), FfiError> {
+        ) -> Result<(), FfiError> { unsafe {
             let (new_layout, offset) = layout
                 .extend(Layout::new::<T>())
                 .map_err(|_| FfiError::LayoutError)?;
             *layout = new_layout;
             ptr.byte_offset(offset as isize).cast::<T>().write(val);
             Ok(())
-        }
+        }}
 
         for arg in args {
             unsafe {
@@ -263,14 +263,14 @@ impl StructImpl {
             unsafe fn read_primitive<T>(
                 ptr: *mut c_void,
                 layout: &mut Layout,
-            ) -> Result<T, FfiError> {
+            ) -> Result<T, FfiError> { unsafe {
                 let (new_layout, offset) = layout
                     .extend(Layout::new::<T>())
                     .map_err(|_| FfiError::LayoutError)?;
                 *layout = new_layout;
                 let n = std::ptr::read::<T>(ptr.byte_offset(offset as isize).cast());
                 Ok(n)
-            }
+            }}
 
             unsafe fn read_int<T>(
                 ptr: *mut c_void,
@@ -280,10 +280,10 @@ impl StructImpl {
             where
                 T: Copy + TryInto<i64> + MightNotFitInFixnum,
                 Integer: From<T>,
-            {
+            { unsafe {
                 let n = read_primitive::<T>(ptr, layout)?;
                 Ok(Value::Number(fixnum!(Number, n, arena)))
-            }
+            }}
 
             unsafe fn read_float<T>(
                 ptr: *mut c_void,
@@ -291,10 +291,10 @@ impl StructImpl {
             ) -> Result<Value, FfiError>
             where
                 T: Into<f64>,
-            {
+            { unsafe {
                 let n = read_primitive::<T>(ptr, layout)?;
                 Ok(Value::Number(Number::Float(OrderedFloat(n.into()))))
-            }
+            }}
 
             let mut layout = Layout::from_size_align(0, 1).map_err(|_| FfiError::LayoutError)?;
 
@@ -807,10 +807,10 @@ impl ForeignFunctionTable {
         where
             T: Copy + TryInto<i64> + MightNotFitInFixnum,
             Integer: From<T>,
-        {
+        { unsafe {
             let n = ptr.cast::<T>().read();
             Value::Number(fixnum!(Number, n, arena))
-        }
+        }}
 
         let ptr = ptr.as_ptr()?;
 
@@ -943,7 +943,7 @@ impl Value {
 
     fn as_ptr(&mut self) -> Result<*mut c_void, FfiError> {
         match self {
-            Value::CString(ref mut cstr) => Ok(cstr.as_ptr().cast_mut().cast()),
+            Value::CString(cstr) => Ok(cstr.as_ptr().cast_mut().cast()),
             Value::Number(Number::Fixnum(fixnum)) => Ok(std::ptr::with_exposed_provenance_mut(
                 fixnum.get_num() as usize,
             )),

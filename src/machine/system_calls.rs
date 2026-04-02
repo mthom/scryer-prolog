@@ -1276,7 +1276,7 @@ impl Machine {
 
         loop {
             match &self.code[bp] {
-                Instruction::IndexingCode(ref indexing_code) => {
+                Instruction::IndexingCode(indexing_code) => {
                     let indexing_code_ptr = match &indexing_code[0] {
                         &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
                             _,
@@ -1299,10 +1299,10 @@ impl Machine {
                     let boip = extract_ptr!(indexing_code_ptr);
 
                     let boip = match &indexing_code[boip] {
-                        IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref hm)) => {
+                        IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(hm)) => {
                             boip + extract_ptr!(hm.get(&key).cloned().unwrap())
                         }
-                        IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref hm)) => {
+                        IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(hm)) => {
                             boip + extract_ptr!(hm.get(&atom_as_cell!(key.0)).cloned().unwrap())
                         }
                         _ => boip,
@@ -3160,7 +3160,7 @@ impl Machine {
         let addr = self.machine_st.registers[2];
 
         match self.indices.global_variables.get_mut(&key) {
-            Some((ref ball, ref mut loc)) => match loc {
+            Some(&mut (ref ball, ref mut loc)) => match loc {
                 Some(value_loc) => {
                     unify_fn!(self.machine_st, addr, *value_loc);
                 }
@@ -4341,7 +4341,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn maybe(&mut self) {
-        self.machine_st.fail = self.rng.gen();
+        self.machine_st.fail = self.rng.r#gen();
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -7473,8 +7473,8 @@ impl Machine {
         let new_value = self.deref_register(2);
 
         match self.indices.global_variables.get_mut(&key) {
-            Some((_, ref mut loc)) => match loc {
-                Some(ref mut value) => {
+            Some((_, loc)) => match loc {
+                Some(value) => {
                     self.machine_st
                         .trail(TrailRef::BlackboardOffset(key, *value));
                     *value = new_value;
@@ -8519,7 +8519,8 @@ impl Machine {
             .value_to_str_like(self.machine_st.registers[2])
             .unwrap();
 
-        env::set_var(&*key.as_str(), &*value.as_str());
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var(&*key.as_str(), &*value.as_str()) };
     }
 
     #[inline(always)]
@@ -8528,7 +8529,8 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
             .unwrap();
-        env::remove_var(&*key.as_str());
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::remove_var(&*key.as_str()) };
     }
 
     #[inline(always)]

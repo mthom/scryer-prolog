@@ -82,7 +82,7 @@ fn setup_op_decl(mut terms: Vec<Term>) -> Result<OpDecl, CompilationError> {
 
 fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, CompilationError> {
     match term {
-        Term::Clause(_, slash, ref mut terms)
+        Term::Clause(_, slash, terms)
             if (*slash == atom!("/") || *slash == atom!("//")) && terms.len() == 2 =>
         {
             let arity = terms.pop().unwrap();

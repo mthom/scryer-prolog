@@ -169,7 +169,7 @@ impl Stack {
     }
 
     #[inline(always)]
-    unsafe fn alloc(&mut self, frame_size: usize) -> Result<NonNull<u8>, AllocError> {
+    unsafe fn alloc(&mut self, frame_size: usize) -> Result<NonNull<u8>, AllocError> { unsafe {
         loop {
             let ptr = self.buf.alloc(frame_size);
             if let Some(ptr) = NonNull::new(ptr) {
@@ -177,7 +177,7 @@ impl Stack {
             }
             self.buf.grow()?;
         }
-    }
+    }}
 
     pub(crate) fn allocate_and_frame(&mut self, num_cells: usize) -> Result<usize, AllocError> {
         let frame_size = AndFrame::size_of(num_cells);

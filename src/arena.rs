@@ -281,11 +281,11 @@ pub trait ArenaAllocated {
     unsafe fn typed_ptr(ptr: UntypedArenaPtr) -> TypedArenaPtr<Self>
     where
         Self::Payload: Sized,
-    {
+    { unsafe {
         TypedArenaPtr(NonNull::new_unchecked(
             ptr.payload_offset().cast_mut().cast::<Self::Payload>(),
         ))
-    }
+    }}
 
     #[allow(clippy::missing_safety_doc)]
     fn alloc(arena: &mut Arena, value: Self::Payload) -> TypedArenaPtr<Self>
@@ -493,7 +493,7 @@ impl Arena {
     }
 }
 
-unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {
+unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) { unsafe {
     macro_rules! drop_typed_slab_in_place {
         ($payload: ty, $value: expr) => {
             <$payload as ArenaAllocated>::dealloc($value.cast::<TypedAllocSlab<$payload>>())
@@ -577,7 +577,7 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {
             unreachable!("NullStream is never arena allocated!");
         }
     }
-}
+}}
 
 impl Drop for Arena {
     fn drop(&mut self) {
