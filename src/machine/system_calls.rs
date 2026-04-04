@@ -9233,10 +9233,9 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn is_sto_enabled(&mut self) {
-        self.machine_st.unify_atom(
-            self.machine_st.occurs_check.flag_value(),
-            self.machine_st.registers[1],
-        );
+        let a1 = self.deref_register(1);
+        self.machine_st
+            .unify_atom(self.machine_st.occurs_check.flag_value(), a1);
     }
 
     #[inline(always)]
