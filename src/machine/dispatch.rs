@@ -77,8 +77,6 @@ macro_rules! push_cell {
     }};
 }
 
-static INSTRUCTIONS_PER_INTERRUPT_POLL: usize = 256;
-
 impl MachineState {
     #[inline(always)]
     fn compare(&mut self) -> CallResult {
@@ -1541,8 +1539,13 @@ impl Machine {
     }
 
     fn verify_attr_dispatch_loop(&mut self) -> Option<std::process::ExitCode> {
+        let mut interrupt_counter = std::num::Wrapping(0u8);
         'outer: loop {
-            for _ in 0..INSTRUCTIONS_PER_INTERRUPT_POLL {
+            loop {
+                interrupt_counter += 1;
+                if interrupt_counter.0 == 0 {
+                    break;
+                }
                 match self.code[self.machine_st.p] {
                     Instruction::BreakFromDispatchLoop => {
                         break 'outer;
@@ -1611,9 +1614,20 @@ impl Machine {
     }
 
     pub(super) fn dispatch_loop(&mut self) -> std::process::ExitCode {
+        let mut interrupt_counter = std::num::Wrapping(0u8);
         'outer: loop {
-            for _ in 0..INSTRUCTIONS_PER_INTERRUPT_POLL {
-                match &self.code[self.machine_st.p] {
+            loop {
+                interrupt_counter += 1;
+                if interrupt_counter.0 == 0 {
+                    break;
+                }
+
+                let Some(inst) = self.code.get(self.machine_st.p) else {
+                    // a seperate function marked #[cold] to make the compiler/branch-predictor prefer the happy path
+                    handle_code_index_oob(self.code.len(), self.machine_st.p);
+                };
+
+                match inst {
                     &Instruction::BreakFromDispatchLoop => {
                         break 'outer;
                     }
@@ -4256,12 +4270,12 @@ impl Machine {
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallInferenceCount => {
-                        let global_count = self.machine_st.cwil.global_count.clone();
+                        let global_count = self.machine_st.cwil.global_count;
                         self.inference_count(self.machine_st.registers[1], global_count);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
                     &Instruction::ExecuteInferenceCount => {
-                        let global_count = self.machine_st.cwil.global_count.clone();
+                        let global_count = self.machine_st.cwil.global_count;
                         self.inference_count(self.machine_st.registers[1], global_count);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
@@ -6022,4 +6036,10 @@ impl Machine {
 
         std::process::ExitCode::SUCCESS
     }
+}
+
+#[cold] // this is a seperate function so that we can annotate it as cold
+#[track_caller]
+fn handle_code_index_oob(code_len: usize, p: usize) -> ! {
+    panic!("code pointer p = {p} is oob for code area of size {code_len}");
 }

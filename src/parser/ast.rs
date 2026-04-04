@@ -608,6 +608,7 @@ mod private {
     impl<T: FitsInFixnumSeal> MightNotFitInFixnumSeal for T {}
     impl MightNotFitInFixnumSeal for i64 {}
     impl MightNotFitInFixnumSeal for u64 {}
+    impl MightNotFitInFixnumSeal for u128 {}
     impl MightNotFitInFixnumSeal for &Integer {}
     impl MightNotFitInFixnumSeal for Integer {}
     impl MightNotFitInFixnumSeal for usize {}

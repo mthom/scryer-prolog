@@ -6141,8 +6141,8 @@ impl Machine {
         let a2 = self.deref_register(2);
 
         let n = match Number::try_from((a2, &self.machine_st.arena.f64_tbl)) {
-            Ok(Number::Fixnum(bp)) => Integer::from(bp.get_num() as usize),
-            Ok(Number::Integer(n)) => (*n).clone(),
+            Ok(Number::Fixnum(bp)) => bp.get_num() as u128,
+            Ok(Number::Integer(n)) => u128::try_from(&*n).unwrap(),
             _ => {
                 let stub = functor_stub(atom!("call_with_inference_limit"), 3);
                 let err = self.machine_st.type_error(ValidType::Integer, a2);
@@ -6153,21 +6153,21 @@ impl Machine {
         let bp = unsafe { a1.to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
         let a3 = self.deref_register(3);
 
-        let count = self.machine_st.cwil.add_limit(n, bp).clone();
+        let count = self.machine_st.cwil.add_limit(n, bp);
         self.inference_count(a3, count);
 
         Ok(())
     }
 
     #[inline(always)]
-    pub(crate) fn inference_count(&mut self, count_var: HeapCellValue, count: Integer) {
-        if let Some(value) = <&Integer as TryInto<i64>>::try_into(&count)
+    pub(crate) fn inference_count(&mut self, count_var: HeapCellValue, count: u128) {
+        if let Some(value) = TryInto::<i64>::try_into(count)
             .ok()
             .and_then(|i| Fixnum::build_with_checked(i).ok())
         {
             self.machine_st.unify_fixnum(value, count_var);
         } else {
-            let count = arena_alloc!(count, &mut self.machine_st.arena);
+            let count = arena_alloc!(Integer::from(count), &mut self.machine_st.arena);
             self.machine_st.unify_big_int(count, count_var);
         }
     }
@@ -6321,11 +6321,11 @@ impl Machine {
         let a2 = self.deref_register(2);
 
         let block = unsafe { a1.to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
-        let count = self.machine_st.cwil.remove_limit(block).clone();
-        if let Ok(value) = Fixnum::build_with_checked(&count) {
+        let count = self.machine_st.cwil.remove_limit(block);
+        if let Ok(value) = Fixnum::build_with_checked(count) {
             self.machine_st.unify_fixnum(value, a2);
         } else {
-            let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
+            let count = arena_alloc!(Integer::from(count), &mut self.machine_st.arena);
             self.machine_st.unify_big_int(count, a2);
         }
     }

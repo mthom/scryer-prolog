@@ -234,12 +234,7 @@ impl Machine {
 
     /// Gets the current inference count.
     pub fn get_inference_count(&mut self) -> u64 {
-        self.machine_st
-            .cwil
-            .global_count
-            .clone()
-            .try_into()
-            .unwrap()
+        self.machine_st.cwil.global_count.try_into().unwrap()
     }
 
     /// Runs the predicate `key` in `module_name` until completion.

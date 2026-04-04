@@ -16,8 +16,6 @@ use crate::parser::ast::*;
 use crate::read::TermWriteResult;
 use crate::types::*;
 
-use crate::parser::dashu::Integer;
-
 use indexmap::IndexMap;
 
 use std::convert::TryFrom;
@@ -550,7 +548,8 @@ impl MachineState {
             return true;
         }
 
-        self.cwil.global_count += 1;
+        // use strict_add once msrv is >= 1.91.0
+        self.cwil.global_count = self.cwil.global_count.checked_add(1).unwrap();
 
         if let Some(&(ref limit, block)) = self.cwil.limits.last() {
             if self.cwil.local_count == *limit {
@@ -1112,47 +1111,48 @@ impl MachineState {
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
 pub(crate) struct CWIL {
-    local_count: Integer,
-    pub(crate) global_count: Integer,
-    limits: Vec<(Integer, usize)>,
+    local_count: u128,
+    pub(crate) global_count: u128,
+    limits: Vec<(u128, usize)>,
     pub(crate) inference_limit_exceeded: bool,
 }
 
 impl CWIL {
     pub(crate) fn new() -> Self {
         CWIL {
-            local_count: Integer::from(0),
-            global_count: Integer::from(0),
+            local_count: 0,
+            global_count: 0,
             limits: vec![],
             inference_limit_exceeded: false,
         }
     }
 
-    pub(crate) fn add_limit(&mut self, mut limit: Integer, block: usize) -> &Integer {
-        limit += &self.local_count;
+    pub(crate) fn add_limit(&mut self, mut limit: u128, block: usize) -> u128 {
+        // use strict_add once msrv is >= 1.91.0
+        limit = limit.checked_add(self.local_count).unwrap();
 
         match self.limits.last() {
             Some((ref inner_limit, _)) if *inner_limit <= limit => {}
             _ => self.limits.push((limit, block)),
         }
 
-        &self.local_count
+        self.local_count
     }
 
     #[inline(always)]
-    pub(crate) fn remove_limit(&mut self, block: usize) -> &Integer {
+    pub(crate) fn remove_limit(&mut self, block: usize) -> u128 {
         if let Some((_, bl)) = self.limits.last() {
             if bl == &block {
                 self.limits.pop();
             }
         }
 
-        &self.local_count
+        self.local_count
     }
 
     #[inline(always)]
     pub(crate) fn reset(&mut self) {
-        self.local_count = Integer::from(0);
+        self.local_count = 0;
         self.limits.clear();
         self.inference_limit_exceeded = false;
     }
