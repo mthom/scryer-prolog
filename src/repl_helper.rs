@@ -1,5 +1,5 @@
 use rustyline::completion::Completer;
-use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
+use rustyline::highlight::{CmdKind, Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::{Context, Helper as RlHelper, Result};
@@ -93,7 +93,7 @@ impl Highlighter for Helper {
         self.highlighter.highlight(line, pos)
     }
 
-    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
+    fn highlight_char(&self, line: &str, pos: usize, forced: CmdKind) -> bool {
         self.highlighter.highlight_char(line, pos, forced)
     }
 }
