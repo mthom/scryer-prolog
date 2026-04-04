@@ -58,7 +58,6 @@ struct InnerHeap {
 
 impl InnerHeap {
     unsafe fn grow(&mut self) -> bool {
-        unsafe {
             let new_cap = if self.byte_cap == 0 {
                 256 * 256 * 8
             } else {
@@ -72,7 +71,7 @@ impl InnerHeap {
                 new_layout.size() <= isize::MAX as usize,
                 "Allocation too large. We should probably GC (TODO)"
             );
-
+            unsafe {
             let new_ptr = if self.byte_cap == 0 {
                 alloc::alloc(new_layout)
             } else {
@@ -105,11 +104,12 @@ pub struct HeapStringScan<'a> {
 
 // The heap_slice should be inside the heap
 unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan<'_> {
-    unsafe {
         let string_len = heap_slice
             .iter()
             .position(|b| *b == 0u8)
             .unwrap_or(heap_slice.len());
+        
+        unsafe {
         let zero_byte_addr = heap_slice.as_ptr().add(string_len);
 
         let sentinel_len = pstr_sentinel_length(zero_byte_addr.addr());
@@ -130,7 +130,6 @@ unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan<'_> {
 // Same as scan_slice_to_str but assumes that the slice is from the start of a string.
 // Can be used on strings out of the heap.
 unsafe fn scan_slice_to_str_from_start(heap_slice: &[u8]) -> HeapStringScan<'_> {
-    unsafe {
         let string_len = heap_slice
             .iter()
             .position(|b| *b == 0u8)
@@ -143,7 +142,8 @@ unsafe fn scan_slice_to_str_from_start(heap_slice: &[u8]) -> HeapStringScan<'_> 
         );
 
         let str_slice = &heap_slice[..string_len];
-
+        
+    unsafe {
         HeapStringScan {
             string: std::str::from_utf8_unchecked(str_slice),
             tail_idx,

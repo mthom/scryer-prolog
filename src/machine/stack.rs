@@ -170,8 +170,8 @@ impl Stack {
 
     #[inline(always)]
     unsafe fn alloc(&mut self, frame_size: usize) -> Result<NonNull<u8>, AllocError> {
-        unsafe {
             loop {
+                unsafe {
                 let ptr = self.buf.alloc(frame_size);
                 if let Some(ptr) = NonNull::new(ptr) {
                     return Ok(ptr);
