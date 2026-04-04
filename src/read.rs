@@ -97,7 +97,7 @@ pub(crate) fn set_prompt(value: bool) {
 #[cfg(feature = "repl")]
 #[inline]
 fn get_prompt() -> &'static str {
-        if unsafe { PROMPT } { "?- " } else { "" }    
+    if unsafe { PROMPT } { "?- " } else { "" }
 }
 
 thread_local! {

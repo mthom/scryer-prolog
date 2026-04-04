@@ -493,12 +493,12 @@ impl Arena {
     }
 }
 
-unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {    
-        macro_rules! drop_typed_slab_in_place {
-            ($payload: ty, $value: expr) => {
-                <$payload as ArenaAllocated>::dealloc($value.cast::<TypedAllocSlab<$payload>>())
-            };
-        }
+unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {
+    macro_rules! drop_typed_slab_in_place {
+        ($payload: ty, $value: expr) => {
+            <$payload as ArenaAllocated>::dealloc($value.cast::<TypedAllocSlab<$payload>>())
+        };
+    }
     unsafe {
         match tag {
             ArenaHeaderTag::Integer => {
