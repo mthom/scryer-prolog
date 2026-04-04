@@ -3,23 +3,23 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use crate::atom_table;
-use crate::heap_iter::{stackful_post_order_iter, NonListElider};
+use crate::heap_iter::{NonListElider, stackful_post_order_iter};
 use crate::machine::heap::AllocError;
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{
-    ArenaHeaderTag, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS,
+    ArenaHeaderTag, BREAK_FROM_DISPATCH_LOOP_LOC, Fixnum, LIB_QUERY_SUCCESS, Number,
 };
 use crate::offset_table::*;
 use crate::parser::ast::{Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
-use crate::read::{write_term_to_heap, TermWriteResult};
+use crate::read::{TermWriteResult, write_term_to_heap};
 use crate::types::UntypedArenaPtr;
 
 use dashu::{Integer, Rational};
 use indexmap::IndexMap;
 
-use super::{streams::Stream, Atom, AtomCell, HeapCellValue, HeapCellValueTag, Machine};
+use super::{Atom, AtomCell, HeapCellValue, HeapCellValueTag, Machine, streams::Stream};
 
 #[cfg(test)]
 mod tests;

@@ -14,10 +14,10 @@ use std::sync::Mutex;
 use std::sync::RwLock;
 use std::sync::Weak;
 
+use arcu::Rcu;
 use arcu::atomic::Arcu;
 use arcu::epoch_counters::GlobalEpochCounterPool;
 use arcu::rcu_ref::RcuRef;
-use arcu::Rcu;
 use indexmap::IndexSet;
 
 use modular_bitfield::prelude::*;
@@ -345,11 +345,7 @@ impl Atom {
         let c1 = it.next();
         let c2 = it.next();
 
-        if c2.is_none() {
-            c1
-        } else {
-            None
-        }
+        if c2.is_none() { c1 } else { None }
     }
 
     #[inline]
@@ -389,9 +385,11 @@ impl Atom {
 }
 
 unsafe fn write_to_ptr(string: &str, ptr: *mut u8) {
-    ptr::write(ptr as *mut _, AtomHeader::build_with(string.len() as u64));
-    let str_ptr = ptr.add(mem::size_of::<AtomHeader>());
-    ptr::copy_nonoverlapping(string.as_ptr(), str_ptr, string.len());
+    unsafe {
+        ptr::write(ptr as *mut _, AtomHeader::build_with(string.len() as u64));
+        let str_ptr = ptr.add(mem::size_of::<AtomHeader>());
+        ptr::copy_nonoverlapping(string.as_ptr(), str_ptr, string.len());
+    }
 }
 
 impl PartialOrd for Atom {

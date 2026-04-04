@@ -157,7 +157,7 @@ impl DebrayAllocator {
 
         for var_num in subsumed_hits {
             match &mut self.var_data.records[var_num].allocation {
-                VarAlloc::Perm(_, ref mut allocation) => {
+                VarAlloc::Perm(_, allocation) => {
                     if let PermVarAllocation::Done {
                         shallow_safety,
                         deep_safety,
@@ -550,8 +550,7 @@ impl DebrayAllocator {
                 } else if let Some(&temp_var_num) = self.shallow_temp_mappings.get(&self.arg_c) {
                     match &mut self.var_data.records[temp_var_num].allocation {
                         VarAlloc::Temp {
-                            ref mut to_perm_var_num,
-                            ..
+                            to_perm_var_num, ..
                         } => {
                             *to_perm_var_num = Some(var_num);
                         }
@@ -559,7 +558,7 @@ impl DebrayAllocator {
                     }
                 }
             }
-            VarAlloc::Temp { ref mut safety, .. } => {
+            VarAlloc::Temp { safety, .. } => {
                 *safety = VarSafetyStatus::GloballyUnneeded;
             }
             _ => {
@@ -577,13 +576,7 @@ impl DebrayAllocator {
         let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(
-                _,
-                PermVarAllocation::Done {
-                    ref mut shallow_safety,
-                    ..
-                },
-            ) => {
+            VarAlloc::Perm(_, PermVarAllocation::Done { shallow_safety, .. }) => {
                 if !self.in_tail_position
                     || self
                         .branch_stack
@@ -613,13 +606,7 @@ impl DebrayAllocator {
         let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(
-                _,
-                PermVarAllocation::Done {
-                    ref mut deep_safety,
-                    ..
-                },
-            ) => {
+            VarAlloc::Perm(_, PermVarAllocation::Done { deep_safety, .. }) => {
                 if self
                     .branch_stack
                     .safety_unneeded_in_branch(deep_safety, &branch_designator)
@@ -630,7 +617,7 @@ impl DebrayAllocator {
                     Target::unsafe_subterm_to_value(r)
                 }
             }
-            VarAlloc::Temp { ref mut safety, .. } => {
+            VarAlloc::Temp { safety, .. } => {
                 if self
                     .branch_stack
                     .safety_unneeded_in_branch(safety, &branch_designator)
@@ -873,7 +860,7 @@ impl Allocator for DebrayAllocator {
         self.arity = args.len();
 
         for (idx, arg) in args.iter().enumerate() {
-            if let Term::Var(_, ref var) = arg {
+            if let Term::Var(_, var) = arg {
                 let var_num = var.to_var_num().unwrap();
                 let r = self.get_binding(var_num);
 

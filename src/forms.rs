@@ -388,15 +388,15 @@ impl ClauseInfo for Rule {
 impl ClauseInfo for PredicateClause {
     fn name(&self) -> Option<Atom> {
         match self {
-            PredicateClause::Fact(ref term, ..) => term.head.name(),
-            PredicateClause::Rule(ref rule, ..) => rule.name(),
+            PredicateClause::Fact(term, ..) => term.head.name(),
+            PredicateClause::Rule(rule, ..) => rule.name(),
         }
     }
 
     fn arity(&self) -> usize {
         match self {
-            PredicateClause::Fact(ref term, ..) => term.head.arity(),
-            PredicateClause::Rule(ref rule, ..) => rule.arity(),
+            PredicateClause::Fact(term, ..) => term.head.arity(),
+            PredicateClause::Rule(rule, ..) => rule.arity(),
         }
     }
 }
@@ -581,7 +581,7 @@ pub(crate) fn fetch_op_spec_from_existing(
     op_desc: Option<OpDesc>,
     op_dir: &OpDir,
 ) -> Option<OpDesc> {
-    if let Some(ref op_desc) = &op_desc {
+    if let Some(op_desc) = &op_desc {
         if op_desc.arity() != arity {
             /* it's possible to extend operator functors with
              * additional terms. When that happens,
@@ -842,9 +842,9 @@ impl Number {
     pub(crate) fn is_positive(&self) -> bool {
         match self {
             Number::Fixnum(n) => n.get_num() > 0,
-            Number::Integer(ref n) => n.is_positive(),
+            Number::Integer(n) => n.is_positive(),
             Number::Float(f) => f.is_sign_positive(),
-            Number::Rational(ref r) => r.is_positive(),
+            Number::Rational(r) => r.is_positive(),
         }
     }
 
@@ -852,9 +852,9 @@ impl Number {
     pub(crate) fn is_negative(&self) -> bool {
         match self {
             Number::Fixnum(n) => n.get_num() < 0,
-            Number::Integer(ref n) => n.is_negative(),
+            Number::Integer(n) => n.is_negative(),
             &Number::Float(OrderedFloat(f)) => f.is_sign_negative() && f != -0f64,
-            Number::Rational(ref r) => r.is_negative(),
+            Number::Rational(r) => r.is_negative(),
         }
     }
 
@@ -862,9 +862,9 @@ impl Number {
     pub(crate) fn is_zero(&self) -> bool {
         match self {
             Number::Fixnum(n) => n.get_num() == 0,
-            Number::Integer(ref n) => n.is_zero(),
+            Number::Integer(n) => n.is_zero(),
             &Number::Float(OrderedFloat(f)) => f == 0.0 || f == -0.0,
-            Number::Rational(ref r) => r.is_zero(),
+            Number::Rational(r) => r.is_zero(),
         }
     }
 
@@ -919,9 +919,9 @@ impl OptArgIndexKey {
     #[inline]
     pub(crate) fn set_switch_on_term_loc(&mut self, value: usize) {
         match self {
-            OptArgIndexKey::Literal(_, ref mut loc, ..)
-            | OptArgIndexKey::Structure(_, ref mut loc, ..)
-            | OptArgIndexKey::List(_, ref mut loc) => {
+            OptArgIndexKey::Literal(_, loc, ..)
+            | OptArgIndexKey::Structure(_, loc, ..)
+            | OptArgIndexKey::List(_, loc) => {
                 *loc = value;
             }
             OptArgIndexKey::None => {}
@@ -933,9 +933,9 @@ impl AddAssign<usize> for OptArgIndexKey {
     #[inline]
     fn add_assign(&mut self, n: usize) {
         match self {
-            OptArgIndexKey::Literal(_, ref mut o, ..)
-            | OptArgIndexKey::List(_, ref mut o)
-            | OptArgIndexKey::Structure(_, ref mut o, ..) => {
+            OptArgIndexKey::Literal(_, o, ..)
+            | OptArgIndexKey::List(_, o)
+            | OptArgIndexKey::Structure(_, o, ..) => {
                 *o += n;
             }
             OptArgIndexKey::None => {}

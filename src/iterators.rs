@@ -89,7 +89,7 @@ impl<'a> QueryIterator<'a> {
             | Term::CompleteString(..) => {
                 return QueryIterator {
                     state_stack: vec![],
-                }
+                };
             }
             Term::Clause(r, name, terms) => TermIterState::Clause(Level::Root, 0, r, *name, terms),
             Term::Var(cell, var_ptr) => TermIterState::Var(Level::Root, cell, var_ptr.clone()),
@@ -102,11 +102,11 @@ impl<'a> QueryIterator<'a> {
 
     fn extend_state(&mut self, lvl: Level, term: &'a QueryTerm) {
         match term {
-            QueryTerm::Clause(ref cell, ClauseType::CallN(_), ref terms, _) => {
+            QueryTerm::Clause(cell, ClauseType::CallN(_), terms, _) => {
                 self.state_stack
                     .push(TermIterState::Clause(lvl, 1, cell, atom!("$call"), terms));
             }
-            QueryTerm::Clause(ref cell, ref ct, ref terms, _) => {
+            QueryTerm::Clause(cell, ct, terms, _) => {
                 self.state_stack
                     .push(TermIterState::Clause(lvl, 0, cell, ct.name(), terms));
             }
@@ -142,7 +142,7 @@ impl<'a> Iterator for QueryIterator<'a> {
                                 return match lvl {
                                     Level::Root => None,
                                     lvl => Some(TermRef::Clause(lvl, cell, name, child_terms)),
-                                }
+                                };
                             }
                         };
                     } else {
@@ -292,7 +292,7 @@ impl<'a> Iterator for FactIterator<'a> {
                     return Some(TermRef::CompleteString(lvl, cell, atom));
                 }
                 TermIterState::Literal(lvl, cell, constant) => {
-                    return Some(TermRef::Literal(lvl, cell, constant))
+                    return Some(TermRef::Literal(lvl, cell, constant));
                 }
                 TermIterState::Var(lvl, cell, var_ptr) => {
                     return Some(TermRef::Var(lvl, cell, var_ptr));
@@ -418,7 +418,7 @@ impl<'a> Iterator for ClauseIterator<'a> {
                             self.state_stack
                                 .push(ClauseIteratorState::RemainingBranches(branch_nums, arms, 0));
                         }
-                        ChunkedTerms::Chunk { ref terms } => {
+                        ChunkedTerms::Chunk { terms } => {
                             return Some(ClauseItem::Chunk { terms });
                         }
                     }

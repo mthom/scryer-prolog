@@ -3,6 +3,7 @@ use crate::atom_table::*;
 use crate::forms::*;
 use crate::heap_iter::*;
 use crate::heap_print::*;
+use crate::machine::Machine;
 use crate::machine::attributed_variables::*;
 use crate::machine::copier::*;
 use crate::machine::heap::AllocError;
@@ -11,7 +12,6 @@ use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
-use crate::machine::Machine;
 use crate::parser::ast::*;
 use crate::read::TermWriteResult;
 use crate::types::*;
@@ -1132,7 +1132,7 @@ impl CWIL {
         limit += &self.local_count;
 
         match self.limits.last() {
-            Some((ref inner_limit, _)) if *inner_limit <= limit => {}
+            Some((inner_limit, _)) if *inner_limit <= limit => {}
             _ => self.limits.push((limit, block)),
         }
 

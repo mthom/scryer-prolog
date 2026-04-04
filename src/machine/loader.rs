@@ -160,7 +160,7 @@ impl fmt::Display for CompilationTarget {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             CompilationTarget::User => write!(f, "user"),
-            CompilationTarget::Module(ref module_name) => write!(f, "{}", module_name.as_str()),
+            CompilationTarget::Module(module_name) => write!(f, "{}", module_name.as_str()),
         }
     }
 }
@@ -819,11 +819,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     if let Instruction::IndexingCode(ref mut indexing_code) =
                         self.wam_prelude.code[index_loc]
                     {
-                        if let IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                            _,
-                            ref mut v,
-                            ..,
-                        )) = &mut indexing_code[0]
+                        if let IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, ..)) =
+                            &mut indexing_code[0]
                         {
                             *v = old_v;
                         }
@@ -1110,7 +1107,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     }
                 }
             }
-            CompilationTarget::Module(ref module_name) => {
+            CompilationTarget::Module(module_name) => {
                 match self.wam_prelude.indices.modules.get_mut(module_name) {
                     Some(ref mut module) => match module.extensible_predicates.get_mut(&key) {
                         Some(ref mut skeleton) => {
@@ -1364,14 +1361,12 @@ impl<'a> MachinePreludeView<'a> {
     ) -> CompositeOpDir<'_, '_> {
         match compilation_target {
             CompilationTarget::User => CompositeOpDir::new(&self.indices.op_dir, None),
-            CompilationTarget::Module(ref module_name) => {
-                match self.indices.modules.get(module_name) {
-                    Some(module) => CompositeOpDir::new(&self.indices.op_dir, Some(&module.op_dir)),
-                    None => {
-                        unreachable!()
-                    }
+            CompilationTarget::Module(module_name) => match self.indices.modules.get(module_name) {
+                Some(module) => CompositeOpDir::new(&self.indices.op_dir, Some(&module.op_dir)),
+                None => {
+                    unreachable!()
                 }
-            }
+            },
         }
     }
 }
@@ -1504,9 +1499,10 @@ impl Machine {
     }
 
     pub(crate) fn load_compiled_library(&mut self) -> CallResult {
-        let library = cell_as_atom!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[1])));
+        let library = cell_as_atom!(
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st.registers[1]))
+        );
 
         if let Some(module) = self.indices.modules.get(&library) {
             if let ListingSource::DynamicallyGenerated = module.listing_src {
@@ -1537,9 +1533,10 @@ impl Machine {
     }
 
     pub(crate) fn declare_module(&mut self) -> CallResult {
-        let module_name = cell_as_atom!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[1])));
+        let module_name = cell_as_atom!(
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st.registers[1]))
+        );
 
         let mut loader = self.loader_from_heap_evacuable(temp_v!(3));
 
@@ -1649,9 +1646,10 @@ impl Machine {
     }
 
     pub(crate) fn add_goal_expansion_clause(&mut self) -> CallResult {
-        let target_module_name = cell_as_atom!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[1])));
+        let target_module_name = cell_as_atom!(
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st.registers[1]))
+        );
 
         let mut loader = self.loader_from_heap_evacuable(temp_v!(3));
 
@@ -1744,9 +1742,10 @@ impl Machine {
         &mut self,
         r: RegType,
     ) -> Loader<'_, LiveLoadAndMachineState<'_>> {
-        let mut load_state = cell_as_load_state_payload!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st[r])));
+        let mut load_state = cell_as_load_state_payload!(
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st[r]))
+        );
 
         load_state.set_tag(ArenaHeaderTag::LiveLoadState);
 
@@ -2098,9 +2097,10 @@ impl Machine {
     }
 
     pub(crate) fn abolish_clause(&mut self) -> CallResult {
-        let module_name = cell_as_atom!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[1])));
+        let module_name = cell_as_atom!(
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st.registers[1]))
+        );
 
         let key = self
             .machine_st
@@ -2214,9 +2214,10 @@ impl Machine {
             _ => unreachable!(),
         };
 
-        let module_name = cell_as_atom!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[4])));
+        let module_name = cell_as_atom!(
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st.registers[4]))
+        );
 
         let compilation_target = match module_name {
             atom!("user") => CompilationTarget::User,
@@ -2269,9 +2270,10 @@ impl Machine {
     }
 
     pub(crate) fn is_consistent_with_term_queue(&mut self) -> CallResult {
-        let module_name = cell_as_atom!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[1])));
+        let module_name = cell_as_atom!(
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st.registers[1]))
+        );
 
         let key = self
             .machine_st
@@ -2309,9 +2311,10 @@ impl Machine {
     }
 
     pub(crate) fn remove_module_exports(&mut self) -> CallResult {
-        let module_name = cell_as_atom!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[1])));
+        let module_name = cell_as_atom!(
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st.registers[1]))
+        );
 
         let mut loader = self.loader_from_heap_evacuable(temp_v!(2));
 
@@ -2337,9 +2340,10 @@ impl Machine {
     }
 
     pub(crate) fn meta_predicate_property(&mut self) {
-        let module_name = cell_as_atom!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[1])));
+        let module_name = cell_as_atom!(
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st.registers[1]))
+        );
 
         let (predicate_name, arity) = self
             .machine_st
@@ -2374,7 +2378,7 @@ impl Machine {
                             MetaSpec::Plus => atom_as_cell!(atom!("-")),
                             MetaSpec::Either => atom_as_cell!(atom!("?")),
                             MetaSpec::Colon => atom_as_cell!(atom!(":")),
-                            MetaSpec::RequiresExpansionWithArgument(ref arg_num) => {
+                            MetaSpec::RequiresExpansionWithArgument(arg_num) => {
                                 fixnum_as_cell!(/* FIXME this is not safe */ unsafe {
                                     Fixnum::build_with_unchecked(*arg_num as i64)
                                 })
@@ -2401,9 +2405,10 @@ impl Machine {
     }
 
     pub(crate) fn dynamic_property(&mut self) {
-        let module_name = cell_as_atom!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[1])));
+        let module_name = cell_as_atom!(
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st.registers[1]))
+        );
 
         let key = self
             .machine_st
@@ -2428,9 +2433,10 @@ impl Machine {
     }
 
     pub(crate) fn multifile_property(&mut self) {
-        let module_name = cell_as_atom!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[1])));
+        let module_name = cell_as_atom!(
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st.registers[1]))
+        );
 
         let key = self
             .machine_st
@@ -2455,9 +2461,10 @@ impl Machine {
     }
 
     pub(crate) fn discontiguous_property(&mut self) {
-        let module_name = cell_as_atom!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[1])));
+        let module_name = cell_as_atom!(
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st.registers[1]))
+        );
 
         let key = self
             .machine_st

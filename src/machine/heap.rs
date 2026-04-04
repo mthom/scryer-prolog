@@ -71,22 +71,24 @@ impl InnerHeap {
             new_layout.size() <= isize::MAX as usize,
             "Allocation too large. We should probably GC (TODO)"
         );
+        unsafe {
+            let new_ptr = if self.byte_cap == 0 {
+                alloc::alloc(new_layout)
+            } else {
+                let old_layout =
+                    alloc::Layout::from_size_align(self.byte_cap, size_of::<HeapCellValue>())
+                        .unwrap();
+                alloc::realloc(self.ptr, old_layout, new_layout.size())
+            };
 
-        let new_ptr = if self.byte_cap == 0 {
-            alloc::alloc(new_layout)
-        } else {
-            let old_layout =
-                alloc::Layout::from_size_align(self.byte_cap, size_of::<HeapCellValue>()).unwrap();
-            alloc::realloc(self.ptr, old_layout, new_layout.size())
-        };
+            if !new_ptr.is_null() {
+                self.ptr = new_ptr;
+                self.byte_cap = new_cap;
 
-        if !new_ptr.is_null() {
-            self.ptr = new_ptr;
-            self.byte_cap = new_cap;
-
-            true
-        } else {
-            false
+                true
+            } else {
+                false
+            }
         }
     }
 }
@@ -106,19 +108,22 @@ unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan<'_> {
         .iter()
         .position(|b| *b == 0u8)
         .unwrap_or(heap_slice.len());
-    let zero_byte_addr = heap_slice.as_ptr().add(string_len);
 
-    let sentinel_len = pstr_sentinel_length(zero_byte_addr.addr());
-    let tail_idx = cell_index!(
-        (string_len + sentinel_len).next_multiple_of(ALIGN)
-            + if sentinel_len <= 1 { heap_index!(1) } else { 0 }
-    );
+    unsafe {
+        let zero_byte_addr = heap_slice.as_ptr().add(string_len);
 
-    let str_slice = &heap_slice[..string_len];
+        let sentinel_len = pstr_sentinel_length(zero_byte_addr.addr());
+        let tail_idx = cell_index!(
+            (string_len + sentinel_len).next_multiple_of(ALIGN)
+                + if sentinel_len <= 1 { heap_index!(1) } else { 0 }
+        );
 
-    HeapStringScan {
-        string: std::str::from_utf8_unchecked(str_slice),
-        tail_idx,
+        let str_slice = &heap_slice[..string_len];
+
+        HeapStringScan {
+            string: std::str::from_utf8_unchecked(str_slice),
+            tail_idx,
+        }
     }
 }
 
@@ -138,9 +143,11 @@ unsafe fn scan_slice_to_str_from_start(heap_slice: &[u8]) -> HeapStringScan<'_> 
 
     let str_slice = &heap_slice[..string_len];
 
-    HeapStringScan {
-        string: std::str::from_utf8_unchecked(str_slice),
-        tail_idx,
+    unsafe {
+        HeapStringScan {
+            string: std::str::from_utf8_unchecked(str_slice),
+            tail_idx,
+        }
     }
 }
 
@@ -450,11 +457,7 @@ fn pstr_sentinel_length(chunk_len: usize) -> usize {
     let res = chunk_len.next_multiple_of(ALIGN) - chunk_len;
 
     // No bytes available in last chunk
-    if res == 0 {
-        ALIGN
-    } else {
-        res
-    }
+    if res == 0 { ALIGN } else { res }
 }
 
 #[must_use]
@@ -586,7 +589,7 @@ impl Heap {
 
     #[inline(always)]
     unsafe fn grow(&mut self) -> bool {
-        self.inner.grow()
+        unsafe { self.inner.grow() }
     }
 
     #[inline]

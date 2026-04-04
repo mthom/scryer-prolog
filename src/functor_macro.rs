@@ -230,9 +230,9 @@ pub(crate) fn variadic_functor(
 #[allow(unused_parens)]
 mod tests {
     use super::*;
+    use FunctorElement::*;
     use indexmap::indexmap;
     use std::string::String;
-    use FunctorElement::*;
 
     #[test]
     fn basic_terms() {

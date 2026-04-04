@@ -34,7 +34,7 @@ pub(super) fn set_code_index<'a, LS: LoadState<'a>>(
                     RetractionRecord::ReplacedUserPredicate(key, replaced)
                 }
             }
-            CompilationTarget::Module(ref module_name) => {
+            CompilationTarget::Module(module_name) => {
                 if IndexPtrTag::Undefined == code_idx_ptr.tag() {
                     *code_idx_ptr = code_ptr;
                     RetractionRecord::AddedModulePredicate(*module_name, key)
@@ -98,7 +98,7 @@ pub(super) fn add_op_decl(
             CompilationTarget::User => {
                 retraction_info.push_record(RetractionRecord::ReplacedUserOp(*op_decl, op_desc));
             }
-            CompilationTarget::Module(ref module_name) => {
+            CompilationTarget::Module(module_name) => {
                 retraction_info.push_record(RetractionRecord::ReplacedModuleOp(
                     *module_name,
                     *op_decl,
@@ -110,7 +110,7 @@ pub(super) fn add_op_decl(
             CompilationTarget::User => {
                 retraction_info.push_record(RetractionRecord::AddedUserOp(*op_decl));
             }
-            CompilationTarget::Module(ref module_name) => {
+            CompilationTarget::Module(module_name) => {
                 retraction_info
                     .push_record(RetractionRecord::AddedModuleOp(*module_name, *op_decl));
             }
@@ -167,7 +167,7 @@ pub(super) fn import_module_exports<'a, LS: LoadState<'a>>(
                     ));
                 }
             }
-            ModuleExport::OpDecl(ref op_decl) => {
+            ModuleExport::OpDecl(op_decl) => {
                 add_op_decl(
                     &mut payload.retraction_info,
                     compilation_target,
@@ -221,7 +221,7 @@ fn import_module_exports_into_module<'a, LS: LoadState<'a>>(
                     ));
                 }
             }
-            ModuleExport::OpDecl(ref op_decl) => {
+            ModuleExport::OpDecl(op_decl) => {
                 add_op_decl_as_module_export::<LS>(payload, op_dir, wam_op_dir, op_decl);
             }
         }
@@ -276,7 +276,7 @@ fn import_qualified_module_exports<'a, LS: LoadState<'a>>(
                     ));
                 }
             }
-            ModuleExport::OpDecl(ref op_decl) => {
+            ModuleExport::OpDecl(op_decl) => {
                 add_op_decl(
                     &mut payload.retraction_info,
                     compilation_target,
@@ -336,7 +336,7 @@ fn import_qualified_module_exports_into_module<'a, LS: LoadState<'a>>(
                     ));
                 }
             }
-            ModuleExport::OpDecl(ref op_decl) => {
+            ModuleExport::OpDecl(op_decl) => {
                 add_op_decl_as_module_export::<LS>(payload, op_dir, wam_op_dir, op_decl);
             }
         }
@@ -545,7 +545,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         ) {
             for export in removed_module.module_decl.exports.iter() {
                 match export {
-                    ModuleExport::PredicateKey(ref key) => {
+                    ModuleExport::PredicateKey(key) => {
                         if let (Some(module_code_idx), Some(target_code_idx)) = (
                             removed_module.code_dir.get(key).cloned(),
                             code_dir.get_mut(key).cloned(),
@@ -1050,7 +1050,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         );
 
         for export in &module.module_decl.exports {
-            if let ModuleExport::OpDecl(ref op_decl) = export {
+            if let ModuleExport::OpDecl(op_decl) = export {
                 add_op_decl_as_module_export::<LS>(
                     &mut self.payload,
                     &mut module.op_dir,
@@ -1084,7 +1084,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         &mut self.wam_prelude.indices.meta_predicates,
                     )?;
                 }
-                CompilationTarget::Module(ref defining_module_name) => {
+                CompilationTarget::Module(defining_module_name) => {
                     match self
                         .wam_prelude
                         .indices
@@ -1137,7 +1137,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     &exports,
                     &mut self.wam_prelude,
                 ),
-                CompilationTarget::Module(ref defining_module_name) => {
+                CompilationTarget::Module(defining_module_name) => {
                     match self
                         .wam_prelude
                         .indices

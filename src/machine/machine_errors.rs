@@ -773,7 +773,9 @@ impl MachineState {
     // throw an error pre-allocated in the heap
     pub(super) fn throw_resource_error(&mut self, err: AllocError) {
         if self.throwing_resource_error {
-            panic!("attempted to throw `error(resource_error(memory), [])` while attempting to throw `error(resource_error(memory), [])`");
+            panic!(
+                "attempted to throw `error(resource_error(memory), [])` while attempting to throw `error(resource_error(memory), [])`"
+            );
         }
         self.throwing_resource_error = true;
 
@@ -896,7 +898,7 @@ impl CompilationError {
             CompilationError::InvalidUseModuleDecl => {
                 functor!(atom!("invalid_use_module_declaration"))
             }
-            CompilationError::ParserError(ref err) => {
+            CompilationError::ParserError(err) => {
                 functor!(err.as_atom())
             }
             CompilationError::FiniteMemoryInHeap(_) => {
