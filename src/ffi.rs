@@ -56,8 +56,8 @@ impl FunctionImpl {
     unsafe fn call_void(&self, args: &[Arg], _: &mut Arena) -> Result<Value, FfiError> {
         unsafe {
             self.cif.call_return_into(self.code_ptr, args, Ret::void());
-            Ok(Value::Number(Number::Fixnum(Fixnum::build_with(0))))
         }
+        Ok(Value::Number(Number::Fixnum(Fixnum::build_with(0))))
     }
 
     unsafe fn call_int<T>(&self, args: &[Arg], arena: &mut Arena) -> Result<Value, FfiError>
@@ -204,14 +204,14 @@ impl StructImpl {
             layout: &mut Layout,
             val: T,
         ) -> Result<(), FfiError> {
+            let (new_layout, offset) = layout
+                .extend(Layout::new::<T>())
+                .map_err(|_| FfiError::LayoutError)?;
+            *layout = new_layout;
             unsafe {
-                let (new_layout, offset) = layout
-                    .extend(Layout::new::<T>())
-                    .map_err(|_| FfiError::LayoutError)?;
-                *layout = new_layout;
                 ptr.byte_offset(offset as isize).cast::<T>().write(val);
-                Ok(())
             }
+            Ok(())
         }
 
         for arg in args {
@@ -267,11 +267,11 @@ impl StructImpl {
                 ptr: *mut c_void,
                 layout: &mut Layout,
             ) -> Result<T, FfiError> {
+                let (new_layout, offset) = layout
+                    .extend(Layout::new::<T>())
+                    .map_err(|_| FfiError::LayoutError)?;
+                *layout = new_layout;
                 unsafe {
-                    let (new_layout, offset) = layout
-                        .extend(Layout::new::<T>())
-                        .map_err(|_| FfiError::LayoutError)?;
-                    *layout = new_layout;
                     let n = std::ptr::read::<T>(ptr.byte_offset(offset as isize).cast());
                     Ok(n)
                 }
