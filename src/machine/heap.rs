@@ -71,26 +71,26 @@ impl InnerHeap {
             new_layout.size() <= isize::MAX as usize,
             "Allocation too large. We should probably GC (TODO)"
         );
-        
-            let new_ptr = unsafe { 
-                if self.byte_cap == 0 {
-                    alloc::alloc(new_layout)
-                } else {
-                    let old_layout =
-                        alloc::Layout::from_size_align(self.byte_cap, size_of::<HeapCellValue>())
-                            .unwrap();
-                    alloc::realloc(self.ptr, old_layout, new_layout.size())
-                }
-            };
 
-            if !new_ptr.is_null() {
-                self.ptr = new_ptr;
-                self.byte_cap = new_cap;
-
-                true
+        let new_ptr = unsafe {
+            if self.byte_cap == 0 {
+                alloc::alloc(new_layout)
             } else {
-                false
+                let old_layout =
+                    alloc::Layout::from_size_align(self.byte_cap, size_of::<HeapCellValue>())
+                        .unwrap();
+                alloc::realloc(self.ptr, old_layout, new_layout.size())
             }
+        };
+
+        if !new_ptr.is_null() {
+            self.ptr = new_ptr;
+            self.byte_cap = new_cap;
+
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -110,20 +110,20 @@ unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan<'_> {
         .position(|b| *b == 0u8)
         .unwrap_or(heap_slice.len());
 
-        let zero_byte_addr = unsafe { heap_slice.as_ptr().add(string_len) };
+    let zero_byte_addr = unsafe { heap_slice.as_ptr().add(string_len) };
 
-        let sentinel_len = pstr_sentinel_length(zero_byte_addr.addr());
-        let tail_idx = cell_index!(
-            (string_len + sentinel_len).next_multiple_of(ALIGN)
-                + if sentinel_len <= 1 { heap_index!(1) } else { 0 }
-        );
+    let sentinel_len = pstr_sentinel_length(zero_byte_addr.addr());
+    let tail_idx = cell_index!(
+        (string_len + sentinel_len).next_multiple_of(ALIGN)
+            + if sentinel_len <= 1 { heap_index!(1) } else { 0 }
+    );
 
-        let str_slice = &heap_slice[..string_len];
+    let str_slice = &heap_slice[..string_len];
 
-        HeapStringScan {
-            string: unsafe { std::str::from_utf8_unchecked(str_slice) },
-            tail_idx,
-        }
+    HeapStringScan {
+        string: unsafe { std::str::from_utf8_unchecked(str_slice) },
+        tail_idx,
+    }
 }
 
 // Same as scan_slice_to_str but assumes that the slice is from the start of a string.
@@ -142,10 +142,10 @@ unsafe fn scan_slice_to_str_from_start(heap_slice: &[u8]) -> HeapStringScan<'_> 
 
     let str_slice = &heap_slice[..string_len];
 
-        HeapStringScan {
-            string: unsafe { std::str::from_utf8_unchecked(str_slice) },
-            tail_idx,
-        }
+    HeapStringScan {
+        string: unsafe { std::str::from_utf8_unchecked(str_slice) },
+        tail_idx,
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -282,28 +282,29 @@ impl ReservedHeapSection {
             )
         };
 
-            let zero_region_idx = heap_index!(self.heap_cell_len) + str_byte_len;
-            let align_offset = pstr_sentinel_length(zero_region_idx);
+        let zero_region_idx = heap_index!(self.heap_cell_len) + str_byte_len;
+        let align_offset = pstr_sentinel_length(zero_region_idx);
 
-            unsafe { ptr::write_bytes(self.heap_ptr.add(zero_region_idx), 0u8, align_offset) };
+        unsafe { ptr::write_bytes(self.heap_ptr.add(zero_region_idx), 0u8, align_offset) };
 
-            cells_written = if align_offset == 1 {
-                unsafe { ptr::write_bytes(
+        cells_written = if align_offset == 1 {
+            unsafe {
+                ptr::write_bytes(
                     self.heap_ptr.add(zero_region_idx + 1),
                     0u8,
                     size_of::<HeapCellValue>(),
                 )
             };
 
-                // ensure there are at least two bytes in the boundary
-                // buffer separating the string data from the tail
-                // cell
-                cell_index!(src.len() + align_offset + size_of::<HeapCellValue>())
-            } else {
-                cell_index!(src.len() + align_offset)
-            };
+            // ensure there are at least two bytes in the boundary
+            // buffer separating the string data from the tail
+            // cell
+            cell_index!(src.len() + align_offset + size_of::<HeapCellValue>())
+        } else {
+            cell_index!(src.len() + align_offset)
+        };
 
-            self.heap_cell_len += cells_written;
+        self.heap_cell_len += cells_written;
 
         cells_written
     }
@@ -627,15 +628,15 @@ impl Heap {
         let len = heap_index_checked!(num_cells).ok_or(AllocError)?;
 
         loop {
-                if self.free_space() >= len {
-                    section = ReservedHeapSection {
-                        heap_ptr: self.inner.ptr,
-                        heap_cell_len: self.cell_len(),
-                    };
-                    break;
-                } else if unsafe { !self.grow() } {
-                    return Err(AllocError);
-                }
+            if self.free_space() >= len {
+                section = ReservedHeapSection {
+                    heap_ptr: self.inner.ptr,
+                    heap_cell_len: self.cell_len(),
+                };
+                break;
+            } else if unsafe { !self.grow() } {
+                return Err(AllocError);
+            }
         }
 
         Ok(HeapWriter {
@@ -864,8 +865,8 @@ impl Heap {
         let align_offset = pstr_sentinel_length(s_len);
         let copy_size = s_len + align_offset;
 
-            loop {
-                unsafe {
+        loop {
+            unsafe {
                 if self.free_space() >= copy_size {
                     let slice =
                         std::slice::from_raw_parts_mut(self.inner.ptr, self.inner.byte_len + s_len);
