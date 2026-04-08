@@ -66,16 +66,16 @@ impl FunctionImpl {
         Integer: From<T>,
         T: Copy + TryInto<i64> + MightNotFitInFixnum,
     {
-            let n = unsafe { self.cif.call::<T>(self.code_ptr, args) };
-            Ok(Value::Number(fixnum!(Number, n, arena)))
+        let n = unsafe { self.cif.call::<T>(self.code_ptr, args) };
+        Ok(Value::Number(fixnum!(Number, n, arena)))
     }
 
     unsafe fn call_float<T>(&self, args: &[Arg], _: &mut Arena) -> Result<Value, FfiError>
     where
         T: Into<f64>,
     {
-            let n = unsafe { self.cif.call::<T>(self.code_ptr, args) };
-            Ok(Value::Number(Number::Float(OrderedFloat(n.into()))))
+        let n = unsafe { self.cif.call::<T>(self.code_ptr, args) };
+        Ok(Value::Number(Number::Float(OrderedFloat(n.into()))))
     }
 
     unsafe fn call_ptr(&self, args: &[Arg], arena: &mut Arena) -> Result<Value, FfiError> {
@@ -271,9 +271,9 @@ impl StructImpl {
                 let (new_layout, offset) = layout
                     .extend(Layout::new::<T>())
                     .map_err(|_| FfiError::LayoutError)?;
-                *layout = new_layout;                
-                    let n = unsafe { std::ptr::read::<T>(ptr.byte_offset(offset as isize).cast()) };
-                    Ok(n)
+                *layout = new_layout;
+                let n = unsafe { std::ptr::read::<T>(ptr.byte_offset(offset as isize).cast()) };
+                Ok(n)
             }
 
             unsafe fn read_int<T>(
@@ -285,9 +285,8 @@ impl StructImpl {
                 T: Copy + TryInto<i64> + MightNotFitInFixnum,
                 Integer: From<T>,
             {
-                
-                    let n = unsafe { read_primitive::<T>(ptr, layout)? };
-                    Ok(Value::Number(fixnum!(Number, n, arena)))
+                let n = unsafe { read_primitive::<T>(ptr, layout)? };
+                Ok(Value::Number(fixnum!(Number, n, arena)))
             }
 
             unsafe fn read_float<T>(
@@ -297,8 +296,8 @@ impl StructImpl {
             where
                 T: Into<f64>,
             {
-                    let n = unsafe { read_primitive::<T>(ptr, layout)? };
-                    Ok(Value::Number(Number::Float(OrderedFloat(n.into()))))
+                let n = unsafe { read_primitive::<T>(ptr, layout)? };
+                Ok(Value::Number(Number::Float(OrderedFloat(n.into()))))
             }
 
             let mut layout = Layout::from_size_align(0, 1).map_err(|_| FfiError::LayoutError)?;
@@ -813,8 +812,8 @@ impl ForeignFunctionTable {
             T: Copy + TryInto<i64> + MightNotFitInFixnum,
             Integer: From<T>,
         {
-                let n = unsafe { ptr.cast::<T>().read() };
-                Value::Number(fixnum!(Number, n, arena))
+            let n = unsafe { ptr.cast::<T>().read() };
+            Value::Number(fixnum!(Number, n, arena))
         }
 
         let ptr = ptr.as_ptr()?;
