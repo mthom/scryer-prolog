@@ -35,7 +35,7 @@ jobs:
       - name: Extract Docker metadata
         id: meta
         # https://github.com/docker/metadata-action
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/scryer-prolog
           tags: |
