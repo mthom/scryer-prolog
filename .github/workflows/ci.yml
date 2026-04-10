@@ -110,7 +110,7 @@ jobs:
         
       - name: Publish release binary artifact
         if: matrix.publish
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           path: |
             target/${{ matrix.target }}/release/scryer-prolog*
@@ -147,12 +147,12 @@ jobs:
             || echo "::warning ::logtalk compliance suite failed"
             # -u "https://github.com/LogtalkDotOrg/logtalk3/tree/$LOGTALK_GIT_HASH/tests/prolog/" \
       - name: Publish Logtalk test logs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: logtalk-test-logs
           path: '${{ env.LOGTALKUSER }}/tests/prolog/logtalk_tester_logs'
       - name: Publish Logtalk test results artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: logtalk-test-results
           path: '${{ env.LOGTALKUSER }}/tests/prolog/**/*.xml'
@@ -187,7 +187,7 @@ jobs:
         run: |
           RUSTC_BOOTSTRAP=1 cargo test --all -- -Z unstable-options --format json --report-time | cargo2junit > cargo_test_results.xml
       - name: Publish cargo test results artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cargo-test-results
           path: cargo_test_results.xml
@@ -206,7 +206,7 @@ jobs:
       - run: cargo bench --bench run_criterion -- --profile-time 60
 
       - name: Publish benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: |
