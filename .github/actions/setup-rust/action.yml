@@ -16,7 +16,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-  - uses: dtolnay/rust-toolchain@master
+  - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
     id: toolchain
     with:
       toolchain: ${{ inputs.rust-version }}
@@ -33,7 +33,7 @@ runs:
       echo "CC=clang" >> $GITHUB_ENV
       echo "PKG_CONFIG_SYSROOT_DIR=/" >> $GITHUB_ENV
 
-  - uses: actions/cache@v4
+  - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
     with:
       path: |
         ~/.cargo/bin/
@@ -46,7 +46,7 @@ runs:
   # Remove build artifacts for the current crate, since it will be rebuilt every
   # run anyway, but keep dependency artifacts to cache them.
   # Must be placed after actions/cache so its post step runs first.
-  - uses: pyTooling/Actions/with-post-step@v4.1.0
+  - uses: pyTooling/Actions/with-post-step@679ec24c80c6736efa7099a11c19086263a6beba # v4.1.0
     with:
       main: bash ./.github/actions/setup-rust/cleanup.sh
       post: bash ./.github/actions/setup-rust/cleanup.sh
