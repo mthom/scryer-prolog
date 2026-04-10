@@ -19,7 +19,7 @@ jobs:
   style:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
         with:
@@ -39,7 +39,7 @@ jobs:
     outputs: 
       msrv: ${{ steps.read-declared-msrv.outputs.msrv }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - id: read-declared-msrv
         name: Read msrv from Cargo.toml rust_version field
         run: echo "msrv=$(cargo metadata  --no-deps --format-version  1 | jq -r '.packages[] | select(.name = "scryer-prolog") | ."rust_version"')" >>  "$GITHUB_OUTPUT"
@@ -68,7 +68,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actionhippie/swap-space@v1
         if: matrix.use_swap
         with:
@@ -167,7 +167,7 @@ jobs:
   report:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
         with:
