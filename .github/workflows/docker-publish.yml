@@ -47,7 +47,7 @@ jobs:
       - name: Build and push Docker image
         id: build-and-push
         # https://github.com/docker/build-push-action
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         # v4 adds SLSA Provenance attestation which is 
         # - unsupported by AWS Lambda 
         # - limited support by Google Cloud Run 
