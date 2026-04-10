@@ -46,7 +46,7 @@ runs:
   # Remove build artifacts for the current crate, since it will be rebuilt every
   # run anyway, but keep dependency artifacts to cache them.
   # Must be placed after actions/cache so its post step runs first.
-  - uses: pyTooling/Actions/with-post-step@679ec24c80c6736efa7099a11c19086263a6beba # v4.1.0
+  - uses: pyTooling/Actions/with-post-step@41aed3e559cbf69bfdb46abb25d7c535900ed5b6 # v7.7.0
     with:
       main: bash ./.github/actions/setup-rust/cleanup.sh
       post: bash ./.github/actions/setup-rust/cleanup.sh
