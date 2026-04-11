@@ -155,12 +155,14 @@ fn issue_rename_file() {
     load_module_test("tests-pl/issue_rename_file.pl", "file_renamed");
 }
 
+#[serial]
 #[test]
 #[cfg(feature = "http")]
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-#[cfg_attr(not(miri), ignore = "flaky due to network requests")]
 fn http_open_hanging() {
+    std::env::set_var("PROLOG", env!("CARGO_BIN_EXE_scryer-prolog"));
+
     load_module_test_with_tokio_runtime(
         "tests-pl/issue-http_open-hanging.pl",
             "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
