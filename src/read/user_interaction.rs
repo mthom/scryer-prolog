@@ -38,12 +38,6 @@ pub(crate) fn get_key() -> KeyEvent {
 }
 
 fn supported_terminal() -> bool {
-    #[cfg(windows)]
-    let windows_os = true;
-
-    #[cfg(not(windows))]
-    let windows_os = false;
-
     // If OS is Windows and stdin is not a tty, it's either a pipe or an unsupported terminal configuration.
-    !windows_os || std::io::stdin().is_tty()
+    cfg!(not(windows)) || std::io::stdin().is_tty()
 }
