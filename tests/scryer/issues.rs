@@ -1,6 +1,6 @@
 use crate::helper::load_module_test;
 #[cfg(not(target_arch = "wasm32"))]
-use crate::helper::load_module_test_with_tokio_runtime;
+use crate::helper::load_module_test_with_tokio_runtime_and_input;
 use serial_test::serial;
 
 // issue #831
@@ -155,16 +155,14 @@ fn issue_rename_file() {
     load_module_test("tests-pl/issue_rename_file.pl", "file_renamed");
 }
 
-#[serial]
 #[test]
 #[cfg(feature = "http")]
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn http_open_hanging() {
-    std::env::set_var("PROLOG", env!("CARGO_BIN_EXE_scryer-prolog"));
-
-    load_module_test_with_tokio_runtime(
+    load_module_test_with_tokio_runtime_and_input(
         "tests-pl/issue-http_open-hanging.pl",
+        format!("PROLOG={:?}.", env!("CARGO_BIN_EXE_scryer-prolog")),
             "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
     );
 }

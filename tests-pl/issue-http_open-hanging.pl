@@ -3,8 +3,13 @@
 :- use_module(library(iso_ext)).
 :- use_module(library(os)).
 
+prolog_path(Prolog) :-
+    read(Body),
+    term_variables(Body, [Prolog]),
+    Body.
+
 server_start([Process,Out]) :-
-    getenv("PROLOG", Prolog),
+    prolog_path(Prolog),
     process_create(Prolog,
         ["tests-pl/issue-http_open-hanging_server", "-t", "server"],
         [process(Process), stdout(pipe(Out))]).
