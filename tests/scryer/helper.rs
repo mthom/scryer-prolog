@@ -56,7 +56,7 @@ pub(crate) fn load_module_test_with_tokio_runtime<T: Expectable>(file: &str, exp
 pub(crate) fn load_module_test_with_tokio_runtime_and_input<T: Expectable>(
     file: &str,
     input: impl Into<Cow<'static, str>>,
-    expected: T
+    expected: T,
 ) {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -65,7 +65,9 @@ pub(crate) fn load_module_test_with_tokio_runtime_and_input<T: Expectable>(
 
     runtime.block_on(async move {
         let mut wam = MachineBuilder::default()
-            .with_streams(StreamConfig::in_memory().with_user_input(InputStreamConfig::string(input)))
+            .with_streams(
+                StreamConfig::in_memory().with_user_input(InputStreamConfig::string(input)),
+            )
             .build();
         expected.assert_eq(wam.test_load_file(file).as_slice())
     });
