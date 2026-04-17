@@ -44,33 +44,6 @@ pub enum HeapCellValueTag {
 }
 
 #[derive(Specifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(u8)]
-#[bits = 6]
-pub enum HeapCellValueView {
-    Str = 0b000001,
-    Lis = 0b000101,
-    Var = 0b001011,
-    StackVar = 0b001101,
-    AttrVar = 0b010001,
-    PStrLoc = 0b010011,
-    // constants.
-    Cons = 0b0,
-    F64Offset = 0b010101,
-    Fixnum = 0b011001,
-    CodeIndexOffset = 0b011011,
-    Atom = 0b011111,
-    CutPoint = 0b011101,
-    // trail elements.
-    TrailedHeapVar = 0b100001,
-    TrailedStackVar = 0b100011,
-    TrailedAttrVar = 0b100101,
-    TrailedAttrVarListLink = 0b101001,
-    TrailedAttachedValue = 0b101011,
-    TrailedBlackboardEntry = 0b101101,
-    TrailedBlackboardOffset = 0b110001,
-}
-
-#[derive(Specifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[bits = 1]
 pub enum ConsPtrMaskTag {
     Cons = 0b0,
