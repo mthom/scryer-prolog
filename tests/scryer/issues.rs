@@ -174,3 +174,44 @@ fn http_open_hanging() {
             "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
     );
 }
+
+#[test]
+#[cfg(feature = "repl")]
+#[cfg(unix)]
+fn sigint_interrupts_nonterminating_goals() {
+    use std::process::{Command, Stdio};
+    use std::io::Read;
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scryer-prolog"))
+        //.args(["-g", "write(ready),asserta((f :- f)), f."])
+        .args(["-g", "catch((write(ready), asserta((f :- f)), f), _, halt)."])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    let pid = child.id();
+
+    std::thread::sleep(std::time::Duration::from_millis(5000));
+    let mut buf = [0; 1];
+    let mut stdout = child.stdout.take().unwrap();
+    stdout.read_exact(&mut buf).unwrap();
+
+    assert!(Command::new("kill")
+        .arg("-SIGINT")
+        .arg(pid.to_string())
+        .status()
+        .unwrap()
+        .success());
+
+    stdout.read_exact(&mut buf).unwrap();
+
+    // assert!(Command::new("kill")
+    //     .arg("-SIGINT")
+    //     .arg(pid.to_string())
+    //     .status()
+    //     .unwrap()
+    //     .success());
+
+    std::thread::sleep(std::time::Duration::from_millis(5000));
+    child.try_wait().expect("Should exit after two SIGINTs");
+}
