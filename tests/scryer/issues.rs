@@ -1,4 +1,5 @@
 use crate::helper::load_module_test;
+use crate::helper::load_module_test_with_input;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::helper::load_module_test_with_tokio_runtime;
 use serial_test::serial;
@@ -153,6 +154,13 @@ fn issue_path_canonical() {
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn issue_rename_file() {
     load_module_test("tests-pl/issue_rename_file.pl", "file_renamed");
+}
+
+// issue #3262: read/1 on non-TTY stdin should resolve without requiring a newline
+#[test]
+#[cfg_attr(miri, ignore = "unsupported operation when isolation is enabled")]
+fn issue3262_read_from_stdin_no_newline() {
+    load_module_test_with_input("tests-pl/issue3262.pl", "hello.", "hello");
 }
 
 #[test]
