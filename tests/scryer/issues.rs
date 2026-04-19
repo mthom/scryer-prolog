@@ -182,23 +182,31 @@ fn sigint_interrupts_nonterminating_goals() {
     use std::process::{Command, Stdio};
     use std::io::Read;
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_scryer-prolog"))
+    //String cmd;
+
+    let scryer_path = env!("CARGO_BIN_EXE_scryer-prolog");
+    let mut child = Command::new("bash")
         //.args(["-g", "write(ready),asserta((f :- f)), f."])
-        .args(["-g", "catch((write(ready), asserta((f :- f)), f), _, halt)."])
+        //.args(["-c", "-g", "catch((write(ready), asserta((f :- f)), f), _, halt)."])
+        .args([
+            "-c",
+            &format!("{scryer_path} -g 'catch((write(ready), asserta((f :- f)), f), _, halt).'")
+        ])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
 
     let pid = child.id();
 
-    std::thread::sleep(std::time::Duration::from_millis(5000));
+    std::thread::sleep(std::time::Duration::from_millis(60000));
     let mut buf = [0; 1];
     let mut stdout = child.stdout.take().unwrap();
     stdout.read_exact(&mut buf).unwrap();
 
     assert!(Command::new("kill")
-        .arg("-SIGINT")
-        .arg(pid.to_string())
+        .args(["-s", "INT", &pid.to_string()])
+        //.arg("-SIGINT")
+        //.arg(pid.to_string())
         .status()
         .unwrap()
         .success());
