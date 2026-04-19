@@ -1,0 +1,52 @@
+version: 2
+
+updates:
+  # Enable version updates for cargo
+  - package-ecosystem: "cargo"
+    # Look for `Cargo.toml` and `Cargo.lock` files in the `root` directory
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: "7"
+    groups:
+      cargo-incompatible:
+        applies-to: version-updates
+        # TODO: use incompatible update-type once available
+        # see issue https://github.com/dependabot/dependabot-core/issues/9681
+        update-types:
+          - "major"
+          - "minor" # pre-1.0 dependencies
+      cargo-compatible:
+        applies-to: version-updates
+        # TODO: use compatible update-type once available
+        # see issue https://github.com/dependabot/dependabot-core/issues/9681
+        update-types:
+          - "patch"
+    ignore:
+      # ignore all cargo updates for now while dependabot does not respect msrv/rust-version
+      # see issue https://github.com/dependabot/dependabot-core/issues/5423
+      - dependency-name: "*"
+
+  # Enable version updates for Docker
+  - package-ecosystem: "docker"
+    # Look for a `Dockerfile` in the `root` directory
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: "7"
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    # Workflow files stored in the default location of `.github/workflows`
+    # You don't need to specify `/.github/workflows` for `directory`. You can use `directory: "/"`.
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: "7"
+    ignore:
+      # these actions doesn't have proper version tags
+      - dependency-name: "dtolnay/rust-toolchain"
+      - dependency-name: "logtalk-actions/setup-logtalk"
