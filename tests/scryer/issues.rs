@@ -179,47 +179,54 @@ fn http_open_hanging() {
 #[cfg(feature = "repl")]
 #[cfg(unix)]
 fn sigint_interrupts_nonterminating_goals() {
-    use std::process::{Command, Stdio};
-    use std::io::Read;
+    load_module_test_with_tokio_runtime_and_input(
+        "tests-pl/issue-interrupt-nontermination.pl",
+        format!("PROLOG={:?}.", env!("CARGO_BIN_EXE_scryer-prolog")),
+            "ok\n"
+    );
 
-    //String cmd;
 
-    let scryer_path = env!("CARGO_BIN_EXE_scryer-prolog");
-    let mut child = Command::new("bash")
-        //.args(["-g", "write(ready),asserta((f :- f)), f."])
-        //.args(["-c", "-g", "catch((write(ready), asserta((f :- f)), f), _, halt)."])
-        .args([
-            "-c",
-            &format!("{scryer_path} -g 'catch((write(ready), asserta((f :- f)), f), _, halt).'")
-        ])
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
+    // use std::process::{Command, Stdio};
+    // use std::io::Read;
 
-    let pid = child.id();
+    // //String cmd;
 
-    std::thread::sleep(std::time::Duration::from_millis(60000));
-    let mut buf = [0; 1];
-    let mut stdout = child.stdout.take().unwrap();
-    stdout.read_exact(&mut buf).unwrap();
+    // let scryer_path = env!("CARGO_BIN_EXE_scryer-prolog");
+    // let mut child = Command::new("bash")
+    //     //.args(["-g", "write(ready),asserta((f :- f)), f."])
+    //     //.args(["-c", "-g", "catch((write(ready), asserta((f :- f)), f), _, halt)."])
+    //     .args([
+    //         "-c",
+    //         &format!("{scryer_path} -g 'catch((write(ready), asserta((f :- f)), f), _, halt).'")
+    //     ])
+    //     .stdout(Stdio::piped())
+    //     .spawn()
+    //     .unwrap();
 
-    assert!(Command::new("kill")
-        .args(["-s", "INT", &pid.to_string()])
-        //.arg("-SIGINT")
-        //.arg(pid.to_string())
-        .status()
-        .unwrap()
-        .success());
+    // let pid = child.id();
 
-    stdout.read_exact(&mut buf).unwrap();
+    // std::thread::sleep(std::time::Duration::from_millis(60000));
+    // let mut buf = [0; 1];
+    // let mut stdout = child.stdout.take().unwrap();
+    // stdout.read_exact(&mut buf).unwrap();
 
     // assert!(Command::new("kill")
-    //     .arg("-SIGINT")
-    //     .arg(pid.to_string())
+    //     .args(["-s", "INT", &pid.to_string()])
+    //     //.arg("-SIGINT")
+    //     //.arg(pid.to_string())
     //     .status()
     //     .unwrap()
     //     .success());
 
-    std::thread::sleep(std::time::Duration::from_millis(5000));
-    child.try_wait().expect("Should exit after two SIGINTs");
+    // stdout.read_exact(&mut buf).unwrap();
+
+    // // assert!(Command::new("kill")
+    // //     .arg("-SIGINT")
+    // //     .arg(pid.to_string())
+    // //     .status()
+    // //     .unwrap()
+    // //     .success());
+
+    // std::thread::sleep(std::time::Duration::from_millis(5000));
+    // child.try_wait().expect("Should exit after two SIGINTs");
 }
