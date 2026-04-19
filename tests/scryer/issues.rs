@@ -1,7 +1,7 @@
 use crate::helper::load_module_test;
 use crate::helper::load_module_test_with_input;
 #[cfg(not(target_arch = "wasm32"))]
-use crate::helper::load_module_test_with_tokio_runtime;
+use crate::helper::load_module_test_with_tokio_runtime_and_input;
 use serial_test::serial;
 
 // issue #831
@@ -167,10 +167,10 @@ fn issue3262_read_from_stdin_no_newline() {
 #[cfg(feature = "http")]
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-#[cfg_attr(not(miri), ignore = "flaky due to network requests")]
 fn http_open_hanging() {
-    load_module_test_with_tokio_runtime(
+    load_module_test_with_tokio_runtime_and_input(
         "tests-pl/issue-http_open-hanging.pl",
+        format!("PROLOG={:?}.", env!("CARGO_BIN_EXE_scryer-prolog")),
             "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
     );
 }
