@@ -396,7 +396,7 @@ impl<T: CopierTarget> CopyTermState<T> {
                 }
             }
             (HeapCellValueTag::Lis, h) => {
-		let index = rd.get_value() as usize;
+                let index = rd.get_value() as usize;
                 if h >= self.old_h && self.target[index].get_mark_bit() {
                     *self.value_at_scan() = heap_loc_as_cell!(
                         if ra.get_forwarding_bit() {
