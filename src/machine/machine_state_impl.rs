@@ -557,10 +557,10 @@ impl MachineState {
     }
 
     pub fn compare_term_test(&self, h1: HeapCellValue, h2: HeapCellValue) -> Option<Ordering> {
-	// all derefs downstack from this function are heap bound so
-	// dereference stack vars pointing into the heap while possible
-	let h1 = self.store(h1);
-	let h2 = self.store(h2);
+        // all derefs downstack from this function are heap bound so
+        // dereference stack vars pointing into the heap while possible
+        let h1 = self.store(h1);
+        let h2 = self.store(h2);
 
         for term_pair in ParallelHeapIter::from(self, h1, h2) {
             match term_pair {
