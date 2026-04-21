@@ -26,6 +26,7 @@ struct ArithmeticTerm;
 struct Atom;
 struct CodeIndex;
 struct Death;
+struct ExternalIndexingCodePtr;
 struct HeapCellValue;
 struct IndexingLine;
 struct Level;
@@ -198,7 +199,7 @@ enum ReplCodePtr {
     Asserta,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$assertz")))]
     Assertz,
-    #[strum_discriminants(strum(props(Arity = "4", Name = "$retract_clause")))]
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$retract_clause")))]
     Retract,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$is_consistent_with_term_queue")))]
     IsConsistentWithTermQueue,
@@ -629,10 +630,6 @@ enum SystemClauseType {
     FastCallN(usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "$is_expanded_or_inlined")))]
     IsExpandedOrInlined,
-    #[strum_discriminants(strum(props(Arity = "3", Name = "$get_clause_p")))]
-    GetClauseP,
-    #[strum_discriminants(strum(props(Arity = "6", Name = "$invoke_clause_at_p")))]
-    InvokeClauseAtP,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$get_from_attr_list")))]
     GetFromAttributedVarList,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$put_to_attr_list")))]
@@ -826,8 +823,9 @@ enum InstructionTemplate {
     #[strum_discriminants(strum(props(Arity = "0", Name = "proceed")))]
     Proceed,
     // indexing.
-    #[strum_discriminants(strum(props(Arity = "1", Name = "indexing_code")))]
-    IndexingCode(Vec<IndexingLine>),
+    #[strum_discriminants(strum(props(Arity = "2", Name = "indexing_code")))]
+
+    IndexingCode(ExternalIndexingCodePtr, Vec<IndexingLine>),
     // break from loop instruction.
     #[strum_discriminants(strum(props(Arity = "0", Name = "break_from_dispatch")))]
     BreakFromDispatchLoop,

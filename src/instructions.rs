@@ -9,10 +9,10 @@ use crate::machine::machine_indices::CodeIndex;
 use crate::parser::ast::*;
 use crate::types::*;
 
-use fxhash::FxBuildHasher;
-use indexmap::IndexMap;
+use hashbrown::hash_table::*;
 
 use std::collections::VecDeque;
+use std::fmt::Debug;
 use std::rc::Rc;
 
 include!(concat!(env!("OUT_DIR"), "/instructions.rs"));
@@ -74,115 +74,58 @@ pub enum Death {
     Infinity,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum IndexedChoiceInstruction {
-    Retry(usize),
-    DefaultRetry(usize),
-    Trust(usize),
-    DefaultTrust(usize),
-    Try(usize),
-}
+pub type DynamicIndexedChoiceInstructionOffset = usize;
 
-impl IndexedChoiceInstruction {
-    pub(crate) fn offset(&self) -> usize {
-        match *self {
-            IndexedChoiceInstruction::Retry(offset) => offset,
-            IndexedChoiceInstruction::Trust(offset) => offset,
-            IndexedChoiceInstruction::Try(offset) => offset,
-            IndexedChoiceInstruction::DefaultRetry(offset) => offset,
-            IndexedChoiceInstruction::DefaultTrust(offset) => offset,
-        }
-    }
-
-    pub(crate) fn to_functor(self) -> MachineStub {
-        match self {
-            IndexedChoiceInstruction::Try(offset) => {
-                functor!(atom!("try"), [fixnum(offset)])
-            }
-            IndexedChoiceInstruction::Trust(offset) => {
-                functor!(atom!("trust"), [fixnum(offset)])
-            }
-            IndexedChoiceInstruction::Retry(offset) => {
-                functor!(atom!("retry"), [fixnum(offset)])
-            }
-            IndexedChoiceInstruction::DefaultTrust(offset) => {
-                functor!(atom!("default_trust"), [fixnum(offset)])
-            }
-            IndexedChoiceInstruction::DefaultRetry(offset) => {
-                functor!(atom!("default_retry"), [fixnum(offset)])
-            }
-        }
-    }
-}
-
-/// `IndexingInstruction` cf. page 110 of wambook.
 #[allow(clippy::enum_variant_names)]
-#[derive(Clone, Debug)]
-pub enum IndexingInstruction {
-    // The first index is the optimal argument being indexed.
+#[derive(Debug, Clone)]
+pub enum IndexedChoiceInstructionTable {
     SwitchOnTerm(
         usize,
-        IndexingCodePtr,
-        IndexingCodePtr,
-        IndexingCodePtr,
-        IndexingCodePtr,
+        usize,
+        TermIndexingCodePtr,
+        TermIndexingCodePtr,
+        TermIndexingCodePtr,
     ),
-    SwitchOnConstant(IndexMap<HeapCellValue, IndexingCodePtr, FxBuildHasher>),
-    SwitchOnStructure(IndexMap<(Atom, usize), IndexingCodePtr, FxBuildHasher>),
+    SwitchOnConstant(HashTable<(HeapCellValue, IndexingCodePtr)>),
+    SwitchOnStructure(HashTable<((Atom, usize), IndexingCodePtr)>),
+    OnDemandConstant {
+        reg_num: usize,
+        arity: usize,
+    },
+    OnDemandStructure {
+        reg_num: usize,
+        arity: usize,
+    },
+    OnDemandTerm {
+        var_offset: usize,
+        arg_num: usize,
+        arity: usize,
+    },
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum IndexingCodePtr {
-    External(usize),        // the index points past the indexing instruction prelude.
-    DynamicExternal(usize), // an External index of a dynamic predicate, potentially invalidated by retraction.
-    Fail,
-    Internal(usize), // the index points into the indexing instruction prelude.
-}
-
-impl IndexingCodePtr {
-    #[allow(dead_code)]
-    pub fn to_functor(self) -> MachineStub {
+impl IndexedChoiceInstructionTable {
+    pub(crate) fn to_functor(&self) -> MachineStub {
         match self {
-            IndexingCodePtr::DynamicExternal(o) => functor!(atom!("dynamic_external"), [fixnum(o)]),
-            IndexingCodePtr::External(o) => functor!(atom!("external"), [fixnum(o)]),
-            IndexingCodePtr::Internal(o) => functor!(atom!("internal"), [fixnum(o)]),
-            IndexingCodePtr::Fail => {
-                functor!(atom!("fail"))
-            }
-        }
-    }
-
-    pub fn is_external(&self) -> bool {
-        matches!(
-            self,
-            IndexingCodePtr::External(_) | IndexingCodePtr::DynamicExternal(_)
-        )
-    }
-}
-
-impl IndexingInstruction {
-    pub fn to_functor(&self) -> MachineStub {
-        match self {
-            &IndexingInstruction::SwitchOnTerm(arg, vars, constants, lists, structures) => {
+            &IndexedChoiceInstructionTable::SwitchOnTerm(arg, var_offset, constants, lists, structures) => {
                 functor!(
                     atom!("switch_on_term"),
                     [
                         fixnum(arg),
-                        indexing_code_ptr(vars),
-                        indexing_code_ptr(constants),
-                        indexing_code_ptr(lists),
-                        indexing_code_ptr(structures)
+                        fixnum(var_offset),
+                        term_indexing_code_ptr(constants),
+                        term_indexing_code_ptr(lists),
+                        term_indexing_code_ptr(structures)
                     ]
                 )
             }
-            IndexingInstruction::SwitchOnConstant(constants) => variadic_functor(
+            IndexedChoiceInstructionTable::SwitchOnConstant(constants) => variadic_functor(
                 atom!("switch_on_constants"),
                 1,
                 constants
                     .iter()
                     .map(|(c, ptr)| functor!(atom!(":"), [cell((*c)), indexing_code_ptr((*ptr))])),
             ),
-            IndexingInstruction::SwitchOnStructure(structures) => variadic_functor(
+            IndexedChoiceInstructionTable::SwitchOnStructure(structures) => variadic_functor(
                 atom!("switch_on_structure"),
                 1,
                 structures.iter().map(|((name, arity), ptr)| {
@@ -195,29 +138,238 @@ impl IndexingInstruction {
                     )
                 }),
             ),
+            &IndexedChoiceInstructionTable::OnDemandTerm { arg_num, .. } => {
+                let rt_stub = reg_type_into_functor(temp_v!(arg_num));
+                functor!(atom!("dindex_on_term"), [functor(rt_stub)])
+            }
+            &IndexedChoiceInstructionTable::OnDemandStructure { reg_num, .. } => {
+                let rt_stub = reg_type_into_functor(temp_v!(reg_num));
+                functor!(atom!("dindex_on_structure"), [functor(rt_stub)])
+            }
+            &IndexedChoiceInstructionTable::OnDemandConstant { reg_num, .. } => {
+                let rt_stub = reg_type_into_functor(temp_v!(reg_num));
+                functor!(atom!("dindex_on_constant"), [functor(rt_stub)])
+            }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum IndexedChoiceInstructionOffset {
+    Try(usize),
+    Retry(usize),
+    DefaultRetry(usize),
+    Trust(usize),
+    DefaultTrust(usize),
+}
+
+impl IndexedChoiceInstructionOffset {
+    pub(crate) fn to_functor(&self) -> MachineStub {
+        let offset = self.offset() as i64;
+
+        match self {
+            IndexedChoiceInstructionOffset::Try(_offset) => {
+                functor!(atom!("try"), [fixnum(offset)])
+            }
+            IndexedChoiceInstructionOffset::Trust(_offset) => {
+                functor!(atom!("trust"), [fixnum(offset)])
+            }
+            IndexedChoiceInstructionOffset::Retry(_offset) => {
+                functor!(atom!("retry"), [fixnum(offset)])
+            }
+            IndexedChoiceInstructionOffset::DefaultTrust(_offset) => {
+                functor!(atom!("default_trust"), [fixnum(offset)])
+            }
+            IndexedChoiceInstructionOffset::DefaultRetry(_offset) => {
+                functor!(atom!("default_retry"), [fixnum(offset)])
+            }
+        }
+    }
+}
+
+pub trait HasOffset {
+    fn offset(&self) -> usize;
+}
+
+impl HasOffset for DynamicIndexedChoiceInstructionOffset {
+    fn offset(&self) -> usize {
+        *self
+    }
+}
+
+impl HasOffset for IndexedChoiceInstructionOffset {
+    fn offset(&self) -> usize {
+        match self {
+            &IndexedChoiceInstructionOffset::Try(offset)
+            | &IndexedChoiceInstructionOffset::Retry(offset)
+            | &IndexedChoiceInstructionOffset::Trust(offset)
+            | &IndexedChoiceInstructionOffset::DefaultRetry(offset)
+            | &IndexedChoiceInstructionOffset::DefaultTrust(offset) => offset,
+        }
+    }
+}
+
+pub trait SecondLevelIndexType {
+    type ThirdLevelIndex: Debug + HasOffset;
+
+    fn to_indexing_line(tbl: SecondLevelTable<Self>) -> IndexingLine;
+    fn to_functor(offset: &Self::ThirdLevelIndex) -> MachineStub;
+}
+
+#[derive(Debug, Clone)]
+pub struct IndexedChoiceInstruction;
+#[derive(Debug, Clone)]
+pub struct DynamicIndexedChoiceInstruction;
+
+#[derive(Debug, Clone)]
+pub struct SecondLevelTable<I: ?Sized + SecondLevelIndexType> {
+    pub tables: VecDeque<IndexedChoiceInstructionTable>,
+    pub offsets: VecDeque<I::ThirdLevelIndex>,
+}
+
+impl<I: ?Sized + SecondLevelIndexType> SecondLevelTable<I> {
+    pub fn new() -> Self {
+        Self {
+            tables: VecDeque::new(),
+            offsets: VecDeque::new(),
+        }
+    }
+
+    fn to_functors(&self) -> Vec<MachineStub> {
+        let mut functors = Vec::with_capacity(self.tables.len() + self.offsets.len());
+
+        for table in &self.tables {
+            functors.push(table.to_functor());
+        }
+
+        for offset in &self.offsets {
+            functors.push(I::to_functor(offset));
+        }
+
+        functors
+    }
+}
+
+impl SecondLevelIndexType for IndexedChoiceInstruction {
+    type ThirdLevelIndex = IndexedChoiceInstructionOffset;
+
+    #[inline]
+    fn to_indexing_line(tbl: SecondLevelTable<Self>) -> IndexingLine {
+        IndexingLine::IndexedChoice(tbl)
+    }
+
+    #[inline]
+    fn to_functor(offset: &IndexedChoiceInstructionOffset) -> MachineStub {
+        offset.to_functor()
+    }
+}
+
+impl SecondLevelIndexType for DynamicIndexedChoiceInstruction {
+    type ThirdLevelIndex = DynamicIndexedChoiceInstructionOffset;
+
+    #[inline]
+    fn to_indexing_line(tbl: SecondLevelTable<Self>) -> IndexingLine {
+        IndexingLine::DynamicIndexedChoice(tbl)
+    }
+
+    #[inline]
+    fn to_functor(offset: &DynamicIndexedChoiceInstructionOffset) -> MachineStub {
+        let offset = offset.offset() as i64;
+        functor!(atom!("dynamic_else"), [fixnum(offset)])
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ExternalIndexingCodePtr {
+    Static(usize),
+    Dynamic(usize),
+}
+
+impl ExternalIndexingCodePtr {
+    #[inline]
+    pub fn offset(self) -> usize {
+        match self {
+            ExternalIndexingCodePtr::Static(offset) | ExternalIndexingCodePtr::Dynamic(offset) => {
+                offset
+            }
+        }
+    }
+
+    pub(crate) fn set_offset(&mut self, old_v: usize) {
+        match self {
+            ExternalIndexingCodePtr::Static(offset) | ExternalIndexingCodePtr::Dynamic(offset) => {
+                *offset = old_v;
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TermIndexingCodePtr {
+    External(usize),        // the index points past the indexing instruction prelude.
+    DynamicExternal(usize), // an External index of a dynamic predicate, potentially invalidated by retraction.
+    Fail,
+    Internal(usize),    // index pointing into the IndexingCode vector.
+    TableOffset(usize), // index pointing into the current table vector of a SecondIndexTable<I>.
+}
+
+impl From<IndexingCodePtr> for TermIndexingCodePtr {
+    fn from(value: IndexingCodePtr) -> Self {
+        match value {
+            IndexingCodePtr::External(index) => TermIndexingCodePtr::External(index),
+            IndexingCodePtr::DynamicExternal(index) => TermIndexingCodePtr::DynamicExternal(index),
+            IndexingCodePtr::Internal(index) => TermIndexingCodePtr::Internal(index),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum IndexingCodePtr {
+    External(usize),        // the index points past the indexing instruction prelude.
+    DynamicExternal(usize), // an External index of a dynamic predicate, potentially invalidated by retraction.
+    Internal(usize),        // index pointing into the IndexingCode vector.
+}
+
+impl IndexingCodePtr {
+    #[allow(dead_code)]
+    pub fn to_functor(self) -> MachineStub {
+        match self {
+            IndexingCodePtr::DynamicExternal(o) => functor!(atom!("dynamic_external"), [fixnum(o)]),
+            IndexingCodePtr::External(o) => functor!(atom!("external"), [fixnum(o)]),
+            IndexingCodePtr::Internal(o) => functor!(atom!("internal"), [fixnum(o)]),
+        }
+    }
+
+    pub fn is_external(&self) -> bool {
+        matches!(
+            self,
+            IndexingCodePtr::External(_) | IndexingCodePtr::DynamicExternal(_)
+        )
     }
 }
 
 /// A `Line` is an instruction (cf. page 98 of wambook).
 #[derive(Clone, Debug)]
 pub enum IndexingLine {
-    Indexing(IndexingInstruction),
-    IndexedChoice(VecDeque<IndexedChoiceInstruction>),
-    DynamicIndexedChoice(VecDeque<usize>),
+    IndexedChoice(SecondLevelTable<IndexedChoiceInstruction>),
+    DynamicIndexedChoice(SecondLevelTable<DynamicIndexedChoiceInstruction>),
 }
 
-impl From<IndexingInstruction> for IndexingLine {
+impl IndexingLine {
     #[inline]
-    fn from(instr: IndexingInstruction) -> Self {
-        IndexingLine::Indexing(instr)
+    pub(crate) fn tables(&self) -> &VecDeque<IndexedChoiceInstructionTable> {
+        match self {
+            IndexingLine::IndexedChoice(SecondLevelTable { tables, .. }) => tables,
+            IndexingLine::DynamicIndexedChoice(SecondLevelTable { tables, .. }) => tables,
+        }
     }
-}
 
-impl From<VecDeque<IndexedChoiceInstruction>> for IndexingLine {
     #[inline]
-    fn from(instrs: VecDeque<IndexedChoiceInstruction>) -> Self {
-        IndexingLine::IndexedChoice(instrs.into_iter().collect())
+    pub(crate) fn tables_mut(&mut self) -> &mut VecDeque<IndexedChoiceInstructionTable> {
+        match self {
+            IndexingLine::IndexedChoice(SecondLevelTable { tables, .. }) => tables,
+            IndexingLine::DynamicIndexedChoice(SecondLevelTable { tables, .. }) => tables,
+        }
     }
 }
 
@@ -248,43 +400,16 @@ pub type Code = Vec<Instruction>;
 pub type CodeDeque = VecDeque<Instruction>;
 
 impl Instruction {
-    #[inline]
-    pub fn to_indexing_line_mut(&mut self) -> Option<&mut Vec<IndexingLine>> {
-        match self {
-            Instruction::IndexingCode(indexing_code) => Some(indexing_code),
-            _ => None,
-        }
-    }
-
-    #[inline]
-    pub fn to_indexing_line(&self) -> Option<&Vec<IndexingLine>> {
-        match self {
-            Instruction::IndexingCode(indexing_code) => Some(indexing_code),
-            _ => None,
-        }
-    }
-
     pub fn enqueue_functors(&self, arena: &mut Arena, functors: &mut Vec<MachineStub>) {
         match self {
-            Instruction::IndexingCode(indexing_instrs) => {
+            Instruction::IndexingCode(_, indexing_instrs) => {
                 for indexing_instr in indexing_instrs {
                     match indexing_instr {
-                        IndexingLine::Indexing(indexing_instr) => {
-                            let section = indexing_instr.to_functor();
-                            functors.push(section);
-                        }
-                        IndexingLine::IndexedChoice(indexed_choice_instrs) => {
-                            for indexed_choice_instr in indexed_choice_instrs {
-                                let section = indexed_choice_instr.to_functor();
-                                functors.push(section);
-                            }
+                        IndexingLine::IndexedChoice(indexing_instr) => {
+                            functors.extend(indexing_instr.to_functors());
                         }
                         IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
-                            for indexed_choice_instr in indexed_choice_instrs {
-                                let section =
-                                    functor!(atom!("dynamic"), [fixnum((*indexed_choice_instr))]);
-                                functors.push(section);
-                            }
+                            functors.extend(indexed_choice_instrs.to_functors());
                         }
                     }
                 }
@@ -500,7 +625,7 @@ impl Instruction {
             &Instruction::BitwiseComplement(ref at, t) => {
                 arith_instr_unary_functor(atom!("\\"), arena, at, t)
             }
-            &Instruction::IndexingCode(_) => {
+            &Instruction::IndexingCode(..) => {
                 // this case is covered in enqueue_functors, which
                 // should be called instead (to_functor is a private
                 // function for this reason).
@@ -718,8 +843,6 @@ impl Instruction {
             | &Instruction::CallPrepareCallClause(..)
             | &Instruction::CallCompileInlineOrExpandedGoal
             | &Instruction::CallIsExpandedOrInlined
-            | &Instruction::CallGetClauseP
-            | &Instruction::CallInvokeClauseAtP
             | &Instruction::CallGetFromAttributedVarList
             | &Instruction::CallPutToAttributedVarList
             | &Instruction::CallDeleteFromAttributedVarList
@@ -978,8 +1101,6 @@ impl Instruction {
             | &Instruction::ExecutePrepareCallClause(..)
             | &Instruction::ExecuteCompileInlineOrExpandedGoal
             | &Instruction::ExecuteIsExpandedOrInlined
-            | &Instruction::ExecuteGetClauseP
-            | &Instruction::ExecuteInvokeClauseAtP
             | &Instruction::ExecuteGetFromAttributedVarList
             | &Instruction::ExecutePutToAttributedVarList
             | &Instruction::ExecuteDeleteFromAttributedVarList

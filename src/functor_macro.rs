@@ -2,7 +2,7 @@
 //! heap.
 
 use crate::atom_table::*;
-use crate::instructions::IndexingCodePtr;
+use crate::instructions::{IndexingCodePtr, TermIndexingCodePtr};
 use crate::machine::heap::Heap;
 use crate::parser::ast::Fixnum;
 use crate::types::*;
@@ -62,6 +62,22 @@ macro_rules! build_functor {
      $res_len:expr,
      [$($subfunctor:expr),*]) => ({
         let (inner_functor, cell_size) = indexing_code_ptr($e);
+        let referent = if cell_size == 1 {
+            heap_loc_as_cell!(1u64 + count!($($dt)*) + $res_len)
+        } else {
+            str_loc_as_cell!(1u64 + count!($($dt)*) + $res_len)
+        };
+
+        build_functor!([$($dt($($value),*)),*],
+                       [$($res, )* FunctorElement::Cell(referent)],
+                       1 + cell_size + $res_len,
+                       [$($subfunctor, )* FunctorElement::InnerFunctor(cell_size, inner_functor)])
+    });
+    ([term_indexing_code_ptr($e:expr) $(, $dt:ident($($value:tt),*))*],
+     [$($res:expr),*],
+     $res_len:expr,
+     [$($subfunctor:expr),*]) => ({
+        let (inner_functor, cell_size) = term_indexing_code_ptr($e);
         let referent = if cell_size == 1 {
             heap_loc_as_cell!(1u64 + count!($($dt)*) + $res_len)
         } else {
@@ -179,6 +195,18 @@ macro_rules! build_functor {
     });
 }
 
+pub(crate) fn term_indexing_code_ptr(code_ptr: TermIndexingCodePtr) -> (Vec<FunctorElement>, u64) {
+    match code_ptr {
+        TermIndexingCodePtr::DynamicExternal(o) => {
+            (functor!(atom!("dynamic_external"), [fixnum(o)]), 2)
+        }
+        TermIndexingCodePtr::External(o) => (functor!(atom!("external"), [fixnum(o)]), 2),
+        TermIndexingCodePtr::Fail => (functor!(atom!("fail")), 1),
+        TermIndexingCodePtr::Internal(o) => (functor!(atom!("internal"), [fixnum(o)]), 2),
+        TermIndexingCodePtr::TableOffset(o) => (functor!(atom!("table_offset"), [fixnum(o)]), 2),
+    }
+}
+
 pub(crate) fn indexing_code_ptr(code_ptr: IndexingCodePtr) -> (Vec<FunctorElement>, u64) {
     match code_ptr {
         IndexingCodePtr::DynamicExternal(o) => {
@@ -186,7 +214,6 @@ pub(crate) fn indexing_code_ptr(code_ptr: IndexingCodePtr) -> (Vec<FunctorElemen
         }
         IndexingCodePtr::External(o) => (functor!(atom!("external"), [fixnum(o)]), 2),
         IndexingCodePtr::Internal(o) => (functor!(atom!("internal"), [fixnum(o)]), 2),
-        IndexingCodePtr::Fail => (vec![FunctorElement::Cell(atom_as_cell!(atom!("fail")))], 1),
     }
 }
 

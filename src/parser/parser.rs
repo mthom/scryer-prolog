@@ -4,7 +4,7 @@ use ordered_float::OrderedFloat;
 
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::offset_table::F64Offset;
+use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::lexer::*;

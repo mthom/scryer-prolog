@@ -728,30 +728,6 @@ pub enum Literal {
     F64(F64Offset, OrderedFloat<f64>),
 }
 
-/*
-impl From<F64Ptr<'_>> for Literal {
-    #[inline(always)]
-    fn from(ptr: F64Ptr) -> Literal {
-        Literal::Float(ptr.as_offset())
-    }
-}
-
-impl fmt::Display for Literal {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Literal::Atom(ref atom) => {
-                write!(f, "{}", atom.flat_index())
-            }
-            Literal::CodeIndexOffset(i) => write!(f, "{}", *i),
-            Literal::Fixnum(n) => write!(f, "{}", n.get_num()),
-            Literal::Integer(ref n) => write!(f, "{}", n),
-            Literal::Rational(ref n) => write!(f, "{}", n),
-            Literal::FloatOffset(ref n) => write!(f, "{}", *n),
-        }
-    }
-}
-*/
-
 impl Literal {
     pub fn as_atom(&self, atom_tbl: &Arc<AtomTable>) -> Option<Atom> {
         match self {

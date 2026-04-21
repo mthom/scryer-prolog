@@ -248,7 +248,7 @@ impl TrailEntry {
 
 #[repr(u64)]
 #[bitfield]
-#[derive(Copy, Clone, Hash, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct HeapCellValue {
     val: B56,
     f: bool,

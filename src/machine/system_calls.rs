@@ -25,6 +25,7 @@ use crate::machine::partial_string::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::machine::{Machine, get_structure_index};
+use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
@@ -1197,136 +1198,6 @@ impl Machine {
             self.machine_st.heap[attr_var_loc] = heap_loc_as_cell!(attr_var_loc);
             self.machine_st
                 .trail(TrailRef::Ref(Ref::attr_var(attr_var_loc)));
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn get_clause_p(&self, module_name: Atom) -> (usize, usize) {
-        use crate::machine::loader::CompilationTarget;
-
-        let key_cell = self.machine_st.registers[1];
-        let key = self.machine_st.name_and_arity_from_heap(key_cell).unwrap();
-
-        let compilation_target = if module_name == atom!("user") {
-            CompilationTarget::User
-        } else {
-            CompilationTarget::Module(module_name)
-        };
-
-        let skeleton = self
-            .indices
-            .get_predicate_skeleton(&compilation_target, &key)
-            .unwrap();
-
-        let module_name = match compilation_target {
-            CompilationTarget::User => atom!("builtins"),
-            CompilationTarget::Module(target) => target,
-        };
-
-        let mut bp = self
-            .indices
-            .get_predicate_code_index(atom!("$clause"), 2, module_name)
-            .and_then(|idx| {
-                self.machine_st
-                    .arena
-                    .code_index_tbl
-                    .get_entry(idx.into())
-                    .local()
-            })
-            .unwrap();
-
-        macro_rules! extract_ptr {
-            ($ptr: expr) => {
-                match $ptr {
-                    IndexingCodePtr::External(p) => {
-                        return (
-                            skeleton.core.clause_clause_locs.back().cloned().unwrap(),
-                            bp + p,
-                        )
-                    }
-                    IndexingCodePtr::Internal(boip) => boip,
-                    _ => unreachable!(),
-                }
-            };
-        }
-
-        loop {
-            match &self.code[bp] {
-                Instruction::IndexingCode(indexing_code) => {
-                    let indexing_code_ptr = match &indexing_code[0] {
-                        &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                            _,
-                            _,
-                            c,
-                            _,
-                            s,
-                        )) => {
-                            if key.1 > 0 {
-                                s
-                            } else {
-                                c
-                            }
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    };
-
-                    let boip = extract_ptr!(indexing_code_ptr);
-
-                    let boip = match &indexing_code[boip] {
-                        IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(hm)) => {
-                            boip + extract_ptr!(hm.get(&key).cloned().unwrap())
-                        }
-                        IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(hm)) => {
-                            boip + extract_ptr!(hm.get(&atom_as_cell!(key.0)).cloned().unwrap())
-                        }
-                        _ => boip,
-                    };
-
-                    match &indexing_code[boip] {
-                        IndexingLine::IndexedChoice(indexed_choice) => {
-                            let p = if self.machine_st.b > self.machine_st.e {
-                                // this means the last
-                                // self.machine_st.iip value has yet
-                                // to be overwritten by the Trust
-                                // instruction. In this case, return
-                                // it.
-                                self.machine_st.iip as usize
-                            } else {
-                                // otherwise, read the '$clause'
-                                // choicepoint from the top of the
-                                // stack. this is very volatile in
-                                // that it depends on '$clause'
-                                // immediately preceding
-                                // '$get_clause_p', which cannot be
-                                // the last clause of the retract
-                                // helper to delay deallocation of its
-                                // environment frame.
-                                unsafe {
-                                    self.machine_st.stack.index_dangling_or_frame().prelude.biip
-                                        as usize
-                                }
-                            };
-
-                            return (
-                                skeleton.core.clause_clause_locs[p],
-                                bp + indexed_choice[p].offset(),
-                            );
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-                &Instruction::RevJmpBy(offset) => {
-                    bp -= offset;
-                }
-                _ => {
-                    return (
-                        skeleton.core.clause_clause_locs.back().cloned().unwrap(),
-                        bp,
-                    );
-                }
-            }
         }
     }
 

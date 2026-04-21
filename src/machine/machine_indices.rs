@@ -430,14 +430,14 @@ impl IndexStore {
                 .get(&key)
                 .map(|skeleton| skeleton.core.is_dynamic)
                 .unwrap_or(false),
-            _ => match self.modules.get(&module_name) {
-                Some(module) => module
+            _ => self
+                .modules
+                .get(&module_name)
+                .and_then(|module| module
                     .extensible_predicates
                     .get(&key)
-                    .map(|skeleton| skeleton.core.is_dynamic)
-                    .unwrap_or(false),
-                None => false,
-            },
+                    .map(|skeleton| skeleton.core.is_dynamic))
+                .unwrap_or(false),
         }
     }
 

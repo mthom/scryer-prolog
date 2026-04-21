@@ -361,7 +361,7 @@ impl<T: fmt::Debug + RawBlockTraits> Default for ConcurrentOffsetTable<T> {
 
 /*
  * indirection_tbl maps f64 values to unique offsets so predicate indices on floats work correctly.
- */
+*/
 
 #[derive(Debug)]
 pub struct ConcurrentF64Table {

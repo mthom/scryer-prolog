@@ -1092,7 +1092,7 @@ setof(Template, Goal, Solution) :-
           '$fail'
        ;  '$head_is_dynamic'(Module, H) ->
           '$clause_body_is_valid'(B),
-          Module:'$clause'(H, B)
+          '$call'(Module:'$clause'(H, B, _, _, _))
        ;  throw(error(permission_error(access, private_procedure, Name/Arity),
                       clause/2))
        )
@@ -1115,7 +1115,7 @@ clause(H, B) :-
           '$fail'
        ;  '$head_is_dynamic'(user, H) ->
           '$clause_body_is_valid'(B),
-          '$clause'(H, B)
+          '$clause'(H, B, _, _, _)
        ;  throw(error(permission_error(access, private_procedure, Name/Arity),
                       clause/2))
        )
@@ -1172,33 +1172,13 @@ retract(Clause0) :-
        retract_module_clause(Head, Body, Module)
     ).
 
-retract_clauses([L-P | Ps], Head, Body, Name, Arity, Module) :-
-    '$invoke_clause_at_p'(Head, Body, L, P, N, Module),
-    (  integer(N) ->
-       '$retract_clause'(Name, Arity, N, Module)
-    ;  true % the clause at index N has already been retracted in this
-            % case but unify (Head :- Body) anyway.
-    ),
-    (  Ps == [] -> !
-    ;  true
-    ).
-retract_clauses([_ | Ps], Head, Body, Name, Arity, Module) :-
-    retract_clauses(Ps, Head, Body, Name, Arity, Module).
-
-call_retract_helper(Head, Body, P, Module) :-
+call_retract(Head, Body, Module) :-
     (  Module == user ->
        ClauseQualifier = builtins
     ;  ClauseQualifier = Module
     ),
-    ClauseQualifier:'$clause'(Head, Body),
-    % ensure '$get_clause_p'/3 is not the last clause so it can
-    % recover the choice point of '$clause' if necessary.
-    '$get_clause_p'(Head, P, Module),
-    true.
-
-call_retract(Head, Body, Name, Arity, Module) :-
-    findall(P, builtins:call_retract_helper(Head, Body, P, Module), Ps),
-    retract_clauses(Ps, Head, Body, Name, Arity, Module).
+    '$call'(ClauseQualifier:'$clause'(Head, Body, ClauseLoc, IndexLoc, ClauseClauseLoc)),
+    '$retract_clause'(ClauseLoc, IndexLoc, ClauseClauseLoc).
 
 retract_clause(Head, Body) :-
     (  var(Head) ->
@@ -1213,7 +1193,7 @@ retract_clause(Head, Body) :-
        ;  '$no_such_predicate'(user, Head) ->
           '$fail'
        ;  '$head_is_dynamic'(user, Head) ->
-          call_retract(Head, Body, Name, Arity, user)
+          call_retract(Head, Body, user)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
        )
     ;  throw(error(type_error(callable, Head), retract/1))
@@ -1227,7 +1207,7 @@ retract_module_clause(Head, Body, Module) :-
        (  '$no_such_predicate'(Module, Head) ->
           '$fail'
        ;  '$head_is_dynamic'(Module, Head) ->
-          call_retract(Head, Body, Name, Arity, Module)
+          call_retract(Head, Body, Module)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
        )
     ;  throw(error(type_error(callable, Head), retract/1))

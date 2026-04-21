@@ -2,15 +2,13 @@ use std::sync::atomic;
 
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::functor_macro::*;
+use crate::indexing_iter::IndexedClauseView;
 use crate::instructions::*;
 use crate::machine::arithmetic_ops::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_state::*;
 use crate::machine::*;
 use crate::types::*;
-
-use fxhash::FxBuildHasher;
 
 macro_rules! step_or_fail {
     ($self:expr, $step_e:expr) => {
@@ -207,88 +205,6 @@ impl MachineState {
         }
 
         Ok(())
-    }
-
-    #[inline(always)]
-    pub(crate) fn select_switch_on_term_index(
-        &self,
-        addr: HeapCellValue,
-        v: IndexingCodePtr,
-        c: IndexingCodePtr,
-        l: IndexingCodePtr,
-        s: IndexingCodePtr,
-    ) -> IndexingCodePtr {
-        read_heap_cell!(addr,
-            (HeapCellValueTag::Var |
-             HeapCellValueTag::StackVar |
-             HeapCellValueTag::AttrVar) => {
-                v
-            }
-            (HeapCellValueTag::PStrLoc |
-             HeapCellValueTag::Lis) => {
-                l
-            }
-            (HeapCellValueTag::Fixnum |
-             HeapCellValueTag::CutPoint |
-             HeapCellValueTag::F64Offset) => {
-                c
-            }
-            (HeapCellValueTag::Atom, (_name, arity)) => {
-                debug_assert!(arity == 0);
-                c
-            }
-            (HeapCellValueTag::Str, st) => {
-                let (name, arity) = cell_as_atom_cell!(self.heap[st])
-                    .get_name_and_arity();
-
-                match (name, arity) {
-                    (atom!("."), 2) => l,
-                    (_, 0) => c,
-                    _ => s,
-                }
-            }
-            (HeapCellValueTag::Cons, ptr) => {
-                match ptr.get_tag() {
-                    ArenaHeaderTag::Rational | ArenaHeaderTag::Integer => {
-                        c
-                    }
-                    _ => {
-                        IndexingCodePtr::Fail
-                    }
-                }
-            }
-            _ => {
-                unreachable!();
-            }
-        )
-    }
-
-    #[inline(always)]
-    pub(crate) fn select_switch_on_structure_index(
-        &self,
-        addr: HeapCellValue,
-        hm: &IndexMap<(Atom, usize), IndexingCodePtr, FxBuildHasher>,
-    ) -> IndexingCodePtr {
-        read_heap_cell!(addr,
-            (HeapCellValueTag::Atom, (name, arity)) => {
-                match hm.get(&(name, arity)) {
-                    Some(offset) => *offset,
-                    None => IndexingCodePtr::Fail,
-                }
-            }
-            (HeapCellValueTag::Str, s) => {
-                let (name, arity) = cell_as_atom_cell!(self.heap[s])
-                    .get_name_and_arity();
-
-                match hm.get(&(name, arity)) {
-                    Some(offset) => *offset,
-                    None => IndexingCodePtr::Fail,
-                }
-            }
-            _ => {
-                IndexingCodePtr::Fail
-            }
-        )
     }
 
     #[inline(always)]
@@ -1358,16 +1274,18 @@ impl Machine {
         let p = self.machine_st.p;
 
         let indexed_choice_instrs = match &self.code[p] {
-            Instruction::IndexingCode(indexing_code) => match &indexing_code[oi as usize] {
-                IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => indexed_choice_instrs,
+            Instruction::IndexingCode(_, indexing_code) => match &indexing_code[oi as usize] {
+                IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
+                    indexed_choice_instrs
+                }
                 _ => unreachable!(),
             },
             _ => unreachable!(),
         };
 
         loop {
-            match &indexed_choice_instrs.get(ii as usize) {
-                &Some(&offset) => match &self.code[p + offset - 1] {
+            match indexed_choice_instrs.offsets.get(ii as usize).cloned() {
+                Some(offset) => match &self.code[p + offset - 1] {
                     &Instruction::DynamicInternalElse(birth, death, next_or_fail) => {
                         if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death
                         {
@@ -1379,152 +1297,6 @@ impl Machine {
                     _ => unreachable!(),
                 },
                 None => return None,
-            }
-        }
-    }
-
-    #[inline(always)]
-    fn execute_switch_on_term(&mut self) {
-        #[inline(always)]
-        fn dynamic_external_of_clause_is_valid(machine: &mut Machine, p: usize) -> bool {
-            if let Instruction::DynamicInternalElse(..) = machine.code[p] {
-                machine.machine_st.dynamic_mode = FirstOrNext::First;
-                return true;
-            }
-
-            if let Instruction::DynamicInternalElse(birth, death, _) = machine.code[p - 1] {
-                return birth < machine.machine_st.cc
-                    && Death::Finite(machine.machine_st.cc) <= death;
-            }
-
-            true
-        }
-
-        let indexing_lines = self.code[self.machine_st.p].to_indexing_line_mut().unwrap();
-
-        let mut index = 0;
-        let addr = match &indexing_lines[0] {
-            &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(arg, ..)) => self
-                .machine_st
-                .store(self.machine_st.deref(self.machine_st.registers[arg])),
-            _ => {
-                unreachable!()
-            }
-        };
-
-        loop {
-            match &indexing_lines[index] {
-                &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, c, l, s)) => {
-                    let offset = self
-                        .machine_st
-                        .select_switch_on_term_index(addr, v, c, l, s);
-
-                    match offset {
-                        IndexingCodePtr::Fail => {
-                            self.machine_st.fail = true;
-                            break;
-                        }
-                        IndexingCodePtr::DynamicExternal(o) => {
-                            // either points directly to a
-                            // DynamicInternalElse, or just ahead of
-                            // one. Or neither!
-                            let p = self.machine_st.p;
-
-                            if !dynamic_external_of_clause_is_valid(self, p + o) {
-                                self.machine_st.fail = true;
-                            } else {
-                                self.machine_st.p += o;
-                            }
-
-                            break;
-                        }
-                        IndexingCodePtr::External(o) => {
-                            self.machine_st.p += o;
-                            break;
-                        }
-                        IndexingCodePtr::Internal(o) => {
-                            index += o;
-                        }
-                    }
-                }
-                IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(hm)) => {
-                    // let lit = self.machine_st.constant_to_literal(addr);
-
-                    let offset = match hm.get(&addr) {
-                        Some(offset) => *offset,
-                        _ => IndexingCodePtr::Fail,
-                    };
-
-                    match offset {
-                        IndexingCodePtr::Fail => {
-                            self.machine_st.fail = true;
-                            break;
-                        }
-                        IndexingCodePtr::DynamicExternal(o) => {
-                            // either points directly to a
-                            // DynamicInternalElse, or just ahead of
-                            // one. Or neither!
-                            let p = self.machine_st.p;
-
-                            if !dynamic_external_of_clause_is_valid(self, p + o) {
-                                self.machine_st.fail = true;
-                            } else {
-                                self.machine_st.p += o;
-                            }
-
-                            break;
-                        }
-                        IndexingCodePtr::External(o) => {
-                            self.machine_st.p += o;
-                            break;
-                        }
-                        IndexingCodePtr::Internal(o) => {
-                            index += o;
-                        }
-                    }
-                }
-                IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(hm)) => {
-                    let offset = self.machine_st.select_switch_on_structure_index(addr, hm);
-
-                    match offset {
-                        IndexingCodePtr::Fail => {
-                            self.machine_st.fail = true;
-                            break;
-                        }
-                        IndexingCodePtr::DynamicExternal(o) => {
-                            let p = self.machine_st.p;
-
-                            if !dynamic_external_of_clause_is_valid(self, p + o) {
-                                self.machine_st.fail = true;
-                            } else {
-                                self.machine_st.p += o;
-                            }
-
-                            break;
-                        }
-                        IndexingCodePtr::External(o) => {
-                            self.machine_st.p += o;
-                            break;
-                        }
-                        IndexingCodePtr::Internal(o) => {
-                            index += o;
-                        }
-                    }
-                }
-                &IndexingLine::IndexedChoice(_) => {
-                    self.machine_st.oip = index as u32;
-                    self.machine_st.iip = 0;
-
-                    break;
-                }
-                &IndexingLine::DynamicIndexedChoice(_) => {
-                    self.machine_st.dynamic_mode = FirstOrNext::First;
-
-                    self.machine_st.oip = index as u32;
-                    self.machine_st.iip = 0;
-
-                    break;
-                }
             }
         }
     }
@@ -1628,7 +1400,7 @@ impl Machine {
                     &Instruction::BreakFromDispatchLoop => {
                         break 'outer;
                     }
-                    &Instruction::RunVerifyAttr => {
+                    Instruction::RunVerifyAttr => {
                         self.machine_st.p = self.machine_st.attr_var_init.p;
 
                         if self.code[self.machine_st.p].is_execute() {
@@ -1650,7 +1422,7 @@ impl Machine {
                                 | Instruction::DefaultTrustMe(_)
                                 | Instruction::DynamicElse(..)
                                 | Instruction::DynamicInternalElse(..)
-                                | Instruction::IndexingCode(_)
+                                | Instruction::IndexingCode(..)
                         ) {
                             continue;
                         }
@@ -1659,107 +1431,147 @@ impl Machine {
                         let (_, arity) = self.code[self.machine_st.p].to_name_and_arity();
                         self.run_verify_attr_interrupt(arity);
                     }
-                    &Instruction::Add(ref a1, ref a2, t) => self.machine_st.add_instr(a1, a2, t),
-                    &Instruction::Sub(ref a1, ref a2, t) => self.machine_st.sub_instr(a1, a2, t),
-                    &Instruction::Mul(ref a1, ref a2, t) => self.machine_st.mul_instr(a1, a2, t),
-                    &Instruction::Max(ref a1, ref a2, t) => self.machine_st.max_instr(a1, a2, t),
-                    &Instruction::Min(ref a1, ref a2, t) => self.machine_st.min_instr(a1, a2, t),
-                    &Instruction::IntPow(ref a1, ref a2, t) => {
+                    &mut Instruction::Add(ref a1, ref a2, t) => {
+                        self.machine_st.add_instr(a1, a2, t)
+                    }
+                    &mut Instruction::Sub(ref a1, ref a2, t) => {
+                        self.machine_st.sub_instr(a1, a2, t)
+                    }
+                    &mut Instruction::Mul(ref a1, ref a2, t) => {
+                        self.machine_st.mul_instr(a1, a2, t)
+                    }
+                    &mut Instruction::Max(ref a1, ref a2, t) => {
+                        self.machine_st.max_instr(a1, a2, t)
+                    }
+                    &mut Instruction::Min(ref a1, ref a2, t) => {
+                        self.machine_st.min_instr(a1, a2, t)
+                    }
+                    &mut Instruction::IntPow(ref a1, ref a2, t) => {
                         self.machine_st.int_pow_instr(a1, a2, t)
                     }
-                    &Instruction::Gcd(ref a1, ref a2, t) => self.machine_st.gcd_instr(a1, a2, t),
-                    &Instruction::Pow(ref a1, ref a2, t) => self.machine_st.pow_instr(a1, a2, t),
-                    &Instruction::RDiv(ref a1, ref a2, t) => self.machine_st.rdiv_instr(a1, a2, t),
-                    &Instruction::IntFloorDiv(ref a1, ref a2, t) => {
+                    &mut Instruction::Gcd(ref a1, ref a2, t) => {
+                        self.machine_st.gcd_instr(a1, a2, t)
+                    }
+                    &mut Instruction::Pow(ref a1, ref a2, t) => {
+                        self.machine_st.pow_instr(a1, a2, t)
+                    }
+                    &mut Instruction::RDiv(ref a1, ref a2, t) => {
+                        self.machine_st.rdiv_instr(a1, a2, t)
+                    }
+                    &mut Instruction::IntFloorDiv(ref a1, ref a2, t) => {
                         self.machine_st.int_floor_div_instr(a1, a2, t)
                     }
-                    &Instruction::IDiv(ref a1, ref a2, t) => self.machine_st.idiv_instr(a1, a2, t),
-                    &Instruction::Abs(ref a1, t) => self.machine_st.abs_instr(a1, t),
-                    &Instruction::Sign(ref a1, t) => self.machine_st.sign_instr(a1, t),
-                    &Instruction::Neg(ref a1, t) => self.machine_st.neg_instr(a1, t),
-                    &Instruction::BitwiseComplement(ref a1, t) => {
+                    &mut Instruction::IDiv(ref a1, ref a2, t) => {
+                        self.machine_st.idiv_instr(a1, a2, t)
+                    }
+                    &mut Instruction::Abs(ref a1, t) => self.machine_st.abs_instr(a1, t),
+                    &mut Instruction::Sign(ref a1, t) => self.machine_st.sign_instr(a1, t),
+                    &mut Instruction::Neg(ref a1, t) => self.machine_st.neg_instr(a1, t),
+                    &mut Instruction::BitwiseComplement(ref a1, t) => {
                         self.machine_st.bitwise_complement_instr(a1, t)
                     }
-                    &Instruction::Div(ref a1, ref a2, t) => self.machine_st.div_instr(a1, a2, t),
-                    &Instruction::Shr(ref a1, ref a2, t) => self.machine_st.shr_instr(a1, a2, t),
-                    &Instruction::Shl(ref a1, ref a2, t) => self.machine_st.shl_instr(a1, a2, t),
-                    &Instruction::Xor(ref a1, ref a2, t) => self.machine_st.xor_instr(a1, a2, t),
-                    &Instruction::And(ref a1, ref a2, t) => self.machine_st.and_instr(a1, a2, t),
-                    &Instruction::Or(ref a1, ref a2, t) => self.machine_st.or_instr(a1, a2, t),
-                    &Instruction::Mod(ref a1, ref a2, t) => self.machine_st.mod_instr(a1, a2, t),
-                    &Instruction::Rem(ref a1, ref a2, t) => self.machine_st.rem_instr(a1, a2, t),
-                    &Instruction::Cos(ref a1, t) => self.machine_st.cos_instr(a1, t),
-                    &Instruction::Sin(ref a1, t) => self.machine_st.sin_instr(a1, t),
-                    &Instruction::Tan(ref a1, t) => self.machine_st.tan_instr(a1, t),
-                    &Instruction::Sqrt(ref a1, t) => self.machine_st.sqrt_instr(a1, t),
-                    &Instruction::Log(ref a1, t) => self.machine_st.log_instr(a1, t),
-                    &Instruction::Exp(ref a1, t) => self.machine_st.exp_instr(a1, t),
-                    &Instruction::ACos(ref a1, t) => self.machine_st.acos_instr(a1, t),
-                    &Instruction::ASin(ref a1, t) => self.machine_st.asin_instr(a1, t),
-                    &Instruction::ATan(ref a1, t) => self.machine_st.atan_instr(a1, t),
-                    &Instruction::ATan2(ref a1, ref a2, t) => {
+                    &mut Instruction::Div(ref a1, ref a2, t) => {
+                        self.machine_st.div_instr(a1, a2, t)
+                    }
+                    &mut Instruction::Shr(ref a1, ref a2, t) => {
+                        self.machine_st.shr_instr(a1, a2, t)
+                    }
+                    &mut Instruction::Shl(ref a1, ref a2, t) => {
+                        self.machine_st.shl_instr(a1, a2, t)
+                    }
+                    &mut Instruction::Xor(ref a1, ref a2, t) => {
+                        self.machine_st.xor_instr(a1, a2, t)
+                    }
+                    &mut Instruction::And(ref a1, ref a2, t) => {
+                        self.machine_st.and_instr(a1, a2, t)
+                    }
+                    &mut Instruction::Or(ref a1, ref a2, t) => self.machine_st.or_instr(a1, a2, t),
+                    &mut Instruction::Mod(ref a1, ref a2, t) => {
+                        self.machine_st.mod_instr(a1, a2, t)
+                    }
+                    &mut Instruction::Rem(ref a1, ref a2, t) => {
+                        self.machine_st.rem_instr(a1, a2, t)
+                    }
+                    &mut Instruction::Cos(ref a1, t) => self.machine_st.cos_instr(a1, t),
+                    &mut Instruction::Sin(ref a1, t) => self.machine_st.sin_instr(a1, t),
+                    &mut Instruction::Tan(ref a1, t) => self.machine_st.tan_instr(a1, t),
+                    &mut Instruction::Sqrt(ref a1, t) => self.machine_st.sqrt_instr(a1, t),
+                    &mut Instruction::Log(ref a1, t) => self.machine_st.log_instr(a1, t),
+                    &mut Instruction::Exp(ref a1, t) => self.machine_st.exp_instr(a1, t),
+                    &mut Instruction::ACos(ref a1, t) => self.machine_st.acos_instr(a1, t),
+                    &mut Instruction::ASin(ref a1, t) => self.machine_st.asin_instr(a1, t),
+                    &mut Instruction::ATan(ref a1, t) => self.machine_st.atan_instr(a1, t),
+                    &mut Instruction::ATan2(ref a1, ref a2, t) => {
                         self.machine_st.atan2_instr(a1, a2, t)
                     }
-                    &Instruction::Float(ref a1, t) => self.machine_st.float_instr(a1, t),
-                    &Instruction::Truncate(ref a1, t) => self.machine_st.truncate_instr(a1, t),
-                    &Instruction::Round(ref a1, t) => self.machine_st.round_instr(a1, t),
-                    &Instruction::Ceiling(ref a1, t) => self.machine_st.ceiling_instr(a1, t),
-                    &Instruction::Floor(ref a1, t) => self.machine_st.floor_instr(a1, t),
-                    &Instruction::FloatFractionalPart(ref a1, t) => {
+                    &mut Instruction::Float(ref a1, t) => self.machine_st.float_instr(a1, t),
+                    &mut Instruction::Truncate(ref a1, t) => self.machine_st.truncate_instr(a1, t),
+                    &mut Instruction::Round(ref a1, t) => self.machine_st.round_instr(a1, t),
+                    &mut Instruction::Ceiling(ref a1, t) => self.machine_st.ceiling_instr(a1, t),
+                    &mut Instruction::Floor(ref a1, t) => self.machine_st.floor_instr(a1, t),
+                    &mut Instruction::FloatFractionalPart(ref a1, t) => {
                         self.machine_st.float_fractional_part_instr(a1, t)
                     }
-                    &Instruction::FloatIntegerPart(ref a1, t) => {
+                    &mut Instruction::FloatIntegerPart(ref a1, t) => {
                         self.machine_st.float_integer_part_instr(a1, t)
                     }
-                    &Instruction::Plus(ref a1, t) => self.machine_st.plus_instr(a1, t),
-                    &Instruction::GetLevel(r) => self.machine_st.get_level_instr(r),
-                    &Instruction::GetPrevLevel(r) => self.machine_st.get_prev_level_instr(r),
-                    &Instruction::GetCutPoint(r) => self.machine_st.get_cut_point_instr(r),
-                    &Instruction::Deallocate => self.machine_st.deallocate(),
-                    &Instruction::GetConstant(_, c, reg) => {
+                    &mut Instruction::Plus(ref a1, t) => self.machine_st.plus_instr(a1, t),
+                    &mut Instruction::GetLevel(r) => self.machine_st.get_level_instr(r),
+                    &mut Instruction::GetPrevLevel(r) => self.machine_st.get_prev_level_instr(r),
+                    &mut Instruction::GetCutPoint(r) => self.machine_st.get_cut_point_instr(r),
+                    Instruction::Deallocate => self.machine_st.deallocate(),
+                    &mut Instruction::GetConstant(_, c, reg) => {
                         self.machine_st.get_constant_instr(c, reg)
                     }
-                    &Instruction::GetList(_, reg) => self.machine_st.get_list_instr(reg),
-                    &Instruction::GetPartialString(_, ref string, reg) => {
+                    &mut Instruction::GetList(_, reg) => self.machine_st.get_list_instr(reg),
+                    &mut Instruction::GetPartialString(_, ref string, reg) => {
                         self.machine_st.get_partial_string_instr(string, reg)
                     }
-                    &Instruction::GetStructure(_lvl, name, arity, reg) => {
+                    &mut Instruction::GetStructure(_lvl, name, arity, reg) => {
                         self.machine_st.get_structure_instr(name, arity, reg)
                     }
-                    &Instruction::GetVariable(norm, arg) => {
+                    &mut Instruction::GetVariable(norm, arg) => {
                         self.machine_st.get_variable_instr(norm, arg)
                     }
-                    &Instruction::GetValue(norm, arg) => self.machine_st.get_value_instr(norm, arg),
-                    &Instruction::UnifyConstant(v) => self.machine_st.unify_constant_instr(v),
-                    &Instruction::UnifyLocalValue(reg) => {
+                    &mut Instruction::GetValue(norm, arg) => {
+                        self.machine_st.get_value_instr(norm, arg)
+                    }
+                    &mut Instruction::UnifyConstant(v) => self.machine_st.unify_constant_instr(v),
+                    &mut Instruction::UnifyLocalValue(reg) => {
                         self.machine_st.unify_local_value_instr(reg)
                     }
-                    &Instruction::UnifyVariable(reg) => self.machine_st.unify_variable_instr(reg),
-                    &Instruction::UnifyValue(reg) => self.machine_st.unify_value_instr(reg),
-                    &Instruction::UnifyVoid(n) => self.machine_st.unify_void_instr(n),
-                    &Instruction::PutConstant(_, cell, reg) => {
+                    &mut Instruction::UnifyVariable(reg) => {
+                        self.machine_st.unify_variable_instr(reg)
+                    }
+                    &mut Instruction::UnifyValue(reg) => self.machine_st.unify_value_instr(reg),
+                    &mut Instruction::UnifyVoid(n) => self.machine_st.unify_void_instr(n),
+                    &mut Instruction::PutConstant(_, cell, reg) => {
                         self.machine_st.put_constant_instr(cell, reg)
                     }
-                    &Instruction::PutList(_, reg) => self.machine_st.put_list_instr(reg),
-                    &Instruction::PutPartialString(_, ref string, reg) => {
+                    &mut Instruction::PutList(_, reg) => self.machine_st.put_list_instr(reg),
+                    &mut Instruction::PutPartialString(_, ref string, reg) => {
                         self.machine_st.put_partial_string_instr(string, reg)
                     }
-                    &Instruction::PutStructure(name, arity, reg) => {
+                    &mut Instruction::PutStructure(name, arity, reg) => {
                         self.machine_st.put_structure_instr(name, arity, reg)
                     }
-                    &Instruction::PutUnsafeValue(perm_slot, arg) => {
+                    &mut Instruction::PutUnsafeValue(perm_slot, arg) => {
                         self.machine_st.put_unsafe_value_instr(perm_slot, arg)
                     }
-                    &Instruction::PutValue(norm, arg) => self.machine_st.put_value_instr(norm, arg),
-                    &Instruction::PutVariable(norm, arg) => {
+                    &mut Instruction::PutValue(norm, arg) => {
+                        self.machine_st.put_value_instr(norm, arg)
+                    }
+                    &mut Instruction::PutVariable(norm, arg) => {
                         self.machine_st.put_variable_instr(norm, arg)
                     }
-                    &Instruction::SetConstant(c) => self.machine_st.set_constant_instr(c),
-                    &Instruction::SetLocalValue(reg) => self.machine_st.set_local_value_instr(reg),
-                    &Instruction::SetVariable(reg) => self.machine_st.set_variable_instr(reg),
-                    &Instruction::SetValue(reg) => self.machine_st.set_value_instr(reg),
-                    &Instruction::SetVoid(n) => self.machine_st.set_void_instr(n),
-                    &Instruction::DynamicElse(..) => {
+                    &mut Instruction::SetConstant(c) => self.machine_st.set_constant_instr(c),
+                    &mut Instruction::SetLocalValue(reg) => {
+                        self.machine_st.set_local_value_instr(reg)
+                    }
+                    &mut Instruction::SetVariable(reg) => self.machine_st.set_variable_instr(reg),
+                    &mut Instruction::SetValue(reg) => self.machine_st.set_value_instr(reg),
+                    &mut Instruction::SetVoid(n) => self.machine_st.set_void_instr(n),
+                    Instruction::DynamicElse(..) => {
                         if let FirstOrNext::First = self.machine_st.dynamic_mode {
                             self.machine_st.cc = self.machine_st.global_clock;
                         }
@@ -1847,7 +1659,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::DynamicInternalElse(..) => {
+                    Instruction::DynamicInternalElse(..) => {
                         let p = self.machine_st.p;
 
                         match self.find_living_dynamic_else(p) {
@@ -1930,32 +1742,32 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::TryMeElse(offset) => {
+                    &mut Instruction::TryMeElse(offset) => {
                         backtrack_on_resource_error!(
                             self.machine_st,
                             self.try_me_else(offset),
                             continue
                         );
                     }
-                    &Instruction::DefaultRetryMeElse(offset) => {
+                    &mut Instruction::DefaultRetryMeElse(offset) => {
                         self.retry_me_else(offset);
                     }
-                    &Instruction::DefaultTrustMe(_) => {
+                    Instruction::DefaultTrustMe(_) => {
                         self.trust_me();
                     }
-                    &Instruction::RetryMeElse(offset) => {
+                    &mut Instruction::RetryMeElse(offset) => {
                         self.retry_me_else(offset);
                         increment_call_count!(self.machine_st);
                     }
-                    &Instruction::TrustMe(_) => {
+                    Instruction::TrustMe(_) => {
                         self.trust_me();
                         increment_call_count!(self.machine_st);
                     }
-                    &Instruction::NeckCut => {
+                    Instruction::NeckCut => {
                         self.machine_st.neck_cut();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::Cut(r) => {
+                    &mut Instruction::Cut(r) => {
                         let value = self.machine_st[r];
                         self.machine_st.cut_body(value);
 
@@ -1970,7 +1782,7 @@ impl Machine {
 
                         self.machine_st.p += 1;
                     }
-                    &Instruction::CutPrev(r) => {
+                    &mut Instruction::CutPrev(r) => {
                         let value = self.machine_st[r];
                         self.machine_st.cut_prev_body(value);
 
@@ -1985,14 +1797,14 @@ impl Machine {
 
                         self.machine_st.p += 1;
                     }
-                    &Instruction::Allocate(num_cells) => {
+                    &mut Instruction::Allocate(num_cells) => {
                         backtrack_on_resource_error!(
                             self.machine_st,
                             self.machine_st.allocate(num_cells),
                             continue
                         );
                     }
-                    &Instruction::DefaultCallAcyclicTerm => {
+                    Instruction::DefaultCallAcyclicTerm => {
                         let addr = self.deref_register(1);
 
                         if addr.is_ref() {
@@ -2006,7 +1818,7 @@ impl Machine {
 
                         self.machine_st.p += 1;
                     }
-                    &Instruction::DefaultExecuteAcyclicTerm => {
+                    Instruction::DefaultExecuteAcyclicTerm => {
                         let addr = self.deref_register(1);
 
                         if addr.is_ref() {
@@ -2020,23 +1832,23 @@ impl Machine {
 
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::DefaultCallArg => {
+                    Instruction::DefaultCallArg => {
                         try_or_throw!(self.machine_st, self.machine_st.try_arg(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::DefaultExecuteArg => {
+                    Instruction::DefaultExecuteArg => {
                         try_or_throw!(self.machine_st, self.machine_st.try_arg(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::DefaultCallCompare => {
+                    Instruction::DefaultCallCompare => {
                         try_or_throw!(self.machine_st, self.machine_st.compare(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::DefaultExecuteCompare => {
+                    Instruction::DefaultExecuteCompare => {
                         try_or_throw!(self.machine_st, self.machine_st.compare(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::DefaultCallTermGreaterThan => {
+                    Instruction::DefaultCallTermGreaterThan => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2046,7 +1858,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::DefaultExecuteTermGreaterThan => {
+                    Instruction::DefaultExecuteTermGreaterThan => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2056,7 +1868,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::DefaultCallTermLessThan => {
+                    Instruction::DefaultCallTermLessThan => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2066,7 +1878,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::DefaultExecuteTermLessThan => {
+                    Instruction::DefaultExecuteTermLessThan => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2076,7 +1888,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::DefaultCallTermGreaterThanOrEqual => {
+                    Instruction::DefaultCallTermGreaterThanOrEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2089,7 +1901,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteTermGreaterThanOrEqual => {
+                    Instruction::DefaultExecuteTermGreaterThanOrEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2102,7 +1914,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallTermLessThanOrEqual => {
+                    Instruction::DefaultCallTermLessThanOrEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2115,7 +1927,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteTermLessThanOrEqual => {
+                    Instruction::DefaultExecuteTermLessThanOrEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2128,11 +1940,11 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallCopyTerm => {
+                    Instruction::DefaultCallCopyTerm => {
                         self.machine_st.copy_term(AttrVarPolicy::DeepCopy);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::DefaultExecuteCopyTerm => {
+                    Instruction::DefaultExecuteCopyTerm => {
                         self.machine_st.copy_term(AttrVarPolicy::DeepCopy);
 
                         if self.machine_st.fail {
@@ -2141,7 +1953,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::DefaultCallTermEqual => {
+                    Instruction::DefaultCallTermEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2151,7 +1963,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::DefaultExecuteTermEqual => {
+                    Instruction::DefaultExecuteTermEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2161,25 +1973,25 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::DefaultCallGround => {
+                    Instruction::DefaultCallGround => {
                         if self.machine_st.ground_test() {
                             self.machine_st.backtrack();
                         } else {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::DefaultExecuteGround => {
+                    Instruction::DefaultExecuteGround => {
                         if self.machine_st.ground_test() {
                             self.machine_st.backtrack();
                         } else {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::DefaultCallFunctor => {
+                    Instruction::DefaultCallFunctor => {
                         try_or_throw!(self.machine_st, self.machine_st.try_functor(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::DefaultExecuteFunctor => {
+                    Instruction::DefaultExecuteFunctor => {
                         try_or_throw!(self.machine_st, self.machine_st.try_functor(), continue);
 
                         if self.machine_st.fail {
@@ -2188,7 +2000,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::DefaultCallTermNotEqual => {
+                    Instruction::DefaultCallTermNotEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2198,7 +2010,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::DefaultExecuteTermNotEqual => {
+                    Instruction::DefaultExecuteTermNotEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2208,19 +2020,19 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::DefaultCallSort => {
+                    Instruction::DefaultCallSort => {
                         try_or_throw!(self.machine_st, self.machine_st.sort(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::DefaultExecuteSort => {
+                    Instruction::DefaultExecuteSort => {
                         try_or_throw!(self.machine_st, self.machine_st.sort(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::DefaultCallKeySort => {
+                    Instruction::DefaultCallKeySort => {
                         try_or_throw!(self.machine_st, self.machine_st.keysort(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::DefaultExecuteKeySort => {
+                    Instruction::DefaultExecuteKeySort => {
                         try_or_throw!(self.machine_st, self.machine_st.keysort(), continue);
 
                         if self.machine_st.fail {
@@ -2229,23 +2041,23 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::DefaultCallIs(r, at) => {
+                    &mut Instruction::DefaultCallIs(r, at) => {
                         try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::DefaultExecuteIs(r, at) => {
+                    &mut Instruction::DefaultExecuteIs(r, at) => {
                         try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    Instruction::DefaultCallGetNumber(at) => {
+                    &mut Instruction::DefaultCallGetNumber(ref at) => {
                         try_or_throw!(self.machine_st, self.machine_st.get_number(at), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    Instruction::DefaultExecuteGetNumber(at) => {
+                    &mut Instruction::DefaultExecuteGetNumber(ref at) => {
                         try_or_throw!(self.machine_st, self.machine_st.get_number(at), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallAcyclicTerm => {
+                    Instruction::CallAcyclicTerm => {
                         let addr = self.deref_register(1);
 
                         if addr.is_ref() {
@@ -2260,7 +2072,7 @@ impl Machine {
                         increment_call_count!(self.machine_st);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteAcyclicTerm => {
+                    Instruction::ExecuteAcyclicTerm => {
                         let addr = self.deref_register(1);
 
                         if addr.is_ref() {
@@ -2275,7 +2087,7 @@ impl Machine {
                         increment_call_count!(self.machine_st);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallArg => {
+                    Instruction::CallArg => {
                         try_or_throw!(self.machine_st, self.machine_st.try_arg(), continue);
 
                         if self.machine_st.fail {
@@ -2285,7 +2097,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteArg => {
+                    Instruction::ExecuteArg => {
                         try_or_throw!(self.machine_st, self.machine_st.try_arg(), continue);
 
                         if self.machine_st.fail {
@@ -2295,7 +2107,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallCompare => {
+                    Instruction::CallCompare => {
                         try_or_throw!(self.machine_st, self.machine_st.compare(), continue);
 
                         if self.machine_st.fail {
@@ -2305,7 +2117,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteCompare => {
+                    Instruction::ExecuteCompare => {
                         try_or_throw!(self.machine_st, self.machine_st.compare(), continue);
 
                         if self.machine_st.fail {
@@ -2315,7 +2127,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallTermGreaterThan => {
+                    Instruction::CallTermGreaterThan => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2326,7 +2138,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::ExecuteTermGreaterThan => {
+                    Instruction::ExecuteTermGreaterThan => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2337,7 +2149,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::CallTermLessThan => {
+                    Instruction::CallTermLessThan => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2348,7 +2160,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::ExecuteTermLessThan => {
+                    Instruction::ExecuteTermLessThan => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2359,7 +2171,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::CallTermGreaterThanOrEqual => {
+                    Instruction::CallTermGreaterThanOrEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2373,7 +2185,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteTermGreaterThanOrEqual => {
+                    Instruction::ExecuteTermGreaterThanOrEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2387,7 +2199,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallTermLessThanOrEqual => {
+                    Instruction::CallTermLessThanOrEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2401,7 +2213,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteTermLessThanOrEqual => {
+                    Instruction::ExecuteTermLessThanOrEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2415,7 +2227,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallCopyTerm => {
+                    Instruction::CallCopyTerm => {
                         self.machine_st.copy_term(AttrVarPolicy::DeepCopy);
 
                         if self.machine_st.fail {
@@ -2425,7 +2237,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteCopyTerm => {
+                    Instruction::ExecuteCopyTerm => {
                         self.machine_st.copy_term(AttrVarPolicy::DeepCopy);
 
                         if self.machine_st.fail {
@@ -2435,7 +2247,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallTermEqual => {
+                    Instruction::CallTermEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2446,7 +2258,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteTermEqual => {
+                    Instruction::ExecuteTermEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2457,7 +2269,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallGround => {
+                    Instruction::CallGround => {
                         if self.machine_st.ground_test() {
                             self.machine_st.backtrack();
                         } else {
@@ -2465,7 +2277,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteGround => {
+                    Instruction::ExecuteGround => {
                         if self.machine_st.ground_test() {
                             self.machine_st.backtrack();
                         } else {
@@ -2473,7 +2285,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallFunctor => {
+                    Instruction::CallFunctor => {
                         try_or_throw!(self.machine_st, self.machine_st.try_functor(), continue);
 
                         if self.machine_st.fail {
@@ -2483,7 +2295,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteFunctor => {
+                    Instruction::ExecuteFunctor => {
                         try_or_throw!(self.machine_st, self.machine_st.try_functor(), continue);
 
                         if self.machine_st.fail {
@@ -2493,7 +2305,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallTermNotEqual => {
+                    Instruction::CallTermNotEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2504,7 +2316,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteTermNotEqual => {
+                    Instruction::ExecuteTermNotEqual => {
                         let a1 = self.machine_st.registers[1];
                         let a2 = self.machine_st.registers[2];
 
@@ -2515,7 +2327,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallSort => {
+                    Instruction::CallSort => {
                         try_or_throw!(self.machine_st, self.machine_st.sort(), continue);
 
                         if self.machine_st.fail {
@@ -2525,7 +2337,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteSort => {
+                    Instruction::ExecuteSort => {
                         try_or_throw!(self.machine_st, self.machine_st.sort(), continue);
 
                         if self.machine_st.fail {
@@ -2535,7 +2347,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallKeySort => {
+                    Instruction::CallKeySort => {
                         try_or_throw!(self.machine_st, self.machine_st.keysort(), continue);
 
                         if self.machine_st.fail {
@@ -2545,7 +2357,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteKeySort => {
+                    Instruction::ExecuteKeySort => {
                         try_or_throw!(self.machine_st, self.machine_st.keysort(), continue);
 
                         if self.machine_st.fail {
@@ -2555,7 +2367,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallIs(r, at) => {
+                    &mut Instruction::CallIs(r, at) => {
                         try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
 
                         if self.machine_st.fail {
@@ -2565,7 +2377,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteIs(r, at) => {
+                    &mut Instruction::ExecuteIs(r, at) => {
                         try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
 
                         if self.machine_st.fail {
@@ -2575,7 +2387,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    Instruction::CallGetNumber(at) => {
+                    &mut Instruction::CallGetNumber(ref at) => {
                         try_or_throw!(self.machine_st, self.machine_st.get_number(at), continue);
 
                         if self.machine_st.fail {
@@ -2585,7 +2397,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    Instruction::ExecuteGetNumber(at) => {
+                    &mut Instruction::ExecuteGetNumber(ref at) => {
                         try_or_throw!(self.machine_st, self.machine_st.get_number(at), continue);
 
                         if self.machine_st.fail {
@@ -2595,7 +2407,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallN(arity) => {
+                    &mut Instruction::CallN(arity) => {
                         let pred = self.machine_st.registers[1];
 
                         for i in 2..arity + 1 {
@@ -2612,7 +2424,7 @@ impl Machine {
                             increment_call_count!(self.machine_st);
                         }
                     }
-                    &Instruction::ExecuteN(arity) => {
+                    &mut Instruction::ExecuteN(arity) => {
                         let pred = self.machine_st.registers[1];
 
                         for i in 2..arity + 1 {
@@ -2633,7 +2445,7 @@ impl Machine {
                             increment_call_count!(self.machine_st);
                         }
                     }
-                    &Instruction::DefaultCallN(arity) => {
+                    &mut Instruction::DefaultCallN(arity) => {
                         let pred = self.machine_st.registers[1];
 
                         for i in 2..arity + 1 {
@@ -2648,7 +2460,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::DefaultExecuteN(arity) => {
+                    &mut Instruction::DefaultExecuteN(arity) => {
                         let pred = self.machine_st.registers[1];
 
                         for i in 2..arity + 1 {
@@ -3184,7 +2996,7 @@ impl Machine {
                         }
                     }
                     //
-                    &Instruction::CallIsAtom(r) => {
+                    &mut Instruction::CallIsAtom(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3212,7 +3024,7 @@ impl Machine {
                             }
                         );
                     }
-                    &Instruction::ExecuteIsAtom(r) => {
+                    &mut Instruction::ExecuteIsAtom(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3240,7 +3052,7 @@ impl Machine {
                             }
                         );
                     }
-                    &Instruction::CallIsAtomic(r) => {
+                    &mut Instruction::CallIsAtomic(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3272,7 +3084,7 @@ impl Machine {
                             }
                         );
                     }
-                    &Instruction::ExecuteIsAtomic(r) => {
+                    &mut Instruction::ExecuteIsAtomic(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3304,7 +3116,7 @@ impl Machine {
                             }
                         );
                     }
-                    &Instruction::CallIsCompound(r) => {
+                    &mut Instruction::CallIsCompound(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3337,7 +3149,7 @@ impl Machine {
                             }
                         );
                     }
-                    &Instruction::ExecuteIsCompound(r) => {
+                    &mut Instruction::ExecuteIsCompound(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3370,7 +3182,7 @@ impl Machine {
                             }
                         );
                     }
-                    &Instruction::CallIsInteger(r) => {
+                    &mut Instruction::CallIsInteger(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3391,7 +3203,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteIsInteger(r) => {
+                    &mut Instruction::ExecuteIsInteger(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3412,7 +3224,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallIsNumber(r) => {
+                    &mut Instruction::CallIsNumber(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3426,7 +3238,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteIsNumber(r) => {
+                    &mut Instruction::ExecuteIsNumber(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3440,7 +3252,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallIsRational(r) => {
+                    &mut Instruction::CallIsRational(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3464,7 +3276,7 @@ impl Machine {
                             }
                         );
                     }
-                    &Instruction::ExecuteIsRational(r) => {
+                    &mut Instruction::ExecuteIsRational(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3488,7 +3300,7 @@ impl Machine {
                             }
                         );
                     }
-                    &Instruction::CallIsFloat(r) => {
+                    &mut Instruction::CallIsFloat(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3502,7 +3314,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteIsFloat(r) => {
+                    &mut Instruction::ExecuteIsFloat(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3516,7 +3328,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallIsNonVar(r) => {
+                    &mut Instruction::CallIsNonVar(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3532,7 +3344,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteIsNonVar(r) => {
+                    &mut Instruction::ExecuteIsNonVar(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3548,7 +3360,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallIsVar(r) => {
+                    &mut Instruction::CallIsVar(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3564,7 +3376,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteIsVar(r) => {
+                    &mut Instruction::ExecuteIsVar(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3580,7 +3392,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallNamed(arity, name, idx) => {
+                    &mut Instruction::CallNamed(arity, name, idx) => {
                         let idx = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
 
                         try_or_throw!(self.machine_st, self.try_call(name, arity, idx), continue);
@@ -3591,7 +3403,7 @@ impl Machine {
                             increment_call_count!(self.machine_st);
                         }
                     }
-                    &Instruction::ExecuteNamed(arity, name, idx) => {
+                    &mut Instruction::ExecuteNamed(arity, name, idx) => {
                         let idx = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
 
                         try_or_throw!(
@@ -3606,7 +3418,7 @@ impl Machine {
                             increment_call_count!(self.machine_st);
                         }
                     }
-                    &Instruction::DefaultCallNamed(arity, name, idx) => {
+                    &mut Instruction::DefaultCallNamed(arity, name, idx) => {
                         let idx = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
 
                         try_or_throw!(self.machine_st, self.try_call(name, arity, idx), continue);
@@ -3615,7 +3427,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::DefaultExecuteNamed(arity, name, idx) => {
+                    &mut Instruction::DefaultExecuteNamed(arity, name, idx) => {
                         let idx = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
 
                         try_or_throw!(
@@ -3628,159 +3440,222 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::JmpByCall(offset) => {
+                    &mut Instruction::JmpByCall(offset) => {
                         self.machine_st.p += offset;
                     }
-                    &Instruction::RevJmpBy(offset) => {
+                    &mut Instruction::RevJmpBy(offset) => {
                         self.machine_st.p -= offset;
                     }
-                    &Instruction::Proceed => {
+                    Instruction::Proceed => {
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    Instruction::IndexingCode(indexing_lines) => {
-                        match &indexing_lines[self.machine_st.oip as usize] {
-                            IndexingLine::Indexing(_) => {
-                                self.execute_switch_on_term();
+                    // TODO probably add an is_extensible flag here??
+                    &mut Instruction::IndexingCode(var_offset, _) => {
+                        if self.machine_st.oip == 0 && self.machine_st.iip == 0 {
+                            if let Some(mut view) = IndexedClauseView::try_from_code(
+                                &mut self.code[self.machine_st.p..],
+                            ) {
+                                #[inline(always)]
+                                fn dynamic_external_of_clause_is_valid(machine: &mut Machine, p: usize) -> bool {
+                                    if let Instruction::DynamicInternalElse(..) = machine.code[p] {
+                                        machine.machine_st.dynamic_mode = FirstOrNext::First;
+                                        return true;
+                                    }
 
-                                if self.machine_st.fail {
-                                    self.machine_st.backtrack();
+                                    if let Instruction::DynamicInternalElse(birth, death, _) = machine.code[p - 1] {
+                                        return birth < machine.machine_st.cc
+                                            && Death::Finite(machine.machine_st.cc) <= death;
+                                    }
+
+                                    true
                                 }
-                            }
-                            IndexingLine::IndexedChoice(indexed_choice) => {
-                                match indexed_choice[self.machine_st.iip as usize] {
-                                    IndexedChoiceInstruction::Try(offset) => {
-                                        backtrack_on_resource_error!(
-                                            self.machine_st,
-                                            self.indexed_try(offset),
-                                            continue
-                                        );
+
+                                match self.machine_st.switch_on_term(&mut view) {
+                                    SwitchOnTermResult::Fail => {
+                                        self.machine_st.fail = true;
+                                        self.machine_st.backtrack();
+
+                                        continue;
                                     }
-                                    IndexedChoiceInstruction::Retry(l) => {
-                                        self.retry(l);
-                                        increment_call_count!(self.machine_st);
+                                    SwitchOnTermResult::DynamicExternal(o) => {
+                                        // either points directly to a
+                                        // DynamicInternalElse, or just ahead of
+                                        // one. Or neither!
+                                        let p = self.machine_st.p;
+
+                                        if !dynamic_external_of_clause_is_valid(self, p + o) {
+                                            self.machine_st.fail = true;
+                                            self.machine_st.backtrack();
+                                        } else {
+                                            self.machine_st.p += o;
+                                        }
+
+                                        continue;
                                     }
-                                    IndexedChoiceInstruction::DefaultRetry(l) => {
-                                        self.retry(l);
+                                    SwitchOnTermResult::External(o) => {
+                                        self.machine_st.p += o;
+                                        continue;
                                     }
-                                    IndexedChoiceInstruction::Trust(l) => {
-                                        self.trust(l);
-                                        increment_call_count!(self.machine_st);
+                                    SwitchOnTermResult::Internal(o) => {
+                                        self.machine_st.oip = o as u32;
+                                        self.machine_st.iip = 0;
                                     }
-                                    IndexedChoiceInstruction::DefaultTrust(l) => {
-                                        self.trust(l);
+                                    SwitchOnTermResult::DynamicInternal(o) => {
+                                        self.machine_st.dynamic_mode = FirstOrNext::First;
+
+                                        self.machine_st.oip = o as u32;
+                                        self.machine_st.iip = 0;
+                                    }
+                                    SwitchOnTermResult::Variadic => {
+                                        self.machine_st.p += var_offset.offset();
+                                        continue;
                                     }
                                 }
+                            } else {
+                                unreachable!(
+                                    "this statically cannot fail under the definition of try_from_code"
+                                )
                             }
-                            IndexingLine::DynamicIndexedChoice(_) => {
-                                let p = self.machine_st.p;
+                        }
 
-                                match self
-                                    .find_living_dynamic(self.machine_st.oip, self.machine_st.iip)
-                                {
-                                    Some((offset, oi, ii, is_next_clause)) => {
-                                        self.machine_st.p = p;
-                                        self.machine_st.oip = oi;
-                                        self.machine_st.iip = ii;
+                        if let Instruction::IndexingCode(_, indexing) = &self.code[self.machine_st.p] {
+                            match &indexing[self.machine_st.oip as usize] {
+                                IndexingLine::IndexedChoice(indexed_choice) => {
+                                    match &indexed_choice.offsets[self.machine_st.iip as usize] {
+                                        &IndexedChoiceInstructionOffset::Try(offset) => {
+                                            backtrack_on_resource_error!(
+                                                self.machine_st,
+                                                self.indexed_try(offset),
+                                                continue
+                                            );
+                                        }
+                                        &IndexedChoiceInstructionOffset::Retry(l) => {
+                                            self.retry(l);
+                                            increment_call_count!(self.machine_st);
+                                        }
+                                        &IndexedChoiceInstructionOffset::DefaultRetry(l) => {
+                                            self.retry(l);
+                                        }
+                                        &IndexedChoiceInstructionOffset::Trust(l) => {
+                                            self.trust(l);
+                                            increment_call_count!(self.machine_st);
+                                        }
+                                        &IndexedChoiceInstructionOffset::DefaultTrust(l) => {
+                                            self.trust(l);
+                                        }
+                                    }
+                                }
+                                IndexingLine::DynamicIndexedChoice(_) => {
+                                    let p = self.machine_st.p;
 
-                                        match self.machine_st.dynamic_mode {
-                                            FirstOrNext::First if !is_next_clause => {
-                                                self.machine_st.p = p + offset;
-                                            }
-                                            FirstOrNext::First => {
-                                                // there's a leading DynamicElse that sets self.machine_st.cc.
-                                                // self.machine_st.cc = self.machine_st.global_clock;
+                                    match self
+                                        .find_living_dynamic(self.machine_st.oip, self.machine_st.iip)
+                                    {
+                                        Some((offset, oi, ii, is_next_clause)) => {
+                                            self.machine_st.p = p;
+                                            self.machine_st.oip = oi;
+                                            self.machine_st.iip = ii;
 
-                                                // see that there is a following dynamic_else
-                                                // clause so we avoid generating a choice
-                                                // point in case there isn't.
-                                                match self.find_living_dynamic(oi, ii + 1) {
-                                                    Some(_) => {
-                                                        self.machine_st.registers
-                                                            [self.machine_st.num_of_args + 1] = fixnum_as_cell!(
-                                                            /* FIXME this is not safe */
-                                                            unsafe {
-                                                                Fixnum::build_with_unchecked(
-                                                                    self.machine_st.cc as i64,
-                                                                )
-                                                            }
-                                                        );
-
-                                                        self.machine_st.num_of_args += 1;
-                                                        backtrack_on_resource_error!(
-                                                            self.machine_st,
-                                                            self.indexed_try(offset),
-                                                            continue
-                                                        );
-                                                        self.machine_st.num_of_args -= 1;
-                                                    }
-                                                    None => {
-                                                        self.machine_st.p = p + offset;
-                                                        self.machine_st.oip = 0;
-                                                        self.machine_st.iip = 0;
-                                                    }
+                                            match self.machine_st.dynamic_mode {
+                                                FirstOrNext::First if !is_next_clause => {
+                                                    self.machine_st.p = p + offset;
                                                 }
-                                            }
-                                            FirstOrNext::Next => {
-                                                let b = self.machine_st.b;
-                                                let n = self
-                                                    .machine_st
-                                                    .stack
-                                                    .index_or_frame(b)
-                                                    .prelude
-                                                    .num_cells;
+                                                FirstOrNext::First => {
+                                                    // there's a leading DynamicElse that sets self.machine_st.cc.
+                                                    // self.machine_st.cc = self.machine_st.global_clock;
 
-                                                self.machine_st.cc = unsafe {
-                                                    self.machine_st.stack
-                                                        [stack_loc!(OrFrame, b, n - 1)]
-                                                    .to_fixnum_or_cut_point_unchecked()
-                                                }
-                                                .get_num()
-                                                    as usize;
-
-                                                if is_next_clause {
-                                                    match self.find_living_dynamic(
-                                                        self.machine_st.oip,
-                                                        self.machine_st.iip + 1,
-                                                    ) {
-                                                        // if we're executing the last instruction
-                                                        // of the internal block pointed to by
-                                                        // self.machine_st.iip, we want trust, not retry.
-                                                        // this is true iff ii + 1 < len.
+                                                    // see that there is a following dynamic_else
+                                                    // clause so we avoid generating a choice
+                                                    // point in case there isn't.
+                                                    match self.find_living_dynamic(oi, ii + 1) {
                                                         Some(_) => {
-                                                            self.retry(offset);
-                                                            increment_call_count!(self.machine_st);
+                                                            self.machine_st.registers
+                                                                [self.machine_st.num_of_args + 1] = fixnum_as_cell!(
+                                                                    /* FIXME this is not safe */
+                                                                    unsafe {
+                                                                        Fixnum::build_with_unchecked(
+                                                                            self.machine_st.cc as i64,
+                                                                        )
+                                                                    }
+                                                                );
+
+                                                            self.machine_st.num_of_args += 1;
+                                                            backtrack_on_resource_error!(
+                                                                self.machine_st,
+                                                                self.indexed_try(offset),
+                                                                continue
+                                                            );
+                                                            self.machine_st.num_of_args -= 1;
                                                         }
-                                                        _ => {
-                                                            self.trust(offset);
-                                                            increment_call_count!(self.machine_st);
+                                                        None => {
+                                                            self.machine_st.p = p + offset;
+                                                            self.machine_st.oip = 0;
+                                                            self.machine_st.iip = 0;
                                                         }
                                                     }
-                                                } else {
-                                                    self.trust(offset);
-                                                    increment_call_count!(self.machine_st);
+                                                }
+                                                FirstOrNext::Next => {
+                                                    let b = self.machine_st.b;
+                                                    let n = self
+                                                        .machine_st
+                                                        .stack
+                                                        .index_or_frame(b)
+                                                        .prelude
+                                                        .num_cells;
+
+                                                    self.machine_st.cc = unsafe {
+                                                        self.machine_st.stack
+                                                            [stack_loc!(OrFrame, b, n - 1)]
+                                                            .to_fixnum_or_cut_point_unchecked()
+                                                    }
+                                                    .get_num()
+                                                        as usize;
+
+                                                    if is_next_clause {
+                                                        match self.find_living_dynamic(
+                                                            self.machine_st.oip,
+                                                            self.machine_st.iip + 1,
+                                                        ) {
+                                                            // if we're executing the last instruction
+                                                            // of the internal block pointed to by
+                                                            // self.machine_st.iip, we want trust, not retry.
+                                                            // this is true iff ii + 1 < len.
+                                                            Some(_) => {
+                                                                self.retry(offset);
+                                                                increment_call_count!(self.machine_st);
+                                                            }
+                                                            _ => {
+                                                                self.trust(offset);
+                                                                increment_call_count!(self.machine_st);
+                                                            }
+                                                        }
+                                                    } else {
+                                                        self.trust(offset);
+                                                        increment_call_count!(self.machine_st);
+                                                    }
                                                 }
                                             }
                                         }
+                                        None => {
+                                            self.machine_st.fail = true;
+                                        }
                                     }
-                                    None => {
-                                        self.machine_st.fail = true;
+
+                                    self.machine_st.dynamic_mode = FirstOrNext::Next;
+
+                                    if self.machine_st.fail {
+                                        self.machine_st.backtrack();
                                     }
-                                }
-
-                                self.machine_st.dynamic_mode = FirstOrNext::Next;
-
-                                if self.machine_st.fail {
-                                    self.machine_st.backtrack();
                                 }
                             }
                         }
                     }
                     //
-                    &Instruction::CallAtomChars => {
+                    Instruction::CallAtomChars => {
                         self.atom_chars();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteAtomChars => {
+                    Instruction::ExecuteAtomChars => {
                         self.atom_chars();
 
                         if self.machine_st.fail {
@@ -3789,7 +3664,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallAtomCodes => {
+                    Instruction::CallAtomCodes => {
                         try_or_throw!(self.machine_st, self.atom_codes(), continue);
 
                         if self.machine_st.fail {
@@ -3798,7 +3673,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteAtomCodes => {
+                    Instruction::ExecuteAtomCodes => {
                         try_or_throw!(self.machine_st, self.atom_codes(), continue);
 
                         if self.machine_st.fail {
@@ -3807,237 +3682,237 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallAtomLength => {
+                    Instruction::CallAtomLength => {
                         self.atom_length();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteAtomLength => {
+                    Instruction::ExecuteAtomLength => {
                         self.atom_length();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallBindFromRegister => {
+                    Instruction::CallBindFromRegister => {
                         self.bind_from_register();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteBindFromRegister => {
+                    Instruction::ExecuteBindFromRegister => {
                         self.bind_from_register();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallContinuation => {
+                    Instruction::CallContinuation => {
                         try_or_throw!(self.machine_st, self.call_continuation(false), continue);
                     }
-                    &Instruction::ExecuteContinuation => {
+                    Instruction::ExecuteContinuation => {
                         try_or_throw!(self.machine_st, self.call_continuation(true), continue);
                     }
-                    &Instruction::CallCharCode => {
+                    Instruction::CallCharCode => {
                         try_or_throw!(self.machine_st, self.char_code(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCharCode => {
+                    Instruction::ExecuteCharCode => {
                         try_or_throw!(self.machine_st, self.char_code(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCharType => {
+                    Instruction::CallCharType => {
                         self.char_type();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCharType => {
+                    Instruction::ExecuteCharType => {
                         self.char_type();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCharsToNumber => {
+                    Instruction::CallCharsToNumber => {
                         try_or_throw!(self.machine_st, self.chars_to_number(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCharsToNumber => {
+                    Instruction::ExecuteCharsToNumber => {
                         try_or_throw!(self.machine_st, self.chars_to_number(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCodesToNumber => {
+                    Instruction::CallCodesToNumber => {
                         try_or_throw!(self.machine_st, self.codes_to_number(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCodesToNumber => {
+                    Instruction::ExecuteCodesToNumber => {
                         try_or_throw!(self.machine_st, self.codes_to_number(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCopyTermWithoutAttrVars => {
+                    Instruction::CallCopyTermWithoutAttrVars => {
                         self.copy_term_without_attr_vars();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCopyTermWithoutAttrVars => {
+                    Instruction::ExecuteCopyTermWithoutAttrVars => {
                         self.copy_term_without_attr_vars();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCheckCutPoint => {
+                    Instruction::CallCheckCutPoint => {
                         self.check_cut_point();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCheckCutPoint => {
+                    Instruction::ExecuteCheckCutPoint => {
                         self.check_cut_point();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallClose => {
+                    Instruction::CallClose => {
                         try_or_throw!(self.machine_st, self.close(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteClose => {
+                    Instruction::ExecuteClose => {
                         try_or_throw!(self.machine_st, self.close(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallCopyToLiftedHeap => {
+                    Instruction::CallCopyToLiftedHeap => {
                         self.copy_to_lifted_heap();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCopyToLiftedHeap => {
+                    Instruction::ExecuteCopyToLiftedHeap => {
                         self.copy_to_lifted_heap();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCreatePartialString => {
+                    Instruction::CallCreatePartialString => {
                         self.create_partial_string();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCreatePartialString => {
+                    Instruction::ExecuteCreatePartialString => {
                         self.create_partial_string();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCurrentHostname => {
+                    Instruction::CallCurrentHostname => {
                         self.current_hostname();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCurrentHostname => {
+                    Instruction::ExecuteCurrentHostname => {
                         self.current_hostname();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCurrentInput => {
+                    Instruction::CallCurrentInput => {
                         try_or_throw!(self.machine_st, self.current_input(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCurrentInput => {
+                    Instruction::ExecuteCurrentInput => {
                         try_or_throw!(self.machine_st, self.current_input(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCurrentOutput => {
+                    Instruction::CallCurrentOutput => {
                         try_or_throw!(self.machine_st, self.current_output(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCurrentOutput => {
+                    Instruction::ExecuteCurrentOutput => {
                         try_or_throw!(self.machine_st, self.current_output(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDirectoryFiles => {
+                    Instruction::CallDirectoryFiles => {
                         try_or_throw!(self.machine_st, self.directory_files(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteDirectoryFiles => {
+                    Instruction::ExecuteDirectoryFiles => {
                         try_or_throw!(self.machine_st, self.directory_files(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallFileSize => {
+                    Instruction::CallFileSize => {
                         self.file_size();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteFileSize => {
+                    Instruction::ExecuteFileSize => {
                         self.file_size();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallFileExists => {
+                    Instruction::CallFileExists => {
                         self.file_exists();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteFileExists => {
+                    Instruction::ExecuteFileExists => {
                         self.file_exists();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDirectoryExists => {
+                    Instruction::CallDirectoryExists => {
                         self.directory_exists();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteDirectoryExists => {
+                    Instruction::ExecuteDirectoryExists => {
                         self.directory_exists();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDirectorySeparator => {
+                    Instruction::CallDirectorySeparator => {
                         self.directory_separator();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteDirectorySeparator => {
+                    Instruction::ExecuteDirectorySeparator => {
                         self.directory_separator();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallMakeDirectory => {
+                    Instruction::CallMakeDirectory => {
                         self.make_directory();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteMakeDirectory => {
+                    Instruction::ExecuteMakeDirectory => {
                         self.make_directory();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallMakeDirectoryPath => {
+                    Instruction::CallMakeDirectoryPath => {
                         self.make_directory_path();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteMakeDirectoryPath => {
+                    Instruction::ExecuteMakeDirectoryPath => {
                         self.make_directory_path();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDeleteFile => {
+                    Instruction::CallDeleteFile => {
                         self.delete_file();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteDeleteFile => {
+                    Instruction::ExecuteDeleteFile => {
                         self.delete_file();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallRenameFile => {
+                    Instruction::CallRenameFile => {
                         self.rename_file();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteRenameFile => {
+                    Instruction::ExecuteRenameFile => {
                         self.rename_file();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallFileCopy => {
+                    Instruction::CallFileCopy => {
                         self.file_copy();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteFileCopy => {
+                    Instruction::ExecuteFileCopy => {
                         self.file_copy();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallWorkingDirectory => {
+                    Instruction::CallWorkingDirectory => {
                         try_or_throw!(self.machine_st, self.working_directory(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteWorkingDirectory => {
+                    Instruction::ExecuteWorkingDirectory => {
                         try_or_throw!(self.machine_st, self.working_directory(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDeleteDirectory => {
+                    Instruction::CallDeleteDirectory => {
                         self.delete_directory();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteDeleteDirectory => {
+                    Instruction::ExecuteDeleteDirectory => {
                         self.delete_directory();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPathCanonical => {
+                    Instruction::CallPathCanonical => {
                         try_or_throw!(self.machine_st, self.path_canonical(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePathCanonical => {
+                    Instruction::ExecutePathCanonical => {
                         try_or_throw!(self.machine_st, self.path_canonical(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallFileTime => {
+                    Instruction::CallFileTime => {
                         self.file_time();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteFileTime => {
+                    Instruction::ExecuteFileTime => {
                         self.file_time();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDynamicModuleResolution(arity) => {
+                    &mut Instruction::CallDynamicModuleResolution(arity) => {
                         let (module_name, key) = try_or_throw!(
                             self.machine_st,
                             self.dynamic_module_resolution(arity - 2),
@@ -4054,7 +3929,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::ExecuteDynamicModuleResolution(arity) => {
+                    &mut Instruction::ExecuteDynamicModuleResolution(arity) => {
                         let (module_name, key) = try_or_throw!(
                             self.machine_st,
                             self.dynamic_module_resolution(arity - 2),
@@ -4071,198 +3946,198 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::CallFetchGlobalVar => {
+                    Instruction::CallFetchGlobalVar => {
                         self.fetch_global_var();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteFetchGlobalVar => {
+                    Instruction::ExecuteFetchGlobalVar => {
                         self.fetch_global_var();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallFirstStream => {
+                    Instruction::CallFirstStream => {
                         self.first_stream();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteFirstStream => {
+                    Instruction::ExecuteFirstStream => {
                         self.first_stream();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallFlushOutput => {
+                    Instruction::CallFlushOutput => {
                         try_or_throw!(self.machine_st, self.flush_output(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteFlushOutput => {
+                    Instruction::ExecuteFlushOutput => {
                         try_or_throw!(self.machine_st, self.flush_output(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallGetByte => {
+                    Instruction::CallGetByte => {
                         try_or_throw!(self.machine_st, self.get_byte(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetByte => {
+                    Instruction::ExecuteGetByte => {
                         try_or_throw!(self.machine_st, self.get_byte(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetChar => {
+                    Instruction::CallGetChar => {
                         try_or_throw!(self.machine_st, self.get_char(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetChar => {
+                    Instruction::ExecuteGetChar => {
                         try_or_throw!(self.machine_st, self.get_char(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetNChars => {
+                    Instruction::CallGetNChars => {
                         try_or_throw!(self.machine_st, self.get_n_chars(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetNChars => {
+                    Instruction::ExecuteGetNChars => {
                         try_or_throw!(self.machine_st, self.get_n_chars(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetCode => {
+                    Instruction::CallGetCode => {
                         try_or_throw!(self.machine_st, self.get_code(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetCode => {
+                    Instruction::ExecuteGetCode => {
                         try_or_throw!(self.machine_st, self.get_code(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetSingleChar => {
+                    Instruction::CallGetSingleChar => {
                         try_or_throw!(self.machine_st, self.get_single_char(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetSingleChar => {
+                    Instruction::ExecuteGetSingleChar => {
                         try_or_throw!(self.machine_st, self.get_single_char(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallTruncateIfNoLiftedHeapGrowthDiff => {
+                    Instruction::CallTruncateIfNoLiftedHeapGrowthDiff => {
                         self.truncate_if_no_lifted_heap_growth_diff();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteTruncateIfNoLiftedHeapGrowthDiff => {
+                    Instruction::ExecuteTruncateIfNoLiftedHeapGrowthDiff => {
                         self.truncate_if_no_lifted_heap_growth_diff();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallTruncateIfNoLiftedHeapGrowth => {
+                    Instruction::CallTruncateIfNoLiftedHeapGrowth => {
                         self.truncate_if_no_lifted_heap_growth();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteTruncateIfNoLiftedHeapGrowth => {
+                    Instruction::ExecuteTruncateIfNoLiftedHeapGrowth => {
                         self.truncate_if_no_lifted_heap_growth();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetAttributedVariableList => {
+                    Instruction::CallGetAttributedVariableList => {
                         self.get_attributed_variable_list();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetAttributedVariableList => {
+                    Instruction::ExecuteGetAttributedVariableList => {
                         self.get_attributed_variable_list();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetAttrVarQueueDelimiter => {
+                    Instruction::CallGetAttrVarQueueDelimiter => {
                         self.get_attr_var_queue_delimiter();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetAttrVarQueueDelimiter => {
+                    Instruction::ExecuteGetAttrVarQueueDelimiter => {
                         self.get_attr_var_queue_delimiter();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetAttrVarQueueBeyond => {
+                    Instruction::CallGetAttrVarQueueBeyond => {
                         self.get_attr_var_queue_beyond();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetAttrVarQueueBeyond => {
+                    Instruction::ExecuteGetAttrVarQueueBeyond => {
                         self.get_attr_var_queue_beyond();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetBValue => {
+                    Instruction::CallGetBValue => {
                         self.get_b_value();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetBValue => {
+                    Instruction::ExecuteGetBValue => {
                         self.get_b_value();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetContinuationChunk => {
+                    Instruction::CallGetContinuationChunk => {
                         self.get_continuation_chunk();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetContinuationChunk => {
+                    Instruction::ExecuteGetContinuationChunk => {
                         self.get_continuation_chunk();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallLookupDBRef => {
+                    Instruction::CallLookupDBRef => {
                         self.lookup_db_ref();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteLookupDBRef => {
+                    Instruction::ExecuteLookupDBRef => {
                         self.lookup_db_ref();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetNextOpDBRef => {
+                    Instruction::CallGetNextOpDBRef => {
                         self.get_next_op_db_ref();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetNextOpDBRef => {
+                    Instruction::ExecuteGetNextOpDBRef => {
                         self.get_next_op_db_ref();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallIsPartialString => {
+                    Instruction::CallIsPartialString => {
                         self.is_partial_string();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteIsPartialString => {
+                    Instruction::ExecuteIsPartialString => {
                         self.is_partial_string();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallHalt | &Instruction::ExecuteHalt => {
+                    Instruction::CallHalt | Instruction::ExecuteHalt => {
                         return self.halt();
                     }
-                    &Instruction::CallGetLiftedHeapFromOffset => {
+                    Instruction::CallGetLiftedHeapFromOffset => {
                         self.get_lifted_heap_from_offset();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetLiftedHeapFromOffset => {
+                    Instruction::ExecuteGetLiftedHeapFromOffset => {
                         self.get_lifted_heap_from_offset();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetLiftedHeapFromOffsetDiff => {
+                    Instruction::CallGetLiftedHeapFromOffsetDiff => {
                         self.get_lifted_heap_from_offset_diff();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetLiftedHeapFromOffsetDiff => {
+                    Instruction::ExecuteGetLiftedHeapFromOffsetDiff => {
                         self.get_lifted_heap_from_offset_diff();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetSCCCleaner => {
+                    Instruction::CallGetSCCCleaner => {
                         self.get_scc_cleaner();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetSCCCleaner => {
+                    Instruction::ExecuteGetSCCCleaner => {
                         self.get_scc_cleaner();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallHeadIsDynamic => {
+                    Instruction::CallHeadIsDynamic => {
                         self.head_is_dynamic();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteHeadIsDynamic => {
+                    Instruction::ExecuteHeadIsDynamic => {
                         self.head_is_dynamic();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallInstallSCCCleaner => {
+                    Instruction::CallInstallSCCCleaner => {
                         self.install_scc_cleaner();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteInstallSCCCleaner => {
+                    Instruction::ExecuteInstallSCCCleaner => {
                         self.install_scc_cleaner();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallInstallInferenceCounter => {
+                    Instruction::CallInstallInferenceCounter => {
                         try_or_throw!(self.machine_st, self.install_inference_counter(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteInstallInferenceCounter => {
+                    Instruction::ExecuteInstallInferenceCounter => {
                         try_or_throw!(self.machine_st, self.install_inference_counter(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
@@ -4276,228 +4151,228 @@ impl Machine {
                         self.inference_count(self.machine_st.registers[1], global_count);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallLiftedHeapLength => {
+                    Instruction::CallLiftedHeapLength => {
                         self.lifted_heap_length();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteLiftedHeapLength => {
+                    Instruction::ExecuteLiftedHeapLength => {
                         self.lifted_heap_length();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallLoadLibraryAsStream => {
+                    Instruction::CallLoadLibraryAsStream => {
                         try_or_throw!(self.machine_st, self.load_library_as_stream(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteLoadLibraryAsStream => {
+                    Instruction::ExecuteLoadLibraryAsStream => {
                         try_or_throw!(self.machine_st, self.load_library_as_stream(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallModuleExists => {
+                    Instruction::CallModuleExists => {
                         self.module_exists();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteModuleExists => {
+                    Instruction::ExecuteModuleExists => {
                         self.module_exists();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallNextEP => {
+                    Instruction::CallNextEP => {
                         self.next_ep();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteNextEP => {
+                    Instruction::ExecuteNextEP => {
                         self.next_ep();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallNoSuchPredicate => {
+                    Instruction::CallNoSuchPredicate => {
                         try_or_throw!(self.machine_st, self.no_such_predicate(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteNoSuchPredicate => {
+                    Instruction::ExecuteNoSuchPredicate => {
                         try_or_throw!(self.machine_st, self.no_such_predicate(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallNumberToChars => {
+                    Instruction::CallNumberToChars => {
                         self.number_to_chars();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteNumberToChars => {
+                    Instruction::ExecuteNumberToChars => {
                         self.number_to_chars();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallNumberToCodes => {
+                    Instruction::CallNumberToCodes => {
                         self.number_to_codes();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteNumberToCodes => {
+                    Instruction::ExecuteNumberToCodes => {
                         self.number_to_codes();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallOpDeclaration => {
+                    Instruction::CallOpDeclaration => {
                         try_or_throw!(self.machine_st, self.op_declaration(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteOpDeclaration => {
+                    Instruction::ExecuteOpDeclaration => {
                         try_or_throw!(self.machine_st, self.op_declaration(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallOpen => {
+                    Instruction::CallOpen => {
                         try_or_throw!(self.machine_st, self.open(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteOpen => {
+                    Instruction::ExecuteOpen => {
                         try_or_throw!(self.machine_st, self.open(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallSetStreamOptions => {
+                    Instruction::CallSetStreamOptions => {
                         try_or_throw!(self.machine_st, self.set_stream_options(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteSetStreamOptions => {
+                    Instruction::ExecuteSetStreamOptions => {
                         try_or_throw!(self.machine_st, self.set_stream_options(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallNextStream => {
+                    Instruction::CallNextStream => {
                         self.next_stream();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteNextStream => {
+                    Instruction::ExecuteNextStream => {
                         self.next_stream();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPartialStringTail => {
+                    Instruction::CallPartialStringTail => {
                         self.partial_string_tail();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePartialStringTail => {
+                    Instruction::ExecutePartialStringTail => {
                         self.partial_string_tail();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPeekByte => {
+                    Instruction::CallPeekByte => {
                         try_or_throw!(self.machine_st, self.peek_byte(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePeekByte => {
+                    Instruction::ExecutePeekByte => {
                         try_or_throw!(self.machine_st, self.peek_byte(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPeekChar => {
+                    Instruction::CallPeekChar => {
                         try_or_throw!(self.machine_st, self.peek_char(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePeekChar => {
+                    Instruction::ExecutePeekChar => {
                         try_or_throw!(self.machine_st, self.peek_char(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPeekCode => {
+                    Instruction::CallPeekCode => {
                         try_or_throw!(self.machine_st, self.peek_code(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePeekCode => {
+                    Instruction::ExecutePeekCode => {
                         try_or_throw!(self.machine_st, self.peek_code(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPointsToContinuationResetMarker => {
+                    Instruction::CallPointsToContinuationResetMarker => {
                         self.points_to_continuation_reset_marker();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePointsToContinuationResetMarker => {
+                    Instruction::ExecutePointsToContinuationResetMarker => {
                         self.points_to_continuation_reset_marker();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPutByte => {
+                    Instruction::CallPutByte => {
                         try_or_throw!(self.machine_st, self.put_byte(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecutePutByte => {
+                    Instruction::ExecutePutByte => {
                         try_or_throw!(self.machine_st, self.put_byte(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallPutChar => {
+                    Instruction::CallPutChar => {
                         try_or_throw!(self.machine_st, self.put_char(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecutePutChar => {
+                    Instruction::ExecutePutChar => {
                         try_or_throw!(self.machine_st, self.put_char(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallPutChars => {
+                    Instruction::CallPutChars => {
                         try_or_throw!(self.machine_st, self.put_chars(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePutChars => {
+                    Instruction::ExecutePutChars => {
                         try_or_throw!(self.machine_st, self.put_chars(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPutCode => {
+                    Instruction::CallPutCode => {
                         try_or_throw!(self.machine_st, self.put_code(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecutePutCode => {
+                    Instruction::ExecutePutCode => {
                         try_or_throw!(self.machine_st, self.put_code(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallReadQueryTerm => {
+                    Instruction::CallReadQueryTerm => {
                         try_or_throw!(self.machine_st, self.read_query_term(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteReadQueryTerm => {
+                    Instruction::ExecuteReadQueryTerm => {
                         try_or_throw!(self.machine_st, self.read_query_term(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallReadTerm => {
+                    Instruction::CallReadTerm => {
                         try_or_throw!(self.machine_st, self.read_term(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteReadTerm => {
+                    Instruction::ExecuteReadTerm => {
                         try_or_throw!(self.machine_st, self.read_term(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallRedoAttrVarBinding => {
+                    Instruction::CallRedoAttrVarBinding => {
                         self.redo_attr_var_binding();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteRedoAttrVarBinding => {
+                    Instruction::ExecuteRedoAttrVarBinding => {
                         self.redo_attr_var_binding();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallRemoveCallPolicyCheck => {
+                    Instruction::CallRemoveCallPolicyCheck => {
                         self.remove_call_policy_check();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteRemoveCallPolicyCheck => {
+                    Instruction::ExecuteRemoveCallPolicyCheck => {
                         self.remove_call_policy_check();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallRemoveInferenceCounter => {
+                    Instruction::CallRemoveInferenceCounter => {
                         self.remove_inference_counter();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteRemoveInferenceCounter => {
+                    Instruction::ExecuteRemoveInferenceCounter => {
                         self.remove_inference_counter();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallResetContinuationMarker => {
+                    Instruction::CallResetContinuationMarker => {
                         self.reset_continuation_marker();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteResetContinuationMarker => {
+                    Instruction::ExecuteResetContinuationMarker => {
                         self.reset_continuation_marker();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallRestoreCutPolicy => {
+                    Instruction::CallRestoreCutPolicy => {
                         self.restore_cut_policy();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteRestoreCutPolicy => {
+                    Instruction::ExecuteRestoreCutPolicy => {
                         self.restore_cut_policy();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallSetCutPoint(r) => {
+                    &mut Instruction::CallSetCutPoint(r) => {
                         if !self.set_cut_point(r) {
                             step_or_fail!(self.machine_st, self.machine_st.p += 1);
                         }
                     }
-                    &Instruction::ExecuteSetCutPoint(r) => {
+                    &mut Instruction::ExecuteSetCutPoint(r) => {
                         let cp = self.machine_st.cp;
 
                         if !self.set_cut_point(r) {
@@ -4510,179 +4385,179 @@ impl Machine {
                             self.machine_st.cp = cp;
                         }
                     }
-                    &Instruction::CallSetInput => {
+                    Instruction::CallSetInput => {
                         try_or_throw!(self.machine_st, self.set_input(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteSetInput => {
+                    Instruction::ExecuteSetInput => {
                         try_or_throw!(self.machine_st, self.set_input(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallSetOutput => {
+                    Instruction::CallSetOutput => {
                         try_or_throw!(self.machine_st, self.set_output(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteSetOutput => {
+                    Instruction::ExecuteSetOutput => {
                         try_or_throw!(self.machine_st, self.set_output(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallStoreBacktrackableGlobalVar => {
+                    Instruction::CallStoreBacktrackableGlobalVar => {
                         self.store_backtrackable_global_var();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteStoreBacktrackableGlobalVar => {
+                    Instruction::ExecuteStoreBacktrackableGlobalVar => {
                         self.store_backtrackable_global_var();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallStoreGlobalVar => {
+                    Instruction::CallStoreGlobalVar => {
                         self.store_global_var();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteStoreGlobalVar => {
+                    Instruction::ExecuteStoreGlobalVar => {
                         self.store_global_var();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallStreamProperty => {
+                    Instruction::CallStreamProperty => {
                         try_or_throw!(self.machine_st, self.stream_property(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteStreamProperty => {
+                    Instruction::ExecuteStreamProperty => {
                         try_or_throw!(self.machine_st, self.stream_property(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallSetStreamPosition => {
+                    Instruction::CallSetStreamPosition => {
                         try_or_throw!(self.machine_st, self.set_stream_position(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteSetStreamPosition => {
+                    Instruction::ExecuteSetStreamPosition => {
                         try_or_throw!(self.machine_st, self.set_stream_position(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallInferenceLevel => {
+                    Instruction::CallInferenceLevel => {
                         self.inference_level();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteInferenceLevel => {
+                    Instruction::ExecuteInferenceLevel => {
                         self.inference_level();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCleanUpBlock => {
+                    Instruction::CallCleanUpBlock => {
                         self.clean_up_block();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteCleanUpBlock => {
+                    Instruction::ExecuteCleanUpBlock => {
                         self.clean_up_block();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallFail | &Instruction::ExecuteFail => {
+                    Instruction::CallFail | Instruction::ExecuteFail => {
                         self.machine_st.backtrack();
                     }
-                    &Instruction::CallGetBall => {
+                    Instruction::CallGetBall => {
                         self.get_ball();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetBall => {
+                    Instruction::ExecuteGetBall => {
                         self.get_ball();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetCurrentBlock => {
+                    Instruction::CallGetCurrentBlock => {
                         self.get_current_block();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetCurrentBlock => {
+                    Instruction::ExecuteGetCurrentBlock => {
                         self.get_current_block();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetCurrentSCCBlock => {
+                    Instruction::CallGetCurrentSCCBlock => {
                         self.get_current_scc_block();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetCurrentSCCBlock => {
+                    Instruction::ExecuteGetCurrentSCCBlock => {
                         self.get_current_scc_block();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetCutPoint => {
+                    Instruction::CallGetCutPoint => {
                         self.get_cut_point();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetCutPoint => {
+                    Instruction::ExecuteGetCutPoint => {
                         self.get_cut_point();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetDoubleQuotes => {
+                    Instruction::CallGetDoubleQuotes => {
                         self.get_double_quotes();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetDoubleQuotes => {
+                    Instruction::ExecuteGetDoubleQuotes => {
                         self.get_double_quotes();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetUnknown => {
+                    Instruction::CallGetUnknown => {
                         self.get_unknown();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetUnknown => {
+                    Instruction::ExecuteGetUnknown => {
                         self.get_unknown();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallInstallNewBlock => {
+                    Instruction::CallInstallNewBlock => {
                         self.machine_st
                             .install_new_block(self.machine_st.registers[1]);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteInstallNewBlock => {
+                    Instruction::ExecuteInstallNewBlock => {
                         self.machine_st
                             .install_new_block(self.machine_st.registers[1]);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallRandomInteger => {
+                    Instruction::CallRandomInteger => {
                         self.random_integer();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteRandomInteger => {
+                    Instruction::ExecuteRandomInteger => {
                         self.random_integer();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallMaybe => {
+                    Instruction::CallMaybe => {
                         self.maybe();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteMaybe => {
+                    Instruction::ExecuteMaybe => {
                         self.maybe();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCpuNow => {
+                    Instruction::CallCpuNow => {
                         self.cpu_now();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCpuNow => {
+                    Instruction::ExecuteCpuNow => {
                         self.cpu_now();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDeterministicLengthRundown => {
+                    Instruction::CallDeterministicLengthRundown => {
                         try_or_throw!(self.machine_st, self.det_length_rundown(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteDeterministicLengthRundown => {
+                    Instruction::ExecuteDeterministicLengthRundown => {
                         try_or_throw!(self.machine_st, self.det_length_rundown(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallHttpOpen => {
+                    Instruction::CallHttpOpen => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_open(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteHttpOpen => {
+                    Instruction::ExecuteHttpOpen => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_open(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallHttpListen => {
+                    Instruction::CallHttpListen => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_listen(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteHttpListen => {
+                    Instruction::ExecuteHttpListen => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_listen(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
@@ -4702,206 +4577,206 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.http_accept(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteHttpAccept => {
+                    Instruction::ExecuteHttpAccept => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_accept(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallHttpAnswer => {
+                    Instruction::CallHttpAnswer => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_answer(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteHttpAnswer => {
+                    Instruction::ExecuteHttpAnswer => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_answer(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallLoadForeignLib => {
+                    Instruction::CallLoadForeignLib => {
                         try_or_throw!(self.machine_st, self.load_foreign_lib(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteLoadForeignLib => {
+                    Instruction::ExecuteLoadForeignLib => {
                         try_or_throw!(self.machine_st, self.load_foreign_lib(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallForeignCall => {
+                    Instruction::CallForeignCall => {
                         try_or_throw!(self.machine_st, self.foreign_call(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteForeignCall => {
+                    Instruction::ExecuteForeignCall => {
                         try_or_throw!(self.machine_st, self.foreign_call(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDefineForeignStruct => {
+                    Instruction::CallDefineForeignStruct => {
                         try_or_throw!(self.machine_st, self.define_foreign_struct(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteDefineForeignStruct => {
+                    Instruction::ExecuteDefineForeignStruct => {
                         try_or_throw!(self.machine_st, self.define_foreign_struct(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallFfiAllocate => {
+                    Instruction::CallFfiAllocate => {
                         try_or_throw!(self.machine_st, self.ffi_allocate(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteFfiAllocate => {
+                    Instruction::ExecuteFfiAllocate => {
                         try_or_throw!(self.machine_st, self.ffi_allocate(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallFfiReadPtr => {
+                    Instruction::CallFfiReadPtr => {
                         try_or_throw!(self.machine_st, self.ffi_read_ptr(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteFfiReadPtr => {
+                    Instruction::ExecuteFfiReadPtr => {
                         try_or_throw!(self.machine_st, self.ffi_read_ptr(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallFfiDeallocate => {
+                    Instruction::CallFfiDeallocate => {
                         try_or_throw!(self.machine_st, self.ffi_deallocate(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteFfiDeallocate => {
+                    Instruction::ExecuteFfiDeallocate => {
                         try_or_throw!(self.machine_st, self.ffi_deallocate(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallJsEval => {
+                    Instruction::CallJsEval => {
                         try_or_throw!(self.machine_st, self.js_eval(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteJsEval => {
+                    Instruction::ExecuteJsEval => {
                         try_or_throw!(self.machine_st, self.js_eval(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallArgv => {
+                    Instruction::CallArgv => {
                         try_or_throw!(self.machine_st, self.argv(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteArgv => {
+                    Instruction::ExecuteArgv => {
                         try_or_throw!(self.machine_st, self.argv(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCurrentTime => {
+                    Instruction::CallCurrentTime => {
                         self.current_time();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCurrentTime => {
+                    Instruction::ExecuteCurrentTime => {
                         self.current_time();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallQuotedToken => {
+                    Instruction::CallQuotedToken => {
                         self.quoted_token();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteQuotedToken => {
+                    Instruction::ExecuteQuotedToken => {
                         self.quoted_token();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallReadFromChars => {
+                    Instruction::CallReadFromChars => {
                         try_or_throw!(self.machine_st, self.read_from_chars(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteReadFromChars => {
+                    Instruction::ExecuteReadFromChars => {
                         try_or_throw!(self.machine_st, self.read_from_chars(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallReadTermFromChars => {
+                    Instruction::CallReadTermFromChars => {
                         try_or_throw!(self.machine_st, self.read_term_from_chars(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteReadTermFromChars => {
+                    Instruction::ExecuteReadTermFromChars => {
                         try_or_throw!(self.machine_st, self.read_term_from_chars(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallResetBlock => {
+                    Instruction::CallResetBlock => {
                         self.reset_block();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteResetBlock => {
+                    Instruction::ExecuteResetBlock => {
                         self.reset_block();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallResetSCCBlock => {
+                    Instruction::CallResetSCCBlock => {
                         self.reset_scc_block();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteResetSCCBlock => {
+                    Instruction::ExecuteResetSCCBlock => {
                         self.reset_scc_block();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallReturnFromVerifyAttr
-                    | &Instruction::ExecuteReturnFromVerifyAttr => {
+                    Instruction::CallReturnFromVerifyAttr
+                    | Instruction::ExecuteReturnFromVerifyAttr => {
                         self.return_from_verify_attr();
                     }
-                    &Instruction::CallSetBall => {
+                    Instruction::CallSetBall => {
                         self.set_ball();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteSetBall => {
+                    Instruction::ExecuteSetBall => {
                         self.set_ball();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPushBallStack => {
+                    Instruction::CallPushBallStack => {
                         self.push_ball_stack();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePushBallStack => {
+                    Instruction::ExecutePushBallStack => {
                         self.push_ball_stack();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPopBallStack => {
+                    Instruction::CallPopBallStack => {
                         self.pop_ball_stack();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecutePopBallStack => {
+                    Instruction::ExecutePopBallStack => {
                         self.pop_ball_stack();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallPopFromBallStack => {
+                    Instruction::CallPopFromBallStack => {
                         self.pop_from_ball_stack();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecutePopFromBallStack => {
+                    Instruction::ExecutePopFromBallStack => {
                         self.pop_from_ball_stack();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallSetCutPointByDefault(r) => {
+                    &mut Instruction::CallSetCutPointByDefault(r) => {
                         self.set_cut_point_by_default(r);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteSetCutPointByDefault(r) => {
+                    &mut Instruction::ExecuteSetCutPointByDefault(r) => {
                         self.set_cut_point_by_default(r);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallSetDoubleQuotes => {
+                    Instruction::CallSetDoubleQuotes => {
                         self.set_double_quotes();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteSetDoubleQuotes => {
+                    Instruction::ExecuteSetDoubleQuotes => {
                         self.set_double_quotes();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallSetUnknown => {
+                    Instruction::CallSetUnknown => {
                         self.set_unknown();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteSetUnknown => {
+                    Instruction::ExecuteSetUnknown => {
                         self.set_unknown();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallSetSeed => {
+                    Instruction::CallSetSeed => {
                         self.set_seed();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteSetSeed => {
+                    Instruction::ExecuteSetSeed => {
                         self.set_seed();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallSkipMaxList => {
+                    Instruction::CallSkipMaxList => {
                         try_or_throw!(self.machine_st, self.machine_st.skip_max_list(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteSkipMaxList => {
+                    Instruction::ExecuteSkipMaxList => {
                         try_or_throw!(self.machine_st, self.machine_st.skip_max_list(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
@@ -4913,531 +4788,531 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.sleep(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallSocketClientOpen => {
+                    Instruction::CallSocketClientOpen => {
                         try_or_throw!(self.machine_st, self.socket_client_open(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteSocketClientOpen => {
+                    Instruction::ExecuteSocketClientOpen => {
                         try_or_throw!(self.machine_st, self.socket_client_open(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallSocketServerOpen => {
+                    Instruction::CallSocketServerOpen => {
                         try_or_throw!(self.machine_st, self.socket_server_open(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteSocketServerOpen => {
+                    Instruction::ExecuteSocketServerOpen => {
                         try_or_throw!(self.machine_st, self.socket_server_open(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallSocketServerAccept => {
+                    Instruction::CallSocketServerAccept => {
                         try_or_throw!(self.machine_st, self.socket_server_accept(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteSocketServerAccept => {
+                    Instruction::ExecuteSocketServerAccept => {
                         try_or_throw!(self.machine_st, self.socket_server_accept(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallSocketServerClose => {
+                    Instruction::CallSocketServerClose => {
                         try_or_throw!(self.machine_st, self.socket_server_close(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteSocketServerClose => {
+                    Instruction::ExecuteSocketServerClose => {
                         try_or_throw!(self.machine_st, self.socket_server_close(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallTLSAcceptClient => {
+                    Instruction::CallTLSAcceptClient => {
                         #[cfg(feature = "tls")]
                         try_or_throw!(self.machine_st, self.tls_accept_client(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteTLSAcceptClient => {
+                    Instruction::ExecuteTLSAcceptClient => {
                         #[cfg(feature = "tls")]
                         try_or_throw!(self.machine_st, self.tls_accept_client(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallTLSClientConnect => {
+                    Instruction::CallTLSClientConnect => {
                         #[cfg(feature = "tls")]
                         try_or_throw!(self.machine_st, self.tls_client_connect(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteTLSClientConnect => {
+                    Instruction::ExecuteTLSClientConnect => {
                         #[cfg(feature = "tls")]
                         try_or_throw!(self.machine_st, self.tls_client_connect(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallSucceed => {
+                    Instruction::CallSucceed => {
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteSucceed => {
+                    Instruction::ExecuteSucceed => {
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallTermAttributedVariables => {
+                    Instruction::CallTermAttributedVariables => {
                         self.term_attributed_variables();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteTermAttributedVariables => {
+                    Instruction::ExecuteTermAttributedVariables => {
                         self.term_attributed_variables();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallTermVariables => {
+                    Instruction::CallTermVariables => {
                         self.term_variables();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteTermVariables => {
+                    Instruction::ExecuteTermVariables => {
                         self.term_variables();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallTermVariablesUnderMaxDepth => {
+                    Instruction::CallTermVariablesUnderMaxDepth => {
                         self.term_variables_under_max_depth();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteTermVariablesUnderMaxDepth => {
+                    Instruction::ExecuteTermVariablesUnderMaxDepth => {
                         self.term_variables_under_max_depth();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallTruncateLiftedHeapTo => {
+                    Instruction::CallTruncateLiftedHeapTo => {
                         self.truncate_lifted_heap_to();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteTruncateLiftedHeapTo => {
+                    Instruction::ExecuteTruncateLiftedHeapTo => {
                         self.truncate_lifted_heap_to();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallUnifyWithOccursCheck => {
+                    Instruction::CallUnifyWithOccursCheck => {
                         self.unify_with_occurs_check();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteUnifyWithOccursCheck => {
+                    Instruction::ExecuteUnifyWithOccursCheck => {
                         self.unify_with_occurs_check();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallUnwindEnvironments => {
+                    Instruction::CallUnwindEnvironments => {
                         if !self.unwind_environments() {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteUnwindEnvironments => {
+                    Instruction::ExecuteUnwindEnvironments => {
                         if !self.unwind_environments() {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallUnwindStack | &Instruction::ExecuteUnwindStack => {
+                    Instruction::CallUnwindStack | Instruction::ExecuteUnwindStack => {
                         self.machine_st.unwind_stack();
                         self.machine_st.backtrack();
                     }
-                    &Instruction::CallWAMInstructions => {
+                    Instruction::CallWAMInstructions => {
                         try_or_throw!(self.machine_st, self.wam_instructions(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteWAMInstructions => {
+                    Instruction::ExecuteWAMInstructions => {
                         try_or_throw!(self.machine_st, self.wam_instructions(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallInlinedInstructions => {
+                    Instruction::CallInlinedInstructions => {
                         self.inlined_instructions();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteInlinedInstructions => {
+                    Instruction::ExecuteInlinedInstructions => {
                         self.inlined_instructions();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallWriteTerm => {
+                    Instruction::CallWriteTerm => {
                         try_or_throw!(self.machine_st, self.write_term(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteWriteTerm => {
+                    Instruction::ExecuteWriteTerm => {
                         try_or_throw!(self.machine_st, self.write_term(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallWriteTermToChars => {
+                    Instruction::CallWriteTermToChars => {
                         try_or_throw!(self.machine_st, self.write_term_to_chars(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteWriteTermToChars => {
+                    Instruction::ExecuteWriteTermToChars => {
                         try_or_throw!(self.machine_st, self.write_term_to_chars(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallScryerPrologVersion => {
+                    Instruction::CallScryerPrologVersion => {
                         self.scryer_prolog_version();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteScryerPrologVersion => {
+                    Instruction::ExecuteScryerPrologVersion => {
                         self.scryer_prolog_version();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCryptoRandomByte => {
+                    Instruction::CallCryptoRandomByte => {
                         self.crypto_random_byte();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCryptoRandomByte => {
+                    Instruction::ExecuteCryptoRandomByte => {
                         self.crypto_random_byte();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCryptoDataHash => {
+                    Instruction::CallCryptoDataHash => {
                         self.crypto_data_hash();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCryptoDataHash => {
+                    Instruction::ExecuteCryptoDataHash => {
                         self.crypto_data_hash();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCryptoHMAC => {
+                    Instruction::CallCryptoHMAC => {
                         self.crypto_hmac();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCryptoHMAC => {
+                    Instruction::ExecuteCryptoHMAC => {
                         self.crypto_hmac();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCryptoDataHKDF => {
+                    Instruction::CallCryptoDataHKDF => {
                         self.crypto_data_hkdf();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCryptoDataHKDF => {
+                    Instruction::ExecuteCryptoDataHKDF => {
                         self.crypto_data_hkdf();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCryptoPasswordHash => {
+                    Instruction::CallCryptoPasswordHash => {
                         self.crypto_password_hash();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCryptoPasswordHash => {
+                    Instruction::ExecuteCryptoPasswordHash => {
                         self.crypto_password_hash();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
                     #[cfg(feature = "crypto-full")]
-                    &Instruction::CallCryptoDataEncrypt => {
+                    Instruction::CallCryptoDataEncrypt => {
                         self.crypto_data_encrypt();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
                     #[cfg(feature = "crypto-full")]
-                    &Instruction::ExecuteCryptoDataEncrypt => {
+                    Instruction::ExecuteCryptoDataEncrypt => {
                         self.crypto_data_encrypt();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
                     #[cfg(feature = "crypto-full")]
-                    &Instruction::CallCryptoDataDecrypt => {
+                    Instruction::CallCryptoDataDecrypt => {
                         self.crypto_data_decrypt();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
                     #[cfg(feature = "crypto-full")]
-                    &Instruction::ExecuteCryptoDataDecrypt => {
+                    Instruction::ExecuteCryptoDataDecrypt => {
                         self.crypto_data_decrypt();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallBeta => {
+                    Instruction::CallBeta => {
                         self.beta();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteBeta => {
+                    Instruction::ExecuteBeta => {
                         self.beta();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallBetaI => {
+                    Instruction::CallBetaI => {
                         self.betai();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteBetaI => {
+                    Instruction::ExecuteBetaI => {
                         self.betai();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallInvBetaI => {
+                    Instruction::CallInvBetaI => {
                         self.invbetai();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteInvBetaI => {
+                    Instruction::ExecuteInvBetaI => {
                         self.invbetai();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGamma => {
+                    Instruction::CallGamma => {
                         self.gamma();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGamma => {
+                    Instruction::ExecuteGamma => {
                         self.gamma();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallLnGamma => {
+                    Instruction::CallLnGamma => {
                         self.ln_gamma();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteLnGamma => {
+                    Instruction::ExecuteLnGamma => {
                         self.ln_gamma();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGammP => {
+                    Instruction::CallGammP => {
                         self.gammp();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGammP => {
+                    Instruction::ExecuteGammP => {
                         self.gammp();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallInvGammP => {
+                    Instruction::CallInvGammP => {
                         self.invgammp();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteInvGammP => {
+                    Instruction::ExecuteInvGammP => {
                         self.invgammp();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGammQ => {
+                    Instruction::CallGammQ => {
                         self.gammq();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGammQ => {
+                    Instruction::ExecuteGammQ => {
                         self.gammq();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallErf => {
+                    Instruction::CallErf => {
                         self.erf();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteErf => {
+                    Instruction::ExecuteErf => {
                         self.erf();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallErfc => {
+                    Instruction::CallErfc => {
                         self.erfc();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteErfc => {
+                    Instruction::ExecuteErfc => {
                         self.erfc();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallInvErf => {
+                    Instruction::CallInvErf => {
                         self.inverf();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteInvErf => {
+                    Instruction::ExecuteInvErf => {
                         self.inverf();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallInvErfc => {
+                    Instruction::CallInvErfc => {
                         self.inverfc();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteInvErfc => {
+                    Instruction::ExecuteInvErfc => {
                         self.inverfc();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCryptoCurveScalarMult => {
+                    Instruction::CallCryptoCurveScalarMult => {
                         self.crypto_curve_scalar_mult();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCryptoCurveScalarMult => {
+                    Instruction::ExecuteCryptoCurveScalarMult => {
                         self.crypto_curve_scalar_mult();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallEd25519SignRaw => {
+                    Instruction::CallEd25519SignRaw => {
                         self.ed25519_sign_raw();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteEd25519SignRaw => {
+                    Instruction::ExecuteEd25519SignRaw => {
                         self.ed25519_sign_raw();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallEd25519VerifyRaw => {
+                    Instruction::CallEd25519VerifyRaw => {
                         self.ed25519_verify_raw();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteEd25519VerifyRaw => {
+                    Instruction::ExecuteEd25519VerifyRaw => {
                         self.ed25519_verify_raw();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallEd25519SeedToPublicKey => {
+                    Instruction::CallEd25519SeedToPublicKey => {
                         self.ed25519_seed_to_public_key();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteEd25519SeedToPublicKey => {
+                    Instruction::ExecuteEd25519SeedToPublicKey => {
                         self.ed25519_seed_to_public_key();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCurve25519ScalarMult => {
+                    Instruction::CallCurve25519ScalarMult => {
                         self.curve25519_scalar_mult();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCurve25519ScalarMult => {
+                    Instruction::ExecuteCurve25519ScalarMult => {
                         self.curve25519_scalar_mult();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallFirstNonOctet => {
+                    Instruction::CallFirstNonOctet => {
                         self.first_non_octet();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteFirstNonOctet => {
+                    Instruction::ExecuteFirstNonOctet => {
                         self.first_non_octet();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallLoadHTML => {
+                    Instruction::CallLoadHTML => {
                         backtrack_on_resource_error!(self.machine_st, self.load_html(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteLoadHTML => {
+                    Instruction::ExecuteLoadHTML => {
                         backtrack_on_resource_error!(self.machine_st, self.load_html(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallLoadXML => {
+                    Instruction::CallLoadXML => {
                         backtrack_on_resource_error!(self.machine_st, self.load_xml(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteLoadXML => {
+                    Instruction::ExecuteLoadXML => {
                         backtrack_on_resource_error!(self.machine_st, self.load_xml(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallGetEnv => {
+                    Instruction::CallGetEnv => {
                         self.get_env();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetEnv => {
+                    Instruction::ExecuteGetEnv => {
                         self.get_env();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallSetEnv => {
+                    Instruction::CallSetEnv => {
                         self.set_env();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteSetEnv => {
+                    Instruction::ExecuteSetEnv => {
                         self.set_env();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallUnsetEnv => {
+                    Instruction::CallUnsetEnv => {
                         self.unset_env();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteUnsetEnv => {
+                    Instruction::ExecuteUnsetEnv => {
                         self.unset_env();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallShell => {
+                    Instruction::CallShell => {
                         self.shell();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteShell => {
+                    Instruction::ExecuteShell => {
                         self.shell();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallProcessCreate => {
+                    Instruction::CallProcessCreate => {
                         try_or_throw!(self.machine_st, self.process_create(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteProcessCreate => {
+                    Instruction::ExecuteProcessCreate => {
                         try_or_throw!(self.machine_st, self.process_create(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallProcessId => {
+                    Instruction::CallProcessId => {
                         try_or_throw!(self.machine_st, self.process_id(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteProcessId => {
+                    Instruction::ExecuteProcessId => {
                         try_or_throw!(self.machine_st, self.process_id(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallProcessWait => {
+                    Instruction::CallProcessWait => {
                         try_or_throw!(self.machine_st, self.process_wait(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteProcessWait => {
+                    Instruction::ExecuteProcessWait => {
                         try_or_throw!(self.machine_st, self.process_wait(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallProcessKill => {
+                    Instruction::CallProcessKill => {
                         try_or_throw!(self.machine_st, self.process_kill(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteProcessKill => {
+                    Instruction::ExecuteProcessKill => {
                         try_or_throw!(self.machine_st, self.process_kill(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallProcessRelease => {
+                    Instruction::CallProcessRelease => {
                         try_or_throw!(self.machine_st, self.process_release(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteProcessRelease => {
+                    Instruction::ExecuteProcessRelease => {
                         try_or_throw!(self.machine_st, self.process_release(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPid => {
+                    Instruction::CallPid => {
                         self.pid();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePid => {
+                    Instruction::ExecutePid => {
                         self.pid();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCharsBase64 => {
+                    Instruction::CallCharsBase64 => {
                         try_or_throw!(self.machine_st, self.chars_base64(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCharsBase64 => {
+                    Instruction::ExecuteCharsBase64 => {
                         try_or_throw!(self.machine_st, self.chars_base64(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDevourWhitespace => {
+                    Instruction::CallDevourWhitespace => {
                         try_or_throw!(self.machine_st, self.devour_whitespace(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteDevourWhitespace => {
+                    Instruction::ExecuteDevourWhitespace => {
                         try_or_throw!(self.machine_st, self.devour_whitespace(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallIsSTOEnabled => {
+                    Instruction::CallIsSTOEnabled => {
                         self.is_sto_enabled();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteIsSTOEnabled => {
+                    Instruction::ExecuteIsSTOEnabled => {
                         self.is_sto_enabled();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallSetSTOAsUnify => {
+                    Instruction::CallSetSTOAsUnify => {
                         self.set_sto_as_unify();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteSetSTOAsUnify => {
+                    Instruction::ExecuteSetSTOAsUnify => {
                         self.set_sto_as_unify();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallSetNSTOAsUnify => {
+                    Instruction::CallSetNSTOAsUnify => {
                         self.set_nsto_as_unify();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteSetNSTOAsUnify => {
+                    Instruction::ExecuteSetNSTOAsUnify => {
                         self.set_nsto_as_unify();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallSetSTOWithErrorAsUnify => {
+                    Instruction::CallSetSTOWithErrorAsUnify => {
                         self.set_sto_with_error_as_unify();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteSetSTOWithErrorAsUnify => {
+                    Instruction::ExecuteSetSTOWithErrorAsUnify => {
                         self.set_sto_with_error_as_unify();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallHomeDirectory => {
+                    Instruction::CallHomeDirectory => {
                         self.home_directory();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteHomeDirectory => {
+                    Instruction::ExecuteHomeDirectory => {
                         self.home_directory();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDebugHook => {
+                    Instruction::CallDebugHook => {
                         self.debug_hook();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteDebugHook => {
+                    Instruction::ExecuteDebugHook => {
                         self.debug_hook();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallPopCount => {
+                    Instruction::CallPopCount => {
                         self.pop_count();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePopCount => {
+                    Instruction::ExecutePopCount => {
                         self.pop_count();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallAddDiscontiguousPredicate => {
+                    Instruction::CallAddDiscontiguousPredicate => {
                         try_or_throw!(
                             self.machine_st,
                             self.add_discontiguous_predicate(),
@@ -5445,7 +5320,7 @@ impl Machine {
                         );
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteAddDiscontiguousPredicate => {
+                    Instruction::ExecuteAddDiscontiguousPredicate => {
                         try_or_throw!(
                             self.machine_st,
                             self.add_discontiguous_predicate(),
@@ -5453,39 +5328,39 @@ impl Machine {
                         );
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallAddDynamicPredicate => {
+                    Instruction::CallAddDynamicPredicate => {
                         try_or_throw!(self.machine_st, self.add_dynamic_predicate(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteAddDynamicPredicate => {
+                    Instruction::ExecuteAddDynamicPredicate => {
                         try_or_throw!(self.machine_st, self.add_dynamic_predicate(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallAddMultifilePredicate => {
+                    Instruction::CallAddMultifilePredicate => {
                         try_or_throw!(self.machine_st, self.add_multifile_predicate(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteAddMultifilePredicate => {
+                    Instruction::ExecuteAddMultifilePredicate => {
                         try_or_throw!(self.machine_st, self.add_multifile_predicate(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallAddGoalExpansionClause => {
+                    Instruction::CallAddGoalExpansionClause => {
                         try_or_throw!(self.machine_st, self.add_goal_expansion_clause(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteAddGoalExpansionClause => {
+                    Instruction::ExecuteAddGoalExpansionClause => {
                         try_or_throw!(self.machine_st, self.add_goal_expansion_clause(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallAddTermExpansionClause => {
+                    Instruction::CallAddTermExpansionClause => {
                         try_or_throw!(self.machine_st, self.add_term_expansion_clause(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteAddTermExpansionClause => {
+                    Instruction::ExecuteAddTermExpansionClause => {
                         try_or_throw!(self.machine_st, self.add_term_expansion_clause(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallAddInSituFilenameModule => {
+                    Instruction::CallAddInSituFilenameModule => {
                         try_or_throw!(
                             self.machine_st,
                             self.add_in_situ_filename_module(),
@@ -5493,7 +5368,7 @@ impl Machine {
                         );
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteAddInSituFilenameModule => {
+                    Instruction::ExecuteAddInSituFilenameModule => {
                         try_or_throw!(
                             self.machine_st,
                             self.add_in_situ_filename_module(),
@@ -5501,127 +5376,127 @@ impl Machine {
                         );
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallClauseToEvacuable => {
+                    Instruction::CallClauseToEvacuable => {
                         try_or_throw!(self.machine_st, self.clause_to_evacuable(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteClauseToEvacuable => {
+                    Instruction::ExecuteClauseToEvacuable => {
                         try_or_throw!(self.machine_st, self.clause_to_evacuable(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallScopedClauseToEvacuable => {
+                    Instruction::CallScopedClauseToEvacuable => {
                         try_or_throw!(self.machine_st, self.scoped_clause_to_evacuable(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteScopedClauseToEvacuable => {
+                    Instruction::ExecuteScopedClauseToEvacuable => {
                         try_or_throw!(self.machine_st, self.scoped_clause_to_evacuable(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallConcludeLoad => {
+                    Instruction::CallConcludeLoad => {
                         try_or_throw!(self.machine_st, self.conclude_load(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteConcludeLoad => {
+                    Instruction::ExecuteConcludeLoad => {
                         try_or_throw!(self.machine_st, self.conclude_load(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallDeclareModule => {
+                    Instruction::CallDeclareModule => {
                         try_or_throw!(self.machine_st, self.declare_module(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteDeclareModule => {
+                    Instruction::ExecuteDeclareModule => {
                         try_or_throw!(self.machine_st, self.declare_module(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallLoadCompiledLibrary => {
+                    Instruction::CallLoadCompiledLibrary => {
                         try_or_throw!(self.machine_st, self.load_compiled_library(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteLoadCompiledLibrary => {
+                    Instruction::ExecuteLoadCompiledLibrary => {
                         try_or_throw!(self.machine_st, self.load_compiled_library(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallLoadContextSource => {
+                    Instruction::CallLoadContextSource => {
                         self.load_context_source();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteLoadContextSource => {
+                    Instruction::ExecuteLoadContextSource => {
                         self.load_context_source();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallLoadContextFile => {
+                    Instruction::CallLoadContextFile => {
                         self.load_context_file();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteLoadContextFile => {
+                    Instruction::ExecuteLoadContextFile => {
                         self.load_context_file();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallLoadContextDirectory => {
+                    Instruction::CallLoadContextDirectory => {
                         self.load_context_directory();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteLoadContextDirectory => {
+                    Instruction::ExecuteLoadContextDirectory => {
                         self.load_context_directory();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallLoadContextModule => {
+                    Instruction::CallLoadContextModule => {
                         self.load_context_module(self.deref_register(1));
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteLoadContextModule => {
+                    Instruction::ExecuteLoadContextModule => {
                         self.load_context_module(self.deref_register(1));
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallLoadContextStream => {
+                    Instruction::CallLoadContextStream => {
                         self.load_context_stream();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteLoadContextStream => {
+                    Instruction::ExecuteLoadContextStream => {
                         self.load_context_stream();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPopLoadContext => {
+                    Instruction::CallPopLoadContext => {
                         self.pop_load_context();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecutePopLoadContext => {
+                    Instruction::ExecutePopLoadContext => {
                         self.pop_load_context();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallPopLoadStatePayload => {
+                    Instruction::CallPopLoadStatePayload => {
                         self.pop_load_state_payload();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecutePopLoadStatePayload => {
+                    Instruction::ExecutePopLoadStatePayload => {
                         self.pop_load_state_payload();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallPushLoadContext => {
+                    Instruction::CallPushLoadContext => {
                         try_or_throw!(self.machine_st, self.push_load_context(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecutePushLoadContext => {
+                    Instruction::ExecutePushLoadContext => {
                         try_or_throw!(self.machine_st, self.push_load_context(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallPushLoadStatePayload => {
+                    Instruction::CallPushLoadStatePayload => {
                         self.push_load_state_payload();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePushLoadStatePayload => {
+                    Instruction::ExecutePushLoadStatePayload => {
                         self.push_load_state_payload();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallUseModule => {
+                    Instruction::CallUseModule => {
                         try_or_throw!(self.machine_st, self.use_module(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteUseModule => {
+                    Instruction::ExecuteUseModule => {
                         try_or_throw!(self.machine_st, self.use_module(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallBuiltInProperty => {
+                    Instruction::CallBuiltInProperty => {
                         let key = self.machine_st.read_predicate_key(
                             self.machine_st.registers[1],
                             self.machine_st.registers[2],
@@ -5630,7 +5505,7 @@ impl Machine {
                         self.machine_st.fail = !self.indices.builtin_property(key);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteBuiltInProperty => {
+                    Instruction::ExecuteBuiltInProperty => {
                         let key = self.machine_st.read_predicate_key(
                             self.machine_st.registers[1],
                             self.machine_st.registers[2],
@@ -5639,47 +5514,47 @@ impl Machine {
                         self.machine_st.fail = !self.indices.builtin_property(key);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallMetaPredicateProperty => {
+                    Instruction::CallMetaPredicateProperty => {
                         self.meta_predicate_property();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteMetaPredicateProperty => {
+                    Instruction::ExecuteMetaPredicateProperty => {
                         self.meta_predicate_property();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallMultifileProperty => {
+                    Instruction::CallMultifileProperty => {
                         self.multifile_property();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteMultifileProperty => {
+                    Instruction::ExecuteMultifileProperty => {
                         self.multifile_property();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDiscontiguousProperty => {
+                    Instruction::CallDiscontiguousProperty => {
                         self.discontiguous_property();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteDiscontiguousProperty => {
+                    Instruction::ExecuteDiscontiguousProperty => {
                         self.discontiguous_property();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDynamicProperty => {
+                    Instruction::CallDynamicProperty => {
                         self.dynamic_property();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteDynamicProperty => {
+                    Instruction::ExecuteDynamicProperty => {
                         self.dynamic_property();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallAbolishClause => {
+                    Instruction::CallAbolishClause => {
                         try_or_throw!(self.machine_st, self.abolish_clause(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteAbolishClause => {
+                    Instruction::ExecuteAbolishClause => {
                         try_or_throw!(self.machine_st, self.abolish_clause(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallAsserta => {
+                    Instruction::CallAsserta => {
                         try_or_throw!(
                             self.machine_st,
                             self.compile_assert(AppendOrPrepend::Prepend),
@@ -5687,7 +5562,7 @@ impl Machine {
                         );
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteAsserta => {
+                    Instruction::ExecuteAsserta => {
                         try_or_throw!(
                             self.machine_st,
                             self.compile_assert(AppendOrPrepend::Prepend),
@@ -5695,7 +5570,7 @@ impl Machine {
                         );
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallAssertz => {
+                    Instruction::CallAssertz => {
                         try_or_throw!(
                             self.machine_st,
                             self.compile_assert(AppendOrPrepend::Append),
@@ -5703,7 +5578,7 @@ impl Machine {
                         );
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteAssertz => {
+                    Instruction::ExecuteAssertz => {
                         try_or_throw!(
                             self.machine_st,
                             self.compile_assert(AppendOrPrepend::Append),
@@ -5711,15 +5586,15 @@ impl Machine {
                         );
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallRetract => {
-                        try_or_throw!(self.machine_st, self.retract_clause(), continue);
+                    Instruction::CallRetract => {
+                        self.retract_clause();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteRetract => {
-                        try_or_throw!(self.machine_st, self.retract_clause(), continue);
+                    Instruction::ExecuteRetract => {
+                        self.retract_clause();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallIsConsistentWithTermQueue => {
+                    Instruction::CallIsConsistentWithTermQueue => {
                         try_or_throw!(
                             self.machine_st,
                             self.is_consistent_with_term_queue(),
@@ -5727,7 +5602,7 @@ impl Machine {
                         );
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteIsConsistentWithTermQueue => {
+                    Instruction::ExecuteIsConsistentWithTermQueue => {
                         try_or_throw!(
                             self.machine_st,
                             self.is_consistent_with_term_queue(),
@@ -5735,23 +5610,23 @@ impl Machine {
                         );
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::CallFlushTermQueue => {
+                    Instruction::CallFlushTermQueue => {
                         try_or_throw!(self.machine_st, self.flush_term_queue(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteFlushTermQueue => {
+                    Instruction::ExecuteFlushTermQueue => {
                         try_or_throw!(self.machine_st, self.flush_term_queue(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallRemoveModuleExports => {
+                    Instruction::CallRemoveModuleExports => {
                         try_or_throw!(self.machine_st, self.remove_module_exports(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteRemoveModuleExports => {
+                    Instruction::ExecuteRemoveModuleExports => {
                         try_or_throw!(self.machine_st, self.remove_module_exports(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallAddNonCountedBacktracking => {
+                    Instruction::CallAddNonCountedBacktracking => {
                         try_or_throw!(
                             self.machine_st,
                             self.add_non_counted_backtracking(),
@@ -5759,7 +5634,7 @@ impl Machine {
                         );
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteAddNonCountedBacktracking => {
+                    Instruction::ExecuteAddNonCountedBacktracking => {
                         try_or_throw!(
                             self.machine_st,
                             self.add_non_counted_backtracking(),
@@ -5767,31 +5642,31 @@ impl Machine {
                         );
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallPredicateDefined => {
+                    Instruction::CallPredicateDefined => {
                         self.machine_st.fail = !self.predicate_defined();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePredicateDefined => {
+                    Instruction::ExecutePredicateDefined => {
                         self.machine_st.fail = !self.predicate_defined();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallStripModule => {
+                    Instruction::CallStripModule => {
                         self.strip_module();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteStripModule => {
+                    Instruction::ExecuteStripModule => {
                         self.strip_module();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPrepareCallClause(arity) => {
+                    &mut Instruction::CallPrepareCallClause(arity) => {
                         try_or_throw!(self.machine_st, self.prepare_call_clause(arity), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePrepareCallClause(arity) => {
+                    &mut Instruction::ExecutePrepareCallClause(arity) => {
                         try_or_throw!(self.machine_st, self.prepare_call_clause(arity), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallCompileInlineOrExpandedGoal => {
+                    Instruction::CallCompileInlineOrExpandedGoal => {
                         try_or_throw!(
                             self.machine_st,
                             self.compile_inline_or_expanded_goal(),
@@ -5799,7 +5674,7 @@ impl Machine {
                         );
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteCompileInlineOrExpandedGoal => {
+                    Instruction::ExecuteCompileInlineOrExpandedGoal => {
                         try_or_throw!(
                             self.machine_st,
                             self.compile_inline_or_expanded_goal(),
@@ -5807,15 +5682,15 @@ impl Machine {
                         );
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallIsExpandedOrInlined => {
+                    Instruction::CallIsExpandedOrInlined => {
                         self.machine_st.fail = !self.is_expanded_or_inlined();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteIsExpandedOrInlined => {
+                    Instruction::ExecuteIsExpandedOrInlined => {
                         self.machine_st.fail = !self.is_expanded_or_inlined();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallFastCallN(arity) => {
+                    &mut Instruction::CallFastCallN(arity) => {
                         let call_at_index =
                             |wam: &mut Machine, name, arity, ptr| wam.try_call(name, arity, ptr);
 
@@ -5829,7 +5704,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::ExecuteFastCallN(arity) => {
+                    &mut Instruction::ExecuteFastCallN(arity) => {
                         let call_at_index =
                             |wam: &mut Machine, name, arity, ptr| wam.try_execute(name, arity, ptr);
 
@@ -5843,195 +5718,59 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::CallGetClauseP => {
-                        let module_name = cell_as_atom!(self.deref_register(3));
-
-                        let (n, p) = self.get_clause_p(module_name);
-
-                        let r = self.machine_st.registers[2];
-                        let r = self.machine_st.store(self.machine_st.deref(r));
-
-                        let mut writer =
-                            Heap::functor_writer(functor!(atom!("-"), [fixnum(n), fixnum(p)]));
-
-                        let str_cell = backtrack_on_resource_error!(
-                            &mut self.machine_st,
-                            writer(&mut self.machine_st.heap),
-                            continue
-                        );
-
-                        let r = r.as_var().unwrap();
-
-                        self.machine_st.bind(r, str_cell);
-
-                        step_or_fail!(self.machine_st, self.machine_st.p += 1);
-                    }
-                    &Instruction::ExecuteGetClauseP => {
-                        let module_name = cell_as_atom!(self.deref_register(3));
-
-                        let (n, p) = self.get_clause_p(module_name);
-
-                        let r = self.machine_st.registers[2];
-                        let r = self.machine_st.store(self.machine_st.deref(r));
-
-                        let mut writer =
-                            Heap::functor_writer(functor!(atom!("-"), [fixnum(n), fixnum(p)]));
-
-                        let str_cell = backtrack_on_resource_error!(
-                            &mut self.machine_st,
-                            writer(&mut self.machine_st.heap),
-                            continue
-                        );
-
-                        let r = r.as_var().unwrap();
-                        self.machine_st.bind(r, str_cell);
-                        step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
-                    }
-                    &Instruction::CallInvokeClauseAtP => {
-                        let key_cell = self.machine_st.registers[1];
-                        let key = self.machine_st.name_and_arity_from_heap(key_cell).unwrap();
-
-                        let l = self.machine_st.registers[3];
-                        let l = self.machine_st.store(self.machine_st.deref(l));
-
-                        let l = match Number::try_from((l, &self.machine_st.arena.f64_tbl)) {
-                            Ok(Number::Fixnum(l)) => l.get_num() as usize,
-                            _ => unreachable!(),
-                        };
-
-                        let p = self.machine_st.registers[4];
-                        let p = self.machine_st.store(self.machine_st.deref(p));
-
-                        let p = match Number::try_from((p, &self.machine_st.arena.f64_tbl)) {
-                            Ok(Number::Fixnum(p)) => p.get_num() as usize,
-                            _ => unreachable!(),
-                        };
-
-                        let module_name = cell_as_atom!(self.deref_register(6));
-
-                        let compilation_target = match module_name {
-                            atom!("user") => CompilationTarget::User,
-                            _ => CompilationTarget::Module(module_name),
-                        };
-
-                        let skeleton = self
-                            .indices
-                            .get_predicate_skeleton_mut(&compilation_target, &key)
-                            .unwrap();
-
-                        if let Some(n) = skeleton.target_pos_of_clause_clause_loc(l) {
-                            let r = self
-                                .machine_st
-                                .store(self.machine_st.deref(self.machine_st.registers[5]));
-
-                            self.machine_st.unify_fixnum(
-                                /* FIXME this is not safe */
-                                unsafe { Fixnum::build_with_unchecked(n as i64) },
-                                r,
-                            );
-                        }
-
-                        self.machine_st.call_at_index(2, p);
-                    }
-                    &Instruction::ExecuteInvokeClauseAtP => {
-                        let key_cell = self.machine_st.registers[1];
-                        let key = self.machine_st.name_and_arity_from_heap(key_cell).unwrap();
-
-                        let l = self.machine_st.registers[3];
-                        let l = self.machine_st.store(self.machine_st.deref(l));
-
-                        let l = match Number::try_from((l, &self.machine_st.arena.f64_tbl)) {
-                            Ok(Number::Fixnum(l)) => l.get_num() as usize,
-                            _ => unreachable!(),
-                        };
-
-                        let p = self.machine_st.registers[4];
-                        let p = self.machine_st.store(self.machine_st.deref(p));
-
-                        let p = match Number::try_from((p, &self.machine_st.arena.f64_tbl)) {
-                            Ok(Number::Fixnum(p)) => p.get_num() as usize,
-                            _ => unreachable!(),
-                        };
-
-                        let module_name = cell_as_atom!(self.deref_register(6));
-
-                        let compilation_target = match module_name {
-                            atom!("user") => CompilationTarget::User,
-                            _ => CompilationTarget::Module(module_name),
-                        };
-
-                        let skeleton = self
-                            .indices
-                            .get_predicate_skeleton_mut(&compilation_target, &key)
-                            .unwrap();
-
-                        if let Some(n) = skeleton.target_pos_of_clause_clause_loc(l) {
-                            let r = self
-                                .machine_st
-                                .store(self.machine_st.deref(self.machine_st.registers[5]));
-
-                            self.machine_st.unify_fixnum(
-                                /* FIXME this is not safe */
-                                unsafe { Fixnum::build_with_unchecked(n as i64) },
-                                r,
-                            );
-                        }
-
-                        self.machine_st.execute_at_index(2, p);
-                    }
-                    &Instruction::CallGetFromAttributedVarList => {
+                    Instruction::CallGetFromAttributedVarList => {
                         self.get_from_attributed_variable_list();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetFromAttributedVarList => {
+                    Instruction::ExecuteGetFromAttributedVarList => {
                         self.get_from_attributed_variable_list();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPutToAttributedVarList => {
+                    Instruction::CallPutToAttributedVarList => {
                         self.put_to_attributed_variable_list();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePutToAttributedVarList => {
+                    Instruction::ExecutePutToAttributedVarList => {
                         self.put_to_attributed_variable_list();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDeleteFromAttributedVarList => {
+                    Instruction::CallDeleteFromAttributedVarList => {
                         self.delete_from_attributed_variable_list();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteDeleteFromAttributedVarList => {
+                    Instruction::ExecuteDeleteFromAttributedVarList => {
                         self.delete_from_attributed_variable_list();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallDeleteAllAttributesFromVar => {
+                    Instruction::CallDeleteAllAttributesFromVar => {
                         self.delete_all_attributes_from_var();
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteDeleteAllAttributesFromVar => {
+                    Instruction::ExecuteDeleteAllAttributesFromVar => {
                         self.delete_all_attributes_from_var();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallUnattributedVar => {
+                    Instruction::CallUnattributedVar => {
                         self.machine_st.unattributed_var();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteUnattributedVar => {
+                    Instruction::ExecuteUnattributedVar => {
                         self.machine_st.unattributed_var();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::CallGetDBRefs => {
+                    Instruction::CallGetDBRefs => {
                         self.get_db_refs();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteGetDBRefs => {
+                    Instruction::ExecuteGetDBRefs => {
                         self.get_db_refs();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallInferenceLimitExceeded => {
+                    Instruction::CallInferenceLimitExceeded => {
                         self.inference_limit_exceeded();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteInferenceLimitExceeded => {
+                    Instruction::ExecuteInferenceLimitExceeded => {
                         self.inference_limit_exceeded();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }

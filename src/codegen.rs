@@ -6,6 +6,7 @@ use crate::forms::*;
 use crate::indexing::*;
 use crate::instructions::*;
 use crate::iterators::*;
+use crate::offset_table::F64Table;
 use crate::parser::ast::*;
 use crate::targets::*;
 use crate::types::*;
@@ -19,6 +20,7 @@ use indexmap::IndexSet;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
+use std::num::NonZero;
 
 #[derive(Debug)]
 pub struct BranchCodeStack {
@@ -185,15 +187,7 @@ impl CodeGenSettings {
 
     pub(crate) fn try_me_else(&self, offset: usize) -> Instruction {
         if let Some(global_clock_tick) = self.global_clock_tick {
-            Instruction::DynamicElse(
-                global_clock_tick,
-                Death::Infinity,
-                if offset == 0 {
-                    NextOrFail::Next(0)
-                } else {
-                    NextOrFail::Next(offset)
-                },
-            )
+            Instruction::DynamicElse(global_clock_tick, Death::Infinity, NextOrFail::Next(offset))
         } else {
             Instruction::TryMeElse(offset)
         }
@@ -217,15 +211,7 @@ impl CodeGenSettings {
 
     pub(crate) fn retry_me_else(&self, offset: usize) -> Instruction {
         if let Some(global_clock_tick) = self.global_clock_tick {
-            Instruction::DynamicElse(
-                global_clock_tick,
-                Death::Infinity,
-                if offset == 0 {
-                    NextOrFail::Next(0)
-                } else {
-                    NextOrFail::Next(offset)
-                },
-            )
+            Instruction::DynamicElse(global_clock_tick, Death::Infinity, NextOrFail::Next(offset))
         } else if self.non_counted_bt {
             Instruction::DefaultRetryMeElse(offset)
         } else {
@@ -269,7 +255,8 @@ impl CodeGenSettings {
 }
 
 #[derive(Debug)]
-pub(crate) struct CodeGenerator {
+pub(crate) struct CodeGenerator<'a> {
+    f64_tbl: &'a F64Table,
     marker: DebrayAllocator,
     settings: CodeGenSettings,
     pub(crate) skeleton: PredicateSkeleton,
@@ -323,7 +310,7 @@ trait AddToFreeList<'a, Target: CompilationTarget<'a>> {
     fn add_subterm_to_free_list(&mut self, term: &Term);
 }
 
-impl<'a> AddToFreeList<'a, FactInstruction> for CodeGenerator {
+impl<'a> AddToFreeList<'_, FactInstruction> for CodeGenerator<'_> {
     fn add_term_to_free_list(&mut self, r: RegType) {
         self.marker.add_reg_to_free_list(r);
     }
@@ -331,7 +318,7 @@ impl<'a> AddToFreeList<'a, FactInstruction> for CodeGenerator {
     fn add_subterm_to_free_list(&mut self, _term: &Term) {}
 }
 
-impl<'a> AddToFreeList<'a, QueryInstruction> for CodeGenerator {
+impl<'a> AddToFreeList<'_, QueryInstruction> for CodeGenerator<'_> {
     #[inline(always)]
     fn add_term_to_free_list(&mut self, _r: RegType) {}
 
@@ -353,18 +340,19 @@ fn structure_cell(term: &Term) -> Option<&Cell<RegType>> {
     }
 }
 
-impl CodeGenerator {
-    pub(crate) fn new(settings: CodeGenSettings) -> Self {
+impl<'a> CodeGenerator<'a> {
+    pub(crate) fn new(f64_tbl: &'a F64Table, settings: CodeGenSettings) -> Self {
         CodeGenerator {
+            f64_tbl,
             marker: DebrayAllocator::new(),
             settings,
             skeleton: PredicateSkeleton::new(),
         }
     }
 
-    fn add_or_increment_void_instr<'a, Target>(target: &mut CodeDeque)
+    fn add_or_increment_void_instr<'b, Target>(target: &mut CodeDeque)
     where
-        Target: crate::targets::CompilationTarget<'a>,
+        Target: crate::targets::CompilationTarget<'b>,
     {
         if let Some(instr) = target.back_mut()
             && Target::is_void_instr(instr)
@@ -376,9 +364,9 @@ impl CodeGenerator {
         target.push_back(Target::to_void(1));
     }
 
-    fn deep_var_instr<'a, Target: crate::targets::CompilationTarget<'a>>(
+    fn deep_var_instr<'b, Target: crate::targets::CompilationTarget<'b>>(
         &mut self,
-        cell: &'a Cell<VarReg>,
+        cell: &'b Cell<VarReg>,
         var_num: usize,
         term_loc: GenContext,
         target: &mut CodeDeque,
@@ -391,9 +379,9 @@ impl CodeGenerator {
         }
     }
 
-    fn subterm_to_instr<'a, Target: crate::targets::CompilationTarget<'a>>(
+    fn subterm_to_instr<'b, Target: crate::targets::CompilationTarget<'b>>(
         &mut self,
-        subterm: &'a Term,
+        subterm: &'b Term,
         term_loc: GenContext,
         target: &mut CodeDeque,
     ) {
@@ -423,11 +411,11 @@ impl CodeGenerator {
         };
     }
 
-    fn compile_target<'a, Target, Iter>(&mut self, iter: Iter, context: GenContext) -> CodeDeque
+    fn compile_target<'b, Target, Iter>(&mut self, iter: Iter, context: GenContext) -> CodeDeque
     where
-        Target: crate::targets::CompilationTarget<'a>,
-        Iter: Iterator<Item = TermRef<'a>>,
-        CodeGenerator: AddToFreeList<'a, Target>,
+        Target: crate::targets::CompilationTarget<'b>,
+        Iter: Iterator<Item = TermRef<'b>>,
+        Self: AddToFreeList<'b, Target>,
     {
         let mut target = CodeDeque::new();
 
@@ -456,7 +444,7 @@ impl CodeGenerator {
                         .mark_non_var::<Target>(lvl, context, cell, &mut target);
                     target.push_back(Target::to_structure(lvl, name, terms_range.end, cell.get()));
 
-                    <CodeGenerator as AddToFreeList<'a, Target>>::add_term_to_free_list(
+                    <CodeGenerator as AddToFreeList<Target>>::add_term_to_free_list(
                         self,
                         cell.get(),
                     );
@@ -466,7 +454,7 @@ impl CodeGenerator {
                     }
 
                     for subterm in &terms[terms_range] {
-                        <CodeGenerator as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
+                        <CodeGenerator as AddToFreeList<Target>>::add_subterm_to_free_list(
                             self, subterm,
                         );
                     }
@@ -476,7 +464,7 @@ impl CodeGenerator {
                         .mark_non_var::<Target>(lvl, context, cell, &mut target);
                     target.push_back(Target::to_list(lvl, cell.get()));
 
-                    <CodeGenerator as AddToFreeList<'a, Target>>::add_term_to_free_list(
+                    <CodeGenerator as AddToFreeList<Target>>::add_term_to_free_list(
                         self,
                         cell.get(),
                     );
@@ -484,12 +472,8 @@ impl CodeGenerator {
                     self.subterm_to_instr::<Target>(head, context, &mut target);
                     self.subterm_to_instr::<Target>(tail, context, &mut target);
 
-                    <CodeGenerator as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
-                        self, head,
-                    );
-                    <CodeGenerator as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
-                        self, tail,
-                    );
+                    <CodeGenerator as AddToFreeList<Target>>::add_subterm_to_free_list(self, head);
+                    <CodeGenerator as AddToFreeList<Target>>::add_subterm_to_free_list(self, tail);
                 }
                 TermRef::Literal(lvl @ Level::Shallow, cell, constant) => {
                     self.marker
@@ -638,14 +622,14 @@ impl CodeGenerator {
                     instr!("$fail")
                 }
             },
-            InlinedClauseType::IsRational(..) => match terms[0] {
+            InlinedClauseType::IsRational(..) => match &terms[0] {
                 Term::Literal(
                     _,
                     Literal::Rational(_) | Literal::Fixnum(_) | Literal::Integer(_),
                 ) => {
                     instr!("$succeed")
                 }
-                Term::Var(ref vr, ref name) => {
+                Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
                     let r = self.marker.mark_non_callable(
                         name.to_var_num().unwrap(),
@@ -660,11 +644,11 @@ impl CodeGenerator {
                     instr!("$fail")
                 }
             },
-            InlinedClauseType::IsFloat(..) => match terms[0] {
+            InlinedClauseType::IsFloat(..) => match &terms[0] {
                 Term::Literal(_, Literal::F64(..)) => {
                     instr!("$succeed")
                 }
-                Term::Var(ref vr, ref name) => {
+                Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
@@ -681,7 +665,7 @@ impl CodeGenerator {
                     instr!("$fail")
                 }
             },
-            InlinedClauseType::IsNumber(..) => match terms[0] {
+            InlinedClauseType::IsNumber(..) => match &terms[0] {
                 Term::Literal(
                     _,
                     Literal::F64(..)
@@ -691,7 +675,7 @@ impl CodeGenerator {
                 ) => {
                     instr!("$succeed")
                 }
-                Term::Var(ref vr, ref name) => {
+                Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
@@ -708,11 +692,11 @@ impl CodeGenerator {
                     instr!("$fail")
                 }
             },
-            InlinedClauseType::IsNonVar(..) => match terms[0] {
+            InlinedClauseType::IsNonVar(..) => match &terms[0] {
                 Term::AnonVar => {
                     instr!("$fail")
                 }
-                Term::Var(ref vr, ref name) => {
+                Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
@@ -750,7 +734,7 @@ impl CodeGenerator {
                     instr!("$fail")
                 }
             },
-            InlinedClauseType::IsVar(..) => match terms[0] {
+            InlinedClauseType::IsVar(..) => match &terms[0] {
                 Term::Literal(..)
                 | Term::Clause(..)
                 | Term::Cons(..)
@@ -761,7 +745,7 @@ impl CodeGenerator {
                 Term::AnonVar => {
                     instr!("$succeed")
                 }
-                Term::Var(ref vr, ref name) => {
+                Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
@@ -809,8 +793,8 @@ impl CodeGenerator {
 
         self.marker.reset_arg(2);
 
-        let at = match terms[0] {
-            Term::Var(ref vr, ref name) => {
+        let at = match &terms[0] {
+            Term::Var(vr, name) => {
                 let var_num = name.to_var_num().unwrap();
 
                 if self.marker.var_data.records[var_num].num_occurrences > 1 {
@@ -855,7 +839,7 @@ impl CodeGenerator {
                     compile_expr!(self, &terms[1], term_loc, code)
                 }
             }
-            Term::Literal(
+            &Term::Literal(
                 ref cell,
                 c @ Literal::Integer(_)
                 | c @ Literal::F64(..)
@@ -865,7 +849,7 @@ impl CodeGenerator {
                 let v = HeapCellValue::from(c);
 
                 self.marker
-                    .mark_non_var::<QueryInstruction>(Level::Shallow, term_loc, cell, code);
+                    .mark_non_var::<QueryInstruction>(Level::Shallow, term_loc, &cell, code);
 
                 code.push_back(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
                 compile_expr!(self, &terms[1], term_loc, code)
@@ -954,26 +938,25 @@ impl CodeGenerator {
                                     self.marker.free_var(chunk_num, var_num);
                                 }
                             }
-                            &QueryTerm::Clause(
+                            QueryTerm::Clause(
                                 _,
                                 ClauseType::BuiltIn(BuiltInClauseType::Is(..)),
-                                ref terms,
+                                terms,
                                 call_policy,
                             ) => self.compile_is_call(
                                 terms,
                                 branch_code_stack.code(code),
                                 term_loc,
-                                call_policy,
+                                *call_policy,
                             )?,
-                            &QueryTerm::Clause(_, ClauseType::Inlined(ref ct), ref terms, _) => {
-                                self.compile_inlined(
+                            QueryTerm::Clause(_, ClauseType::Inlined(ct), terms, _) => self
+                                .compile_inlined(
                                     ct,
                                     terms,
                                     term_loc,
                                     branch_code_stack.code(code),
-                                )?
-                            }
-                            &QueryTerm::Fail => {
+                                )?,
+                            QueryTerm::Fail => {
                                 branch_code_stack.code(code).push_back(instr!("$fail"));
                             }
                             term @ &QueryTerm::Clause(..) => {
@@ -1106,8 +1089,8 @@ impl CodeGenerator {
         code.extend(query);
 
         match term {
-            &QueryTerm::Clause(_, ref ct, _, call_policy) => {
-                self.add_call(code, ct.to_instr(), call_policy);
+            QueryTerm::Clause(_, ct, _, call_policy) => {
+                self.add_call(code, ct.to_instr(), *call_policy);
             }
             _ => unreachable!(),
         };
@@ -1119,27 +1102,25 @@ impl CodeGenerator {
         let mut optimal_index = 0;
 
         'outer: for (right, clause) in clauses.iter().enumerate() {
-            if let Some(args) = clause.args() {
-                for (instantiated_arg_index, arg) in args.iter().enumerate() {
-                    if !matches!(arg, Term::Var(..) | Term::AnonVar) {
-                        if optimal_index != instantiated_arg_index {
-                            if left >= right {
-                                optimal_index = instantiated_arg_index;
-                                continue 'outer;
-                            }
-
-                            subseqs.push(ClauseSpan {
-                                left,
-                                right,
-                                instantiated_arg_index: optimal_index,
-                            });
-
-                            optimal_index = instantiated_arg_index;
-                            left = right;
+            for (instantiated_arg_index, arg) in clause.args().iter().enumerate() {
+                if !matches!(arg, Term::Var(..) | Term::AnonVar) {
+                    if optimal_index != instantiated_arg_index + 1 {
+                        if left >= right {
+                            optimal_index = instantiated_arg_index + 1;
+                            continue 'outer;
                         }
 
-                        continue 'outer;
+                        subseqs.push(ClauseSpan {
+                            left,
+                            right,
+                            instantiated_arg_index: NonZero::new(optimal_index),
+                        });
+
+                        optimal_index = instantiated_arg_index + 1;
+                        left = right;
                     }
+
+                    continue 'outer;
                 }
             }
 
@@ -1147,7 +1128,7 @@ impl CodeGenerator {
                 subseqs.push(ClauseSpan {
                     left,
                     right,
-                    instantiated_arg_index: optimal_index,
+                    instantiated_arg_index: NonZero::new(optimal_index),
                 });
             }
 
@@ -1156,7 +1137,7 @@ impl CodeGenerator {
             subseqs.push(ClauseSpan {
                 left: right,
                 right: right + 1,
-                instantiated_arg_index: optimal_index,
+                instantiated_arg_index: None,
             });
 
             left = right + 1;
@@ -1166,7 +1147,7 @@ impl CodeGenerator {
             subseqs.push(ClauseSpan {
                 left,
                 right: clauses.len(),
-                instantiated_arg_index: optimal_index,
+                instantiated_arg_index: NonZero::new(optimal_index),
             });
         }
 
@@ -1176,20 +1157,31 @@ impl CodeGenerator {
     fn compile_pred_subseq<I: Indexer>(
         &mut self,
         clauses: &mut [PredicateClause],
-        optimal_index: usize,
+        optimal_index: Option<NonZero<usize>>, // if None, the predicate is unindexed
     ) -> Result<Code, CompilationError> {
         let mut code = VecDeque::new();
-        let mut code_offsets =
-            CodeOffsets::new(I::new(), optimal_index + 1, self.settings.non_counted_bt);
+        let mut code_offsets = CodeOffsets::<I>::new(
+            self.f64_tbl,
+            self.settings.non_counted_bt,
+            clauses[0].arity(),
+            self.settings.is_extensible,
+        );
 
         let mut skip_stub_try_me_else = false;
         let clauses_len = clauses.len();
+        let optimal_index = optimal_index.or_else(|| {
+            if self.settings.is_extensible {
+                // plan for indices from the first arg since they may yet be added
+                NonZero::new(1)
+            } else {
+                None
+            }
+        });
 
         for (i, clause) in clauses.iter_mut().enumerate() {
             self.marker.reset();
 
-            let mut clause_index_info = ClauseIndexInfo::new(code.len());
-
+            let index_loc = code.len();
             let clause_code = match clause {
                 PredicateClause::Fact(fact, var_data) => {
                     let var_data = std::mem::take(var_data);
@@ -1211,43 +1203,64 @@ impl CodeGenerator {
                 code.push_back(choice);
             } else if self.settings.is_extensible {
                 /*
-                   generate stub choice instructions for extensible
-                   predicates. if predicates are added to either the
-                   inner or outer thread of choice instructions,
-                   these stubs will be used, and surrounding indexing
-                   instructions modified accordingly.
+                generate stub choice instructions for extensible
+                predicates. if predicates are added to either the
+                inner or outer thread of choice instructions,
+                these stubs will be used, and surrounding indexing
+                instructions modified accordingly.
 
-                   until then, the v offset of SwitchOnTerm will skip
-                   over them.
-                */
+                until then, the v offset of SwitchOnTerm will skip
+                over them.
+                 */
 
                 code.push_front(self.settings.internal_try_me_else(0));
                 skip_stub_try_me_else = !self.settings.is_dynamic();
             }
 
-            let arg = clause.args().and_then(|args| args.get(optimal_index));
+            if let Some(optimal_index) = optimal_index {
+                let clause_offset = code.len();
 
-            if let Some(arg) = arg {
-                let index = code.len();
-
-                if clauses_len > 1 || self.settings.is_extensible {
-                    code_offsets.index_term(arg, index, &mut clause_index_info);
+                for (arg_index, arg) in clause.args().iter().enumerate() {
+                    code_offsets.index_term(
+                        arg_index,
+                        arg,
+                        clause_offset,
+                        optimal_index.get() - 1, // go from 1-based to 0-based index
+                    );
                 }
             }
 
-            self.skeleton.clauses.push_back(clause_index_info);
+            self.skeleton.clause_indices.push_back(ClauseIndex {
+                index_loc: if optimal_index.is_some() {
+                    Some(index_loc)
+                } else {
+                    None
+                },
+                clause_start: index_loc,
+            });
+
             code.extend(clause_code);
         }
 
-        let index_code = if clauses_len > 1 || self.settings.is_extensible {
-            code_offsets.compute_indices(skip_stub_try_me_else)
+        let index_code_is_empty = if let Some(optimal_index) = optimal_index
+            && !code_offsets.no_indices()
+        {
+            let (var_offset, index_code) = code_offsets.compute_indices(
+                optimal_index.get() - 1,
+                skip_stub_try_me_else,
+            );
+
+            if !index_code.is_empty() {
+                code.push_front(Instruction::IndexingCode(var_offset, index_code));
+                false
+            } else {
+                true
+            }
         } else {
-            vec![]
+            true
         };
 
-        if !index_code.is_empty() {
-            code.push_front(Instruction::IndexingCode(index_code));
-        } else if clauses.len() == 1 && self.settings.is_extensible {
+        if index_code_is_empty && clauses.len() == 1 && self.settings.is_extensible {
             // the condition is the value of skip_stub_try_me_else, which is
             // true if the predicate is not dynamic. This operation must apply
             // to dynamic predicates also, though.
@@ -1264,7 +1277,6 @@ impl CodeGenerator {
         mut clauses: Vec<PredicateClause>,
     ) -> Result<Code, CompilationError> {
         let mut code = Code::new();
-
         let split_pred = Self::split_predicate(&clauses);
         let multi_seq = split_pred.len() > 1;
 
@@ -1274,14 +1286,14 @@ impl CodeGenerator {
             instantiated_arg_index,
         } in split_pred
         {
-            let skel_lower_bound = self.skeleton.clauses.len();
+            let skel_lower_bound = self.skeleton.clause_indices.len();
             let code_segment = if self.settings.is_dynamic() {
-                self.compile_pred_subseq::<DynamicCodeIndices>(
+                self.compile_pred_subseq::<DynamicIndexedChoiceInstruction>(
                     &mut clauses[left..right],
                     instantiated_arg_index,
                 )?
             } else {
-                self.compile_pred_subseq::<StaticCodeIndices>(
+                self.compile_pred_subseq::<IndexedChoiceInstruction>(
                     &mut clauses[left..right],
                     instantiated_arg_index,
                 )?
@@ -1302,14 +1314,17 @@ impl CodeGenerator {
             }
 
             if self.settings.is_extensible {
-                let segment_is_indexed = code_segment[0].to_indexing_line().is_some();
+                let segment_is_indexed = matches!(code_segment[0], Instruction::IndexingCode(..));
 
                 for clause_index_info in
-                    self.skeleton.clauses.make_contiguous()[skel_lower_bound..].iter_mut()
+                    self.skeleton.clause_indices.make_contiguous()[skel_lower_bound..].iter_mut()
                 {
-                    clause_index_info.clause_start +=
-                        clause_start_offset + 2 * (segment_is_indexed as usize);
-                    clause_index_info.opt_arg_index_key += clause_start_offset + 1;
+                    clause_index_info.clause_start += clause_start_offset +
+                        2 * (segment_is_indexed as usize);
+
+                    if clause_index_info.index_loc.is_some() {
+                        clause_index_info.add_to_index_loc(clause_start_offset + 1);
+                    }
                 }
             }
 

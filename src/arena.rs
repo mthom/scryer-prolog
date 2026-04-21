@@ -24,6 +24,8 @@ use std::ptr;
 use std::ptr::NonNull;
 use std::ptr::addr_of_mut;
 
+use crate::machine::streams::{PipeReader, PipeWriter};
+
 macro_rules! arena_alloc {
     ($e:expr, $arena:expr) => {{
         let result = $e;
