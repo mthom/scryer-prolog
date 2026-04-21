@@ -384,7 +384,6 @@ impl<T: CopierTarget> CopyTermState<T> {
     }
 
     fn copy_var(&mut self, addr: HeapCellValue) -> Result<(), AllocError> {
-        let index = addr.get_value() as usize;
         let rd = self.target.deref(addr);
         let ra = self.target.store(rd);
 
@@ -397,6 +396,7 @@ impl<T: CopierTarget> CopyTermState<T> {
                 }
             }
             (HeapCellValueTag::Lis, h) => {
+		let index = rd.get_value() as usize;
                 if h >= self.old_h && self.target[index].get_mark_bit() {
                     *self.value_at_scan() = heap_loc_as_cell!(
                         if ra.get_forwarding_bit() {
