@@ -166,13 +166,11 @@ fn issue3262_read_from_stdin_no_newline() {
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 async fn http_open_hanging() {
-    tokio::time::timeout(Duration::from_mins(5), async {
-        load_module_test_with_input(
-            "tests-pl/issue-http_open-hanging.pl",
-            format!("PROLOG={:?}.", env!("CARGO_BIN_EXE_scryer-prolog")),
-            "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
-        );
-    }).await.unwrap()
+    load_module_test_with_input(
+        "tests-pl/issue-http_open-hanging.pl",
+        format!("PROLOG={:?}.", env!("CARGO_BIN_EXE_scryer-prolog")),
+        "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
