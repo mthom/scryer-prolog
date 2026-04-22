@@ -1,0 +1,2 @@
+# issue 3116
+args = ["-f", "--no-add-history", "-g", "test", "-g", "halt", "test.pl"]
