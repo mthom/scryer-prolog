@@ -1,8 +1,6 @@
 use crate::helper::load_module_test;
 use crate::helper::load_module_test_with_input;
-#[cfg(not(target_arch = "wasm32"))]
 use serial_test::serial;
-use tokio::time::Duration;
 
 // issue #831
 #[serial]
@@ -184,6 +182,6 @@ async fn sigint_interrupts_nonterminating_goals() {
     load_module_test_with_input(
         "tests-pl/issue-interrupt-nontermination.pl",
         format!("PROLOG={:?}.", env!("CARGO_BIN_EXE_scryer-prolog")),
-        "ok\n"
+        "ok\n",
     );
 }
