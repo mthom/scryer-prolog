@@ -1,8 +1,8 @@
 use crate::helper::load_module_test;
 use crate::helper::load_module_test_with_input;
 #[cfg(not(target_arch = "wasm32"))]
-use crate::helper::load_module_test_with_tokio_runtime_and_input;
 use serial_test::serial;
+use tokio::time::Duration;
 
 // issue #831
 #[serial]
@@ -163,70 +163,27 @@ fn issue3262_read_from_stdin_no_newline() {
     load_module_test_with_input("tests-pl/issue3262.pl", "hello.", "hello");
 }
 
-#[test]
+#[tokio::test(flavor = "multi_thread")]
 #[cfg(feature = "http")]
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn http_open_hanging() {
-    load_module_test_with_tokio_runtime_and_input(
-        "tests-pl/issue-http_open-hanging.pl",
-        format!("PROLOG={:?}.", env!("CARGO_BIN_EXE_scryer-prolog")),
+async fn http_open_hanging() {
+    tokio::time::timeout(Duration::from_mins(5), async {
+        load_module_test_with_input(
+            "tests-pl/issue-http_open-hanging.pl",
+            format!("PROLOG={:?}.", env!("CARGO_BIN_EXE_scryer-prolog")),
             "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
-    );
+        );
+    }).await.unwrap()
 }
 
-#[test]
+#[tokio::test(flavor = "multi_thread")]
 #[cfg(feature = "repl")]
 #[cfg(unix)]
-fn sigint_interrupts_nonterminating_goals() {
-    load_module_test_with_tokio_runtime_and_input(
+async fn sigint_interrupts_nonterminating_goals() {
+    load_module_test_with_input(
         "tests-pl/issue-interrupt-nontermination.pl",
         format!("PROLOG={:?}.", env!("CARGO_BIN_EXE_scryer-prolog")),
-            "ok\n"
+        "ok\n"
     );
-
-
-    // use std::process::{Command, Stdio};
-    // use std::io::Read;
-
-    // //String cmd;
-
-    // let scryer_path = env!("CARGO_BIN_EXE_scryer-prolog");
-    // let mut child = Command::new("bash")
-    //     //.args(["-g", "write(ready),asserta((f :- f)), f."])
-    //     //.args(["-c", "-g", "catch((write(ready), asserta((f :- f)), f), _, halt)."])
-    //     .args([
-    //         "-c",
-    //         &format!("{scryer_path} -g 'catch((write(ready), asserta((f :- f)), f), _, halt).'")
-    //     ])
-    //     .stdout(Stdio::piped())
-    //     .spawn()
-    //     .unwrap();
-
-    // let pid = child.id();
-
-    // std::thread::sleep(std::time::Duration::from_millis(60000));
-    // let mut buf = [0; 1];
-    // let mut stdout = child.stdout.take().unwrap();
-    // stdout.read_exact(&mut buf).unwrap();
-
-    // assert!(Command::new("kill")
-    //     .args(["-s", "INT", &pid.to_string()])
-    //     //.arg("-SIGINT")
-    //     //.arg(pid.to_string())
-    //     .status()
-    //     .unwrap()
-    //     .success());
-
-    // stdout.read_exact(&mut buf).unwrap();
-
-    // // assert!(Command::new("kill")
-    // //     .arg("-SIGINT")
-    // //     .arg(pid.to_string())
-    // //     .status()
-    // //     .unwrap()
-    // //     .success());
-
-    // std::thread::sleep(std::time::Duration::from_millis(5000));
-    // child.try_wait().expect("Should exit after two SIGINTs");
 }

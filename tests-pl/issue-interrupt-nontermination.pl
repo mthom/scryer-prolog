@@ -1,51 +1,38 @@
 % Server
 :- use_module(library(process)).
-:- use_module(library(iso_ext)).
-:- use_module(library(os)).
+:- use_module(library(charsio)).
+:- use_module(library(lists)).
+:- use_module(library(time)).
 
 prolog_path(Prolog) :-
     read(Body),
     term_variables(Body, [Prolog]),
     Body.
 
-server_start([Process,Out]) :-
-    prolog_path(Prolog),
-    process_create(Prolog,
-        ["tests-pl/issue-http_open-hanging_server", "-t", "server"],
-        [process(Process), stdout(pipe(Out))]).
-
-server_wait_start([_Process, Out]) :-
-    get_char(Out, _C).
-
-server_stop([Process,_Out]) :-
-    process_kill(Process).
-
-% Client 
-:- use_module(library(charsio)).
-:- use_module(library(http/http_open)).
-
-send_request :-
-    Options = [
-        method('get'),
-        status_code(StatusCode),
-        request_headers([]),
-        headers(_)
-    ],
-    http_open("http://localhost:8472", _Stream, Options),
-    write_term('received response with status code':StatusCode, []), nl.
-
 main :-
-    setup_call_cleanup(
-        server_start(Server),
-        (
-            server_wait_start(Server),
-            send_request,
-            send_request,
-            send_request,
-            send_request,
-            send_request
-        ),
-        server_stop(Server)
-    ).
+    prolog_path(Prolog),
+    append(Prolog, " -g '\
+        use_module(library(os)), \
+        pid(PID), \
+        write(PID), nl, \
+        asserta((f :- f)), \
+        catch(f, Err, (write(Err),nl)), \
+        write(done), nl, \
+        halt.'", CMD),
+    process_create("script", ["-q", "-c", CMD], [stdout(pipe(O))]),
+    get_line_to_chars(O, PID0, ""),
+    append(PID, "\r\n", PID0),
+    process_create("kill", ["-s", "INT", PID], []),
+    sleep(5),
+    % second kill should fail because process should exit after one kill
+    process_create("kill", ["-s", "INT", PID], [stderr(null), process(PK)]),
+    process_wait(PK, Status),
+    status_report(Status, PID), nl.
+
+status_report(exit(1), _PID) :- write(ok).
+status_report(exit(0), PID) :-
+    write(not_dead),
+    % kill by force to exit cleanly
+    process_create("kill", ["-9", PID], []).
 
 :- initialization(main).
