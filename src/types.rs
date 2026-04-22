@@ -16,6 +16,7 @@ use std::ops::{Add, Sub, SubAssign};
 
 use dashu::{Integer, Rational};
 
+// Variant tag MUST be odd for all but Cons
 #[derive(Specifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 #[bits = 6]
@@ -61,19 +62,46 @@ pub struct ConsPtr {
 }
 
 impl ConsPtr {
+    // ConstPtr.ptr has 61 bits if usize on the current arch is larger than that
+    // use the niche provided by the alignment of ArenaHeader.
+    // The niece is that the log2(alignment) least significant bits are always 0, so we can shift the
+    // address down by that many places without losing information.
+    // That way with an alignment of 8 a 64-bit address fits into 61-bits after shifting it down by 3 places
+    // and as a result be can store it without loss in ConsPtr.ptr
+    pub(crate) const NICHE_SHIFT: u32 = if usize::BITS > 61 {
+        std::mem::align_of::<ArenaHeader>().ilog2()
+    } else {
+        0
+    };
+
     #[inline(always)]
-    pub fn build_with(ptr: *const ArenaHeader, tag: ConsPtrMaskTag) -> Self {
+    pub fn from_ptr(ptr: *const ArenaHeader) -> Self {
+        Self::build_with(ptr, ConsPtrMaskTag::Cons)
+    }
+
+    #[inline(always)]
+    fn build_with(ptr: *const ArenaHeader, tag: ConsPtrMaskTag) -> Self {
+        let mut addr = u64::try_from(ptr.expose_provenance())
+            .expect("pointer address {ptr:p} should fit into u64");
+
+        debug_assert_eq!(addr % std::mem::align_of::<ArenaHeader>() as u64, 0);
+
+        addr >>= Self::NICHE_SHIFT;
+
         ConsPtr::new()
-            .with_ptr(ptr.expose_provenance() as u64)
+            .with_ptr(addr)
             .with_f(false)
             .with_m(false)
             .with_tag(tag)
     }
 
     #[inline(always)]
-    pub fn as_ptr(self) -> *mut u8 {
-        let addr: u64 = self.ptr();
-        std::ptr::with_exposed_provenance_mut(addr as usize)
+    pub fn as_ptr(self) -> *const ArenaHeader {
+        let mut addr: u64 = self.ptr();
+
+        addr <<= Self::NICHE_SHIFT;
+
+        std::ptr::with_exposed_provenance(addr as usize)
     }
 
     #[inline(always)]
@@ -336,7 +364,7 @@ where
 {
     #[inline]
     fn from(arena_ptr: TypedArenaPtr<T>) -> HeapCellValue {
-        HeapCellValue::from(arena_ptr.header_ptr().expose_provenance() as u64)
+        HeapCellValue::from_arena_header_ptr(arena_ptr.header_ptr())
     }
 }
 
@@ -353,18 +381,6 @@ impl From<CodeIndexOffset> for HeapCellValue {
         HeapCellValue::build_with(
             HeapCellValueTag::CodeIndexOffset,
             code_index_offset.to_u64(),
-        )
-    }
-}
-
-impl From<ConsPtr> for HeapCellValue {
-    #[inline(always)]
-    fn from(cons_ptr: ConsPtr) -> HeapCellValue {
-        HeapCellValue::from_bytes(
-            ConsPtr::from(cons_ptr.as_ptr().expose_provenance() as u64)
-                .with_tag(ConsPtrMaskTag::Cons)
-                .with_m(false)
-                .into_bytes(),
         )
     }
 }
@@ -558,12 +574,12 @@ impl HeapCellValue {
     }
 
     #[inline]
-    pub fn from_ptr_addr(ptr_bytes: usize) -> Self {
-        HeapCellValue::from_bytes((ptr_bytes as u64).to_ne_bytes())
+    pub fn from_arena_header_ptr(ptr: *const ArenaHeader) -> Self {
+        HeapCellValue::from_bytes(ConsPtr::from_ptr(ptr).into_bytes())
     }
 
-    pub fn to_ptr_addr(self) -> usize {
-        u64::from_ne_bytes(self.into_bytes()) as usize
+    pub fn to_arena_header_ptr(self) -> *const ArenaHeader {
+        ConsPtr::from_bytes(self.into_bytes()).as_ptr()
     }
 
     #[inline]
@@ -707,21 +723,14 @@ const_assert!(mem::size_of::<UntypedArenaPtr>() == 8);
 impl From<*const ArenaHeader> for UntypedArenaPtr {
     #[inline]
     fn from(ptr: *const ArenaHeader) -> UntypedArenaPtr {
-        UntypedArenaPtr::build_with(ptr.expose_provenance())
-    }
-}
-
-impl From<*const IndexPtr> for UntypedArenaPtr {
-    #[inline]
-    fn from(ptr: *const IndexPtr) -> UntypedArenaPtr {
-        UntypedArenaPtr::build_with(ptr.expose_provenance())
+        UntypedArenaPtr::from_bytes(ConsPtr::from_ptr(ptr).into_bytes())
     }
 }
 
 impl From<UntypedArenaPtr> for *const ArenaHeader {
     #[inline]
     fn from(ptr: UntypedArenaPtr) -> *const ArenaHeader {
-        ptr.get_ptr().cast::<ArenaHeader>()
+        ptr.get_ptr()
     }
 }
 
@@ -732,9 +741,8 @@ impl UntypedArenaPtr {
     }
 
     #[inline]
-    pub fn get_ptr(self) -> *const u8 {
-        let addr: u64 = self.ptr();
-        std::ptr::with_exposed_provenance(addr as usize)
+    pub fn get_ptr(self) -> *const ArenaHeader {
+        ConsPtr::from_bytes(self.into_bytes()).as_ptr()
     }
 
     #[inline]
@@ -748,7 +756,7 @@ impl UntypedArenaPtr {
 
     #[inline]
     pub fn payload_offset(self) -> *const u8 {
-        unsafe { self.get_ptr().add(size_of::<ArenaHeader>()) }
+        unsafe { self.get_ptr().byte_add(size_of::<ArenaHeader>()).cast() }
     }
 
     /// # Safety

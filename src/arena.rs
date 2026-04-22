@@ -633,16 +633,22 @@ mod tests {
     #[test]
     fn heap_cell_value_const_cast() {
         let mut wam = MockWAM::new();
+
         #[cfg(target_pointer_width = "32")]
-        let const_value = HeapCellValue::from(ConsPtr::build_with(
-            std::ptr::without_provenance(0x0000_0431),
-            ConsPtrMaskTag::Cons,
-        ));
+        assert_eq!(ConsPtr::NICHE_SHIFT, 0);
+
+        #[cfg(not(target_pointer_width = "32"))]
+        assert_eq!(ConsPtr::NICHE_SHIFT, 3);
+
+        #[cfg(target_pointer_width = "32")]
+        let dummy_ptr: *const ArenaHeader = std::ptr::without_provenance(0x0000_0438);
+
         #[cfg(target_pointer_width = "64")]
-        let const_value = HeapCellValue::from(ConsPtr::build_with(
-            std::ptr::without_provenance(0x0000_5555_ff00_0431),
-            ConsPtrMaskTag::Cons,
-        ));
+        let dummy_ptr: *const ArenaHeader = std::ptr::without_provenance(0x0000_5555_ff00_0438);
+
+        assert!(dummy_ptr.is_aligned());
+
+        let const_value = HeapCellValue::from_arena_header_ptr(dummy_ptr);
 
         match const_value.to_untyped_arena_ptr() {
             Some(arena_ptr) => {
@@ -657,8 +663,7 @@ mod tests {
         }
 
         let stream = Stream::from_static_string("test", &mut wam.machine_st.arena);
-        let stream_cell =
-            HeapCellValue::from(ConsPtr::build_with(stream.as_ptr(), ConsPtrMaskTag::Cons));
+        let stream_cell = HeapCellValue::from_arena_header_ptr(stream.as_ptr());
 
         match stream_cell.to_untyped_arena_ptr() {
             Some(arena_ptr) => {
@@ -727,7 +732,7 @@ mod tests {
             Some(untyped_arena_ptr) => {
                 assert_eq!(
                     Some(big_rat_ptr.header_ptr()),
-                    Some(untyped_arena_ptr.into()),
+                    Some(untyped_arena_ptr.get_ptr()),
                 );
             }
             None => {

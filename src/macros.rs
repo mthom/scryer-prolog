@@ -139,12 +139,7 @@ macro_rules! typed_arena_ptr_as_cell {
 
 macro_rules! raw_ptr_as_cell {
     ($ptr:expr) => {{
-        // Cell is 64-bit, but raw ptr is 32-bit in 32-bit systems
-        let ptr: *const _ = $ptr;
-        // This needs to expose provenance because it needs to be turned back into a pointer
-        // in contexts where there is no available provenance locally. For example, in
-        // `ConsPtr::as_ptr`.
-        HeapCellValue::from_ptr_addr(ptr.expose_provenance())
+        HeapCellValue::from_arena_header_ptr($ptr)
     }};
 }
 

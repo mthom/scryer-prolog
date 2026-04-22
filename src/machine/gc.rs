@@ -690,8 +690,7 @@ mod tests {
 
         // term is: [a, <stream ptr>]
         let stream = Stream::from_static_string("test", &mut wam.machine_st.arena);
-        let stream_cell =
-            HeapCellValue::from(ConsPtr::build_with(stream.as_ptr(), ConsPtrMaskTag::Cons));
+        let stream_cell = HeapCellValue::from_arena_header_ptr(stream.as_ptr());
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
 
