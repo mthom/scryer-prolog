@@ -19,7 +19,7 @@ main :-
         catch(f, Err, (write(Err),nl)), \
         write(done), nl, \
         halt.'", CMD),
-    process_create("script", ["-q", "-c", CMD], [stdout(pipe(O))]),
+    process_create("script", ["-q", "-c", CMD, "/dev/null"], [stdout(pipe(O))]),
     get_line_to_chars(O, PID0, ""),
     append(PID, "\r\n", PID0),
     process_create("kill", ["-s", "INT", PID], []),
