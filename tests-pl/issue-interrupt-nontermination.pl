@@ -11,15 +11,15 @@ prolog_path(Prolog) :-
 
 main :-
     prolog_path(Prolog),
-    append(Prolog, " -g '\
-        use_module(library(os)), \
-        pid(PID), \
-        write(PID), nl, \
-        asserta((f :- f)), \
-        catch(f, Err, (write(Err),nl)), \
-        write(done), nl, \
-        halt.'", CMD),
-    process_create("script", ["-q", "-c", CMD, "/dev/null"], [stdout(pipe(O))]),
+    CMD = "\
+use_module(library(os)), \
+pid(PID), \
+write(PID), nl, \
+asserta((f :- f)), \
+catch(f, Err, (write(Err),nl)), \
+write(done), nl, \
+halt.",
+    process_create("tests-pl/pty.py", [Prolog, "-g", CMD], [stdout(pipe(O))]),
     get_line_to_chars(O, PID0, ""),
     append(PID, "\r\n", PID0),
     process_create("kill", ["-s", "INT", PID], []),
