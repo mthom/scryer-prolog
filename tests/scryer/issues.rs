@@ -1,7 +1,5 @@
 use crate::helper::load_module_test;
 use crate::helper::load_module_test_with_input;
-#[cfg(not(target_arch = "wasm32"))]
-use crate::helper::load_module_test_with_tokio_runtime_and_input;
 use serial_test::serial;
 
 // issue #831
@@ -163,14 +161,25 @@ fn issue3262_read_from_stdin_no_newline() {
     load_module_test_with_input("tests-pl/issue3262.pl", "hello.", "hello");
 }
 
-#[test]
+#[tokio::test(flavor = "multi_thread")]
 #[cfg(feature = "http")]
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-fn http_open_hanging() {
-    load_module_test_with_tokio_runtime_and_input(
+async fn http_open_hanging() {
+    load_module_test_with_input(
         "tests-pl/issue-http_open-hanging.pl",
         format!("PROLOG={:?}.", env!("CARGO_BIN_EXE_scryer-prolog")),
-            "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
+        "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[cfg(feature = "repl")]
+#[cfg(unix)]
+async fn sigint_interrupts_nonterminating_goals() {
+    load_module_test_with_input(
+        "tests-pl/issue-interrupt-nontermination.pl",
+        format!("PROLOG={:?}.", env!("CARGO_BIN_EXE_scryer-prolog")),
+        "ok\n",
     );
 }
