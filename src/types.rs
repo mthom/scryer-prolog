@@ -754,11 +754,6 @@ impl UntypedArenaPtr {
         }
     }
 
-    #[inline]
-    pub fn payload_offset(self) -> *const u8 {
-        unsafe { self.get_ptr().byte_add(size_of::<ArenaHeader>()).cast() }
-    }
-
     /// # Safety
     /// - this UntypedArenaPtr actual pointee type is T
     /// - the pointer must be non-null

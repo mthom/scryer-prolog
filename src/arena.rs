@@ -283,7 +283,10 @@ pub trait ArenaAllocated {
         Self::Payload: Sized,
     {
         TypedArenaPtr(NonNull::new_unchecked(
-            ptr.payload_offset().cast_mut().cast::<Self::Payload>(),
+            ptr.get_ptr()
+                .byte_add(Self::header_offset_from_payload())
+                .cast_mut()
+                .cast::<Self::Payload>(),
         ))
     }
 
