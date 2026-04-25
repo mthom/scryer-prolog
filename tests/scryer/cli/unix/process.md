@@ -1,5 +1,6 @@
 ```trycmd
-$ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_create("false", [], [process(P)]), process_wait(P, exit(1)), halt'
+$ scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_create("false", [], [process(P)]), process_id(P, Pid), write(pid=Pid), nl, process_wait(P, exit(1)), halt'
+pid=[..]
 
 ```
 
@@ -10,5 +11,24 @@ $  scryer-prolog -f --no-add-history -g 'use_module(library(process)), use_modul
 
 ```trycmd
 $  scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_create("sh", ["-c", "sleep 5"], [process(P), stdout(null)]), process_kill(P), process_wait(P, killed(9)), halt'
+
+```
+
+
+```trycmd
+$ scryer-prolog -f --no-add-history -t halt -g 'use_module(library(process)), process_create("false", [], [process(P)]), process_id(P, Pid), write(pid=Pid), nl, process_wait(P, exit(1)), process_id(P, Pid2), write(pid=Pid2), nl'
+? success
+pid=[..]
+pid=[..]
+
+```
+
+
+domain error is expected release option doesn't exsist yet
+```trycmd
+$ scryer-prolog -f --no-add-history -t halt -g 'use_module(library(process)), process_create("false", [], [process(P)]), process_id(P, Pid), write(pid=Pid), nl, process_wait(P, exit(1), [release(false)]), process_id(P, Pid2), write(pid=Pid2), nl, process_release(P), process_id(P, Pid3), write(pid=Pid3), nl'
+? success
+pid=[..]
+use_module(library(process)),process_create("false",[],[process(P)]),process_id(P,Pid),write(pid=Pid),nl,process_wait(P,exit(1),[release(false)]),process_id(P,Pid2),write(pid=Pid2),nl,process_release(P),process_id(P,Pid3),write(pid=Pid3),nl causes: error(domain_error(process_wait_option,release),[predicate-process_wait/3,predicate-check_options/3,predicate-must_be_known_options/3])
 
 ```
