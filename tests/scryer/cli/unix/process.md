@@ -22,7 +22,7 @@ $ scryer-prolog -f --no-add-history -t halt -g 'use_module(library(process)), pr
 pid=[..]
 use_module(library(process)),process_create("false",[],[process(P)]),process_id(P,Pid),write(pid=Pid),nl,process_wait(P,exit(1)),process_id(P,Pid2),write(pid=Pid2),nl causes: error(existence_error(process,$dropped_value),[predicate-process_id/2|process_id/2])
 
-thread 'main' ([..]) panicked at src/machine/loader.rs:[..]:[..]:
+thread 'main'[..] panicked at src/machine/loader.rs:[..]:[..]:
 called `Result::unwrap()` on an `Err` value: ()
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
@@ -37,7 +37,7 @@ pid=[..]
 pid=[..]
 use_module(library(process)),process_create("false",[],[process(P)]),process_id(P,Pid),write(pid=Pid),nl,process_wait(P,exit(1),[release(false)]),process_id(P,Pid2),write(pid=Pid2),nl,process_release(P),process_id(P,Pid3),write(pid=Pid3),nl causes: error(existence_error(process,$dropped_value),[predicate-process_id/2|process_id/2])
 
-thread 'main' ([..]) panicked at src/machine/loader.rs:[..]:[..]:
+thread 'main'[..] panicked at src/machine/loader.rs:[..]:[..]:
 called `Result::unwrap()` on an `Err` value: ()
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
