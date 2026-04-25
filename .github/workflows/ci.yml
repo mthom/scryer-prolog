@@ -93,7 +93,7 @@ jobs:
 
       - name: Check miri
         if: matrix.miri
-        run: cargo miri test ${{ matrix.args }}
+        run: cargo miri test --target ${{ matrix.target }} ${{ matrix.args }}
 
       # On stable rust builds, build a binary and publish as a github actions
       # artifact. These binaries could be useful for testing the pipeline but
