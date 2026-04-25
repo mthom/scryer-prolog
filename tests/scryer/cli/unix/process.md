@@ -15,20 +15,30 @@ $  scryer-prolog -f --no-add-history -g 'use_module(library(process)), process_c
 ```
 
 
+existence error is expected as the process was released, but the program shouldn't panic, see [issue 3300](https://github.com/mthom/scryer-prolog/issues/3300)
 ```trycmd
 $ scryer-prolog -f --no-add-history -t halt -g 'use_module(library(process)), process_create("false", [], [process(P)]), process_id(P, Pid), write(pid=Pid), nl, process_wait(P, exit(1)), process_id(P, Pid2), write(pid=Pid2), nl'
-? success
+? failed
 pid=[..]
-pid=[..]
+use_module(library(process)),process_create("false",[],[process(P)]),process_id(P,Pid),write(pid=Pid),nl,process_wait(P,exit(1)),process_id(P,Pid2),write(pid=Pid2),nl causes: error(existence_error(process,$dropped_value),[predicate-process_id/2|process_id/2])
+
+thread 'main' ([..]) panicked at src/machine/loader.rs:[..]:[..]:
+called `Result::unwrap()` on an `Err` value: ()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
 ```
 
 
-domain error is expected release option doesn't exsist yet
+existence error is expected as the process was released, but the program shouldn't panic, see [issue 3300](https://github.com/mthom/scryer-prolog/issues/3300)
 ```trycmd
 $ scryer-prolog -f --no-add-history -t halt -g 'use_module(library(process)), process_create("false", [], [process(P)]), process_id(P, Pid), write(pid=Pid), nl, process_wait(P, exit(1), [release(false)]), process_id(P, Pid2), write(pid=Pid2), nl, process_release(P), process_id(P, Pid3), write(pid=Pid3), nl'
-? success
+? failed
 pid=[..]
-use_module(library(process)),process_create("false",[],[process(P)]),process_id(P,Pid),write(pid=Pid),nl,process_wait(P,exit(1),[release(false)]),process_id(P,Pid2),write(pid=Pid2),nl,process_release(P),process_id(P,Pid3),write(pid=Pid3),nl causes: error(domain_error(process_wait_option,release),[predicate-process_wait/3,predicate-check_options/3,predicate-must_be_known_options/3])
+pid=[..]
+use_module(library(process)),process_create("false",[],[process(P)]),process_id(P,Pid),write(pid=Pid),nl,process_wait(P,exit(1),[release(false)]),process_id(P,Pid2),write(pid=Pid2),nl,process_release(P),process_id(P,Pid3),write(pid=Pid3),nl causes: error(existence_error(process,$dropped_value),[predicate-process_id/2|process_id/2])
+
+thread 'main' ([..]) panicked at src/machine/loader.rs:[..]:[..]:
+called `Result::unwrap()` on an `Err` value: ()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
 ```
