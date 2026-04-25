@@ -12,8 +12,8 @@
 :- use_module(library(lambda)).
 :- use_module(library(error)).
 :- use_module(library(time)).
-:- use_module(library('numerics/testutils')).
-:- use_module(library('numerics/special_functions')).
+:- use_module(library('testing/testutils')).
+:- use_module(library('testing/special_functions')).
 
 portray_term(Stream) :-
     read_term(Stream, Term, []),
