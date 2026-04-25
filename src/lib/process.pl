@@ -95,10 +95,12 @@ process_wait(Process, Status) :- call_with_error_context(process_wait(Process, S
 % `Options` is a a list of the following options
 %
 %  * timeout(Timeout) supported values for `Timeout` are 0 or `infinite`
+%  * release(Bool) supported values for `Bool` are `true` or `false`
 %
 % Each options may be specified at most once, when an option is not specified the following defaults apply:
 %
 % - timeout(infinite)
+% - release(true)
 %
 process_wait(Process, Status, Options) :- call_with_error_context(process_wait_(Process, Status, Options), predicate-process_wait/3).
 
@@ -106,16 +108,28 @@ process_wait_(Process, Status, Options) :-
     valid_process(Process),
     check_options(
         [
-            option([timeout], valid_timeout, timeout(infinite), timeout(Timeout))
+            option([timeout], valid_timeout, timeout(infinite), timeout(Timeout)),
+            option([release], valid_release, release(true), release(Release))
         ],
         Options,
         process_wait_option
     ),
     '$process_wait'(Process, Exit, Timeout),
+    ((true = Release) -> '$process_release'(Process) ; true),
     Exit = Status.
 
 valid_timeout(timeout(infinite)).
 valid_timeout(timeout(0)).
+
+valid_release(release(Arg)) :-
+    ( var(Arg) -> instantiation_error([])
+    ; valid_bool(Arg) -> true
+    ; domain_error(boolean, Arg, [])
+    ).
+
+
+valid_bool(true).
+valid_bool(false).
 
 
 %% process_kill(+Process).
@@ -139,10 +153,9 @@ process_kill_(Process) :-
 %
 process_release(Process) :- call_with_error_context(process_release_(Process), predicate-process_release/1).
 
-process_release_(Process) :- 
+process_release_(Process) :-
     valid_process(Process),
-    process_wait(Process, _),
-    '$process_release'(Process).
+    process_wait(Process, _).
 
 
 must_be_known_options(Valid, Options, Domain) :- call_with_error_context(must_be_known_options_(Valid, [], Options, Domain),predicate-must_be_known_options/3).
@@ -184,9 +197,9 @@ find_option(Names, Found, T) :-
     functor(Found, Name, 1), 
     memberd_t(Name, Names, T).
 
-valid_stdio(IO) :- arg(1, IO, Arg), 
-    ( var(Arg) -> instantiation_error([]) 
-    ; valid_stdio_(Arg) -> true 
+valid_stdio(IO) :- arg(1, IO, Arg),
+    ( var(Arg) -> instantiation_error([])
+    ; valid_stdio_(Arg) -> true
     ; domain_error(stdio_spec, Arg, [])
     ).
 
