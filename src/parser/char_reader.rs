@@ -110,10 +110,10 @@ impl<R: Read> CharReader<R> {
         if self.pos >= self.buf.len() {
             self.buf.clear();
 
-            let mut word = [0u8; std::mem::size_of::<char>()];
-            let nread = self.inner.read(&mut word)?;
+            let mut chunk = [0u8; 8 * 1024];
+            let nread = self.inner.read(&mut chunk)?;
 
-            self.buf.extend_from_slice(&word[..nread]);
+            self.buf.extend_from_slice(&chunk[..nread]);
             self.pos = 0;
         }
 
@@ -234,19 +234,17 @@ impl<R: Read> CharRead for CharReader<R> {
 
     #[inline(always)]
     fn put_back_char(&mut self, c: char) {
-        let src_len = self.buf.len() - self.pos;
-        debug_assert!(src_len <= self.buf.capacity());
-
         let c_len = c.len_utf8();
-        let mut shifted_slice = [0u8; 32];
 
-        shifted_slice[0..src_len].copy_from_slice(&self.buf[self.pos..self.buf.len()]);
+        let mut shifted_slice = SmallVec::<[u8; 32]>::new();
+        shifted_slice.extend_from_slice(&self.buf[self.pos..]);
 
+        self.buf.clear();
         self.buf.resize(c_len, 0);
-        self.buf.extend_from_slice(&shifted_slice[0..src_len]);
-        self.pos = 0;
+        c.encode_utf8(&mut self.buf[..c_len]);
 
-        c.encode_utf8(&mut self.buf[0..c_len]);
+        self.buf.extend_from_slice(&shifted_slice);
+        self.pos = 0;
     }
 
     #[inline(always)]
