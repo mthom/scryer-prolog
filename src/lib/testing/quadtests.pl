@@ -1,6 +1,6 @@
 % Efforts toward literate tests with quads
 
-:- module(quadtests, [check_module_quads/2]).
+:- module(quadtests, [check_module_quads/2, evaluated_quads/2]).
 
 :- use_module(library(iso_ext)).
 :- use_module(library(pio)).
@@ -33,6 +33,26 @@ portray_term(Stream) :-
 % CHECKING.. (?-gamma_P_Q(1.2,2.3,A,B),abs(A+B-1)<epsilon).
 % CHECKING.. (?-A=1.5,B=0.7,invgammp(A,B,C),gamma_P_Q(A,C,D,E),abs(B-D)<epsilon).
    true.
+
+evaluated_quads(Module, evaluation(passed(Passed), rejected(Rejected))) :-
+    use_module(Module),
+    read_quads(Module, Quads),
+    zip(Qs, ADs, Quads),
+    phrase(evaluate_qd_ads(Module, Qs, ADs), R),
+    phrase(assemble_passed_response(R), Passed),
+    phrase(assemble_rejected_response(R), Rejected).
+
+evaluate_qd_ads(Module, [Q|Qr], [A|Ar]) --> {check_qu_ad_(Module, Q, A, _)}, [passed(Q)], evaluate_qd_ads(Module, Qr, Ar).
+evaluate_qd_ads(Module, [Q|Qr], [A|Ar]) --> { \+ check_qu_ad_(Module, Q, A, _)}, [rejected(Q)], evaluate_qd_ads(Module, Qr, Ar).
+evaluate_qd_ads(_, [], []) --> [].
+
+assemble_passed_response([passed(X)|R]) --> [X], assemble_passed_response(R).
+assemble_passed_response([rejected(_)|R]) --> [], assemble_passed_response(R).
+assemble_passed_response([]) --> [].
+
+assemble_rejected_response([rejected(X)|R]) --> [X], assemble_rejected_response(R).
+assemble_rejected_response([passed(_)|R]) --> [], assemble_rejected_response(R).
+assemble_rejected_response([]) --> [].
 
 check_module_quads(Module, Quads) :-
     use_module(Module),
@@ -116,10 +136,10 @@ zip([], [], []).
    Xs = [1,2,3], Ys = [4,5,6].
 
 % 3. Demonstrate checking 1 quad, the top two elements of a QAs list.
-check_qu_ad(Module, Q-QVN, A-AVN) :-
+
+check_qu_ad_(Module, Q-QVN, A-AVN, LitQ) :-
     Q = ?-(G),
     phrase(portray_clause_(Q), LitQ), % NB: LitQ terminates w/ newline
-    format("% CHECKING.. ",[]),
     (   A == true -> call(Module:G)
     ;   A == false -> (   call(Module:G) -> false
                       ;   true
@@ -134,8 +154,12 @@ check_qu_ad(Module, Q-QVN, A-AVN) :-
         call(Module:G),
         call(A),
         QVN == AVN
-    ),
-    format("~s", [LitQ]).
+    ).
+
+check_qu_ad(Module, Q-QVN, A-AVN) :-
+  format("% CHECKING.. ",[]),
+  check_qu_ad_(Module, Q-QVN, A-AVN, LitQ),
+  format("~s", [LitQ]).
 
 % Answer-description AD (qua set-of-bindings) contains Answer.
 contains(AD, Answer) :- append(Answer, _, AD).
@@ -187,4 +211,3 @@ n_answers_(N, G, VN, ADs) :-
 
 ?- n_answers(3, length(Xs, L), ('Xs'=Xs,'Len'=L), ADs).
    Xs = [_A,_B], L = 2, ADs = [('Xs'=[],'Len'=0),('Xs'=[_C],'Len'=1),('Xs'=[_D,_E],'Len'=2)].
-
