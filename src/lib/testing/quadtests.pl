@@ -1,3 +1,7 @@
+/**
+A module to evaluate to quads.
+Quads is a prolog paradigm for testing.
+*/
 % Efforts toward literate tests with quads
 
 :- module(quadtests, [check_module_quads/2, evaluated_quads/2]).
@@ -34,6 +38,8 @@ portray_term(Stream) :-
 % CHECKING.. (?-A=1.5,B=0.7,invgammp(A,B,C),gamma_P_Q(A,C,D,E),abs(B-D)<epsilon).
    true.
 
+%% evaluated_quads(+Module, -evaluation(passed(Passed), rejected(Rejected))).
+%  Evaluate the quad of a module, and return the passed and the rejected quads.
 evaluated_quads(Module, evaluation(passed(Passed), rejected(Rejected))) :-
     use_module(Module),
     read_quads(Module, Quads),
@@ -54,6 +60,8 @@ assemble_rejected_response([rejected(X)|R]) --> [X], assemble_rejected_response(
 assemble_rejected_response([passed(_)|R]) --> [], assemble_rejected_response(R).
 assemble_rejected_response([]) --> [].
 
+%% check_module_quads(+Module, -Quads).
+%  Evaluate the quad of a module, and return in the top level a human readble output.
 check_module_quads(Module, Quads) :-
     use_module(Module),
     read_quads(Module, Quads),
