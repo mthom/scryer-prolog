@@ -1,6 +1,14 @@
+/**
+Evaluate quads.
+
+A quad is a top-level query (?- Goal.) followed by its expected
+answer description. This module exposes check_module_quads/2 for
+human-readable top-level output, and evaluated_quads/2 for reasoning use.
+*/
+
 % Efforts toward literate tests with quads
 
-:- module(quadtests, [check_module_quads/2]).
+:- module(quadtests, [check_module_quads/2, evaluated_quads/2]).
 
 :- use_module(library(iso_ext)).
 :- use_module(library(pio)).
@@ -12,8 +20,8 @@
 :- use_module(library(lambda)).
 :- use_module(library(error)).
 :- use_module(library(time)).
-:- use_module(library('numerics/testutils')).
-:- use_module(library('numerics/special_functions')).
+:- use_module(library('testing/testutils')).
+:- use_module(library('testing/special_functions')).
 
 portray_term(Stream) :-
     read_term(Stream, Term, []),
@@ -34,6 +42,38 @@ portray_term(Stream) :-
 % CHECKING.. (?-A=1.5,B=0.7,invgammp(A,B,C),gamma_P_Q(A,C,D,E),abs(B-D)<epsilon).
    true.
 
+%% evaluated_quads(+Module, -Result).
+%
+%  Evaluate the quads of Module. Result is bound to a term of the form
+%  evaluation(passed(Passed), rejected(Rejected)), where Passed and
+%  Rejected are lists of the quads that succeeded and failed against
+%  their expected answer description.
+evaluated_quads(Module, evaluation(passed(Passed), rejected(Rejected))) :-
+    use_module(Module),
+    read_quads(Module, Quads),
+    zip(Qs, ADs, Quads),
+    phrase(evaluate_qd_ads(Module, Qs, ADs), R),
+    phrase(assemble_passed_response(R), Passed),
+    phrase(assemble_rejected_response(R), Rejected).
+
+evaluate_qd_ads(Module, [Q|Qr], [A|Ar]) --> {check_qu_ad_(Module, Q, A, _)}, [passed(Q)], evaluate_qd_ads(Module, Qr, Ar).
+evaluate_qd_ads(Module, [Q|Qr], [A|Ar]) --> { \+ check_qu_ad_(Module, Q, A, _)}, [rejected(Q)], evaluate_qd_ads(Module, Qr, Ar).
+evaluate_qd_ads(_, [], []) --> [].
+
+assemble_passed_response([passed(X)|R]) --> [X], assemble_passed_response(R).
+assemble_passed_response([rejected(_)|R]) --> [], assemble_passed_response(R).
+assemble_passed_response([]) --> [].
+
+assemble_rejected_response([rejected(X)|R]) --> [X], assemble_rejected_response(R).
+assemble_rejected_response([passed(_)|R]) --> [], assemble_rejected_response(R).
+assemble_rejected_response([]) --> [].
+
+%% check_module_quads(+Module, -Quads).
+%
+%  Evaluate the quads of Module, printing a human-readable trace of
+%  each quad to the top level. Fails as soon as a quad does not match
+%  its expected answer description, without checking subsequent quads.
+%  Quads is bound to the list of quads read from Module.
 check_module_quads(Module, Quads) :-
     use_module(Module),
     read_quads(Module, Quads),
@@ -116,10 +156,10 @@ zip([], [], []).
    Xs = [1,2,3], Ys = [4,5,6].
 
 % 3. Demonstrate checking 1 quad, the top two elements of a QAs list.
-check_qu_ad(Module, Q-QVN, A-AVN) :-
+
+check_qu_ad_(Module, Q-QVN, A-AVN, LitQ) :-
     Q = ?-(G),
     phrase(portray_clause_(Q), LitQ), % NB: LitQ terminates w/ newline
-    format("% CHECKING.. ",[]),
     (   A == true -> call(Module:G)
     ;   A == false -> (   call(Module:G) -> false
                       ;   true
@@ -134,8 +174,12 @@ check_qu_ad(Module, Q-QVN, A-AVN) :-
         call(Module:G),
         call(A),
         QVN == AVN
-    ),
-    format("~s", [LitQ]).
+    ).
+
+check_qu_ad(Module, Q-QVN, A-AVN) :-
+  format("% CHECKING.. ",[]),
+  check_qu_ad_(Module, Q-QVN, A-AVN, LitQ),
+  format("~s", [LitQ]).
 
 % Answer-description AD (qua set-of-bindings) contains Answer.
 contains(AD, Answer) :- append(Answer, _, AD).
@@ -187,4 +231,3 @@ n_answers_(N, G, VN, ADs) :-
 
 ?- n_answers(3, length(Xs, L), ('Xs'=Xs,'Len'=L), ADs).
    Xs = [_A,_B], L = 2, ADs = [('Xs'=[],'Len'=0),('Xs'=[_C],'Len'=1),('Xs'=[_D,_E],'Len'=2)].
-
