@@ -235,16 +235,17 @@ impl<R: Read> CharRead for CharReader<R> {
     #[inline(always)]
     fn put_back_char(&mut self, c: char) {
         let c_len = c.len_utf8();
+        if c_len <= self.pos {
+            self.pos -= c_len;
+        } else {
+            self.buf.insert_from_slice(
+                0,
+                &[0u8; 4/* char::MAX_LEN_UTF8 once msrv reached 1.93 */][..c_len - self.pos],
+            );
+            self.pos = 0;
+        }
 
-        let mut shifted_slice = SmallVec::<[u8; 32]>::new();
-        shifted_slice.extend_from_slice(&self.buf[self.pos..]);
-
-        self.buf.clear();
-        self.buf.resize(c_len, 0);
-        c.encode_utf8(&mut self.buf[..c_len]);
-
-        self.buf.extend_from_slice(&shifted_slice);
-        self.pos = 0;
+        c.encode_utf8(&mut self.buf[self.pos..]);
     }
 
     #[inline(always)]
