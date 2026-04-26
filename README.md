@@ -817,6 +817,103 @@ local_member(X, Xs) :- member(X, Xs).
 The user listing can also be terminated by placing `end_of_file.` at
 the end of the stream.
 
+### Testing
+
+Testing is very important in software development, Prolog included.
+The programming language paradigm has a strong impact on the way testing is done.
+Scryer Prolog promotes quad testing:
+a way to embed query-like test cases directly in your Prolog knowledge base.
+Quads are really simple to write and are meant to grow alongside your program. 
+You just append new ones as the program evolves and as bugs are found.
+Given a simple program in a knowledge base titled `my_list_manipulation.pl`:
+
+```prolog
+:- module(my_list_manipulation, [my_append/3, my_length/2]).
+
+my_append([], Ys, Ys).
+my_append([X|Xs], Ys, [X|Zs]) :-
+    my_append(Xs, Ys, Zs).
+
+?- my_append([1,2], [3,4], Xs).
+   Xs = [1,2,3,4].
+
+?- my_append(Xs, Ys, [1,2,3]).
+   Xs = [], Ys = [1,2,3]
+;  Xs = [1], Ys = [2,3]
+;  Xs = [1,2], Ys = [3]
+;  Xs = [1,2,3], Ys = [].
+
+my_length([], 0).
+my_length([_|Xs], N) :-
+    my_length(Xs, N0),
+    N is N0 + 1.
+
+?- my_length([a,b,c], N).
+   N = 3.
+
+?- my_length([1,2], 3).
+   false.
+```
+
+The quads in that knowledge base are the clauses starting with `?-` (notice how it uses the same syntax as a query) together with their associated expected answer.
+An example of one is:
+
+```prolog
+?- my_append([1,2], [3,4], Xs).
+   Xs = [1,2,3,4].
+```
+
+The goal of a quad is to explain what the expected answer to a query is.
+
+To evaluate quads, users can use the `testing/quadtests` module, which offers two methods.
+
+#### Human readable
+Given the user is writing in the top-level:
+
+```prolog
+use_module(library(testing/quadtests)).
+check_module_quads('my_list_manipulation', _).
+```
+will return, in a human readable way, the response of each quad of the module.
+
+```prolog
+% Checking 4 quads ..
+% CHECKING.. (?-my_append([1,2],[3,4],A)).
+% CHECKING.. (?-my_append(A,B,[1,2,3])).
+% CHECKING.. (?-my_length("abc",A)).
+% CHECKING.. (?-my_length([1,2],3)).
+   true
+;  (?-my_append(A,B,[1,2,3])).
+% CHECKING.. (?-my_length("abc",A)).
+% CHECKING.. (?-my_length([1,2],3)).
+true
+;  (?-my_append(A,B,[1,2,3])).
+% CHECKING.. (?-my_length("abc",A)).
+% CHECKING.. (?-my_length([1,2],3)).
+true
+;  (?-my_append(A,B,[1,2,3])).
+% CHECKING.. (?-my_length("abc",A)).
+% CHECKING.. (?-my_length([1,2],3)).
+true.
+```
+
+
+#### Machine readable
+Given the user is writing in the top-level:
+
+```prolog
+use_module(library(testing/quadtests)).
+evaluated_quads('my_list_manipulation', R).
+```
+will return a bag of solutions for `R` with every solution for the quads:
+```prolog
+R = evaluation(passed([(?-my_append([1,2],[3,4],[1,2,3,4]))-['Xs'=[1,2,3,4]],(?-my_append([],[1,2,3],[1,2,3]))-['Xs'=[],'Ys'=[1,2,3]],(?-my_length("abc",3))-['N'=3],(?-my_length([1,2],3))-[]]),rejected([]))
+;  R = evaluation(passed([(?-my_append([1,2],[3,4],[1,2,3,4]))-['Xs'=[1,2,3,4]],(?-my_append([1],[2,3],[1,2,3]))-['Xs'=[1],'Ys'=[2,3]],(?-my_length("abc",3))-['N'=3],(?-my_length([1,2],3))-[]]),rejected([]))
+;  R = evaluation(passed([(?-my_append([1,2],[3,4],[1,2,3,4]))-['Xs'=[1,2,3,4]],(?-my_append([1,2],[3],[1,2,3]))-['Xs'=[1,2],'Ys'=[3]],(?-my_length("abc",3))-['N'=3],(?-my_length([1,2],3))-[]]),rejected([]))
+;  R = evaluation(passed([(?-my_append([1,2],[3,4],[1,2,3,4]))-['Xs'=[1,2,3,4]],(?-my_append([1,2,3],[],[1,2,3]))-['Xs'=[1,2,3],'Ys'=[]],(?-my_length("abc",3))-['N'=3],(?-my_length([1,2],3))-[]]),rejected([]))
+;  false.
+```
+
 ### Configuration file
 
 At startup, Scryer Prolog consults the file `~/.scryerrc`, if the file
