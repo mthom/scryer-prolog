@@ -64,8 +64,8 @@ jobs:
           - { os: ubuntu-22.04,   rust-version: "${{ needs.read-msrv.outputs.msrv }}" ,  target: 'x86_64-unknown-linux-gnu' }
           - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu' }
           - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu', miri: true, components: "miri" } 
-          # run miri for a big-endian target, without features that require openssl i.e. without http, tls
-          - { os: ubuntu-22.04,   rust-version: nightly, target: 's390x-unknown-linux-gnu', miri: true, components: "miri", args: '--no-default-features --features=repl,hostname,crypto-full,ffi', test-args: '--no-run --no-default-features --features=repl,hostname,crypto-full,ffi' } 
+          # run miri for a big-endian target, with all features that are simple to get cross-compiled
+          - { os: ubuntu-22.04,   rust-version: nightly, target: 's390x-unknown-linux-gnu', miri: true, components: "miri", args: '--no-default-features --features=all-simple-cross', test-args: '--no-run --no-default-features --features=all-simple-cross' } 
     defaults:
       run:
         shell: bash
