@@ -577,7 +577,7 @@ impl Heap {
     // takes a heap index, returns a cell index
     #[inline]
     pub const fn pstr_tail_idx(pstr_zero_byte_loc: usize) -> usize {
-        if (pstr_zero_byte_loc + 1) % Heap::heap_cell_alignment() == 0 {
+        if (pstr_zero_byte_loc + 1).is_multiple_of(Heap::heap_cell_alignment()) {
             cell_index!(pstr_zero_byte_loc) + 2
         } else {
             cell_index!(pstr_zero_byte_loc) + 1

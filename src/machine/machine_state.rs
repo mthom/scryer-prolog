@@ -548,8 +548,7 @@ impl MachineState {
             return true;
         }
 
-        // use strict_add once msrv is >= 1.91.0
-        self.cwil.global_count = self.cwil.global_count.checked_add(1).unwrap();
+        self.cwil.global_count = self.cwil.global_count.strict_add(1);
 
         if let Some(&(ref limit, block)) = self.cwil.limits.last() {
             if self.cwil.local_count == *limit {
@@ -651,7 +650,7 @@ impl MachineState {
         mut var_list: Vec<(VarKey, HeapCellValue, usize)>,
         singleton_heap_list: HeapCellValue,
     ) -> CallResult {
-        var_list.sort_by(|(_, _, idx_1), (_, _, idx_2)| idx_1.cmp(idx_2));
+        var_list.sort_by_key(|(_, _, idx_1)| *idx_1);
 
         let singleton_addr = self.registers[3];
         unify_fn!(*self, singleton_heap_list, singleton_addr);
@@ -1128,8 +1127,7 @@ impl CWIL {
     }
 
     pub(crate) fn add_limit(&mut self, mut limit: u128, block: usize) -> u128 {
-        // use strict_add once msrv is >= 1.91.0
-        limit = limit.checked_add(self.local_count).unwrap();
+        limit = limit.strict_add(self.local_count);
 
         match self.limits.last() {
             Some((ref inner_limit, _)) if *inner_limit <= limit => {}

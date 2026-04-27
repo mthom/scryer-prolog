@@ -549,7 +549,7 @@ impl VariableClassifier {
 
                             let first_branch_num = Arc::new(self.current_branch_num.split());
                             let branches: Vec<_> = std::iter::once(head)
-                                .chain(unfold_by_str(tail, atom!(";")).into_iter())
+                                .chain(unfold_by_str(tail, atom!(";")))
                                 .collect();
 
                             let mut branch_numbers = vec![first_branch_num];
@@ -571,7 +571,7 @@ impl VariableClassifier {
                                 self.current_branch_num.halve_delta(),
                             )));
 
-                            let iter = branches.into_iter().zip(branch_numbers.into_iter());
+                            let iter = branches.into_iter().zip(branch_numbers);
                             let final_disjunct_loc = state_stack.len();
 
                             for (term, branch_num) in iter.rev() {

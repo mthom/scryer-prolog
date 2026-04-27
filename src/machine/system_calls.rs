@@ -8950,36 +8950,27 @@ impl Machine {
             Some(atom!("std")) => Stdio::inherit(),
             Some(atom!("null")) => Stdio::null(),
             Some(atom!("pipe")) => {
-                #[cfg(rust_version = "1.87.0")]
-                #[allow(clippy::incompatible_msrv)]
-                {
-                    let (reader, writer) = match std::io::pipe() {
-                        Ok(pipe_pair) => pipe_pair,
-                        Err(_) => {
-                            return Err(self.machine_st.open_permission_error(
-                                atom!("anonymous_pipe"),
-                                atom!("process_create"),
-                                3,
-                            ));
-                        }
-                    };
+                let (reader, writer) = match std::io::pipe() {
+                    Ok(pipe_pair) => pipe_pair,
+                    Err(_) => {
+                        return Err(self.machine_st.open_permission_error(
+                            atom!("anonymous_pipe"),
+                            atom!("process_create"),
+                            3,
+                        ));
+                    }
+                };
 
-                    let stream = Stream::from_pipe_writer(writer, &mut self.machine_st.arena);
+                let stream = Stream::from_pipe_writer(writer, &mut self.machine_st.arena);
 
-                    self.indices
-                        .add_stream(stream, atom!("process_create"), 3)
-                        .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+                self.indices
+                    .add_stream(stream, atom!("process_create"), 3)
+                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
-                    self.machine_st
-                        .bind(args[1].as_var().unwrap(), stream.into());
+                self.machine_st
+                    .bind(args[1].as_var().unwrap(), stream.into());
 
-                    Stdio::from(reader)
-                }
-
-                #[cfg(not(rust_version = "1.87.0"))]
-                {
-                    Stdio::piped()
-                }
+                Stdio::from(reader)
             }
             Some(atom!("file")) => {
                 let path = self.machine_st.value_to_str_like(args[1]).unwrap();
@@ -9613,7 +9604,6 @@ impl Machine {
 
 #[cfg(feature = "crypto-inpure")]
 fn rng() -> &'static dyn SecureRandom {
-    use lazy_static::lazy_static;
     use std::ops::Deref;
 
     static RANDOM: LazyLock<SystemRandom> = LazyLock::new(SystemRandom::new);

@@ -37,12 +37,14 @@ http = ["dep:warp", "dep:reqwest"]
 crypto-inpure = ["dep:ring"]
 crypto-full = ["crypto-inpure"]
 
+[lints.clippy]
+collapsible_match = "allow"
+
 [lints.rust]
 unexpected_cfgs = { level = "deny", check-cfg = [
     'cfg(rust_version, values("1.87.0"))',
 ] }
 function_casts_as_integer = "deny"
-
 
 [build-dependencies]
 proc-macro2 = "1.0.86"

@@ -247,11 +247,12 @@ impl<T: CopierTarget> CopyTermState<T> {
             self.trail
                 .push((TrailRef::pstr_loc(pstr_loc_idx), old_cell));
 
-            let old_tail_idx = if (pstr_loc + offset + 1) % Heap::heap_cell_alignment() == 0 {
-                cell_index!(pstr_loc + offset) + 2
-            } else {
-                cell_index!(pstr_loc + offset) + 1
-            };
+            let old_tail_idx =
+                if (pstr_loc + offset + 1).is_multiple_of(Heap::heap_cell_alignment()) {
+                    cell_index!(pstr_loc + offset) + 2
+                } else {
+                    cell_index!(pstr_loc + offset) + 1
+                };
 
             let tail_cell = self.target[old_tail_idx];
 
