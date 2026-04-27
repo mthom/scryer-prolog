@@ -4,6 +4,7 @@ set -e
 echo Cleanup workspace build artifacts and extra target output
 
 # clean just the direct members of the current workspace, use cargo metadata to generalize to all rust projects
+# FIXME(msrv) once msrv reaches 1.93 this can be simplified to "cargo clean --workspace"
 cargo clean -p `cargo metadata --no-deps --offline --format-version 1 | jq -r '[.workspace_members[]|split(" ")|.[0]]|join(" ")'`
 
 # remove directories in /target/ that are not named `debug` or `release`

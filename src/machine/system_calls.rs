@@ -8949,6 +8949,7 @@ impl Machine {
             Some(atom!("std")) => Stdio::inherit(),
             Some(atom!("null")) => Stdio::null(),
             Some(atom!("pipe")) => {
+                // FIXME(msrv)
                 #[cfg(rust_version = "1.87.0")]
                 #[allow(clippy::incompatible_msrv)]
                 {
@@ -8975,6 +8976,7 @@ impl Machine {
                     Stdio::from(reader)
                 }
 
+                // FIXME(msrv)
                 #[cfg(not(rust_version = "1.87.0"))]
                 {
                     Stdio::piped()

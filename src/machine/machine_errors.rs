@@ -933,6 +933,7 @@ impl Permission {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(not(feature = "ffi"), expect(dead_code))]
 pub(crate) enum DomainErrorType {
     IOMode,
     NotLessThanZero,
@@ -983,6 +984,7 @@ impl DomainErrorType {
 
 // from 7.12.2 f) of 13211-1:1995
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(not(feature = "ffi"), expect(dead_code))]
 pub(crate) enum RepFlag {
     Character,
     CharacterCode,
@@ -1174,6 +1176,7 @@ impl MachineState {
 }
 
 #[derive(Debug)]
+#[cfg_attr(not(feature = "ffi"), expect(dead_code))]
 pub enum ExistenceError {
     Module(Atom),
     ModuleSource(ModuleSource),
