@@ -1,0 +1,2 @@
+[target.s390x-unknown-linux-gnu]
+linker = "/usr/bin/s390x-linux-gnu-gcc"
