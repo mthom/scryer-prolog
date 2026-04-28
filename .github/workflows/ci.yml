@@ -53,10 +53,10 @@ jobs:
       matrix:
         include:
           # operating systems
-          - { os: windows-latest, rust-version: stable,  target: 'x86_64-pc-windows-msvc',   publish: true }
-          - { os: macos-latest,   rust-version: stable,  target: 'x86_64-apple-darwin',      publish: true }
+          - { os: windows-latest, rust-version: stable,  target: 'x86_64-pc-windows-msvc',   publish: true, check-features: true }
+          - { os: macos-latest,   rust-version: stable,  target: 'x86_64-apple-darwin',      publish: true, check-features: true }
           # architectures
-          - { os: ubuntu-22.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', publish: true }
+          - { os: ubuntu-22.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', publish: true, check-features: true }
           - { os: ubuntu-22.04,   rust-version: stable,  target: 'i686-unknown-linux-gnu',   publish: true }
           # FIXME(issue #2138): run wasm tests, failing to run since https://github.com/mthom/scryer-prolog/pull/2137 removed wasm-pack
           - { os: ubuntu-22.04,   rust-version: nightly, target: 'wasm32-unknown-unknown',   publish: true, args: '--no-default-features' , test-args: '--no-run --no-default-features', use_swap: true }
@@ -84,8 +84,13 @@ jobs:
       # Build and test.
       - name: Build library
         run: cargo build --all-targets --target ${{ matrix.target }} ${{ matrix.args }} --verbose
+
       - name: Test
         run: cargo test --target ${{ matrix.target }} ${{ matrix.test-args }} --all
+
+      - name: Check features
+        if: matrix.check-features
+        run: bash ./.github/workflows/check_features.sh --target ${{ matrix.target }}
 
       - name: Check miri
         if: matrix.miri

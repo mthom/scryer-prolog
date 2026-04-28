@@ -1,3 +1,5 @@
+// FIXME(msrv)
+
 #[cfg(rust_version = "1.87.0")]
 pub use ge_1_87_0::{PipeReader, PipeWriter};
 

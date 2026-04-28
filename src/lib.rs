@@ -54,6 +54,8 @@ pub mod wasm;
 /// The entry point for the Scryer Prolog CLI.
 pub fn run_binary() -> std::process::ExitCode {
     use crate::atom_table::Atom;
+
+    #[cfg(feature = "repl")]
     use crate::machine::INTERRUPT;
 
     #[cfg(feature = "repl")]

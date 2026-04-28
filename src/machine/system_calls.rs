@@ -1,6 +1,5 @@
 use base64::Engine;
 use dashu::integer::{Sign, UBig};
-use lazy_static::lazy_static;
 use num_order::NumOrd;
 
 use crate::arena::*;
@@ -54,7 +53,6 @@ use std::mem;
 #[cfg(feature = "http")]
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::net::{TcpListener, TcpStream};
-use std::num::NonZeroU32;
 use std::process;
 use std::process::Child;
 use std::process::Stdio;
@@ -74,11 +72,15 @@ use crossterm::event::{read, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifier
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
 use blake2::{Blake2b512, Blake2s256};
-use ring::rand::{SecureRandom, SystemRandom};
-use ring::{digest, hkdf, hmac, pbkdf2};
 
 #[cfg(feature = "crypto-full")]
 use ring::aead;
+#[cfg(feature = "crypto-inpure")]
+use ring::{
+    digest, hkdf, hmac, pbkdf2,
+    rand::{SecureRandom, SystemRandom},
+};
+
 use ripemd::{Digest, Ripemd160};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 
@@ -96,8 +98,6 @@ use roxmltree;
 use futures::future;
 #[cfg(feature = "http")]
 use reqwest::Url;
-use tokio::runtime::Handle;
-use tokio::task;
 #[cfg(feature = "http")]
 use warp::hyper::header::{HeaderName, HeaderValue};
 #[cfg(feature = "http")]
@@ -4403,6 +4403,8 @@ impl Machine {
     #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_open(&mut self) -> CallResult {
+        use tokio::task;
+
         let address_sink = self.deref_register(1);
         let method = read_heap_cell!(self.deref_register(3),
             (HeapCellValueTag::Atom, (name, arity)) => {
@@ -4466,7 +4468,7 @@ impl Machine {
 
             // do it!
             task::block_in_place(move || {
-                match Handle::current().block_on(req.send()) {
+                match tokio::runtime::Handle::current().block_on(req.send()) {
                     Ok(resp) => {
                         // status code
                         let status = resp.status().as_u16();
@@ -7843,22 +7845,33 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn crypto_random_byte(&mut self) {
-        let arg = self.machine_st.registers[1];
-        let mut bytes: [u8; 1] = [0];
+        #[cfg(feature = "crypto-inpure")]
+        {
+            let arg = self.machine_st.registers[1];
+            let mut bytes: [u8; 1] = [0];
 
-        match rng().fill(&mut bytes) {
-            Ok(()) => {}
-            Err(_) => {
-                // the error payload here is of type 'Unspecified',
-                // which contains no information whatsoever. So, for now,
-                // just fail.
-                self.machine_st.fail = true;
-                return;
+            match rng().fill(&mut bytes) {
+                Ok(()) => {}
+                Err(_) => {
+                    // the error payload here is of type 'Unspecified',
+                    // which contains no information whatsoever. So, for now,
+                    // just fail.
+                    self.machine_st.fail = true;
+                    return;
+                }
             }
+
+            let byte = Fixnum::build_with(bytes[0]);
+            self.machine_st.unify_fixnum(byte, arg);
         }
 
-        let byte = Fixnum::build_with(bytes[0]);
-        self.machine_st.unify_fixnum(byte, arg);
+        #[cfg(not(feature = "crypto-inpure"))]
+        {
+            let stub_gen = || functor_stub(atom!("crypto_random_byte"), 1);
+            let err = self.machine_st.missing_feature_error(atom!("crypto"));
+            let exception = self.machine_st.error_form(err, stub_gen());
+            self.machine_st.throw_exception(exception);
+        }
     }
 
     #[inline(always)]
@@ -7990,29 +8003,40 @@ impl Machine {
                 )
             }
             _ => {
-                let ints = digest::digest(
-                    match algorithm {
-                        atom!("sha256") => &digest::SHA256,
-                        atom!("sha384") => &digest::SHA384,
-                        atom!("sha512") => &digest::SHA512,
-                        atom!("sha512_256") => &digest::SHA512_256,
-                        _ => {
-                            unreachable!()
-                        }
-                    },
-                    &bytes,
-                );
+                #[cfg(feature = "crypto-inpure")]
+                {
+                    let ints = digest::digest(
+                        match algorithm {
+                            atom!("sha256") => &digest::SHA256,
+                            atom!("sha384") => &digest::SHA384,
+                            atom!("sha512") => &digest::SHA512,
+                            atom!("sha512_256") => &digest::SHA512_256,
+                            _ => {
+                                unreachable!()
+                            }
+                        },
+                        &bytes,
+                    );
 
-                step_or_resource_error!(
-                    self.machine_st,
-                    sized_iter_to_heap_list(
-                        &mut self.machine_st.heap,
-                        ints.as_ref().len(),
-                        ints.as_ref()
-                            .iter()
-                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
+                    step_or_resource_error!(
+                        self.machine_st,
+                        sized_iter_to_heap_list(
+                            &mut self.machine_st.heap,
+                            ints.as_ref().len(),
+                            ints.as_ref()
+                                .iter()
+                                .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
+                        )
                     )
-                )
+                }
+                #[cfg(not(feature = "crypto-inpure"))]
+                {
+                    let stub_gen = || functor_stub(atom!("crypto_data_hash"), 1);
+                    let err = self.machine_st.missing_feature_error(atom!("crypto"));
+                    let exception = self.machine_st.error_form(err, stub_gen());
+                    self.machine_st.throw_exception(exception);
+                    return;
+                }
             }
         };
 
@@ -8021,168 +8045,201 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn crypto_hmac(&mut self) {
-        let encoding = cell_as_atom!(self.deref_register(2));
-        let data = self.string_encoding_bytes(self.machine_st.registers[1], encoding);
-
         let stub_gen = || functor_stub(atom!("crypto_data_hash"), 3);
 
-        let key = self
-            .machine_st
-            .integers_to_bytevec(self.machine_st.registers[3], stub_gen);
+        #[cfg(feature = "crypto-inpure")]
+        {
+            let encoding = cell_as_atom!(self.deref_register(2));
+            let data = self.string_encoding_bytes(self.machine_st.registers[1], encoding);
 
-        let algorithm = cell_as_atom!(self.deref_register(5));
-        let ralg = match algorithm {
-            atom!("sha256") => hmac::HMAC_SHA256,
-            atom!("sha384") => hmac::HMAC_SHA384,
-            atom!("sha512") => hmac::HMAC_SHA512,
-            _ => {
-                unreachable!()
-            }
-        };
+            let key = self
+                .machine_st
+                .integers_to_bytevec(self.machine_st.registers[3], stub_gen);
 
-        let rkey = hmac::Key::new(ralg, key.as_ref());
-        let tag = hmac::sign(&rkey, &data);
+            let algorithm = cell_as_atom!(self.deref_register(5));
+            let ralg = match algorithm {
+                atom!("sha256") => hmac::HMAC_SHA256,
+                atom!("sha384") => hmac::HMAC_SHA384,
+                atom!("sha512") => hmac::HMAC_SHA512,
+                _ => {
+                    unreachable!()
+                }
+            };
 
-        let ints_list = step_or_resource_error!(
-            self.machine_st,
-            sized_iter_to_heap_list(
-                &mut self.machine_st.heap,
-                tag.as_ref().len(),
-                tag.as_ref()
-                    .iter()
-                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
-            )
-        );
+            let rkey = hmac::Key::new(ralg, key.as_ref());
+            let tag = hmac::sign(&rkey, &data);
 
-        unify!(self.machine_st, self.machine_st.registers[4], ints_list);
+            let ints_list = step_or_resource_error!(
+                self.machine_st,
+                sized_iter_to_heap_list(
+                    &mut self.machine_st.heap,
+                    tag.as_ref().len(),
+                    tag.as_ref()
+                        .iter()
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
+                )
+            );
+
+            unify!(self.machine_st, self.machine_st.registers[4], ints_list);
+        }
+
+        #[cfg(not(feature = "crypto-inpure"))]
+        {
+            let err = self.machine_st.missing_feature_error(atom!("crypto"));
+            let exception = self.machine_st.error_form(err, stub_gen());
+            self.machine_st.throw_exception(exception);
+        }
     }
 
     #[inline(always)]
     pub(crate) fn crypto_data_hkdf(&mut self) {
-        let encoding = cell_as_atom!(self.deref_register(2));
-        let data = self.string_encoding_bytes(self.machine_st.registers[1], encoding);
-
         let stub1_gen = || functor_stub(atom!("crypto_data_hkdf"), 4);
-        let salt = self
-            .machine_st
-            .integers_to_bytevec(self.machine_st.registers[3], stub1_gen);
 
-        let stub2_gen = || functor_stub(atom!("crypto_data_hkdf"), 4);
-        let info = self
-            .machine_st
-            .integers_to_bytevec(self.machine_st.registers[4], stub2_gen);
+        #[cfg(feature = "crypto-inpure")]
+        {
+            let encoding = cell_as_atom!(self.deref_register(2));
+            let data = self.string_encoding_bytes(self.machine_st.registers[1], encoding);
 
-        let algorithm = cell_as_atom!(self.deref_register(5));
+            let salt = self
+                .machine_st
+                .integers_to_bytevec(self.machine_st.registers[3], stub1_gen);
 
-        let length = self.deref_register(6);
+            let stub2_gen = || functor_stub(atom!("crypto_data_hkdf"), 4);
+            let info = self
+                .machine_st
+                .integers_to_bytevec(self.machine_st.registers[4], stub2_gen);
 
-        let length = match Number::try_from((length, &self.machine_st.arena.f64_tbl)) {
-            Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
-            Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
-                Ok(u) => u,
+            let algorithm = cell_as_atom!(self.deref_register(5));
+
+            let length = self.deref_register(6);
+
+            let length = match Number::try_from((length, &self.machine_st.arena.f64_tbl)) {
+                Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
+                Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
+                    Ok(u) => u,
+                    _ => {
+                        self.machine_st.fail = true;
+                        return;
+                    }
+                },
                 _ => {
-                    self.machine_st.fail = true;
-                    return;
-                }
-            },
-            _ => {
-                unreachable!()
-            }
-        };
-
-        let ints_list = {
-            let digest_alg = match algorithm {
-                atom!("sha256") => hkdf::HKDF_SHA256,
-                atom!("sha384") => hkdf::HKDF_SHA384,
-                atom!("sha512") => hkdf::HKDF_SHA512,
-                _ => {
-                    self.machine_st.fail = true;
-                    return;
+                    unreachable!()
                 }
             };
 
-            let salt = hkdf::Salt::new(digest_alg, &salt);
-            let mut bytes: Vec<u8> = vec![0; length];
+            let ints_list = {
+                let digest_alg = match algorithm {
+                    atom!("sha256") => hkdf::HKDF_SHA256,
+                    atom!("sha384") => hkdf::HKDF_SHA384,
+                    atom!("sha512") => hkdf::HKDF_SHA512,
+                    _ => {
+                        self.machine_st.fail = true;
+                        return;
+                    }
+                };
 
-            match salt.extract(&data).expand(&[&info[..]], MyKey(length)) {
-                Ok(r) => {
-                    r.fill(&mut bytes).unwrap();
-                }
-                _ => {
-                    self.machine_st.fail = true;
-                    return;
-                }
-            }
+                let salt = hkdf::Salt::new(digest_alg, &salt);
+                let mut bytes: Vec<u8> = vec![0; length];
 
-            step_or_resource_error!(
-                self.machine_st,
-                sized_iter_to_heap_list(
-                    &mut self.machine_st.heap,
-                    bytes.len(),
-                    bytes
-                        .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
-                )
-            )
-        };
-
-        unify!(self.machine_st, self.machine_st.registers[7], ints_list);
-    }
-
-    #[inline(always)]
-    pub(crate) fn crypto_password_hash(&mut self) {
-        let stub1_gen = || functor_stub(atom!("crypto_password_hash"), 3);
-        let data = self
-            .machine_st
-            .integers_to_bytevec(self.machine_st.registers[1], stub1_gen);
-        let stub2_gen = || functor_stub(atom!("crypto_password_hash"), 3);
-        let salt = self
-            .machine_st
-            .integers_to_bytevec(self.machine_st.registers[2], stub2_gen);
-
-        let iterations = self.deref_register(3);
-
-        let iterations = match Number::try_from((iterations, &self.machine_st.arena.f64_tbl)) {
-            Ok(Number::Fixnum(n)) => u64::try_from(n.get_num()).unwrap(),
-            Ok(Number::Integer(n)) => {
-                let n: Result<u64, _> = (&*n).try_into();
-                match n {
-                    Ok(i) => i,
+                match salt.extract(&data).expand(&[&info[..]], MyKey(length)) {
+                    Ok(r) => {
+                        r.fill(&mut bytes).unwrap();
+                    }
                     _ => {
                         self.machine_st.fail = true;
                         return;
                     }
                 }
-            }
-            _ => {
-                unreachable!()
-            }
-        };
 
-        let ints_list = {
-            let mut bytes = [0u8; digest::SHA512_OUTPUT_LEN];
-
-            pbkdf2::derive(
-                pbkdf2::PBKDF2_HMAC_SHA512,
-                NonZeroU32::new(iterations as u32).unwrap(),
-                &salt,
-                &data,
-                &mut bytes,
-            );
-
-            step_or_resource_error!(
-                self.machine_st,
-                sized_iter_to_heap_list(
-                    &mut self.machine_st.heap,
-                    bytes.len(),
-                    bytes
-                        .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
+                step_or_resource_error!(
+                    self.machine_st,
+                    sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        bytes.len(),
+                        bytes
+                            .iter()
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
+                    )
                 )
-            )
-        };
+            };
 
-        unify!(self.machine_st, self.machine_st.registers[4], ints_list);
+            unify!(self.machine_st, self.machine_st.registers[7], ints_list);
+        }
+
+        #[cfg(not(feature = "crypto-inpure"))]
+        {
+            let err = self.machine_st.missing_feature_error(atom!("crypto"));
+            let exception = self.machine_st.error_form(err, stub1_gen());
+            self.machine_st.throw_exception(exception);
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn crypto_password_hash(&mut self) {
+        let stub1_gen = || functor_stub(atom!("crypto_password_hash"), 3);
+
+        #[cfg(feature = "crypto-inpure")]
+        {
+            use std::num::NonZeroU32;
+            let data = self
+                .machine_st
+                .integers_to_bytevec(self.machine_st.registers[1], stub1_gen);
+            let stub2_gen = || functor_stub(atom!("crypto_password_hash"), 3);
+            let salt = self
+                .machine_st
+                .integers_to_bytevec(self.machine_st.registers[2], stub2_gen);
+
+            let iterations = self.deref_register(3);
+
+            let iterations = match Number::try_from((iterations, &self.machine_st.arena.f64_tbl)) {
+                Ok(Number::Fixnum(n)) => u64::try_from(n.get_num()).unwrap(),
+                Ok(Number::Integer(n)) => {
+                    let n: Result<u64, _> = (&*n).try_into();
+                    match n {
+                        Ok(i) => i,
+                        _ => {
+                            self.machine_st.fail = true;
+                            return;
+                        }
+                    }
+                }
+                _ => {
+                    unreachable!()
+                }
+            };
+
+            let ints_list = {
+                let mut bytes = [0u8; digest::SHA512_OUTPUT_LEN];
+
+                pbkdf2::derive(
+                    pbkdf2::PBKDF2_HMAC_SHA512,
+                    NonZeroU32::new(iterations as u32).unwrap(),
+                    &salt,
+                    &data,
+                    &mut bytes,
+                );
+
+                step_or_resource_error!(
+                    self.machine_st,
+                    sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        bytes.len(),
+                        bytes
+                            .iter()
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
+                    )
+                )
+            };
+
+            unify!(self.machine_st, self.machine_st.registers[4], ints_list);
+        }
+
+        #[cfg(not(feature = "crypto-inpure"))]
+        {
+            let err = self.machine_st.missing_feature_error(atom!("crypto"));
+            let exception = self.machine_st.error_form(err, stub1_gen());
+            self.machine_st.throw_exception(exception);
+        }
     }
 
     #[cfg(feature = "crypto-full")]
@@ -8304,109 +8361,153 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn crypto_curve_scalar_mult(&mut self) {
         let stub_gen = || functor_stub(atom!("crypto_curve_scalar_mult"), 4);
-        let scalar_bytes = self
-            .machine_st
-            .integers_to_bytevec(self.machine_st.registers[2], stub_gen);
-        let point_bytes = self
-            .machine_st
-            .integers_to_bytevec(self.machine_st.registers[3], stub_gen);
 
-        let mut point = secp256k1::Point::decode(&point_bytes).unwrap();
-        let scalar = secp256k1::Scalar::decode_reduce(&scalar_bytes);
-        point *= scalar;
+        {
+            let scalar_bytes = self
+                .machine_st
+                .integers_to_bytevec(self.machine_st.registers[2], stub_gen);
+            let point_bytes = self
+                .machine_st
+                .integers_to_bytevec(self.machine_st.registers[3], stub_gen);
 
-        let uncompressed = step_or_resource_error!(
-            self.machine_st,
-            self.u8s_to_string(&point.encode_uncompressed())
-        );
+            let mut point = secp256k1::Point::decode(&point_bytes).unwrap();
+            let scalar = secp256k1::Scalar::decode_reduce(&scalar_bytes);
+            point *= scalar;
 
-        unify!(self.machine_st, self.machine_st.registers[4], uncompressed);
+            let uncompressed = step_or_resource_error!(
+                self.machine_st,
+                self.u8s_to_string(&point.encode_uncompressed())
+            );
+
+            unify!(self.machine_st, self.machine_st.registers[4], uncompressed);
+        }
+
+        {
+            let err = self.machine_st.missing_feature_error(atom!("crypto"));
+            let exception = self.machine_st.error_form(err, stub_gen());
+            self.machine_st.throw_exception(exception);
+        }
     }
 
     #[inline(always)]
     pub(crate) fn ed25519_seed_to_public_key(&mut self) {
         let stub_gen = || functor_stub(atom!("ed25519_seed_keypair"), 2);
-        let seed_bytes = self
-            .machine_st
-            .integers_to_bytevec(self.machine_st.registers[1], stub_gen);
 
-        let skey = ed25519::PrivateKey::from_seed(&seed_bytes);
+        {
+            let seed_bytes = self
+                .machine_st
+                .integers_to_bytevec(self.machine_st.registers[1], stub_gen);
 
-        let complete_string = step_or_resource_error!(
-            self.machine_st,
-            self.u8s_to_string(skey.public_key.encoded.as_ref())
-        );
+            let skey = ed25519::PrivateKey::from_seed(&seed_bytes);
 
-        unify!(
-            self.machine_st,
-            self.machine_st.registers[2],
-            complete_string
-        );
+            let complete_string = step_or_resource_error!(
+                self.machine_st,
+                self.u8s_to_string(skey.public_key.encoded.as_ref())
+            );
+
+            unify!(
+                self.machine_st,
+                self.machine_st.registers[2],
+                complete_string
+            );
+        }
+
+        {
+            let err = self.machine_st.missing_feature_error(atom!("crypto"));
+            let exception = self.machine_st.error_form(err, stub_gen());
+            self.machine_st.throw_exception(exception);
+        }
     }
 
     #[inline(always)]
     pub(crate) fn ed25519_sign_raw(&mut self) {
         let stub_gen = || functor_stub(atom!("ed25519_sign"), 4);
-        let seed_bytes = self
-            .machine_st
-            .integers_to_bytevec(self.machine_st.registers[1], stub_gen);
 
-        let skey = ed25519::PrivateKey::from_seed(&seed_bytes);
+        {
+            let seed_bytes = self
+                .machine_st
+                .integers_to_bytevec(self.machine_st.registers[1], stub_gen);
 
-        let encoding = cell_as_atom!(self.deref_register(3));
-        let data = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
+            let skey = ed25519::PrivateKey::from_seed(&seed_bytes);
 
-        let sig = skey.sign_raw(&data);
-        let sig_list = step_or_resource_error!(
-            self.machine_st,
-            sized_iter_to_heap_list(
-                &mut self.machine_st.heap,
-                sig.as_ref().len(),
-                sig.as_ref()
-                    .iter()
-                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
-            )
-        );
+            let encoding = cell_as_atom!(self.deref_register(3));
+            let data = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
 
-        unify!(self.machine_st, self.machine_st.registers[4], sig_list);
+            let sig = skey.sign_raw(&data);
+            let sig_list = step_or_resource_error!(
+                self.machine_st,
+                sized_iter_to_heap_list(
+                    &mut self.machine_st.heap,
+                    sig.as_ref().len(),
+                    sig.as_ref()
+                        .iter()
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
+                )
+            );
+
+            unify!(self.machine_st, self.machine_st.registers[4], sig_list);
+        }
+
+        {
+            let err = self.machine_st.missing_feature_error(atom!("crypto"));
+            let exception = self.machine_st.error_form(err, stub_gen());
+            self.machine_st.throw_exception(exception);
+        }
     }
 
     #[inline(always)]
     pub(crate) fn ed25519_verify_raw(&mut self) {
-        let key_bytes = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
-        let pkey = ed25519::PublicKey::decode(&key_bytes).unwrap();
-
-        let encoding = cell_as_atom!(self.deref_register(3));
-        let data = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
-
         let stub_gen = || functor_stub(atom!("ed25519_verify"), 4);
 
-        let signature = self
-            .machine_st
-            .integers_to_bytevec(self.machine_st.registers[4], stub_gen);
+        {
+            let key_bytes =
+                self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
+            let pkey = ed25519::PublicKey::decode(&key_bytes).unwrap();
 
-        self.machine_st.fail = !pkey.verify_raw(&signature, &data);
+            let encoding = cell_as_atom!(self.deref_register(3));
+            let data = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
+
+            let signature = self
+                .machine_st
+                .integers_to_bytevec(self.machine_st.registers[4], stub_gen);
+
+            self.machine_st.fail = !pkey.verify_raw(&signature, &data);
+        }
+
+        {
+            let err = self.machine_st.missing_feature_error(atom!("crypto"));
+            let exception = self.machine_st.error_form(err, stub_gen());
+            self.machine_st.throw_exception(exception);
+        }
     }
 
     #[inline(always)]
     pub(crate) fn curve25519_scalar_mult(&mut self) {
-        let stub1_gen = || functor_stub(atom!("curve25519_scalar_mult"), 3);
-        let scalar_bytes = self
-            .machine_st
-            .integers_to_bytevec(self.machine_st.registers[1], stub1_gen);
-        let stub2_gen = || functor_stub(atom!("curve25519_scalar_mult"), 3);
-        let point_bytes = self
-            .machine_st
-            .integers_to_bytevec(self.machine_st.registers[2], stub2_gen);
+        let stub_gen = || functor_stub(atom!("curve25519_scalar_mult"), 3);
 
-        let result = x25519::x25519(
-            &<[u8; 32]>::try_from(&point_bytes[..]).unwrap(),
-            &<[u8; 32]>::try_from(&scalar_bytes[..]).unwrap(),
-        );
+        {
+            let scalar_bytes = self
+                .machine_st
+                .integers_to_bytevec(self.machine_st.registers[1], stub_gen);
+            let point_bytes = self
+                .machine_st
+                .integers_to_bytevec(self.machine_st.registers[2], stub_gen);
 
-        let string = step_or_resource_error!(self.machine_st, self.u8s_to_string(&result[..]));
+            let result = x25519::x25519(
+                &<[u8; 32]>::try_from(&point_bytes[..]).unwrap(),
+                &<[u8; 32]>::try_from(&scalar_bytes[..]).unwrap(),
+            );
 
-        unify!(self.machine_st, self.machine_st.registers[3], string);
+            let string = step_or_resource_error!(self.machine_st, self.u8s_to_string(&result[..]));
+
+            unify!(self.machine_st, self.machine_st.registers[3], string);
+        }
+
+        {
+            let err = self.machine_st.missing_feature_error(atom!("crypto"));
+            let exception = self.machine_st.error_form(err, stub_gen());
+            self.machine_st.throw_exception(exception);
+        }
     }
 
     #[inline(always)]
@@ -8848,6 +8949,7 @@ impl Machine {
             Some(atom!("std")) => Stdio::inherit(),
             Some(atom!("null")) => Stdio::null(),
             Some(atom!("pipe")) => {
+                // FIXME(msrv)
                 #[cfg(rust_version = "1.87.0")]
                 #[allow(clippy::incompatible_msrv)]
                 {
@@ -8874,6 +8976,7 @@ impl Machine {
                     Stdio::from(reader)
                 }
 
+                // FIXME(msrv)
                 #[cfg(not(rust_version = "1.87.0"))]
                 {
                     Stdio::piped()
@@ -9509,7 +9612,9 @@ impl Machine {
     }
 }
 
+#[cfg(feature = "crypto-inpure")]
 fn rng() -> &'static dyn SecureRandom {
+    use lazy_static::lazy_static;
     use std::ops::Deref;
 
     lazy_static! {
@@ -9519,8 +9624,10 @@ fn rng() -> &'static dyn SecureRandom {
     RANDOM.deref()
 }
 
+#[cfg(feature = "crypto-inpure")]
 struct MyKey<T: core::fmt::Debug + PartialEq>(T);
 
+#[cfg(feature = "crypto-inpure")]
 impl hkdf::KeyType for MyKey<usize> {
     fn len(&self) -> usize {
         self.0
