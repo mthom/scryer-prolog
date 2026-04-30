@@ -381,6 +381,33 @@ mod tests {
     }
 
     #[test]
+    fn interspersed_bad_utf8() {
+        let mut read_string = CharReader::new(Cursor::new(b"a string\xffmore_text\xff"));
+
+        for c in "a string".chars() {
+            assert_eq!(read_string.peek_char().unwrap().ok(), Some(c));
+            assert_eq!(read_string.read_char().unwrap().ok(), Some(c));
+        }
+
+        assert_eq!(
+            read_string.peek_char().unwrap().unwrap_err().kind(),
+            std::io::ErrorKind::InvalidData
+        );
+
+        for c in "more_text".chars() {
+            assert_eq!(read_string.peek_char().unwrap().ok(), Some(c));
+            assert_eq!(read_string.read_char().unwrap().ok(), Some(c));
+        }
+
+        assert_eq!(
+            read_string.peek_char().unwrap().unwrap_err().kind(),
+            std::io::ErrorKind::InvalidData
+        );
+
+        assert!(read_string.read_char().is_none());
+    }
+
+    #[test]
     fn greek_string() {
         let mut read_string = CharReader::new(Cursor::new("λέξη"));
 
