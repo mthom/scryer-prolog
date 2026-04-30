@@ -135,7 +135,7 @@ impl<R: Read> CharRead for CharReader<R> {
             Err(e) => return Some(Err(e)),
         }
 
-        let bad_bytes_error = |buf: &[u8]| {
+        fn bad_bytes_error(buf: &[u8]) -> std::io::Error {
             // If we have 4 bytes that still don't make up
             // a valid code point, then we have garbage.
 
