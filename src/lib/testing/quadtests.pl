@@ -1,9 +1,115 @@
-/**
-Evaluate quads.
+/** Quads — testing for Prolog modules.
 
-A quad is a top-level query (?- Goal.) followed by its expected
-answer description. This module exposes check_module_quads/2 for
-human-readable top-level output, and evaluated_quads/2 for reasoning use.
+## Introduction
+
+A *quad* is a query paired with a description of its
+expected answer:
+
+```
+?- emission_by_year(1999, [[_, _, 1999, 1], [_, _, _, _] | _], emission(1999, 1)).
+   true.
+```
+
+The `?-` line is the goal. The line(s) beneath it are the *answer
+description*: here, `true.` records that the goal succeeds. A quad
+runner, `check_module_quads/2` or `evaluated_quads/2`, collects
+each quad of a module and verifies that the goal's answers agree
+with the description.
+
+## Forms of an answer description with example
+
+### `true.` and `false.`
+
+A goal that should succeed is paired with `true.`; one that should
+fail is paired with `false.`:
+
+```
+?- emission_by_year(1999, [[_, _, 1999, 1], [_, _, _, _] | _], emission(1999, 1)).
+   true.
+
+?- emission_by_year(2026, [[_, _, 1999, 1], [_, _, 2000, _]], _).
+   false.
+```
+
+### Domain testing
+
+A quad can also test the domain of a variable. Here we test that the emission data contains every year of interest.
+
+```
+?- emission_parsed_data(_, Data), year_interest(T), emission_by_year(T, Data, R), R == none.
+   false.
+```
+
+### Bindings
+
+When the goal binds variables, the expected bindings are written
+exactly as the top level prints them:
+
+```
+?- emission_parsed_data(Head, _).
+   Head = ["Entity", "Code", "Year", "Annual CO₂ emissions"].
+```
+
+### Multiple answers
+
+```
+?- year_with_emission_of(1, [[_, _, 2002, 1], [_, _, 2003, 2], [_, _, 2004, 1], [_, _, 2005, 1]], X).
+   X = 2002
+;  X = 2004
+;  X = 2005 .
+```
+
+### Partial answer bags
+
+To record only the first few answers without committing to the rest, end the alternatives with `...`:
+```
+?- year_with_emission_of(1, [[_, _, 2002, 1], [_, _, 2003, 2], [_, _, 2004, 1], [_, _, 2005, 1], [_, _, 2006, 1], [_, _, 2007, 3], [_, _, 2008, 1]], X).
+   X = 2002
+;  X = 2004
+;  ... .
+```
+
+
+## Errors
+
+A goal that should throw an error can be exercised with `catch/3`.
+
+```
+?- catch(phrase(jump_emission([[_, _, 2000, 1], [_, _, 1000, 2]]), _),
+         error('the data is not ordered by year'),
+         X = true).
+   X = true.
+```
+
+## Setup and cleanup
+
+A quad can set up state before its goal runs and clean it up
+afterwards, for instance when files are generated:
+
+```
+?- use_module(library(files)),
+   use_module(library(iso_ext)),
+   _File = "mock_analysis.pl",
+   catch(delete_file(_File), error(existence_error(file, _File), delete_file/1), true),
+   _AnalysisToSave = [jump(1000, 2000, 1), jump(3000, 4000, 4)],
+   setup_call_cleanup(
+       saved_analysis(_AnalysisToSave, _File),
+       (
+           file_exists(_File),
+           saved_analysis(_AnalysisLoaded, _File)
+       ),
+       delete_file(_File)
+   ),
+   _AnalysisToSave == _AnalysisLoaded.
+   true.
+```
+
+## Running quads
+
+This module exposes:
+
+| `check_module_quads(+Module, -Quads)` | print a human-readable trace of each quad and fail at the first mismatch |
+| `evaluated_quads(+Module, -Result)`   | return the passed and rejected quads of `Module` for further reasoning   |
 */
 
 % Efforts toward literate tests with quads
