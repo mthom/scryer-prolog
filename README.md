@@ -817,6 +817,244 @@ local_member(X, Xs) :- member(X, Xs).
 The user listing can also be terminated by placing `end_of_file.` at
 the end of the stream.
 
+### Testing
+
+Testing is very important in software development, Prolog included.
+The programming language paradigm has a strong impact on the way testing is done.
+Scryer Prolog promotes quad testing:
+a way to embed query-like test cases directly in your Prolog knowledge base.
+Quads are really simple to write and are meant to grow alongside your program. 
+You just append new ones as the program evolves and as bugs are found.
+Given a simple program in a knowledge base titled `co2_emission_analysis.pl`:
+
+```prolog
+
+/** CO₂ emissions analysis — a worked example of quad testing.
+
+Data source: [Our World in Data — CO₂ emissions](https://ourworldindata.org/co2-emissions).
+The CSV literal is held in `our_world_in_data_co2_cvs/1` so this file is
+self-contained and the quads below are reproducible.
+*/
+:- module(co2_emission_analysis, [emission_parsed_data/2, jump_emission//1, emission_by_year/3, year_with_emission_of/3, saved_analysis/2]).
+
+:- use_module(library(clpz)).
+:- use_module(library(csv)).
+:- use_module(library(files)).
+:- use_module(library(si)).
+:- use_module(library(reif)).
+:- use_module(library(iso_ext)).
+:- use_module(library(dif)).
+
+
+% https://ourworldindata.org/co2-emissions
+our_world_in_data_co2_cvs("Entity,Code,Year,Annual CO₂ emissions\nWorld,OWID_WRL,1750,9305937\nWorld,OWID_WRL,1751,9407229\nWorld,OWID_WRL,1752,9505168\nWorld,OWID_WRL,1753,9610490\nWorld,OWID_WRL,1754,9733580\nWorld,OWID_WRL,1755,9793468\nWorld,OWID_WRL,1756,9909914\nWorld,OWID_WRL,1757,10093936\nWorld,OWID_WRL,1758,10216358").
+
+year_interest(1750).
+year_interest(1752).
+year_interest(1757).
+
+% We can test the domain of a variable.
+%  For instance here, we test if Data domain of emission_parsed_data/2 contains the `year_interest/1`
+?- emission_parsed_data(_, Data), year_interest(T), emission_by_year(T, Data, R), R == none.
+   false.
+
+% Parses the embedded Our World in Data CSV.
+emission_parsed_data(Head, Data) :-
+    our_world_in_data_co2_cvs(Csv),
+    phrase(parse_csv(Frame), Csv),
+    Frame = frame(Head, Data).
+
+% The header row is valid.
+?- emission_parsed_data(Head, _).
+   Head = ["Entity", "Code", "Year", "Annual CO₂ emissions"].
+
+
+% Searches Rows for the row whose year column equals Year.
+emission_by_year(RYear, [[_, _, RYear, Emission]|_], emission(RYear, Emission)).
+emission_by_year(RYear, [[_, _, Year, _]|Rest], R) :-
+    RYear #\= Year,
+    emission_by_year(RYear, Rest, R).
+
+%% We can test the behavior of a clause.
+?- emission_by_year(1999, [[_, _, 1999, 1], [_, _, _, _] | _], emission(1999, 1)).
+   true.
+?- emission_by_year(2026, [[_, _, 1999, 1], [_, _, 2000, _]], _).
+   false.
+?- emission_by_year(1999, [[_, _, 1999, 1], [_, _, _, _]], emission(2000, 1)).
+   false.
+?- emission_by_year(1999, [[_, _, 1999, 1], [_, _, _, _]], emission(1999, 3)).
+   false.
+?- emission_by_year(1999, [[_, _, 1999, 1], [_, _, _, _]], emission(2, 3)).
+   false.
+?- emission_by_year(1999, [[_, _, 2002, 1], [_, _, 2003, 2], [_, _, 1999, 3]], none).
+   false.
+?- emission_by_year(1999, [[_, _, 2002, 1], [_, _, 2003, 2], [_, _, 1999, 3]], emission(1999, 3)).
+   true.
+
+
+% The years where an emission value can be found
+year_with_emission_of(Emission, [[_, _, Year, Emission]|_], Year).
+year_with_emission_of(Emission, [[_, _, _, _]|Rest], Year):-
+    year_with_emission_of(Emission, Rest, Year).
+
+?- year_with_emission_of(1, [], X).
+   false.
+?- year_with_emission_of(1, [[_, _, 2002, 1], [_, _, 2003, 2], [_, _, 1999, 3]], 2002).
+   true.
+% We can test if a clause returns multiple solutions.
+?- year_with_emission_of(1, [[_, _, 2002, 1], [_, _, 2003, 2], [_, _, 2004, 1], [_, _, 2005, 1]], X).
+   X = 2002
+;  X = 2004
+;  X = 2005 .
+% We can test a partial solution bag by using `...`
+?- year_with_emission_of(1, [[_, _, 2002, 1], [_, _, 2003, 2], [_, _, 2004, 1], [_, _, 2005, 1], [_, _, 2006, 1], [_, _, 2007, 3], [_, _, 2008, 1]], X).
+   X = 2002
+;  X = 2004
+;  ... .
+
+% Describe the jump in emission in a dataset
+jump_emission([]) --> [].
+?- phrase(jump_emission([]), R).
+   R = [].
+
+jump_emission([_]) --> [].
+?- phrase(jump_emission([[_, _, 1000, 1]]), R).
+   R = [].
+
+jump_emission([[_, _, Year1, _], [_, _, Year2, _]|_]) -->
+    {
+        Year1 #> Year2,
+        throw(error('the data is not ordered by year'))
+    }.
+% We can test if a clause returns an error.
+?- catch(phrase(jump_emission([[_, _, 2000, 1], [_, _, 1000, 2]]), _), error('the data is not ordered by year'), X = true).
+   X = true.
+
+jump_emission([[_, _, Year1, Emission1], [_, _, Year2, Emission2]|Rest]) -->
+    {
+        Delta #= Emission2 - Emission1,
+        Year2 #> Year1,
+        Delta #> 0
+    },
+    [jump(Year1, Year2, Delta)],
+    jump_emission(Rest).
+?- phrase(jump_emission([[_, _, 1000, 1], [_, _, 2000, 2]]), R).
+   R = [jump(1000, 2000, 1)].
+?- phrase(jump_emission([[_, _, 1000, 1], [_, _, 2000, 2], [_, _, 3000, 1]]), R).
+   R = [jump(1000, 2000, 1)].
+?- phrase(jump_emission([[_, _, 1000, 1], [_, _, 2000, 2], [_, _, 3000, 1], [_, _, 4000, 5]]), R).
+   R = [jump(1000, 2000, 1), jump(3000, 4000, 4)].
+
+% Save an analysis into a file or load an analysis based on if `Data` is grounded or a variable.
+saved_analysis(Data, File) :-
+    if_(file_exists_t(File),
+        (   var(Data),
+            setup_call_cleanup(
+                open(File, read, Stream),
+                once(phrase(prolog_kb_list(Stream), [Data])),
+                close(Stream)
+            )
+        ),
+        (   ground(Data),
+            setup_call_cleanup(
+                open(File, write, Stream),
+                (
+                    write_term(Stream, Data, []),
+                    write(Stream, '.\n')
+                ),
+                close(Stream)
+            )
+        )
+    ).
+
+% We can set up and clean up tests.
+% Like in top-level queries we need to explicitly import the modules used in the tests.
+?- use_module(library(files)),
+   use_module(library(iso_ext)),
+    _File = "mock_analysis.pl",
+    catch(delete_file(_File), error(existence_error(file, _File), delete_file/1), true),
+    _AnalysisToSave = [jump(1000, 2000, 1), jump(3000, 4000, 4)],
+    setup_call_cleanup(
+        saved_analysis(_AnalysisToSave, _File),
+        (
+            file_exists(_File),
+            saved_analysis(_AnalysisLoaded, _File)
+        ),
+        delete_file(_File)
+    ),
+    _AnalysisToSave == _AnalysisLoaded.
+   true.
+
+% DCG that reads Prolog terms from `Stream` until `end_of_file`.
+prolog_kb_list(Stream) --> {read(Stream, Term), dif(Term, end_of_file)}, [Term], prolog_kb_list(Stream).
+prolog_kb_list(Stream) --> {read(Stream, Term), Term == end_of_file}, [].
+
+% Reified `file_exists/1`
+file_exists_t(File, true) :- file_exists(File).
+file_exists_t(File, false) :- when_si(ground(File), \+ file_exists(File)).
+```
+
+The quads in that knowledge base are the clauses starting with `?-` (notice how it uses the same syntax as a query) together with their associated expected answer.
+An example of one is:
+
+```prolog
+?- phrase(jump_emission([[_, _, 1000, 1], [_, _, 2000, 2]]), R).
+   R = [jump(1000, 2000, 1)].
+```
+
+The goal of a quad is to explain what the expected answer to a query is.
+
+To evaluate quads, users can use the `testing/quadtests` module, which offers two methods.
+
+#### Human readable
+Given the user is writing in the top-level:
+
+```prolog
+use_module(library(testing/quadtests)).
+check_module_quads(co2_emission_analysis, _).
+```
+will return, in a human readable way, the response of each quad of the module.
+
+```prolog
+% Checking 20 quads ..
+% CHECKING.. (?-emission_parsed_data(A,B),year_interest(C),emission_by_year(C,B,D),D==none).
+% CHECKING.. (?-emission_parsed_data(A,B)).
+% CHECKING.. (?-emission_by_year(1999,[[A,B,1999,1],[C,D,E,F]|G],emission(1999,1))).
+% CHECKING.. (?-emission_by_year(2026,[[A,B,1999,1],[C,D,2000,E]],F)).
+% CHECKING.. (?-emission_by_year(1999,[[A,B,1999,1],[C,D,E,F]],emission(2000,1))).
+% CHECKING.. (?-emission_by_year(1999,[[A,B,1999,1],[C,D,E,F]],emission(1999,3))).
+% CHECKING.. (?-emission_by_year(1999,[[A,B,1999,1],[C,D,E,F]],emission(2,3))).
+% CHECKING.. (?-emission_by_year(1999,[[A,B,2002,1],[C,D,2003,2],[E,F,1999,3]],none)).
+% CHECKING.. (?-emission_by_year(1999,[[A,B,2002,1],[C,D,2003,2],[E,F,1999,3]],emission(1999,3))).
+% CHECKING.. (?-year_with_emission_of(1,[],A)).
+% CHECKING.. (?-year_with_emission_of(1,[[A,B,2002,1],[C,D,2003,2],[E,F,1999,3]],2002)).
+% CHECKING.. (?-year_with_emission_of(1,[[A,B,2002,1],[C,D,2003,2],[E,F,2004,1],[G,H,2005,1]],I)).
+% CHECKING.. (?-year_with_emission_of(1,[[A,B,2002,1],[C,D,2003,2],[E,F,2004,1],[G,H,2005,1],[I,J,2006,1],[K,L,2007,3],[M,N,2008,1]],O)).
+% CHECKING.. (?-phrase(jump_emission([]),A)).
+% CHECKING.. (?-phrase(jump_emission([[A,B,1000,1]]),C)).
+% CHECKING.. (?-catch(phrase(jump_emission([[A,B,2000,1],[C,D,1000,2]]),E),error('the data is not ordered by year'),F=true)).
+% CHECKING.. (?-phrase(jump_emission([[A,B,1000,1],[C,D,2000,2]]),E)).
+% CHECKING.. (?-phrase(jump_emission([[A,B,1000,1],[C,D,2000,2],[E,F,3000,1]]),G)).
+% CHECKING.. (?-phrase(jump_emission([[A,B,1000,1],[C,D,2000,2],[E,F,3000,1],[G,H,4000,5]]),I)).
+% CHECKING.. (?-use_module(library(files)),use_module(library(iso_ext)),A="mock_analysis.pl",catch(delete_file(A),error(existence_error(file,A),delete_file/1),true),B=[jump(1000,2000,1),jump(3000,4000,4)],setup_call_cleanup(saved_analysis(B,A),(file_exists(A),saved_analysis(C,A)),delete_file(A)),B==C).
+   true
+;  ... .
+```
+
+
+#### Machine readable
+Given the user is writing in the top-level:
+
+```prolog
+use_module(library(testing/quadtests)).
+evaluated_quads('my_list_manipulation', R).
+```
+will return a bag of solutions for `R`, of the form `evaluation(passed(Quad), rejected(Rejected))`, with every solution for the quads:
+```prolog
+R = evaluation(passed([(?-emission_parsed_data(_A,_B),year_interest(_C),emission_by_year(_C,_B,_D),_D==none)-['Data'=_B,'T'=_C,'R'=_D],(?-emission_parsed_data(["Entity","Code","Year","Annual CO ..."],[["World","OWID_WRL",1750,9305937],["World","OWID_WRL",1751,9407229],["World","OWID_WRL ...",1752,9505168],["World","OWID_WR ...",1753,9610490],["World","OWID_W ...",1754,9733580],["World","OWID_ ...",1755,9793468],["World ...","OWID ...",1756,9909914],["Worl ...","OWI ...",1757,10093936],["Wor ...","OW ...",1758,...]]))-['Head'=["Entity","Code","Year","Annual CO ..."]],(?-emission_by_year(1999,[[_E,_F,1999,1],[_G,_H,_I,_J]|_K],emission(1999,1)))-[],(?-emission_by_year(2026,[[_L,_M,1999,1],[_N,_O,2000,_P]],_Q))-[],(?-emission_by_year(1999,[[_R,_S,1999,1],[_T,_U,_V,_W]],emission(2000,1)))-[],(?-emission_by_year(1999,[[_X,_Y,1999,1],[_Z,_A1,_B1,_C1]],emission(1999,3)))-[],(?-emission_by_year(1999,[[_D1,_E1,1999,1],[_F1,_G1,_H1,_I1]],emission(2,3)))-[],(?-emission_by_year(1999,[[_J1,_K1,2002,1],[_L1,_M1,2003,2],[_N1,_O1,1999,...]],none))-[],(?-emission_by_year(1999,[[_P1,_Q1,2002,1],[_R1,_S1,2003,...],[_T1,_U1,...|...]],emission(1999,3)))-[],(?-year_with_emission_of(1,[],_V1))-['X'=_V1],(?-year_with_emission_of(1,[[_W1,_X1,...|...],[_Y1,_Z1|...],[_A2|...]],2002))-[],(?-year_with_emission_of(1,[[_B2,_C2|...],[_D2|...],...|...],2002))-['X'=2002],(?-year_with_emission_of(1,[[_E2|...],...|...],2004))-['X'=2004],(?-phrase(jump_emission([]),[]))-['R'=[]],(?-phrase(...,[]))-['R'=[]],(?- ...)-[...],(...)- ...,...|...]),rejected([]))
+;  ... .
+```
+
 ### Configuration file
 
 At startup, Scryer Prolog consults the file `~/.scryerrc`, if the file
