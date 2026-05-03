@@ -880,6 +880,8 @@ Successful existing applications of Scryer Prolog include:
   trial&nbsp;design, described in [*An Executable Specification of
   Oncology Dose-Escalation Protocols with&nbsp;Prolog*](https://arxiv.org/abs/2402.08334)
   and culminating in&nbsp;[**DEDUCTION**](https://codeberg.org/dcnorris/DEDUCTION)
+- the core tax engine for VAT reasoning and compliance of the
+  Belgian&nbsp;company [VATmiraal](https://vatmiraal.be/)
 - semantic reasoning and queries in [AD4M](https://github.com/coasys/ad4m),
   an agent-centric distributed application meta-ontology.
 
