@@ -737,10 +737,13 @@ impl MachineState {
             FfiError::LayoutError => self.representation_error(RepFlag::FfiLayout),
             FfiError::UnsupportedTypedef => self.representation_error(RepFlag::FfiLayout),
             FfiError::UnsupportedAbi => self.representation_error(RepFlag::FfiAbi),
-            FfiError::VoidArgumentType => self.domain_error(
+            FfiError::UnsupportedArgumentType(None) => self.domain_error(
                 DomainErrorType::FfiArgumentType,
-                atom_as_cell!(atom!("void")),
+                atom_as_cell!(atom!("unknown")),
             ),
+            FfiError::UnsupportedArgumentType(Some(kind)) => {
+                self.domain_error(DomainErrorType::FfiArgumentType, atom_as_cell!(kind))
+            }
             FfiError::CStrFieldType => self.domain_error(
                 DomainErrorType::NonCStrFfiArgumentType,
                 atom_as_cell!(atom!("cstr")),
@@ -749,6 +752,7 @@ impl MachineState {
                 DomainErrorType::NonNullPtr,
                 fixnum_as_cell!(Fixnum::build_with(0)),
             ),
+            FfiError::Other => self.unreachable_error(),
         }
     }
 

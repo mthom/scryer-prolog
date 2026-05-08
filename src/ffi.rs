@@ -26,7 +26,7 @@ use crate::machine::machine_errors::DomainErrorType;
 use crate::parser::ast::{Fixnum, MightNotFitInFixnum};
 
 use dashu::Integer;
-use libffi::middle::{Arg, Cif, CodePtr, Type};
+use libffi::middle::{Arg, Cif, CodePtr, Ret, Type};
 use libloading::{Library, Symbol};
 use ordered_float::OrderedFloat;
 use std::alloc::{self, Layout};
@@ -36,7 +36,6 @@ use std::ffi::{c_char, c_void, CStr, CString};
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
-use std::ops::Deref;
 use std::ptr::NonNull;
 
 pub struct FunctionDefinition {
@@ -55,7 +54,7 @@ pub struct FunctionImpl {
 
 impl FunctionImpl {
     unsafe fn call_void(&self, args: &[Arg], _: &mut Arena) -> Result<Value, FfiError> {
-        self.cif.call::<()>(self.code_ptr, args);
+        self.cif.call_return_into(self.code_ptr, args, Ret::void());
         Ok(Value::Number(Number::Fixnum(Fixnum::build_with(0))))
     }
 
@@ -114,12 +113,8 @@ impl FunctionImpl {
         let alloc = FfiStruct::new(layout, FfiAllocator::Rust)?;
 
         unsafe {
-            libffi::raw::ffi_call(
-                self.cif.as_raw_ptr(),
-                Some(*self.code_ptr.as_safe_fun()),
-                alloc.ptr.as_ptr(),
-                args.as_ptr() as *mut *mut c_void,
-            )
+            self.cif
+                .call_return_into(self.code_ptr, args, alloc.as_ret())
         };
 
         let struct_val =
@@ -336,54 +331,14 @@ impl StructImpl {
                             substruct_type.read(field_ptr, *substruct, struct_table, arena)?;
                         Ok(struct_val)
                     }
-                    FfiType::Void => return Err(FfiError::VoidArgumentType),
+                    FfiType::Void => {
+                        return Err(FfiError::UnsupportedArgumentType(Some(atom!("void"))))
+                    }
                 };
                 returns.push(val?);
             }
             Ok(Value::Struct(struct_name, returns))
         }
-    }
-}
-
-struct PointerArgs<'a, 'val> {
-    memory: Vec<Arg>,
-    phantom: PhantomData<&'a mut ArgValue<'val>>,
-}
-
-impl<'args, 'val> PointerArgs<'args, 'val> {
-    fn new(args: &'args [ArgValue<'val>]) -> Self {
-        let args = args
-            .iter()
-            .map(|arg| match arg {
-                ArgValue::U8(a) => libffi::middle::arg(a),
-                ArgValue::I8(a) => libffi::middle::arg(a),
-                ArgValue::U16(a) => libffi::middle::arg(a),
-                ArgValue::I16(a) => libffi::middle::arg(a),
-                ArgValue::U32(a) => libffi::middle::arg(a),
-                ArgValue::I32(a) => libffi::middle::arg(a),
-                ArgValue::U64(a) => libffi::middle::arg(a),
-                ArgValue::I64(a) => libffi::middle::arg(a),
-                ArgValue::F32(a) => libffi::middle::arg(a),
-                ArgValue::F64(a) => libffi::middle::arg(a),
-                ArgValue::Ptr(ptr, _) => Arg::new(ptr),
-                ArgValue::Struct(s) => unsafe {
-                    std::mem::transmute::<*mut c_void, Arg>(s.ptr.as_ptr())
-                },
-            })
-            .collect();
-
-        PointerArgs {
-            memory: args,
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl Deref for PointerArgs<'_, '_> {
-    type Target = [Arg];
-
-    fn deref(&self) -> &Self::Target {
-        &self.memory
     }
 }
 
@@ -543,7 +498,7 @@ impl<'val> ArgValue<'val> {
                     args,
                 )?))
             }
-            FfiType::Void => Err(FfiError::VoidArgumentType),
+            FfiType::Void => Err(FfiError::UnsupportedArgumentType(Some(atom!("void")))),
         }
     }
 
@@ -567,6 +522,28 @@ impl<'val> ArgValue<'val> {
             .zip(types)
             .map(|(arg, arg_type)| ArgValue::new(arg, arg_type, structs_table))
             .collect::<Result<Vec<_>, _>>()
+    }
+
+    fn as_arg<'res, 'this: 'res>(&'this self) -> Arg<'res>
+    where
+        'val: 'res,
+    {
+        match self {
+            ArgValue::U8(a) => libffi::middle::arg(a),
+            ArgValue::I8(a) => libffi::middle::arg(a),
+            ArgValue::U16(a) => libffi::middle::arg(a),
+            ArgValue::I16(a) => libffi::middle::arg(a),
+            ArgValue::U32(a) => libffi::middle::arg(a),
+            ArgValue::I32(a) => libffi::middle::arg(a),
+            ArgValue::U64(a) => libffi::middle::arg(a),
+            ArgValue::I64(a) => libffi::middle::arg(a),
+            ArgValue::F32(a) => libffi::middle::arg(a),
+            ArgValue::F64(a) => libffi::middle::arg(a),
+            ArgValue::Ptr(ptr, _) => Arg::new(ptr),
+            ArgValue::Struct(s) => unsafe {
+                std::mem::transmute::<*mut c_void, Arg>(s.ptr.as_ptr())
+            },
+        }
     }
 }
 
@@ -627,6 +604,10 @@ impl FfiStruct {
             layout,
             allocator,
         })
+    }
+
+    fn as_ret(&self) -> libffi::middle::Ret<'_> {
+        unsafe { std::mem::transmute::<*mut c_void, Ret>(self.ptr.as_ptr()) }
     }
 }
 
@@ -727,7 +708,7 @@ impl ForeignFunctionTable {
             &self.structs,
         )?;
 
-        let args = PointerArgs::new(&args);
+        let args: Vec<_> = args.iter().map(|v| v.as_arg()).collect();
 
         fn_impl.call(&args, arena, &self.structs)
     }
@@ -755,7 +736,7 @@ impl ForeignFunctionTable {
         }
 
         match FfiType::from_atom(&kind) {
-            FfiType::Void => Err(FfiError::VoidArgumentType),
+            FfiType::Void => Err(FfiError::UnsupportedArgumentType(Some(atom!("void")))),
             FfiType::Bool => {
                 let val = args.as_int::<i8>()?;
                 let init = match val {
@@ -819,7 +800,7 @@ impl ForeignFunctionTable {
         };
 
         match FfiType::from_atom(&kind) {
-            FfiType::Void => Err(FfiError::VoidArgumentType),
+            FfiType::Void => Err(FfiError::UnsupportedArgumentType(Some(atom!("void")))),
             FfiType::U8 => Ok(unsafe { read_int::<u8>(ptr, arena) }),
             FfiType::Bool | FfiType::I8 => Ok(unsafe { read_int::<i8>(ptr, arena) }),
             FfiType::U16 => Ok(unsafe { read_int::<u16>(ptr, arena) }),
@@ -869,7 +850,7 @@ impl ForeignFunctionTable {
         };
 
         match FfiType::from_atom(&kind) {
-            FfiType::Void => return Err(FfiError::VoidArgumentType),
+            FfiType::Void => return Err(FfiError::UnsupportedArgumentType(Some(atom!("void")))),
             FfiType::Bool => deallocate_primitive::<bool>(allocator, ptr),
             FfiType::U8 => deallocate_primitive::<u8>(allocator, ptr),
             FfiType::I8 => deallocate_primitive::<i8>(allocator, ptr),
@@ -966,10 +947,11 @@ impl Value {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum FfiError {
     ValueCast(Atom, Atom),
     ValueOutOfRange(DomainErrorType, Value),
-    VoidArgumentType,
+    UnsupportedArgumentType(Option<Atom>),
     FunctionNotFound(Atom, usize),
     StructNotFound(Atom),
     ArgCountMismatch {
@@ -987,6 +969,9 @@ pub enum FfiError {
     UnsupportedAbi,
     CStrFieldType,
     NullPtr,
+    #[doc(hidden)]
+    #[non_exhaustive]
+    Other,
 }
 
 #[derive(Debug)]
@@ -1008,6 +993,8 @@ impl From<libffi::low::Error> for FfiError {
         match value {
             libffi::low::Error::Typedef => FfiError::UnsupportedTypedef,
             libffi::low::Error::Abi => FfiError::UnsupportedAbi,
+            libffi::low::Error::ArgType => FfiError::UnsupportedArgumentType(None),
+            _ => FfiError::Other,
         }
     }
 }
