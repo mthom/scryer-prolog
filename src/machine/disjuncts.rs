@@ -15,6 +15,7 @@ use std::cell::Cell;
 use std::collections::VecDeque;
 use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VarInfo {
@@ -34,12 +35,12 @@ pub struct ChunkInfo {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BranchInfo {
-    branch_num: BranchNumber,
+    branch_num: Arc<BranchNumber>,
     chunks: Vec<ChunkInfo>,
 }
 
 impl BranchInfo {
-    fn new(branch_num: BranchNumber) -> Self {
+    fn new(branch_num: Arc<BranchNumber>) -> Self {
         Self {
             branch_num,
             chunks: vec![],
@@ -68,7 +69,7 @@ impl DerefMut for BranchMap {
     }
 }
 
-type RootSet = IndexSet<BranchNumber>;
+type RootSet = IndexSet<Arc<BranchNumber>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ClassifyInfo {
@@ -92,14 +93,14 @@ enum TraversalState {
     Term(Term),
     OverrideGlobalCutVar(usize),
     ResetGlobalCutVarOverride(Option<usize>),
-    AddBranchNum(BranchNumber), // set current_branch_num, add it to the root set
-    RepBranchNum(BranchNumber), // replace current_branch_num and the latest in the root set
+    AddBranchNum(Arc<BranchNumber>), // set current_branch_num, add it to the root set
+    RepBranchNum(Arc<BranchNumber>), // replace current_branch_num and the latest in the root set
 }
 
 #[derive(Debug)]
 pub struct VariableClassifier {
     call_policy: CallPolicy,
-    current_branch_num: BranchNumber,
+    current_branch_num: Arc<BranchNumber>,
     current_chunk_num: usize,
     current_chunk_type: ChunkType,
     branch_map: BranchMap,
@@ -156,22 +157,26 @@ pub type ClassifyFactResult = (Term, VarData);
 pub type ClassifyRuleResult = (Term, ChunkedTermVec, VarData);
 
 fn merge_branch_seq(branches: impl Iterator<Item = BranchInfo>) -> BranchInfo {
-    let mut branch_info = BranchInfo::new(BranchNumber::default());
+    let mut branch_info = BranchInfo::new(Arc::new(BranchNumber::default()));
 
     for mut branch in branches {
         branch_info.branch_num = branch.branch_num;
         branch_info.chunks.append(&mut branch.chunks);
     }
 
-    branch_info.branch_num.delta = branch_info.branch_num.delta * Integer::from(2);
-    branch_info.branch_num.branch_num -= &branch_info.branch_num.delta;
+    let new_delta = branch_info.branch_num.delta.clone() * Integer::from(2);
+
+    branch_info.branch_num = Arc::new(BranchNumber {
+        branch_num: branch_info.branch_num.branch_num.clone() - &new_delta,
+        delta: new_delta,
+    });
 
     branch_info
 }
 
 fn flatten_into_disjunct(
     build_stack: &mut ChunkedTermVec,
-    branch_num: BranchNumber,
+    branch_num: Arc<BranchNumber>,
     preceding_len: usize,
 ) {
     let branch_vec = build_stack.drain(preceding_len + 1..).collect();
@@ -188,7 +193,7 @@ impl VariableClassifier {
     pub fn new(call_policy: CallPolicy) -> Self {
         Self {
             call_policy,
-            current_branch_num: BranchNumber::default(),
+            current_branch_num: Arc::new(BranchNumber::default()),
             current_chunk_num: 0,
             current_chunk_type: ChunkType::Head,
             branch_map: BranchMap(BranchMapInt::new()),
@@ -542,7 +547,7 @@ impl VariableClassifier {
                             let tail = terms.pop().unwrap();
                             let head = terms.pop().unwrap();
 
-                            let first_branch_num = self.current_branch_num.split();
+                            let first_branch_num = Arc::new(self.current_branch_num.split());
                             let branches: Vec<_> = std::iter::once(head)
                                 .chain(unfold_by_str(tail, atom!(";")).into_iter())
                                 .collect();
@@ -553,18 +558,18 @@ impl VariableClassifier {
                                 let succ_branch_number = branch_numbers[idx - 1].incr_by_delta();
 
                                 branch_numbers.push(if idx + 1 < branches.len() {
-                                    succ_branch_number.split()
+                                    Arc::new(succ_branch_number.split())
                                 } else {
-                                    succ_branch_number
+                                    Arc::new(succ_branch_number)
                                 });
                             }
 
                             let build_stack_len = build_stack.len();
                             build_stack.reserve_branch(branches.len());
 
-                            state_stack.push(TraversalState::RepBranchNum(
+                            state_stack.push(TraversalState::RepBranchNum(Arc::new(
                                 self.current_branch_num.halve_delta(),
-                            ));
+                            )));
 
                             let iter = branches.into_iter().zip(branch_numbers.into_iter());
                             let final_disjunct_loc = state_stack.len();
@@ -619,14 +624,14 @@ impl VariableClassifier {
                             let not_term = terms.pop().unwrap();
                             let build_stack_len = build_stack.len();
 
-                            let first_branch_num = self.current_branch_num.split();
-                            let second_branch_num = first_branch_num.incr_by_delta();
+                            let first_branch_num = Arc::new(self.current_branch_num.split());
+                            let second_branch_num = Arc::new(first_branch_num.incr_by_delta());
 
                             build_stack.reserve_branch(2);
 
-                            state_stack.push(TraversalState::RepBranchNum(
+                            state_stack.push(TraversalState::RepBranchNum(Arc::new(
                                 self.current_branch_num.halve_delta(),
-                            ));
+                            )));
                             state_stack.push(TraversalState::BuildFinalDisjunct(build_stack_len));
                             state_stack.push(TraversalState::Term(Term::Clause(
                                 Cell::default(),
