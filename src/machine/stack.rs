@@ -183,7 +183,7 @@ impl Stack {
         let frame_size = AndFrame::size_of(num_cells);
 
         unsafe {
-            let e = (*self.buf.ptr.get_mut()).addr() - self.buf.base.addr();
+            let e = self.buf.used_bytes();
             let new_ptr = self.alloc(frame_size)?;
             let mut offset = prelude_size::<AndFramePrelude>();
 
@@ -209,14 +209,14 @@ impl Stack {
     }
 
     pub(crate) fn top(&self) -> usize {
-        unsafe { (*self.buf.ptr.get()).addr() - self.buf.base.addr() }
+        self.buf.used_bytes()
     }
 
     pub(crate) fn allocate_or_frame(&mut self, num_cells: usize) -> Result<usize, AllocError> {
         let frame_size = OrFrame::size_of(num_cells);
 
         unsafe {
-            let b = (*self.buf.ptr.get_mut()).addr() - self.buf.base.addr();
+            let b = self.buf.used_bytes();
             let new_ptr = self.alloc(frame_size)?;
             let mut offset = prelude_size::<OrFramePrelude>();
 
@@ -267,11 +267,7 @@ impl Stack {
 
     #[inline(always)]
     pub(crate) fn truncate(&mut self, b: usize) {
-        let base = unsafe { self.buf.base.add(b) };
-
-        if base < (*self.buf.ptr.get_mut()) {
-            *self.buf.ptr.get_mut() = base.cast_mut();
-        }
+        self.buf.shrink(b);
     }
 }
 
