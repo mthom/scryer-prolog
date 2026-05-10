@@ -1,3 +1,5 @@
+#![deny(unsafe_op_in_unsafe_fn)]
+
 use core::marker::PhantomData;
 
 use std::alloc;
@@ -108,11 +110,28 @@ impl RawBlockConcurrency for RawBlockConcurrent {
 use crate::machine::heap::AllocError;
 
 pub trait RawBlockTraits {
+    /// ## Safety
+    ///
+    /// Must be non-zero.
     fn init_size() -> usize;
+
+    /// ## Safety
+    ///
+    /// Must be constant.
+    ///
+    /// Must respect the invariants of [`std::alloc::Layout::from_size_align()`], namely:
+    /// - must not be zero
+    /// - must be a power of two
+    /// - must not overflow `usize`
     fn align() -> usize;
 }
 
 /// A block of memory with fast, lock-free appends.
+///
+/// ## Invariants
+///
+/// - `base.is_null()` iff `capacity == 0`
+/// - if `!base.is_null()`, then `ptr.get()` is in the same allocation as `base`.
 #[derive(Debug)]
 pub struct RawBlock<T: RawBlockTraits, C: RawBlockConcurrency = RawBlockSerial> {
     base: *const u8,
@@ -146,12 +165,26 @@ impl<T: RawBlockTraits, C: RawBlockConcurrency> RawBlock<T, C> {
         Ok(block)
     }
 
+    /// ## Safety
+    ///
+    /// Assumes that the object has not been initialized before (ie. `self.base.is_null()`)
+    /// and assumes that `cap > 0`.
     unsafe fn init_at_size(&mut self, cap: usize) -> Result<(), AllocError> {
-        let layout = alloc::Layout::from_size_align_unchecked(cap, T::align());
-        let new_base = alloc::alloc(layout).cast_const();
+        debug_assert!(cap > 0);
+        debug_assert!(self.base.is_null());
+
+        // SAFETY:
+        // - Guaranteed by caller: `cap > 0`
+        // - Guaranteed by caller: `T::align()` respects the invariants of `Layout::from_size_align`
+        let new_base = unsafe {
+            let layout = alloc::Layout::from_size_align_unchecked(cap, T::align());
+            alloc::alloc(layout).cast_const()
+        };
+
         if new_base.is_null() {
             return Err(AllocError);
         }
+
         self.base = new_base;
         self.capacity = cap;
         self.ptr.set(self.base.cast_mut());
@@ -162,19 +195,39 @@ impl<T: RawBlockTraits, C: RawBlockConcurrency> RawBlock<T, C> {
     ///
     /// Invalidates all pointers previously obtained by [`RawBlock::get()`] or [`RawBlock::alloc()`].
     pub unsafe fn grow(&mut self) -> Result<(), AllocError> {
+        self.debug_check_invariants();
+
         if self.base.is_null() {
-            self.init_at_size(T::init_size())
+            // SAFETY:
+            // - Guaranteed by caller: `T::init_size() > 0`
+            // - Asserted: `self.base.is_null()`
+            unsafe { self.init_at_size(T::init_size()) }
         } else {
             let size = self.capacity();
-            let layout = alloc::Layout::from_size_align_unchecked(size, T::align());
+            let used_bytes = self.used_bytes();
+            // SAFETY:
+            // - Guaranteed by caller: `T::align()` respects the invariants of `Layout::from_size_align`
+            // - Asserted: `!self.base.is_null()`
+            // - Invariant: `self.base.is_null()` iff `self.capacity() == 0`
+            // - Thus `self.capacity() > 0`
+            let new_base = unsafe {
+                let layout = alloc::Layout::from_size_align_unchecked(size, T::align());
 
-            let new_base = alloc::realloc(self.base.cast_mut(), layout, size * 2).cast_const();
+                alloc::realloc(self.base.cast_mut(), layout, size * 2).cast_const()
+            };
+
             if new_base.is_null() {
                 Err(AllocError)
             } else {
                 self.base = new_base;
                 self.capacity = size * 2;
-                self.ptr.set(self.base.add(size).cast_mut());
+                // SAFETY:
+                // - Invariant: `used_bytes < size`
+                // - Definition: `new_base` has allocation size `2 * size`
+                let new_ptr = unsafe { self.base.add(used_bytes).cast_mut() };
+                self.ptr.set(new_ptr);
+
+                self.debug_check_invariants();
                 Ok(())
             }
         }
@@ -186,10 +239,24 @@ impl<T: RawBlockTraits, C: RawBlockConcurrency> RawBlock<T, C> {
             Self::new()
         } else {
             let mut new_block = Self::empty_block();
-            new_block.init_at_size(self.capacity() * 2)?;
-            let allocated = self.used_bytes();
-            self.base.copy_to(new_block.base.cast_mut(), allocated);
-            new_block.ptr.set(new_block.base.add(allocated).cast_mut());
+            // SAFETY:
+            // - Asserted: !self.base.is_null()
+            // - Invariant: self.base.is_null() iff self.capacity == 0
+            // - Thus self.capacity > 0
+            // - Definition: `new_block` was not yet initialized
+            unsafe {
+                new_block.init_at_size(self.capacity() * 2)?;
+            }
+
+            let used_bytes = self.used_bytes();
+
+            // SAFETY:
+            // - Definition: `self.base` contains `self.allocated()` bytes
+            // - Invariant: `self.used_bytes() < self.allocated()`
+            unsafe {
+                self.base.copy_to(new_block.base.cast_mut(), used_bytes);
+                new_block.ptr.set(new_block.base.add(used_bytes).cast_mut());
+            }
 
             new_block.debug_check_invariants();
 
@@ -294,7 +361,9 @@ impl<T: RawBlockTraits, C: RawBlockConcurrency> RawBlock<T, C> {
             offset,
             self.used_bytes()
         );
-        self.base.add(offset)
+
+        // SAFETY: Guaranteed by caller.
+        unsafe { self.base.add(offset) }
     }
 
     /// ## Safety
