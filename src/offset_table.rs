@@ -225,17 +225,18 @@ impl<T: RawBlockTraits> SerialOffsetTable<T> {
         }
 
         ptr::write(ptr as *mut T, value);
-        ptr.addr() - self.block.base.addr()
+        // SAFETY: `ptr` was obtained from `self.block.alloc()`
+        self.block.get_offset(ptr)
     }
 
     #[inline]
     unsafe fn lookup(&self, offset: usize) -> &T {
-        &*self.block.base.add(offset).cast::<T>()
+        &*self.block.get_unchecked(offset).cast::<T>()
     }
 
     #[inline]
     unsafe fn lookup_mut(&mut self, offset: usize) -> &mut T {
-        &mut *self.block.base.add(offset).cast::<T>().cast_mut()
+        &mut *self.block.get_unchecked(offset).cast::<T>().cast_mut()
     }
 
     #[allow(clippy::wrong_self_convention)]
@@ -248,7 +249,7 @@ impl<T: RawBlockTraits> SerialOffsetTable<T> {
         };
 
         let serial_tbl = mem::replace(self, empty_serial_tbl);
-        let num_tbl_entries = serial_tbl.block.size() / size_of::<T>();
+        let num_tbl_entries = serial_tbl.block.used_bytes() / size_of::<T>();
         let block = Arcu::new(serial_tbl.block, GlobalEpochCounterPool);
 
         let offset_locks: Vec<RwLock<()>> = (0..num_tbl_entries).map(|_| RwLock::new(())).collect();
@@ -283,7 +284,7 @@ impl<T: RawBlockTraits> ConcurrentOffsetTable<T> {
             }
         }
 
-        let new_tbl_sz = block_epoch.size() / size_of::<T>();
+        let new_tbl_sz = block_epoch.used_bytes() / size_of::<T>();
         let mut offset_locks = self.offset_locks.write();
 
         offset_locks.resize_with(new_tbl_sz, || RwLock::new(()));
@@ -292,7 +293,8 @@ impl<T: RawBlockTraits> ConcurrentOffsetTable<T> {
             ptr::write(ptr as *mut T, value);
         }
 
-        let value = ptr.addr() - block_epoch.base.addr();
+        // SAFETY: `ptr` was obtained from `block_epoch.alloc()`
+        let value = unsafe { block_epoch.get_offset(ptr) };
 
         // AtomTable would have to update the index table at this point
         // explicit drop to ensure we don't accidentally drop it early
@@ -307,7 +309,7 @@ impl<T: RawBlockTraits> ConcurrentOffsetTable<T> {
         let inner_offset_lock = outer_offset_lock[offset / size_of::<T>()].read();
 
         let rcu_ref = RcuRef::try_map(self.block.read(), |raw_block| unsafe {
-            raw_block.base.add(offset).cast::<T>().as_ref()
+            raw_block.get_unchecked(offset).cast::<T>().as_ref()
         })
         .expect("offset valid");
 
@@ -326,8 +328,7 @@ impl<T: RawBlockTraits> ConcurrentOffsetTable<T> {
 
         let rcu_ref = RcuRef::try_map(self.block.read(), |raw_block| unsafe {
             raw_block
-                .base
-                .add(offset)
+                .get_unchecked(offset)
                 .cast_mut()
                 .cast::<UnsafeCell<T>>()
                 .as_ref()

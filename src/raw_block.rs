@@ -14,7 +14,7 @@ pub trait RawBlockTraits {
 /// A block of memory with fast, lock-free appends.
 #[derive(Debug)]
 pub struct RawBlock<T: RawBlockTraits> {
-    pub base: *const u8,
+    base: *const u8,
     capacity: usize,
 
     ptr: UnsafeCell<*mut u8>,
@@ -55,6 +55,9 @@ impl<T: RawBlockTraits> RawBlock<T> {
         Ok(())
     }
 
+    /// ## Safety
+    ///
+    /// Invalidates all pointers previously obtained by [`RawBlock::get()`] or [`RawBlock::alloc()`].
     pub unsafe fn grow(&mut self) -> Result<(), AllocError> {
         if self.base.is_null() {
             self.init_at_size(T::init_size())
@@ -141,7 +144,8 @@ impl<T: RawBlockTraits> RawBlock<T> {
     /// Moves `ptr` back to `new_size`.
     ///
     /// Note that this method does *not* deallocate what was placed in the [`RawBlock`].
-    pub fn shrink(&mut self, new_size: usize) {
+    /// Pointers to data past `new_size` remain valid until the next call to [`RawBlock::alloc()`].
+    pub fn shift_back(&mut self, new_size: usize) {
         self.debug_check_invariants();
 
         assert!(
@@ -161,6 +165,46 @@ impl<T: RawBlockTraits> RawBlock<T> {
         *self.ptr.get_mut() = new_ptr as *mut u8;
 
         self.debug_check_invariants();
+    }
+
+    /// Returns a pointer at a given `offset` within the block of memory.
+    ///
+    /// Panics if that range of bytes wasn't allocated yet with [`RawBlock::alloc()`].
+    pub fn get(&self, offset: usize) -> *const u8 {
+        assert!(offset < self.used_bytes());
+
+        // SAFETY: Asserted.
+        unsafe { self.get_unchecked(offset) }
+    }
+
+    /// Returns a pointer at a given `offset` within the block of memory.
+    ///
+    /// ## Safety
+    ///
+    /// Assumes that `offset < self.capacity()`.
+    #[inline]
+    pub unsafe fn get_unchecked(&self, offset: usize) -> *const u8 {
+        debug_assert!(
+            offset < self.capacity(),
+            "offset out of bounds: offset is {:?} but {:?} bytes are available",
+            offset,
+            self.used_bytes()
+        );
+        self.base.add(offset)
+    }
+
+    /// ## Safety
+    ///
+    /// `ptr` is a valid pointer be obtained from [`RawBlock::get()`] or [`RawBlock::alloc()`].
+    #[inline]
+    pub unsafe fn get_offset(&self, ptr: *const u8) -> usize {
+        // SAFETY:
+        // - Guaranteed by caller: `ptr` is still valid
+        // - Guranteed by caller: `ptr` was obtained from `get()` or `alloc()`
+        // - get() and alloc() return pointers in the same allocation as `self.base`
+        // - All functions modifying `self.base` invalidate pointers in their contract
+        // - Thus `ptr` and `self.base` originate from the same allocation
+        unsafe { ptr.offset_from(self.base) as usize }
     }
 }
 
