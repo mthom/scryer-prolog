@@ -1,8 +1,109 @@
 use core::marker::PhantomData;
 
 use std::alloc;
-use std::cell::UnsafeCell;
+use std::cell::Cell;
 use std::ptr;
+use std::sync::atomic::{AtomicPtr, Ordering};
+
+trait PtrCellTrait: std::fmt::Debug {
+    fn new(val: *mut u8) -> Self;
+
+    fn get(&self) -> *mut u8;
+
+    /// Modifies the wrapped value.
+    fn set(&mut self, val: *mut u8);
+
+    /// Performs an atomic compare-and-swap on the wrapped value.
+    ///
+    /// If the compare succeeded and `cb` returns `Some(new_ptr)`, stored `new_ptr` and returns `Ok(old_ptr).
+    ///
+    /// If `cb` returns `None`, returns `Err(old_ptr)`.
+    ///
+    /// May retry multiple times if the comparison fails.
+    fn try_update(&self, cb: impl Fn(*mut u8) -> Option<*mut u8>) -> Result<*mut u8, *mut u8>;
+}
+
+impl PtrCellTrait for Cell<*mut u8> {
+    fn new(val: *mut u8) -> Self {
+        Cell::new(val)
+    }
+
+    #[inline(always)]
+    fn get(&self) -> *mut u8 {
+        Cell::get(self)
+    }
+
+    #[inline(always)]
+    fn set(&mut self, val: *mut u8) {
+        Cell::set(self, val)
+    }
+
+    #[inline(always)]
+    fn try_update(&self, cb: impl Fn(*mut u8) -> Option<*mut u8>) -> Result<*mut u8, *mut u8> {
+        let val = Cell::get(self);
+        if let Some(new_val) = cb(val) {
+            Cell::set(self, new_val);
+            Ok(val)
+        } else {
+            Err(val)
+        }
+    }
+}
+
+impl PtrCellTrait for AtomicPtr<u8> {
+    fn new(val: *mut u8) -> Self {
+        AtomicPtr::new(val)
+    }
+
+    #[inline(always)]
+    fn get(&self) -> *mut u8 {
+        self.load(Ordering::Acquire)
+    }
+
+    #[inline(always)]
+    fn set(&mut self, val: *mut u8) {
+        *self.get_mut() = val;
+    }
+
+    #[inline]
+    fn try_update(&self, cb: impl Fn(*mut u8) -> Option<*mut u8>) -> Result<*mut u8, *mut u8> {
+        let mut prev = PtrCellTrait::get(self);
+
+        while let Some(next) = cb(prev) {
+            match self.compare_exchange_weak(prev, next, Ordering::Relaxed, Ordering::Acquire) {
+                x @ Ok(_) => return x,
+                Err(next_prev) => prev = next_prev,
+            }
+        }
+
+        Err(prev)
+
+        // TODO: replace with the following once 1.95 is the msrv:
+        // AtomicPtr::try_update(self, Ordering::Relaxed, Ordering::Acquire, cb)
+    }
+}
+
+/// Allows the choice of implementation for the mutable pointer in [`RawBlock`].
+/// Can be one of:
+/// - [`RawBlockSerial`] (using a [`Cell<*mut u8>`])
+/// - [`RawBlockConcurrent`] (using a [`AtomicPtr<u8>`])
+pub(crate) trait RawBlockConcurrency {
+    #[allow(private_bounds)]
+    type PtrCell: PtrCellTrait;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RawBlockSerial();
+#[derive(Debug, Clone, Copy)]
+pub struct RawBlockConcurrent();
+
+impl RawBlockConcurrency for RawBlockSerial {
+    type PtrCell = Cell<*mut u8>;
+}
+
+impl RawBlockConcurrency for RawBlockConcurrent {
+    type PtrCell = AtomicPtr<u8>;
+}
 
 use crate::machine::heap::AllocError;
 
@@ -13,22 +114,24 @@ pub trait RawBlockTraits {
 
 /// A block of memory with fast, lock-free appends.
 #[derive(Debug)]
-pub struct RawBlock<T: RawBlockTraits> {
+pub struct RawBlock<T: RawBlockTraits, C: RawBlockConcurrency = RawBlockSerial> {
     base: *const u8,
     capacity: usize,
 
-    ptr: UnsafeCell<*mut u8>,
+    ptr: C::PtrCell,
     _marker: PhantomData<T>,
+    _c_marker: PhantomData<C>,
 }
 
-impl<T: RawBlockTraits> RawBlock<T> {
+impl<T: RawBlockTraits, C: RawBlockConcurrency> RawBlock<T, C> {
     #[inline]
     pub fn empty_block() -> Self {
         RawBlock {
             base: ptr::null(),
             capacity: 0,
-            ptr: UnsafeCell::new(ptr::null_mut()),
+            ptr: C::PtrCell::new(ptr::null_mut()),
             _marker: PhantomData,
+            _c_marker: PhantomData,
         }
     }
 
@@ -51,7 +154,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
         }
         self.base = new_base;
         self.capacity = cap;
-        *self.ptr.get_mut() = self.base.cast_mut();
+        self.ptr.set(self.base.cast_mut());
         Ok(())
     }
 
@@ -71,7 +174,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
             } else {
                 self.base = new_base;
                 self.capacity = size * 2;
-                *self.ptr.get_mut() = (self.base as usize + size) as *mut _;
+                self.ptr.set(self.base.add(size).cast_mut());
                 Ok(())
             }
         }
@@ -86,7 +189,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
             new_block.init_at_size(self.capacity() * 2)?;
             let allocated = self.used_bytes();
             self.base.copy_to(new_block.base.cast_mut(), allocated);
-            *new_block.ptr.get_mut() = new_block.base.add(allocated).cast_mut();
+            new_block.ptr.set(new_block.base.add(allocated).cast_mut());
 
             new_block.debug_check_invariants();
 
@@ -97,14 +200,12 @@ impl<T: RawBlockTraits> RawBlock<T> {
     #[inline(always)]
     fn debug_check_invariants(&self) {
         if cfg!(debug_assertions) {
-            unsafe {
-                assert!(
-                    *self.ptr.get() as *const _ >= self.base,
-                    "self.ptr = {:?} < {:?} = self.base",
-                    *self.ptr.get(),
-                    self.base
-                );
-            }
+            assert!(
+                self.ptr.get().cast_const() >= self.base,
+                "self.ptr = {:?} < {:?} = self.base",
+                self.ptr.get(),
+                self.base
+            );
 
             assert!(self.used_bytes() <= self.capacity());
         }
@@ -117,27 +218,30 @@ impl<T: RawBlockTraits> RawBlock<T> {
 
     #[inline]
     pub fn used_bytes(&self) -> usize {
-        // TODO: safety: UnsafeCell.get()
-        // TODO: safety: prove that ∀Γ: reachable, Γ |- (ptr, base): same alloc
-        unsafe { (*self.ptr.get()).offset_from(self.base) as usize }
-    }
-
-    #[inline(always)]
-    unsafe fn free_bytes(&self) -> usize {
-        self.capacity() - self.used_bytes()
+        // SAFETY:
+        // - Invariant: `ptr` is in the same allocation as `base`
+        unsafe { self.ptr.get().offset_from(self.base) as usize }
     }
 
     pub unsafe fn alloc(&self, size: usize) -> *mut u8 {
         self.debug_check_invariants();
 
         let aligned_size = size.next_multiple_of(T::align());
-        if self.free_bytes() >= aligned_size {
-            // TODO: make this an atomic add
-            let ptr = *self.ptr.get();
-            *self.ptr.get() = ptr.add(aligned_size) as *mut _;
-            ptr
-        } else {
-            ptr::null_mut()
+
+        match self.ptr.try_update(|ptr| {
+            // SAFETY:
+            // - Invariant: `ptr` is in the same allocation as `base`
+            let free_bytes = unsafe { self.capacity() - ptr.offset_from(self.base) as usize };
+
+            if free_bytes >= aligned_size {
+                Some(unsafe { ptr.add(aligned_size) })
+            } else {
+                // Not enough space: don't allocate and return a null pointer
+                None
+            }
+        }) {
+            Ok(ptr) => ptr,
+            Err(_) => ptr::null_mut(),
         }
     }
 
@@ -160,9 +264,9 @@ impl<T: RawBlockTraits> RawBlock<T> {
         // - Definition: self.base := alloc(self.capacity)
         let new_ptr = unsafe { self.base.add(new_size) };
 
-        debug_assert!(new_ptr as usize <= (*self.ptr.get_mut()) as usize,);
+        debug_assert!(new_ptr as usize <= self.ptr.get() as usize,);
 
-        *self.ptr.get_mut() = new_ptr as *mut u8;
+        self.ptr.set(new_ptr.cast_mut());
 
         self.debug_check_invariants();
     }
@@ -208,16 +312,37 @@ impl<T: RawBlockTraits> RawBlock<T> {
     }
 }
 
-impl<T: RawBlockTraits> Drop for RawBlock<T> {
+impl<T: RawBlockTraits, C: RawBlockConcurrency> Drop for RawBlock<T, C> {
     fn drop(&mut self) {
         if !self.base.is_null() {
             unsafe {
                 let layout = alloc::Layout::from_size_align_unchecked(self.capacity(), T::align());
                 alloc::dealloc(self.base as *mut _, layout);
             }
+        }
+    }
+}
 
-            self.base = ptr::null();
-            *self.ptr.get_mut() = ptr::null_mut();
+impl<T: RawBlockTraits> From<RawBlock<T, RawBlockConcurrent>> for RawBlock<T, RawBlockSerial> {
+    fn from(other: RawBlock<T, RawBlockConcurrent>) -> Self {
+        Self {
+            base: other.base,
+            capacity: other.capacity,
+            ptr: PtrCellTrait::new(other.ptr.get()),
+            _marker: PhantomData,
+            _c_marker: PhantomData,
+        }
+    }
+}
+
+impl<T: RawBlockTraits> From<RawBlock<T, RawBlockSerial>> for RawBlock<T, RawBlockConcurrent> {
+    fn from(other: RawBlock<T, RawBlockSerial>) -> Self {
+        Self {
+            base: other.base,
+            capacity: other.capacity,
+            ptr: PtrCellTrait::new(other.ptr.get()),
+            _marker: PhantomData,
+            _c_marker: PhantomData,
         }
     }
 }

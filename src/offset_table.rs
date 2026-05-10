@@ -12,8 +12,8 @@ use parking_lot::{Mutex, RwLock};
 
 use crate::machine::heap::AllocError;
 use crate::machine::machine_indices::IndexPtr;
-use crate::raw_block::RawBlock;
 use crate::raw_block::RawBlockTraits;
+use crate::raw_block::{RawBlock, RawBlockConcurrent};
 
 use ordered_float::OrderedFloat;
 
@@ -93,8 +93,9 @@ impl<T: fmt::Debug + RawBlockTraits> OffsetTableImpl<T> {
                         // this shouldn't be able to fail
                         let raw_block =
                             Arc::try_unwrap(table.block.replace(RawBlock::empty_block())).unwrap();
-                        self.0 =
-                            InnerOffsetTableImpl::Serial(SerialOffsetTable { block: raw_block });
+                        self.0 = InnerOffsetTableImpl::Serial(SerialOffsetTable {
+                            block: raw_block.into(),
+                        });
                         Ok(())
                     }
                     Err(table_arc) => {
@@ -130,7 +131,7 @@ struct SerialOffsetTable<T: RawBlockTraits> {
 
 #[derive(Debug)]
 pub struct ConcurrentOffsetTable<T: RawBlockTraits> {
-    block: Arcu<RawBlock<T>, GlobalEpochCounterPool>,
+    block: Arcu<RawBlock<T, RawBlockConcurrent>, GlobalEpochCounterPool>,
     growth_lock: RwLock<()>,
     offset_locks: RwLock<Vec<RwLock<()>>>,
 }
@@ -250,7 +251,8 @@ impl<T: RawBlockTraits> SerialOffsetTable<T> {
 
         let serial_tbl = mem::replace(self, empty_serial_tbl);
         let num_tbl_entries = serial_tbl.block.used_bytes() / size_of::<T>();
-        let block = Arcu::new(serial_tbl.block, GlobalEpochCounterPool);
+        let raw_block: RawBlock<T, RawBlockConcurrent> = serial_tbl.block.into();
+        let block = Arcu::new(raw_block, GlobalEpochCounterPool);
 
         let offset_locks: Vec<RwLock<()>> = (0..num_tbl_entries).map(|_| RwLock::new(())).collect();
 
@@ -403,6 +405,8 @@ impl F64Table {
                 // which breaks the invariant indirection_tbl is meant to enforce.
                 // Since this branch is never invoked, it does no harm, but that
                 // that will eventually change.
+                //
+                // Note: may be indirectly fixed by the use of the new RawBlockConcurrency trait.
                 {
                     let indirection_tbl = concurrent_tbl.indirection_tbl.lock();
 
@@ -473,7 +477,9 @@ impl F64Table {
                                 .unwrap();
                         *self = Self::Serial(SerialF64Table {
                             indirection_tbl: indirection_tbl.into_inner(),
-                            offset_tbl: SerialOffsetTable { block: raw_block },
+                            offset_tbl: SerialOffsetTable {
+                                block: raw_block.into(),
+                            },
                         });
 
                         Ok(())
