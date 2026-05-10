@@ -89,14 +89,20 @@ impl Index<usize> for Stack {
 
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
-        unsafe { &*self.buf.base.add(index).cast() }
+        unsafe {
+            let ptr = self.buf.get_unchecked(index);
+            &*ptr.cast::<HeapCellValue>()
+        }
     }
 }
 
 impl IndexMut<usize> for Stack {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        unsafe { &mut *self.buf.base.add(index).cast_mut().cast() }
+        unsafe {
+            let ptr = self.buf.get_unchecked(index);
+            &mut *ptr.cast_mut().cast::<HeapCellValue>()
+        }
     }
 }
 
@@ -183,7 +189,7 @@ impl Stack {
         let frame_size = AndFrame::size_of(num_cells);
 
         unsafe {
-            let e = (*self.buf.ptr.get_mut()).addr() - self.buf.base.addr();
+            let e = self.buf.used_bytes();
             let new_ptr = self.alloc(frame_size)?;
             let mut offset = prelude_size::<AndFramePrelude>();
 
@@ -209,14 +215,14 @@ impl Stack {
     }
 
     pub(crate) fn top(&self) -> usize {
-        unsafe { (*self.buf.ptr.get()).addr() - self.buf.base.addr() }
+        self.buf.used_bytes()
     }
 
     pub(crate) fn allocate_or_frame(&mut self, num_cells: usize) -> Result<usize, AllocError> {
         let frame_size = OrFrame::size_of(num_cells);
 
         unsafe {
-            let b = (*self.buf.ptr.get_mut()).addr() - self.buf.base.addr();
+            let b = self.buf.used_bytes();
             let new_ptr = self.alloc(frame_size)?;
             let mut offset = prelude_size::<OrFramePrelude>();
 
@@ -241,37 +247,57 @@ impl Stack {
         }
     }
 
+    fn get_raw(&self, index: usize) -> *const u8 {
+        debug_assert!(index < self.buf.used_bytes());
+
+        unsafe { self.buf.get_unchecked(index) }
+    }
+
     #[inline(always)]
     pub(crate) fn index_and_frame(&self, e: usize) -> &AndFrame {
-        unsafe { &*self.buf.base.add(e).cast() }
+        let ptr = self.get_raw(e);
+
+        unsafe { &*ptr.cast::<AndFrame>() }
     }
 
     #[inline(always)]
     pub(crate) fn index_and_frame_mut(&mut self, e: usize) -> &mut AndFrame {
-        unsafe {
-            // This is doing alignment wrong
-            let ptr = self.buf.base.add(e);
-            &mut *(ptr as *mut AndFrame)
-        }
+        let ptr = self.get_raw(e);
+
+        unsafe { &mut *ptr.cast_mut().cast::<AndFrame>() }
     }
 
     #[inline(always)]
     pub(crate) fn index_or_frame(&self, b: usize) -> &OrFrame {
-        unsafe { &*self.buf.base.add(b).cast() }
+        let ptr = self.get_raw(b);
+
+        unsafe { &*ptr.cast::<OrFrame>() }
     }
 
     #[inline(always)]
     pub(crate) fn index_or_frame_mut(&mut self, b: usize) -> &mut OrFrame {
-        unsafe { &mut *self.buf.base.add(b).cast_mut().cast() }
+        let ptr = self.get_raw(b);
+
+        unsafe { &mut *ptr.cast_mut().cast::<OrFrame>() }
+    }
+
+    /// # Safety
+    ///
+    /// The stack must contain a valid OrFrame at [`self.top()`](Self::top),
+    /// which can only be achieved by allocating it in the first place and later truncating the stack.
+    ///
+    /// No allocation must have been done since the last call to [`truncate()`](Self::truncate).
+    #[inline(always)]
+    pub(crate) unsafe fn index_dangling_or_frame(&self) -> &OrFrame {
+        unsafe {
+            let ptr = self.buf.get_unchecked(self.top());
+            &*ptr.cast::<OrFrame>()
+        }
     }
 
     #[inline(always)]
     pub(crate) fn truncate(&mut self, b: usize) {
-        let base = unsafe { self.buf.base.add(b) };
-
-        if base < (*self.buf.ptr.get_mut()) {
-            *self.buf.ptr.get_mut() = base.cast_mut();
-        }
+        self.buf.shift_back(b);
     }
 }
 

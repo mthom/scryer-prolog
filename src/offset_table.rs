@@ -12,8 +12,8 @@ use parking_lot::{Mutex, RwLock};
 
 use crate::machine::heap::AllocError;
 use crate::machine::machine_indices::IndexPtr;
-use crate::raw_block::RawBlock;
 use crate::raw_block::RawBlockTraits;
+use crate::raw_block::{RawBlock, RawBlockConcurrent};
 
 use ordered_float::OrderedFloat;
 
@@ -93,8 +93,9 @@ impl<T: fmt::Debug + RawBlockTraits> OffsetTableImpl<T> {
                         // this shouldn't be able to fail
                         let raw_block =
                             Arc::try_unwrap(table.block.replace(RawBlock::empty_block())).unwrap();
-                        self.0 =
-                            InnerOffsetTableImpl::Serial(SerialOffsetTable { block: raw_block });
+                        self.0 = InnerOffsetTableImpl::Serial(SerialOffsetTable {
+                            block: raw_block.into(),
+                        });
                         Ok(())
                     }
                     Err(table_arc) => {
@@ -130,7 +131,7 @@ struct SerialOffsetTable<T: RawBlockTraits> {
 
 #[derive(Debug)]
 pub struct ConcurrentOffsetTable<T: RawBlockTraits> {
-    block: Arcu<RawBlock<T>, GlobalEpochCounterPool>,
+    block: Arcu<RawBlock<T, RawBlockConcurrent>, GlobalEpochCounterPool>,
     growth_lock: RwLock<()>,
     offset_locks: RwLock<Vec<RwLock<()>>>,
 }
@@ -225,17 +226,18 @@ impl<T: RawBlockTraits> SerialOffsetTable<T> {
         }
 
         ptr::write(ptr as *mut T, value);
-        ptr.addr() - self.block.base.addr()
+        // SAFETY: `ptr` was obtained from `self.block.alloc()`
+        self.block.get_offset(ptr)
     }
 
     #[inline]
     unsafe fn lookup(&self, offset: usize) -> &T {
-        &*self.block.base.add(offset).cast::<T>()
+        &*self.block.get_unchecked(offset).cast::<T>()
     }
 
     #[inline]
     unsafe fn lookup_mut(&mut self, offset: usize) -> &mut T {
-        &mut *self.block.base.add(offset).cast::<T>().cast_mut()
+        &mut *self.block.get_unchecked(offset).cast::<T>().cast_mut()
     }
 
     #[allow(clippy::wrong_self_convention)]
@@ -248,8 +250,9 @@ impl<T: RawBlockTraits> SerialOffsetTable<T> {
         };
 
         let serial_tbl = mem::replace(self, empty_serial_tbl);
-        let num_tbl_entries = serial_tbl.block.size() / size_of::<T>();
-        let block = Arcu::new(serial_tbl.block, GlobalEpochCounterPool);
+        let num_tbl_entries = serial_tbl.block.used_bytes() / size_of::<T>();
+        let raw_block: RawBlock<T, RawBlockConcurrent> = serial_tbl.block.into();
+        let block = Arcu::new(raw_block, GlobalEpochCounterPool);
 
         let offset_locks: Vec<RwLock<()>> = (0..num_tbl_entries).map(|_| RwLock::new(())).collect();
 
@@ -283,7 +286,7 @@ impl<T: RawBlockTraits> ConcurrentOffsetTable<T> {
             }
         }
 
-        let new_tbl_sz = block_epoch.size() / size_of::<T>();
+        let new_tbl_sz = block_epoch.used_bytes() / size_of::<T>();
         let mut offset_locks = self.offset_locks.write();
 
         offset_locks.resize_with(new_tbl_sz, || RwLock::new(()));
@@ -292,7 +295,8 @@ impl<T: RawBlockTraits> ConcurrentOffsetTable<T> {
             ptr::write(ptr as *mut T, value);
         }
 
-        let value = ptr.addr() - block_epoch.base.addr();
+        // SAFETY: `ptr` was obtained from `block_epoch.alloc()`
+        let value = unsafe { block_epoch.get_offset(ptr) };
 
         // AtomTable would have to update the index table at this point
         // explicit drop to ensure we don't accidentally drop it early
@@ -307,7 +311,7 @@ impl<T: RawBlockTraits> ConcurrentOffsetTable<T> {
         let inner_offset_lock = outer_offset_lock[offset / size_of::<T>()].read();
 
         let rcu_ref = RcuRef::try_map(self.block.read(), |raw_block| unsafe {
-            raw_block.base.add(offset).cast::<T>().as_ref()
+            raw_block.get_unchecked(offset).cast::<T>().as_ref()
         })
         .expect("offset valid");
 
@@ -326,8 +330,7 @@ impl<T: RawBlockTraits> ConcurrentOffsetTable<T> {
 
         let rcu_ref = RcuRef::try_map(self.block.read(), |raw_block| unsafe {
             raw_block
-                .base
-                .add(offset)
+                .get_unchecked(offset)
                 .cast_mut()
                 .cast::<UnsafeCell<T>>()
                 .as_ref()
@@ -402,6 +405,8 @@ impl F64Table {
                 // which breaks the invariant indirection_tbl is meant to enforce.
                 // Since this branch is never invoked, it does no harm, but that
                 // that will eventually change.
+                //
+                // Note: may be indirectly fixed by the use of the new RawBlockConcurrency trait.
                 {
                     let indirection_tbl = concurrent_tbl.indirection_tbl.lock();
 
@@ -472,7 +477,9 @@ impl F64Table {
                                 .unwrap();
                         *self = Self::Serial(SerialF64Table {
                             indirection_tbl: indirection_tbl.into_inner(),
-                            offset_tbl: SerialOffsetTable { block: raw_block },
+                            offset_tbl: SerialOffsetTable {
+                                block: raw_block.into(),
+                            },
                         });
 
                         Ok(())
