@@ -9512,7 +9512,7 @@ impl Machine {
 fn rng() -> &'static dyn SecureRandom {
     use std::ops::Deref;
 
-    static RANDOM: LazyLock<SystemRandom> = LazyLock::new(|| SystemRandom::new());
+    static RANDOM: LazyLock<SystemRandom> = LazyLock::new(SystemRandom::new);
 
     RANDOM.deref()
 }
