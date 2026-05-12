@@ -2720,7 +2720,6 @@ dependencies = [
  "iai-callgrind",
  "indexmap",
  "js-sys",
- "lazy_static",
  "lexical",
  "libc",
  "libffi",
