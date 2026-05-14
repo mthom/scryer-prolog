@@ -12,7 +12,7 @@ integers that may also be interesting.
 :- use_module(library(lists), [length/2]).
 :- use_module(library(error)).
 
-%% between(+Lower, +Upper, -X).
+%% between(+Lower, +Upper, ?X).
 %
 % Given Lower and Upper are both integer numbers, true iff X is an integer so that _Lower =< X =< Upper_.
 % Can be used both to check if X is between Lower and Upper or to generate an integer between
