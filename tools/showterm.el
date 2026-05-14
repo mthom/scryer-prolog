@@ -76,16 +76,18 @@
         (setq str (buffer-string))
         (erase-buffer))
       (let ((proc (let (process-connection-type)
-                    (start-process "convert" (current-buffer)
-                                   "convert"
-                                   "png:-"
-                                   "-gravity" "center"
-                                   "-background" "white"
-                                   "-scale" (format "%dx%d"
-                                                    showterm-pixel-width
-                                                    showterm-pixel-width)
-                                   "-extent" (format "%dx" showterm-pixel-width)
-                                   "png:-"))))
+                    (make-process :name "convert"
+                                  :buffer (current-buffer)
+                                  :stderr " convert-stderr"
+                                  :command `("convert"
+                                             "png:-"
+                                             "-gravity" "center"
+                                             "-background" "white"
+                                             "-scale" ,(format "%dx%d"
+                                                               showterm-pixel-width
+                                                               showterm-pixel-width)
+                                             "-extent" ,(format "%dx" showterm-pixel-width)
+                                             "png:-")))))
         (process-send-string proc str)
         (process-send-eof proc)
         (showterm-wait-for-process proc))
