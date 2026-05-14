@@ -33,7 +33,6 @@ function_casts_as_integer = "deny"
 
 
 [build-dependencies]
-indexmap = "2.3.0"
 proc-macro2 = "1.0.86"
 quote = "1.0.36"
 strum = "0.26"
