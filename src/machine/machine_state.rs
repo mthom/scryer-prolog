@@ -115,7 +115,7 @@ impl OccursCheckImpl for StoError {
 pub struct MachineState {
     pub atom_tbl: Arc<AtomTable>,
     pub arena: Arena,
-    pub(super) pdl: Vec<HeapCellValue>,
+    pub(super) pdl: Vec<(HeapCellValue, HeapCellValue)>,
     pub(super) s: HeapPtr,
     pub(super) s_offset: usize,
     pub(super) p: usize,
