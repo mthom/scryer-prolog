@@ -16,7 +16,9 @@ use crate::parser::ast::*;
 use crate::read::TermWriteResult;
 use crate::types::*;
 
+use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
+use indexmap::IndexSet;
 
 use std::convert::TryFrom;
 use std::fmt;
@@ -116,6 +118,7 @@ pub struct MachineState {
     pub atom_tbl: Arc<AtomTable>,
     pub arena: Arena,
     pub(super) pdl: Vec<(HeapCellValue, HeapCellValue)>,
+    pub(super) unify_tabu_list: IndexSet<(HeapCellValue, HeapCellValue), FxBuildHasher>,
     pub(super) s: HeapPtr,
     pub(super) s_offset: usize,
     pub(super) p: usize,

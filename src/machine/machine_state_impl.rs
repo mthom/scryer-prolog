@@ -1,3 +1,6 @@
+use fxhash::FxBuildHasher;
+use indexmap::IndexSet;
+
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
@@ -31,6 +34,7 @@ impl MachineState {
             arena: Arena::new().unwrap(),
             atom_tbl: AtomTable::new().unwrap(),
             pdl: Vec::with_capacity(1024),
+            unify_tabu_list: IndexSet::with_hasher(FxBuildHasher::default()),
             s: HeapPtr::default(),
             s_offset: 0,
             p: 0,

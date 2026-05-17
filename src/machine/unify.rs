@@ -9,8 +9,6 @@ use crate::types::*;
 use std::ops::{Deref, DerefMut};
 
 use derive_more::*;
-use fxhash::FxBuildHasher;
-use indexmap::IndexSet;
 use num_order::NumOrd;
 
 impl MachineState {
@@ -348,7 +346,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
     }
 
     fn unify_internal(&mut self) {
-        let mut tabu_list = IndexSet::with_hasher(FxBuildHasher::default());
+        debug_assert!(self.unify_tabu_list.is_empty());
 
         while let Some((s1, s2)) = self.pdl.pop() {
             if self.fail {
@@ -378,7 +376,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                         Self::unify_atom(self, name, d2);
                     }
                     (HeapCellValueTag::Str, s1) => {
-                        if tabu_list.contains(&(d1, d2)) {
+                        if self.unify_tabu_list.contains(&(d1, d2)) {
                             continue;
                         }
 
@@ -386,11 +384,11 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
 
                         if !self.fail {
                             let d2 = self.store(d2);
-                            tabu_list.insert((d1, d2));
+                            self.unify_tabu_list.insert((d1, d2));
                         }
                     }
                     (HeapCellValueTag::Lis, l1) => {
-                        if d2.is_ref() && tabu_list.contains(&(d1, d2)) {
+                        if d2.is_ref() && self.unify_tabu_list.contains(&(d1, d2)) {
                             continue;
                         }
 
@@ -398,7 +396,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
 
                         if !self.fail {
                             let d2 = self.store(d2);
-                            tabu_list.insert((d1, d2));
+                            self.unify_tabu_list.insert((d1, d2));
                         }
                     }
                     (HeapCellValueTag::PStrLoc, l) => {
@@ -406,7 +404,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                             (HeapCellValueTag::PStrLoc |
                              HeapCellValueTag::Lis |
                              HeapCellValueTag::Str) => {
-                                if tabu_list.contains(&(d1, d2)) {
+                                if self.unify_tabu_list.contains(&(d1, d2)) {
                                     continue;
                                 }
                             }
@@ -424,7 +422,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
 
                         if !self.fail && !d2.is_constant() {
                             let d2 = self.store(d2);
-                            tabu_list.insert((d1, d2));
+                            self.unify_tabu_list.insert((d1, d2));
                         }
                     }
                     (HeapCellValueTag::F64Offset, f1) => {
@@ -445,6 +443,8 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                 );
             }
         }
+
+        self.unify_tabu_list.clear();
     }
 
     fn bind(&mut self, r: Ref, value: HeapCellValue);
