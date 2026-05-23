@@ -1,18 +1,18 @@
+use std::collections::BTreeSet;
+
 use proc_macro2::TokenStream;
 use syn::parse::*;
 use syn::visit::*;
 use syn::*;
 
-use indexmap::IndexSet;
-
 struct StaticStrVisitor {
-    static_strs: IndexSet<String>,
+    static_strs: BTreeSet<String>,
 }
 
 impl StaticStrVisitor {
     fn new() -> Self {
         Self {
-            static_strs: IndexSet::new(),
+            static_strs: BTreeSet::new(),
         }
     }
 }
@@ -166,17 +166,15 @@ pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStrea
         visitor.visit_file(&syntax)
     }
 
-    let mut static_str_keys = vec![];
-    let mut static_strs = vec![];
-    let mut static_str_indices = vec![];
+    let static_str_keys: Vec<_> = visitor.static_strs.iter().collect();
+    let mut static_strs = Vec::with_capacity(static_str_keys.len());
+    let mut static_str_indices = Vec::with_capacity(static_str_keys.len());
 
     let indices: Vec<u64> = visitor
         .static_strs
         .iter()
         .map(|string| {
             let index = static_string_index(string, static_strs.len());
-
-            static_str_keys.push(string);
 
             if index & 1 == 1 {
                 index

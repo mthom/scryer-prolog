@@ -4,6 +4,7 @@ mod static_string_indexing;
 use instructions_template::generate_instructions_rs;
 use static_string_indexing::index_static_strings;
 
+use std::collections::BTreeMap;
 use std::env;
 use std::fs::File;
 use std::io::Write;
@@ -13,11 +14,12 @@ use std::path::MAIN_SEPARATOR_STR;
 use std::process::{Command, Stdio};
 
 fn find_prolog_files(path_prefix: &str, current_dir: &Path) -> Vec<(String, PathBuf)> {
-    let mut libraries = vec![];
+    // use a BTreeMap to get a stable order independent of fs enumeration order
+    let mut libraries = BTreeMap::new();
 
     let entries = match current_dir.read_dir() {
         Ok(entries) => entries,
-        Err(_) => return libraries,
+        Err(_) => return vec![],
     };
 
     for entry in entries.filter_map(Result::ok).map(|e| e.path()) {
@@ -34,12 +36,12 @@ fn find_prolog_files(path_prefix: &str, current_dir: &Path) -> Vec<(String, Path
                 let name = entry.file_stem().unwrap().to_str().unwrap();
                 let lib_name = format!("{path_prefix}{name}");
 
-                libraries.push((lib_name, entry));
+                libraries.insert(lib_name, entry);
             }
         }
     }
 
-    libraries
+    libraries.into_iter().collect()
 }
 
 fn main() {
