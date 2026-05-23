@@ -1,6 +1,5 @@
 use base64::Engine;
 use dashu::integer::{Sign, UBig};
-use lazy_static::lazy_static;
 use num_order::NumOrd;
 
 use crate::arena::*;
@@ -60,6 +59,7 @@ use std::process::Child;
 use std::process::Stdio;
 #[cfg(feature = "http")]
 use std::str::FromStr;
+use std::sync::LazyLock;
 #[cfg(feature = "http")]
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -9512,9 +9512,7 @@ impl Machine {
 fn rng() -> &'static dyn SecureRandom {
     use std::ops::Deref;
 
-    lazy_static! {
-        static ref RANDOM: SystemRandom = SystemRandom::new();
-    }
+    static RANDOM: LazyLock<SystemRandom> = LazyLock::new(SystemRandom::new);
 
     RANDOM.deref()
 }

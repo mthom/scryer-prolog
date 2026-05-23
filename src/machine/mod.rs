@@ -52,7 +52,6 @@ use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
 
 use indexmap::IndexMap;
-use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 
 use rand::rngs::StdRng;
@@ -63,11 +62,9 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
-use std::sync::OnceLock;
+use std::sync::{LazyLock, OnceLock};
 
-lazy_static! {
-    pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
-}
+pub static INTERRUPT: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
 
 /// An instance of Scryer Prolog.
 ///
