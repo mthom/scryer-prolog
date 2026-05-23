@@ -102,7 +102,7 @@ impl<R> CharReader<R> {
 }
 
 impl<R: Read> CharReader<R> {
-    pub fn read_chunck(&mut self) -> io::Result<usize> {
+    pub fn read_chunk(&mut self) -> io::Result<usize> {
         let mut chunk = [0u8; 8 * 1024];
         let nread = self.inner.read(&mut chunk)?;
         self.buf.extend_from_slice(&chunk[..nread]);
@@ -122,7 +122,7 @@ impl<R: Read> CharReader<R> {
             }
             self.pos = self.buf.len();
 
-            self.read_chunck()?;
+            self.read_chunk()?;
         }
 
         Ok(&self.buf[self.pos..])
@@ -218,7 +218,7 @@ impl<R: Read> CharRead for CharReader<R> {
                 self.pos = 4;
             }
 
-            match self.read_chunck() {
+            match self.read_chunk() {
                 Err(e) => return Some(Err(e)),
                 Ok(0) => return Some(Err(bad_bytes_error(&self.buf))),
                 Ok(_) => {
