@@ -21,7 +21,8 @@ act(TargetPath) :-
 
 main :-
     call_cleanup(
-       (setenv("TARGET_DIRECTORY", "make_directory_test/subdir"),
+       (setenv("SHELL", "/bin/sh"),
+        setenv("TARGET_DIRECTORY", "make_directory_test/subdir"),
         check),
        (shell("test -d make_directory_test/subdir && rmdir make_directory_test/subdir || true", 0),
         shell("test -d make_directory_test && rmdir make_directory_test || true", 0))

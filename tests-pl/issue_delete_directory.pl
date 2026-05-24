@@ -21,7 +21,8 @@ act(TargetDir) :-
 
 main :-
     call_cleanup(
-       (setenv("TARGET_DIRECTORY", "delete_directory_test"),
+       (setenv("SHELL", "/bin/sh"),
+        setenv("TARGET_DIRECTORY", "delete_directory_test"),
         shell("mkdir delete_directory_test", 0),
         check),
         shell("test -d delete_directory_test && rmdir delete_directory_test || true", 0)
