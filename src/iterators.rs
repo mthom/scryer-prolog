@@ -7,6 +7,7 @@ use std::cell::Cell;
 use std::collections::VecDeque;
 use std::iter::*;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::vec::Vec;
 
 #[allow(clippy::borrowed_box)]
@@ -320,7 +321,7 @@ pub(crate) fn breadth_first_iter(
 enum ClauseIteratorState<'a> {
     RemainingChunks(&'a VecDeque<ChunkedTerms>, usize),
     RemainingBranches(
-        &'a Vec<BranchNumber>,
+        &'a Vec<Arc<BranchNumber>>,
         &'a Vec<VecDeque<ChunkedTerms>>,
         usize,
     ),
@@ -329,11 +330,11 @@ enum ClauseIteratorState<'a> {
 #[derive(Debug, Clone)]
 pub(crate) enum ClauseItem<'a> {
     FirstBranch {
-        branch_num: &'a BranchNumber,
+        branch_num: &'a Arc<BranchNumber>,
         num_branches: usize,
     },
     NextBranch {
-        branch_num: &'a BranchNumber,
+        branch_num: &'a Arc<BranchNumber>,
     },
     BranchEnd {
         depth: usize,

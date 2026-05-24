@@ -15,6 +15,7 @@ use indexmap::IndexMap;
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 pub type BranchHits = IndexMap<usize, BitVec, FxBuildHasher>; // key: var_num, value: branch arm occurrences.
 
@@ -25,12 +26,12 @@ pub struct BranchOccurrences {
     pub deep_safety: BitSet<usize>,
     pub num_branches: usize,
     pub current_branch_idx: usize,
-    pub current_branch_num: BranchNumber,
+    pub current_branch_num: Arc<BranchNumber>,
     pub subsumed_hits: SubsumedBranchHits,
 }
 
 impl BranchOccurrences {
-    fn new(current_branch_num: BranchNumber, num_branches: usize) -> Self {
+    fn new(current_branch_num: Arc<BranchNumber>, num_branches: usize) -> Self {
         Self {
             hits: BranchHits::with_hasher(FxBuildHasher::default()),
             shallow_safety: BitSet::default(),
@@ -98,7 +99,7 @@ impl BranchStack {
         }
     }
 
-    pub(crate) fn add_branch_stack(&mut self, branch_num: BranchNumber, num_branches: usize) {
+    pub(crate) fn add_branch_stack(&mut self, branch_num: Arc<BranchNumber>, num_branches: usize) {
         self.push(BranchOccurrences::new(branch_num, num_branches));
     }
 
@@ -112,7 +113,7 @@ impl BranchStack {
     }
 
     #[inline]
-    pub(crate) fn incr_current_branch(&mut self, branch_num: BranchNumber) {
+    pub(crate) fn incr_current_branch(&mut self, branch_num: Arc<BranchNumber>) {
         let branch_occurrences = self.last_mut().unwrap();
         branch_occurrences.current_branch_idx += 1;
         branch_occurrences.current_branch_num = branch_num;
@@ -201,7 +202,7 @@ impl DebrayAllocator {
             },
         );
 
-        let branch_designator = self.branch_stack.current_branch_designator();
+        let branch_designator = Arc::new(self.branch_stack.current_branch_designator());
 
         let (deep_safety, shallow_safety) = match self.branch_stack.last_mut() {
             Some(latest_branch) => {
@@ -506,7 +507,7 @@ impl DebrayAllocator {
     }
 
     pub(crate) fn mark_safe_var_unconditionally(&mut self, var_num: usize) {
-        let branch_designator = self.branch_stack.current_branch_designator();
+        let branch_designator = Arc::new(self.branch_stack.current_branch_designator());
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm(
@@ -530,7 +531,7 @@ impl DebrayAllocator {
     }
 
     fn mark_safe_var(&mut self, var_num: usize, lvl: Level, term_loc: GenContext) {
-        let branch_designator = self.branch_stack.current_branch_designator();
+        let branch_designator = Arc::new(self.branch_stack.current_branch_designator());
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm(
@@ -574,7 +575,7 @@ impl DebrayAllocator {
         r: RegType,
         arg_c: usize,
     ) -> Instruction {
-        let branch_designator = self.branch_stack.current_branch_designator();
+        let branch_designator = Arc::new(self.branch_stack.current_branch_designator());
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm(
@@ -610,7 +611,7 @@ impl DebrayAllocator {
         var_num: usize,
         r: RegType,
     ) -> Instruction {
-        let branch_designator = self.branch_stack.current_branch_designator();
+        let branch_designator = Arc::new(self.branch_stack.current_branch_designator());
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm(

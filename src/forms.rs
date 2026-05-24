@@ -25,6 +25,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::{AddAssign, Deref, DerefMut};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 pub type PredicateKey = (Atom, usize); // name, arity.
 
@@ -194,7 +195,7 @@ impl BranchNumber {
 #[derive(Debug)]
 pub enum ChunkedTerms {
     Branch {
-        branch_nums: Vec<BranchNumber>,
+        branch_nums: Vec<Arc<BranchNumber>>,
         arms: Vec<VecDeque<ChunkedTerms>>,
     },
     Chunk {

@@ -7,6 +7,7 @@ use indexmap::{IndexMap, IndexSet};
 use num_order::NumOrd;
 
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct TempVarData {
@@ -17,7 +18,7 @@ pub struct TempVarData {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BranchDesignator {
-    pub branch_num: BranchNumber,
+    pub branch_num: Arc<BranchNumber>,
 }
 
 impl BranchDesignator {
