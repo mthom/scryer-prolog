@@ -1,4 +1,7 @@
 name: 'Setup Rust'
+description: |
+  Setup the rust toolchain and environment for the selected toolchain
+
 inputs:
   rust-version:
     required: true
