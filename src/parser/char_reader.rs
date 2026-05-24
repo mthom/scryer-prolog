@@ -202,7 +202,7 @@ impl<R: Read> CharRead for CharReader<R> {
                 return Some(Err(bad_bytes_error(buf)));
             }
 
-            // buf is too short to determin if the remaining bytes in buf are a valid char
+            // buf is too short to determine if the remaining bytes in buf are a valid char
             // i.e. the content of buf is a prefix of a valid utf-8 encoded char
             //
             // we need to read more data from the underlying stream
