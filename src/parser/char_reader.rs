@@ -160,10 +160,6 @@ impl<R: Read> CharRead for CharReader<R> {
 
             let bad_bytes = buf[..invalid_prefix].to_vec();
 
-            // Raise the error. If we still have data in
-            // the buffer, it will be returned on the next
-            // loop.
-
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 BadUtf8Error { bytes: bad_bytes },
@@ -206,14 +202,14 @@ impl<R: Read> CharRead for CharReader<R> {
                 return Some(Err(bad_bytes_error(buf)));
             }
 
-            // buf is too short to deterin if the remaining bytes in buf are a valid char
-            // i.e. the content of bufg is a prefix of a valid utf-8 encoded char
+            // buf is too short to determin if the remaining bytes in buf are a valid char
+            // i.e. the content of buf is a prefix of a valid utf-8 encoded char
             //
             // we need to read more data from the underlying stream
             // so that we can determin its validity
 
             if self.buf.len() > 4 {
-                // keep a prefix of 4 bytes so that we put back at least one char
+                // keep a prefix of 4 bytes so that we can put back at least one char
                 self.buf.drain(4..self.pos);
                 self.pos = 4;
             }
