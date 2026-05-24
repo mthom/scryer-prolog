@@ -23,7 +23,7 @@ default = ["all-simple-cross", "tls", "http"]
 # currently does not include
 # ffi due to libffi
 # tls, http due to openssl
-# crypto-inpure due to ring
+# crypto-impure due to ring
 all-pure = ["repl", "hostname"]
 # enables all features that are simple to get working for cross-compliation
 # currently all but tls, http as those depend on openssl
@@ -34,8 +34,8 @@ hostname = ["dep:hostname"]
 tls = ["dep:native-tls"]
 http = ["dep:warp", "dep:reqwest"]
 # crypto function that require non pure-rust dependencies
-crypto-inpure = ["dep:ring"]
-crypto-full = ["crypto-inpure"]
+crypto-impure = ["dep:ring"]
+crypto-full = ["crypto-impure"]
 
 [lints.clippy]
 collapsible_match = "allow"
