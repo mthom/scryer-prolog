@@ -61,18 +61,22 @@ jobs:
           # FIXME(issue #2138): run wasm tests, failing to run since https://github.com/mthom/scryer-prolog/pull/2137 removed wasm-pack
           - { os: ubuntu-22.04,   rust-version: nightly, target: 'wasm32-unknown-unknown',   publish: true, args: '--no-default-features' , test-args: '--no-run --no-default-features', use_swap: true }
           # Cargo.toml rust-version
-          - { os: ubuntu-22.04,   rust-version: "${{ needs.read-msrv.outputs.msrv }}" ,  target: 'x86_64-unknown-linux-gnu'}
-          - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu'}
-          - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu', miri: true, components: "miri"} 
+          - { os: ubuntu-22.04,   rust-version: "${{ needs.read-msrv.outputs.msrv }}" ,  target: 'x86_64-unknown-linux-gnu' }
+          - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu' }
+          - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu', miri: true, components: "miri" } 
+          # run miri for a big-endian target, with all features that are simple to get cross-compiled
+          - { os: ubuntu-22.04,   rust-version: nightly, target: 's390x-unknown-linux-gnu', miri: true, components: "miri", args: '--no-default-features --features=all-simple-cross', test-args: '--no-run --no-default-features --features=all-simple-cross' } 
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
       - uses: actionhippie/swap-space@0cffa893f224708cfb6b011690d8ba819d69c10f # v1.1.0
         if: matrix.use_swap
         with:
           size: 10G
+
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
         with:
@@ -89,7 +93,7 @@ jobs:
 
       - name: Check miri
         if: matrix.miri
-        run: cargo miri test
+        run: cargo miri test --target ${{ matrix.target }} ${{ matrix.args }}
 
       # On stable rust builds, build a binary and publish as a github actions
       # artifact. These binaries could be useful for testing the pipeline but

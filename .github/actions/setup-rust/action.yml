@@ -1,4 +1,7 @@
 name: 'Setup Rust'
+description: |
+  Setup the rust toolchain and environment for the selected toolchain
+
 inputs:
   rust-version:
     required: true
@@ -32,6 +35,14 @@ runs:
       sudo apt-get install libssl-dev:i386 gcc-multilib clang -y
       echo "CC=clang" >> $GITHUB_ENV
       echo "PKG_CONFIG_SYSROOT_DIR=/" >> $GITHUB_ENV
+
+  - name: Install s390x cross-compilation toolchain
+    if: ${{ matrix.target == 's390x-unknown-linux-gnu' }}
+    shell: bash
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y gcc-s390x-linux-gnu
+      echo "CARGO_TARGET_S390X_UNKNOWN_LINUX_GNU_LINKER=s390x-linux-gnu-gcc" >> $GITHUB_ENV
 
   - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
     with:

@@ -18,6 +18,9 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["ffi", "repl", "hostname", "tls", "http", "crypto-full"]
+# enables all features that are simple to get working for cross-compliation
+# currently all but tls, http as those depend on openssl
+all-simple-cross = ["ffi", "repl", "hostname", "crypto-full"]
 ffi = ["dep:libffi"]
 repl = ["dep:crossterm", "dep:ctrlc", "dep:rustyline"]
 hostname = ["dep:hostname"]
