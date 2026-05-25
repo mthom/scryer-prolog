@@ -401,22 +401,22 @@ macro_rules! index_store {
 }
 
 macro_rules! unify {
-    ($machine_st:expr, $($value:expr),*) => {{
-        $($machine_st.pdl.push($value);)*
+    ($machine_st:expr, $($v1:expr, $v2:expr),*) => {{
+        $($machine_st.pdl.push(($v1, $v2));)*
         $machine_st.unify()
     }};
 }
 
 macro_rules! unify_fn {
-    ($machine_st:expr, $($value:expr),*) => {{
-        $($machine_st.pdl.push($value);)*
+    ($machine_st:expr, $($v1:expr, $v2: expr),*) => {{
+        $($machine_st.pdl.push(($v1, $v2));)*
         $machine_st.occurs_check.unify(&mut $machine_st)
     }};
 }
 
 macro_rules! unify_with_occurs_check {
-    ($machine_st:expr, $($value:expr),*) => {{
-        $($machine_st.pdl.push($value);)*
+    ($machine_st:expr, $($v1:expr, $v2:expr),*) => {{
+        $($machine_st.pdl.push(($v1, $v2));)*
         $machine_st.unify_with_occurs_check()
     }};
 }
