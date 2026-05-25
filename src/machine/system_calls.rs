@@ -75,10 +75,8 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use blake2::{Blake2b512, Blake2s256};
 
 #[cfg(feature = "crypto-full")]
-use ring::aead;
-#[cfg(feature = "crypto-impure")]
 use ring::{
-    digest, hkdf, hmac, pbkdf2,
+    aead, digest, hkdf, hmac, pbkdf2,
     rand::{SecureRandom, SystemRandom},
 };
 
@@ -7846,7 +7844,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn crypto_random_byte(&mut self) {
-        #[cfg(feature = "crypto-impure")]
+        #[cfg(feature = "crypto-full")]
         {
             let arg = self.machine_st.registers[1];
             let mut bytes: [u8; 1] = [0];
@@ -7866,7 +7864,7 @@ impl Machine {
             self.machine_st.unify_fixnum(byte, arg);
         }
 
-        #[cfg(not(feature = "crypto-impure"))]
+        #[cfg(not(feature = "crypto-full"))]
         {
             let stub_gen = || functor_stub(atom!("crypto_random_byte"), 1);
             let err = self.machine_st.missing_feature_error(atom!("crypto"));
@@ -8004,7 +8002,7 @@ impl Machine {
                 )
             }
             _ => {
-                #[cfg(feature = "crypto-impure")]
+                #[cfg(feature = "crypto-full")]
                 {
                     let ints = digest::digest(
                         match algorithm {
@@ -8030,7 +8028,7 @@ impl Machine {
                         )
                     )
                 }
-                #[cfg(not(feature = "crypto-impure"))]
+                #[cfg(not(feature = "crypto-full"))]
                 {
                     let stub_gen = || functor_stub(atom!("crypto_data_hash"), 1);
                     let err = self.machine_st.missing_feature_error(atom!("crypto"));
@@ -8048,7 +8046,7 @@ impl Machine {
     pub(crate) fn crypto_hmac(&mut self) {
         let stub_gen = || functor_stub(atom!("crypto_data_hash"), 3);
 
-        #[cfg(feature = "crypto-impure")]
+        #[cfg(feature = "crypto-full")]
         {
             let encoding = cell_as_atom!(self.deref_register(2));
             let data = self.string_encoding_bytes(self.machine_st.registers[1], encoding);
@@ -8084,7 +8082,7 @@ impl Machine {
             unify!(self.machine_st, self.machine_st.registers[4], ints_list);
         }
 
-        #[cfg(not(feature = "crypto-impure"))]
+        #[cfg(not(feature = "crypto-full"))]
         {
             let err = self.machine_st.missing_feature_error(atom!("crypto"));
             let exception = self.machine_st.error_form(err, stub_gen());
@@ -8096,7 +8094,7 @@ impl Machine {
     pub(crate) fn crypto_data_hkdf(&mut self) {
         let stub1_gen = || functor_stub(atom!("crypto_data_hkdf"), 4);
 
-        #[cfg(feature = "crypto-impure")]
+        #[cfg(feature = "crypto-full")]
         {
             let encoding = cell_as_atom!(self.deref_register(2));
             let data = self.string_encoding_bytes(self.machine_st.registers[1], encoding);
@@ -8167,7 +8165,7 @@ impl Machine {
             unify!(self.machine_st, self.machine_st.registers[7], ints_list);
         }
 
-        #[cfg(not(feature = "crypto-impure"))]
+        #[cfg(not(feature = "crypto-full"))]
         {
             let err = self.machine_st.missing_feature_error(atom!("crypto"));
             let exception = self.machine_st.error_form(err, stub1_gen());
@@ -8179,7 +8177,7 @@ impl Machine {
     pub(crate) fn crypto_password_hash(&mut self) {
         let stub1_gen = || functor_stub(atom!("crypto_password_hash"), 3);
 
-        #[cfg(feature = "crypto-impure")]
+        #[cfg(feature = "crypto-full")]
         {
             use std::num::NonZeroU32;
             let data = self
@@ -8235,7 +8233,7 @@ impl Machine {
             unify!(self.machine_st, self.machine_st.registers[4], ints_list);
         }
 
-        #[cfg(not(feature = "crypto-impure"))]
+        #[cfg(not(feature = "crypto-full"))]
         {
             let err = self.machine_st.missing_feature_error(atom!("crypto"));
             let exception = self.machine_st.error_form(err, stub1_gen());
@@ -9602,7 +9600,7 @@ impl Machine {
     }
 }
 
-#[cfg(feature = "crypto-impure")]
+#[cfg(feature = "crypto-full")]
 fn rng() -> &'static dyn SecureRandom {
     use std::ops::Deref;
 
@@ -9611,10 +9609,10 @@ fn rng() -> &'static dyn SecureRandom {
     RANDOM.deref()
 }
 
-#[cfg(feature = "crypto-impure")]
+#[cfg(feature = "crypto-full")]
 struct MyKey<T: core::fmt::Debug + PartialEq>(T);
 
-#[cfg(feature = "crypto-impure")]
+#[cfg(feature = "crypto-full")]
 impl hkdf::KeyType for MyKey<usize> {
     fn len(&self) -> usize {
         self.0
