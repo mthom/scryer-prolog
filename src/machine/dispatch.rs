@@ -1623,7 +1623,7 @@ impl Machine {
                 }
 
                 let Some(inst) = self.code.get(self.machine_st.p) else {
-                    // a seperate function marked #[cold] to make the compiler/branch-predictor prefer the happy path
+                    // a separate function marked #[cold] to make the compiler/branch-predictor prefer the happy path
                     handle_code_index_oob(self.code.len(), self.machine_st.p);
                 };
 
@@ -6038,7 +6038,7 @@ impl Machine {
     }
 }
 
-#[cold] // this is a seperate function so that we can annotate it as cold
+#[cold] // this is a separate function so that we can annotate it as cold
 #[track_caller]
 fn handle_code_index_oob(code_len: usize, p: usize) -> ! {
     panic!("code pointer p = {p} is oob for code area of size {code_len}");

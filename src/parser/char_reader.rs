@@ -206,7 +206,7 @@ impl<R: Read> CharRead for CharReader<R> {
             // i.e. the content of buf is a prefix of a valid utf-8 encoded char
             //
             // we need to read more data from the underlying stream
-            // so that we can determin its validity
+            // so that we can determine its validity
 
             if self.buf.len() > 4 {
                 // keep a prefix of 4 bytes so that we can put back at least one char
@@ -218,7 +218,7 @@ impl<R: Read> CharRead for CharReader<R> {
                 Err(e) => return Some(Err(e)),
                 Ok(0) => return Some(Err(bad_bytes_error(&self.buf))),
                 Ok(_) => {
-                    // successfully filled the buffer with another chuck of data
+                    // successfully filled the buffer with another chunk of data
                 }
             }
         }
