@@ -145,7 +145,7 @@ impl BranchCodeStack {
                     settings.trust_me()
                 });
 
-                combined_code.extend(code.into_iter());
+                combined_code.extend(code);
             }
         }
 
@@ -1236,7 +1236,7 @@ impl CodeGenerator {
             }
 
             self.skeleton.clauses.push_back(clause_index_info);
-            code.extend(clause_code.into_iter());
+            code.extend(clause_code);
         }
 
         let index_code = if clauses_len > 1 || self.settings.is_extensible {
@@ -1313,7 +1313,7 @@ impl CodeGenerator {
                 }
             }
 
-            code.extend(code_segment.into_iter());
+            code.extend(code_segment);
         }
 
         Ok(code)

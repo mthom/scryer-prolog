@@ -17,23 +17,33 @@ rust-version = "1.93.1"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["ffi", "repl", "hostname", "tls", "http", "crypto-full"]
+default = ["all-simple-cross", "tls", "http"]
+# activates all features that depend on no non pure-rust dependencies
+#
+# currently does not include
+# ffi due to libffi
+# tls, http due to openssl
+# crypto-full due to ring
+all-pure = ["repl", "hostname"]
 # enables all features that are simple to get working for cross-compliation
 # currently all but tls, http as those depend on openssl
-all-simple-cross = ["ffi", "repl", "hostname", "crypto-full"]
+all-simple-cross = ["all-pure", "ffi", "crypto-full"]
 ffi = ["dep:libffi"]
 repl = ["dep:crossterm", "dep:ctrlc", "dep:rustyline"]
 hostname = ["dep:hostname"]
 tls = ["dep:native-tls"]
 http = ["dep:warp", "dep:reqwest"]
-crypto-full = []
+# crypto function that require non pure-rust dependencies
+crypto-full = ["dep:ring"]
+
+[lints.clippy]
+collapsible_match = "allow"
 
 [lints.rust]
 unexpected_cfgs = { level = "deny", check-cfg = [
     'cfg(rust_version, values("1.87.0"))',
 ] }
 function_casts_as_integer = "deny"
-
 
 [build-dependencies]
 proc-macro2 = "1.0.86"
@@ -73,7 +83,9 @@ ordered-float = "5.0.0"
 phf = { version = "0.11", features = ["macros"] }
 puruspe = "0.4.1"
 rand = "0.8.5"
-ring = { version = "0.17.8", features = ["wasm32_unknown_unknown_js"] }
+ring = { version = "0.17.8", features = [
+    "wasm32_unknown_unknown_js",
+], optional = true }
 ripemd = "0.1.3"
 roxmltree = "0.20.0"
 ryu = "1.0.18"

@@ -195,8 +195,7 @@ impl Stack {
                 // exposed provenance, we need to expose the provenance here, even though we don't
                 // actually use the value for anything. This is a reminder that `expose_provenance`
                 // isn't just a cast from a pointer to an integer but has actual side effects.
-                // FIXME(msrv) remove the as_ptr() call once MSRV reaches 1.89.0
-                cell_ptr.as_ptr().expose_provenance();
+                cell_ptr.expose_provenance();
 
                 offset += mem::size_of::<HeapCellValue>();
             }
@@ -228,8 +227,7 @@ impl Stack {
                 // exposed provenance, we need to expose the provenance here, even though we don't
                 // actually use the value for anything. This is a reminder that `expose_provenance`
                 // isn't just a cast from a pointer to an integer but has actual side effects.
-                // FIXME(msrv) remove as_ptr() call once msrv reaches 1.89.0
-                cell_ptr.as_ptr().expose_provenance();
+                cell_ptr.expose_provenance();
 
                 offset += mem::size_of::<HeapCellValue>();
             }

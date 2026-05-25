@@ -1,6 +1,6 @@
 use crate::helper::load_module_test;
 use crate::helper::load_module_test_with_input;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "http", not(target_arch = "wasm32")))]
 use crate::helper::load_module_test_with_tokio_runtime_and_input;
 use serial_test::serial;
 
@@ -164,8 +164,7 @@ fn issue3262_read_from_stdin_no_newline() {
 }
 
 #[test]
-#[cfg(feature = "http")]
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "http", not(target_arch = "wasm32")))]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn http_open_hanging() {
     load_module_test_with_tokio_runtime_and_input(
