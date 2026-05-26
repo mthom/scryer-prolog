@@ -6,7 +6,7 @@
 ;;
 ;;     - Scryer Prolog
 ;;     - `dot' (from Graphviz)
-;;     - `convert' (from ImageMagick)
+;;     - `convert' or `magick' (from ImageMagick)
 ;;
 ;; Copy showterm.el and showterm.pl to the same directory,
 ;; say ~/scryer-prolog/tools/, and add to your .emacs:
@@ -76,8 +76,9 @@
         (setq str (buffer-string))
         (erase-buffer))
       (let ((proc (let (process-connection-type)
-                    (start-process "convert" (current-buffer)
-                                   "convert"
+                    (start-process "imagemagick" (current-buffer)
+                                   (or (executable-find "magick")
+                                       "convert")
                                    "png:-"
                                    "-gravity" "center"
                                    "-background" "white"
