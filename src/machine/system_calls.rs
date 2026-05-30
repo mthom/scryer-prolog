@@ -4593,6 +4593,10 @@ impl Machine {
 
             let (tx, rx) = std::sync::mpsc::sync_channel(1024);
 
+            // warp shutdown channel
+            let (warp_shutdown_tx, mut warp_shutdown_rx) = tokio::sync::mpsc::channel(1);
+            let warp_shutdown_tx_timeout = warp_shutdown_tx.clone();
+
             let runtime = tokio::runtime::Handle::current();
             let _guard = runtime.enter();
 
@@ -4657,13 +4661,23 @@ impl Machine {
             runtime.spawn(async move {
                 match ssl_server {
                     Some((key, cert)) => {
-                        warp::serve(serve).tls().key(key).cert(cert).run(addr).await
+                        let (_addr, server) = warp::serve(serve).tls().key(key).cert(cert).bind_with_graceful_shutdown(addr, async move {
+                            warp_shutdown_rx.recv().await;
+                        });
+
+                        tokio::task::spawn(server);
                     }
-                    None => warp::serve(serve).run(addr).await,
+                    None => {
+                        let (_addr, server) = warp::serve(serve).bind_with_graceful_shutdown(addr, async move {
+                            warp_shutdown_rx.recv().await;
+                        });
+
+                        tokio::task::spawn(server);
+                    }
                 }
             });
 
-            let http_listener = HttpListener { incoming: rx };
+            let http_listener = HttpListener { incoming: rx, warp_shutdown: warp_shutdown_tx };
             let http_listener: TypedArenaPtr<HttpListener> =
                 arena_alloc!(http_listener, &mut self.machine_st.arena);
 
@@ -4673,6 +4687,30 @@ impl Machine {
                 typed_arena_ptr_as_cell!(http_listener),
             );
         }
+        Ok(())
+    }
+
+    #[cfg(feature = "http")]
+    #[inline(always)]
+    pub(crate) fn http_listen_stop(&mut self) -> CallResult {
+        let culprit = self.deref_register(1);
+
+        read_heap_cell!(culprit,
+            (HeapCellValueTag::Cons, cons_ptr) => {
+                match_untyped_arena_ptr!(cons_ptr,
+                    (ArenaHeaderTag::HttpListener, http_listener) => {
+                        let _ = futures::executor::block_on(http_listener.warp_shutdown.send(()));
+                    }
+                    _ => {
+                            unreachable!();
+                        }
+                    );
+            }
+            _ => {
+                unreachable!();
+            }
+        );
+
         Ok(())
     }
 

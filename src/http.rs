@@ -5,6 +5,7 @@ use warp::http;
 
 pub struct HttpListener {
     pub incoming: std::sync::mpsc::Receiver<HttpRequest>,
+    pub warp_shutdown: tokio::sync::mpsc::Sender<()>,
 }
 
 pub struct HttpRequest {

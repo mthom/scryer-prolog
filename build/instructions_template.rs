@@ -599,6 +599,8 @@ enum SystemClauseType {
     HttpOpen,
     #[strum_discriminants(strum(props(Arity = "5", Name = "$http_listen")))]
     HttpListen,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$http_listen_stop")))]
+    HttpListenStop,
     #[strum_discriminants(strum(props(Arity = "7", Name = "$http_accept")))]
     HttpAccept,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$http_answer")))]

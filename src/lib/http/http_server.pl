@@ -112,12 +112,29 @@ module_qualification(M, H0, H) :-
     H0 =.. [Method, Path, Goal],
     H =.. [Method, Path, M:Goal].
 
+http_listen__(Addr, HttpListener, TLSKey, TLSCert, ContentLengthLimit) :-
+    '$http_listen'(Addr, HttpListener, TLSKey, TLSCert, ContentLengthLimit).
+
+http_listen_stop_(HttpListener) :-
+    '$http_listen_stop'(HttpListener).
+
+http_accept_(HttpListener, RequestMethod, RequestPath, RequestHeaders, RequestQuery, RequestStream, ResponseHandle) :-
+    '$http_accept'(HttpListener, RequestMethod, RequestPath, RequestHeaders, RequestQuery, RequestStream, ResponseHandle).
+
+http_answer_(ResponseHandle, Code, Headers, ResponseStream) :-
+    '$http_answer'(ResponseHandle, Code, Headers, ResponseStream).
+
 http_listen_(Port, Handlers, Options) :-
     parse_options(Options, TLSKey, TLSCert, ContentLengthLimit),
     phrase(format_("0.0.0.0:~d", [Port]), Addr),
-    '$http_listen'(Addr, HttpListener, TLSKey, TLSCert, ContentLengthLimit),!,
-    format("Listening at ~s\n", [Addr]),
-    http_loop(HttpListener, Handlers).
+    setup_call_cleanup(
+        (
+            http_listen__(Addr, HttpListener, TLSKey, TLSCert, ContentLengthLimit),
+            format("Listening at http://~s\n", [Addr])
+        ),
+        http_loop(HttpListener, Handlers),
+        http_listen_stop_(HttpListener)
+    ).
 
 parse_options(Options, TLSKey, TLSCert, ContentLengthLimit) :-
     member_option_default(tls_key, Options, "", TLSKey),
@@ -131,37 +148,56 @@ member_option_default(Key, List, _Default, Value) :-
 member_option_default(Key, List, Default, Default) :-
     X =.. [Key, _],
     \+ member(X, List).
-	
 
 http_loop(HttpListener, Handlers) :-
-    '$http_accept'(HttpListener, RequestMethod, RequestPath, RequestHeaders, RequestQuery, RequestStream, ResponseHandle),
-    current_time(Time),
-    phrase(format_time("%Y-%m-%d (%H:%M:%S)", Time), TimeString),
-    format("~s ~w ~s\n", [TimeString, RequestMethod, RequestPath]),
-    maplist(map_header_kv, RequestHeaders, RequestHeadersKV),
-    phrase(parse_queries(RequestQueries), RequestQuery),
-    (
-	match_handler(Handlers, RequestMethod, RequestPath, Handler) ->
-	(
-	    HttpRequest = http_request(RequestHeadersKV, stream(RequestStream), RequestQueries),
-	    HttpResponse = http_response(_, _, _),
-	    (call(Handler, HttpRequest, HttpResponse) ->
-		 send_response(ResponseHandle, HttpResponse)
-	    ;    (
-		'$http_answer'(ResponseHandle, 500, [], ResponseStream),
-		call_cleanup(format(ResponseStream, "Internal Server Error", []), close(ResponseStream)))
-	    )
-	)
-    ; (
-	'$http_answer'(ResponseHandle, 404, [], ResponseStream),
-	call_cleanup(format(ResponseStream, "Not Found", []), close(ResponseStream)))
-    ),
+    time((
+        http_accept_(HttpListener, RequestMethod, RequestPath, RequestHeaders, RequestQuery, RequestStream, ResponseHandle),
+        current_time(Time),
+        phrase(format_time("%Y-%m-%d (%H:%M:%S)", Time), TimeString),
+        format("~s ~w ~s", [TimeString, RequestMethod, RequestPath]),
+        maplist(map_header_kv, RequestHeaders, RequestHeadersKV),
+        phrase(parse_queries(RequestQueries), RequestQuery),
+        (
+            match_handler(Handlers, RequestMethod, RequestPath, Handler) ->
+            (
+                HttpRequest = http_request(RequestHeadersKV, stream(RequestStream), RequestQueries),
+                HttpResponse = http_response(_, _, _),
+                catch(
+                    (call(Handler, HttpRequest, HttpResponse) ->
+                        send_response(ResponseHandle, HttpResponse)
+                    ;
+                        setup_call_cleanup(
+                            http_answer_(ResponseHandle, 500, [], ResponseStream),
+                            format(ResponseStream, "Internal Server Error", []),
+                            close(ResponseStream)
+                        ),
+                        throw(handler_not_available(Handler, RequestMethod, RequestPath, RequestQuery, RequestHeaders))
+                    ),
+                    HandlerError,
+                    (
+                        setup_call_cleanup(
+                            http_answer_(ResponseHandle, 500, [], ResponseStream),
+                            format(ResponseStream, "Internal Server Error", []),
+                            close(ResponseStream)
+                        ),
+                        throw(HandlerError)
+                    )
+                )
+            )
+            ;
+            setup_call_cleanup(
+                http_answer_(ResponseHandle, 404, [], ResponseStream),
+                format(ResponseStream, "Not Found", []),
+                close(ResponseStream)
+            )
+        )
+    )),
     http_loop(HttpListener, Handlers).
 
 send_response(ResponseHandle, http_response(StatusCode0, text(ResponseText), ResponseHeaders0)) :-
     default(StatusCode0, 200, StatusCode),
     maplist(map_header_kv_2, ResponseHeaders, ResponseHeaders0),
-    '$http_answer'(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream0),
+    http_answer_(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream0),
     open(stream(ResponseStream0), write, ResponseStream, [type(text)]),
     catch(
 	call_cleanup(format(ResponseStream, "~s", [ResponseText]),close(ResponseStream)),
@@ -172,9 +208,9 @@ send_response(ResponseHandle, http_response(StatusCode0, text(ResponseText), Res
 send_response(ResponseHandle, http_response(StatusCode0, bytes(ResponseBytes), ResponseHeaders0)) :-
     default(StatusCode0, 200, StatusCode),
     maplist(map_header_kv_2, ResponseHeaders, ResponseHeaders0),
-    '$http_answer'(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream),
+    http_answer_(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream),
     catch(
-        call_cleanup(format(ResponseStream, "~s", [ResponseBytes]),close(ResponseStream)),
+    call_cleanup(format(ResponseStream, "~s", [ResponseBytes]),close(ResponseStream)),
 	error(existence_error(stream, _), _),
 	true
     ).
@@ -182,7 +218,7 @@ send_response(ResponseHandle, http_response(StatusCode0, bytes(ResponseBytes), R
 send_response(ResponseHandle, http_response(StatusCode0, file(Filename), ResponseHeaders0)) :-
     default(StatusCode0, 200, StatusCode),
     maplist(map_header_kv_2, ResponseHeaders, ResponseHeaders0),
-    '$http_answer'(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream),
+    http_answer_(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream),
     catch(
 	call_cleanup(
 	    setup_call_cleanup(
