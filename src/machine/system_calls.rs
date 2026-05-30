@@ -4595,7 +4595,6 @@ impl Machine {
 
             // warp shutdown channel
             let (warp_shutdown_tx, mut warp_shutdown_rx) = tokio::sync::mpsc::channel(1);
-            let warp_shutdown_tx_timeout = warp_shutdown_tx.clone();
 
             let runtime = tokio::runtime::Handle::current();
             let _guard = runtime.enter();
