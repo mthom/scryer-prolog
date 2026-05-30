@@ -3,3 +3,5 @@ target/
 .direnv/
 
 
+__pycache__
+*.pyc
