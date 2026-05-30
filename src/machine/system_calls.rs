@@ -4661,23 +4661,31 @@ impl Machine {
             runtime.spawn(async move {
                 match ssl_server {
                     Some((key, cert)) => {
-                        let (_addr, server) = warp::serve(serve).tls().key(key).cert(cert).bind_with_graceful_shutdown(addr, async move {
-                            warp_shutdown_rx.recv().await;
-                        });
+                        let (_addr, server) = warp::serve(serve)
+                            .tls()
+                            .key(key)
+                            .cert(cert)
+                            .bind_with_graceful_shutdown(addr, async move {
+                                warp_shutdown_rx.recv().await;
+                            });
 
                         tokio::task::spawn(server);
                     }
                     None => {
-                        let (_addr, server) = warp::serve(serve).bind_with_graceful_shutdown(addr, async move {
-                            warp_shutdown_rx.recv().await;
-                        });
+                        let (_addr, server) =
+                            warp::serve(serve).bind_with_graceful_shutdown(addr, async move {
+                                warp_shutdown_rx.recv().await;
+                            });
 
                         tokio::task::spawn(server);
                     }
                 }
             });
 
-            let http_listener = HttpListener { incoming: rx, warp_shutdown: warp_shutdown_tx };
+            let http_listener = HttpListener {
+                incoming: rx,
+                warp_shutdown: warp_shutdown_tx,
+            };
             let http_listener: TypedArenaPtr<HttpListener> =
                 arena_alloc!(http_listener, &mut self.machine_st.arena);
 
