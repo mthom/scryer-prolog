@@ -225,8 +225,7 @@ impl Iterator for ParallelHeapIter<'_> {
                                         PStrSegmentCmpResult::Continue(v1, v2) => {
                                             self.tabu_list.insert((l1, l2));
 
-                                            // this looks swapped
-                                            self.stack.push((v2.offset_by(l2), v1.offset_by(l1) ));
+                                            self.stack.push((v1.offset_by(l1), v2.offset_by(l2)));
                                         }
                                         PStrSegmentCmpResult::Less => {
                                             self.stack.clear();
@@ -247,9 +246,8 @@ impl Iterator for ParallelHeapIter<'_> {
 
                                     let (c, succ_cell) = self.heap.last_str_char_and_tail(l1);
 
-                                    // this looks swapped
-                                    self.stack.push((heap_loc_as_cell!(l2 + 1), succ_cell));
-                                    self.stack.push((heap_loc_as_cell!(l2), char_as_cell!(c)));
+                                    self.stack.push((succ_cell, heap_loc_as_cell!(l2 + 1)));
+                                    self.stack.push((char_as_cell!(c), heap_loc_as_cell!(l2)));
                                 }
                                 (HeapCellValueTag::Str, s2) => {
                                     if self.tabu_list.contains(&(l1, s2)) {
