@@ -61,6 +61,7 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 #[cfg(feature = "http")]
 use std::sync::{Arc, Condvar, Mutex};
+use tokio::sync::Notify;
 
 use chrono::{offset::Local, DateTime};
 #[cfg(not(target_arch = "wasm32"))]
@@ -4594,7 +4595,7 @@ impl Machine {
             let (tx, rx) = std::sync::mpsc::sync_channel(1024);
 
             // warp shutdown channel
-            let (warp_shutdown_tx, mut warp_shutdown_rx) = tokio::sync::mpsc::channel(1);
+            let warp_shutdown = Arc::new(Notify::new());
 
             let runtime = tokio::runtime::Handle::current();
             let _guard = runtime.enter();
@@ -4657,6 +4658,7 @@ impl Machine {
                     },
                 );
 
+            let warp_shutdown_clone = warp_shutdown.clone();
             runtime.spawn(async move {
                 match ssl_server {
                     Some((key, cert)) => {
@@ -4665,7 +4667,7 @@ impl Machine {
                             .key(key)
                             .cert(cert)
                             .bind_with_graceful_shutdown(addr, async move {
-                                warp_shutdown_rx.recv().await;
+                                warp_shutdown_clone.notified().await;
                             });
 
                         tokio::task::spawn(server);
@@ -4673,7 +4675,7 @@ impl Machine {
                     None => {
                         let (_addr, server) =
                             warp::serve(serve).bind_with_graceful_shutdown(addr, async move {
-                                warp_shutdown_rx.recv().await;
+                                warp_shutdown_clone.notified().await;
                             });
 
                         tokio::task::spawn(server);
@@ -4683,7 +4685,7 @@ impl Machine {
 
             let http_listener = HttpListener {
                 incoming: rx,
-                warp_shutdown: warp_shutdown_tx,
+                warp_shutdown: warp_shutdown,
             };
             let http_listener: TypedArenaPtr<HttpListener> =
                 arena_alloc!(http_listener, &mut self.machine_st.arena);
@@ -4706,7 +4708,7 @@ impl Machine {
             (HeapCellValueTag::Cons, cons_ptr) => {
                 match_untyped_arena_ptr!(cons_ptr,
                     (ArenaHeaderTag::HttpListener, http_listener) => {
-                        let _ = futures::executor::block_on(http_listener.warp_shutdown.send(()));
+                        http_listener.warp_shutdown.notify_one();
                     }
                     _ => {
                             unreachable!();
