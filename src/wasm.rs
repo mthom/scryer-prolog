@@ -129,23 +129,21 @@ impl WasmQueryState {
         let mut error = None;
         let mut to_drop = false;
         match &mut self.inner {
-            Some(ref mut inner) => {
-                inner.with_query_state_mut(|query_state| match query_state.next() {
-                    Some(Ok(leaf_answer)) => {
-                        js_sys::Reflect::set(&ret, &"value".into(), &leaf_answer.into()).unwrap();
-                        js_sys::Reflect::set(&ret, &"done".into(), &false.into()).unwrap();
-                    }
-                    Some(Err(error_term)) => {
-                        let js_error = js_sys::Error::new("Prolog error");
-                        js_error.set_cause(&error_term.into());
-                        error = Some(js_error);
-                    }
-                    None => {
-                        js_sys::Reflect::set(&ret, &"done".into(), &true.into()).unwrap();
-                        to_drop = true;
-                    }
-                })
-            }
+            Some(mut inner) => inner.with_query_state_mut(|query_state| match query_state.next() {
+                Some(Ok(leaf_answer)) => {
+                    js_sys::Reflect::set(&ret, &"value".into(), &leaf_answer.into()).unwrap();
+                    js_sys::Reflect::set(&ret, &"done".into(), &false.into()).unwrap();
+                }
+                Some(Err(error_term)) => {
+                    let js_error = js_sys::Error::new("Prolog error");
+                    js_error.set_cause(&error_term.into());
+                    error = Some(js_error);
+                }
+                None => {
+                    js_sys::Reflect::set(&ret, &"done".into(), &true.into()).unwrap();
+                    to_drop = true;
+                }
+            }),
             None => return Err(js_sys::Error::new("This query was already dropped").into()),
         }
 
