@@ -176,6 +176,6 @@ fn http_open_hanging() {
     load_module_test_with_tokio_runtime_and_input(
         "tests-pl/issue-http_open-hanging.pl",
         format!("PROLOG={:?}.", env!("CARGO_BIN_EXE_scryer-prolog")),
-            "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
+        "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n",
     );
 }
