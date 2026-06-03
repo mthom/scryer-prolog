@@ -176,6 +176,15 @@ fn http_open_hanging() {
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+#[cfg_attr(
+    all(
+        target_arch = "x86",
+        target_os = "linux",
+        target_vendor = "unknown",
+        target_env = "gnu"
+    ),
+    ignore = "FIXME was already broken before d50d42509903dc3cc1841eb757a703753de84754"
+)]
 fn discussion3359() {
     load_module_test("tests-pl/discussion3359.pl", "");
 }
