@@ -15,9 +15,8 @@ impl MachineState {
     pub(crate) fn partial_string_to_pdl(&mut self, pstr_loc: usize, l: usize) {
         let (c, succ_cell) = self.heap.last_str_char_and_tail(pstr_loc);
 
-        self.pdl.push((heap_loc_as_cell!(l + 1), succ_cell));
-
-        self.pdl.push((heap_loc_as_cell!(l), char_as_cell!(c)));
+        self.pdl.push((succ_cell, heap_loc_as_cell!(l + 1)));
+        self.pdl.push((char_as_cell!(c), heap_loc_as_cell!(l)));
     }
 }
 
@@ -33,7 +32,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
 
                 if n1 == n2 && a1 == a2 {
                     for idx in (0..a1).rev() {
-                        self.pdl.push((heap_loc_as_cell!(s2+1+idx), heap_loc_as_cell!(s1+1+idx)));
+                        self.pdl.push((heap_loc_as_cell!(s1+1+idx), heap_loc_as_cell!(s2+1+idx)));
                     }
                 } else {
                     self.fail = true;
@@ -42,7 +41,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
             (HeapCellValueTag::Lis, l2) => {
                 if a1 == 2 && n1 == atom!(".") {
                     for idx in (0..2).rev() {
-                        self.pdl.push((heap_loc_as_cell!(l2+1+idx), heap_loc_as_cell!(s1+1+idx)));
+                        self.pdl.push((heap_loc_as_cell!(s1+1+idx), heap_loc_as_cell!(l2+1+idx)));
                     }
                 } else {
                     self.fail = true;
@@ -70,7 +69,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
         read_heap_cell!(value,
             (HeapCellValueTag::Lis, l2) => {
                 for idx in (0..2).rev() {
-                    self.pdl.push((heap_loc_as_cell!(l2 + idx), heap_loc_as_cell!(l1 + idx)));
+                    self.pdl.push((heap_loc_as_cell!(l1 + idx), heap_loc_as_cell!(l2 + idx)));
                 }
             }
             (HeapCellValueTag::Str, s2) => {
@@ -79,7 +78,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
 
                 if a2 == 2 && n2 == atom!(".") {
                     for idx in (0..2).rev() {
-                        self.pdl.push((heap_loc_as_cell!(s2+1+idx), heap_loc_as_cell!(l1+idx)));
+                        self.pdl.push((heap_loc_as_cell!(l1+idx), heap_loc_as_cell!(s2+1+idx)));
                     }
                 } else {
                     self.fail = true;
@@ -128,7 +127,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
             (HeapCellValueTag::PStrLoc, other_pstr_loc) => {
                 match machine_st.heap.compare_pstr_segments(pstr_loc, other_pstr_loc) {
                     PStrSegmentCmpResult::Continue(v1, v2) => {
-                        machine_st.pdl.push((v1.offset_by(pstr_loc), v2.offset_by(other_pstr_loc)));
+                        machine_st.pdl.push((v2.offset_by(other_pstr_loc), v1.offset_by(pstr_loc)));
                     }
                     _ => {
                         machine_st.fail = true;
