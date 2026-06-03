@@ -4690,6 +4690,16 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.http_listen(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallHttpListenStop => {
+                        #[cfg(feature = "http")]
+                        try_or_throw!(self.machine_st, self.http_listen_stop(), continue);
+                        step_or_fail!(self.machine_st, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteHttpListenStop => {
+                        #[cfg(feature = "http")]
+                        try_or_throw!(self.machine_st, self.http_listen_stop(), continue);
+                        step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallHttpAccept => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_accept(), continue);
