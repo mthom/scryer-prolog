@@ -173,3 +173,9 @@ fn http_open_hanging() {
             "received response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\nreceived response with status code:200\n"
     );
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn discussion3359() {
+    load_module_test("tests-pl/discussion3359.pl", "");
+}
