@@ -1,10 +1,12 @@
 use bytes::{buf::Reader, Bytes};
 use std::sync::{Arc, Condvar, Mutex};
+use tokio::sync::Notify;
 
 use warp::http;
 
 pub struct HttpListener {
     pub incoming: std::sync::mpsc::Receiver<HttpRequest>,
+    pub warp_shutdown: Arc<Notify>,
 }
 
 pub struct HttpRequest {

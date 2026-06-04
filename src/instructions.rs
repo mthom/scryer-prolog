@@ -803,6 +803,7 @@ impl Instruction {
             | &Instruction::CallDeterministicLengthRundown
             | &Instruction::CallHttpOpen
             | &Instruction::CallHttpListen
+            | &Instruction::CallHttpListenStop
             | &Instruction::CallHttpAccept
             | &Instruction::CallHttpAnswer
             | &Instruction::CallLoadForeignLib
@@ -1062,6 +1063,7 @@ impl Instruction {
             | &Instruction::ExecuteDeterministicLengthRundown
             | &Instruction::ExecuteHttpOpen
             | &Instruction::ExecuteHttpListen
+            | &Instruction::ExecuteHttpListenStop
             | &Instruction::ExecuteHttpAccept
             | &Instruction::ExecuteHttpAnswer
             | &Instruction::ExecuteLoadForeignLib

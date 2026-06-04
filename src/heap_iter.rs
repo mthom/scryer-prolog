@@ -26,7 +26,7 @@ use std::vec::Vec;
 // None's and pairs of variables as the Iterator Item.
 
 pub struct ParallelHeapIter<'a> {
-    stack: Vec<HeapCellValue>,
+    stack: Vec<(HeapCellValue, HeapCellValue)>,
     heap: &'a Heap,
     arena: &'a Arena,
     tabu_list: IndexSet<(usize, usize), FxBuildHasher>,
@@ -35,7 +35,7 @@ pub struct ParallelHeapIter<'a> {
 impl<'a> ParallelHeapIter<'a> {
     pub fn from(machine_st: &'a MachineState, h1: HeapCellValue, h2: HeapCellValue) -> Self {
         Self {
-            stack: vec![h2, h1],
+            stack: vec![(h1, h2)],
             heap: &machine_st.heap,
             arena: &machine_st.arena,
             tabu_list: IndexSet::with_hasher(FxBuildHasher::new()),
@@ -89,10 +89,8 @@ impl Iterator for ParallelHeapIter<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         use crate::offset_table::F64Offset;
 
-        while let Some(s1) = self.stack.pop() {
+        while let Some((s1, s2)) = self.stack.pop() {
             let s1 = heap_bound_deref(self.heap, s1);
-
-            let s2 = self.stack.pop().unwrap();
             let s2 = heap_bound_deref(self.heap, s2);
 
             let v1 = heap_bound_store(self.heap, s1);
@@ -183,11 +181,8 @@ impl Iterator for ParallelHeapIter<'_> {
                                     // correctness) different.
                                     let (c, succ_cell) = self.heap.last_str_char_and_tail(l2);
 
-                                    self.stack.push(succ_cell);
-                                    self.stack.push(heap_loc_as_cell!(l1 + 1));
-
-                                    self.stack.push(char_as_cell!(c));
-                                    self.stack.push(heap_loc_as_cell!(l1));
+                                    self.stack.push((heap_loc_as_cell!(l1 + 1), succ_cell));
+                                    self.stack.push((heap_loc_as_cell!(l1), char_as_cell!(c)));
                                 }
                                 (HeapCellValueTag::Lis, l2) => {
                                     if self.tabu_list.contains(&(l1, l2)) {
@@ -196,11 +191,8 @@ impl Iterator for ParallelHeapIter<'_> {
 
                                     self.tabu_list.insert((l1, l2));
 
-                                    self.stack.push(self.heap[l2 + 1]);
-                                    self.stack.push(self.heap[l1 + 1]);
-
-                                    self.stack.push(self.heap[l2]);
-                                    self.stack.push(self.heap[l1]);
+                                    self.stack.push((self.heap[l1 + 1], self.heap[l2 + 1]));
+                                    self.stack.push((self.heap[l1], self.heap[l2]));
                                 }
                                 (HeapCellValueTag::Str, s2) => {
                                     if self.tabu_list.contains(&(l1, s2)) {
@@ -214,11 +206,8 @@ impl Iterator for ParallelHeapIter<'_> {
 
                                     self.tabu_list.insert((l1, s2));
 
-                                    self.stack.push(self.heap[s2 + 2]);
-                                    self.stack.push(self.heap[l1 + 1]);
-
-                                    self.stack.push(self.heap[s2 + 1]);
-                                    self.stack.push(self.heap[l1]);
+                                    self.stack.push((self.heap[l1 + 1], self.heap[s2 + 2]));
+                                    self.stack.push((self.heap[l1], self.heap[s2 + 1]));
                                 }
                                 _ => {
                                     unreachable!();
@@ -236,8 +225,7 @@ impl Iterator for ParallelHeapIter<'_> {
                                         PStrSegmentCmpResult::Continue(v1, v2) => {
                                             self.tabu_list.insert((l1, l2));
 
-                                            self.stack.push(v1.offset_by(l1));
-                                            self.stack.push(v2.offset_by(l2));
+                                            self.stack.push((v1.offset_by(l1), v2.offset_by(l2)));
                                         }
                                         PStrSegmentCmpResult::Less => {
                                             self.stack.clear();
@@ -258,11 +246,8 @@ impl Iterator for ParallelHeapIter<'_> {
 
                                     let (c, succ_cell) = self.heap.last_str_char_and_tail(l1);
 
-                                    self.stack.push(succ_cell);
-                                    self.stack.push(heap_loc_as_cell!(l2 + 1));
-
-                                    self.stack.push(char_as_cell!(c));
-                                    self.stack.push(heap_loc_as_cell!(l2));
+                                    self.stack.push((succ_cell, heap_loc_as_cell!(l2 + 1)));
+                                    self.stack.push((char_as_cell!(c), heap_loc_as_cell!(l2)));
                                 }
                                 (HeapCellValueTag::Str, s2) => {
                                     if self.tabu_list.contains(&(l1, s2)) {
@@ -278,11 +263,8 @@ impl Iterator for ParallelHeapIter<'_> {
 
                                     let (c, succ_cell) = self.heap.last_str_char_and_tail(l1);
 
-                                    self.stack.push(heap_loc_as_cell!(s2+2));
-                                    self.stack.push(succ_cell);
-
-                                    self.stack.push(heap_loc_as_cell!(s2+1));
-                                    self.stack.push(char_as_cell!(c));
+                                    self.stack.push((succ_cell, heap_loc_as_cell!(s2+2)));
+                                    self.stack.push((char_as_cell!(c), heap_loc_as_cell!(s2+1)));
                                 }
                                 _ => {
                                     unreachable!()
@@ -307,8 +289,7 @@ impl Iterator for ParallelHeapIter<'_> {
                                     self.tabu_list.insert((s1, s2));
 
                                     for idx in (1 .. a1+1).rev() {
-                                        self.stack.push(self.heap[s2+idx]);
-                                        self.stack.push(self.heap[s1+idx]);
+                                        self.stack.push((self.heap[s1+idx], self.heap[s2+idx]));
                                     }
                                 }
                                 (HeapCellValueTag::Lis, l2) => {
@@ -321,11 +302,9 @@ impl Iterator for ParallelHeapIter<'_> {
 
                                     some_or_return!(self.parallel_cmp((a1, n1), (2, atom!(".")), v1, v2));
 
-                                    self.stack.push(self.heap[l2]);
-                                    self.stack.push(self.heap[s1+1]);
+                                    self.stack.push((self.heap[s1+1], self.heap[l2]));
 
-                                    self.stack.push(self.heap[l2+1]);
-                                    self.stack.push(self.heap[s1+2]);
+                                    self.stack.push((self.heap[s1+2], self.heap[l2+1]));
                                 }
                                 (HeapCellValueTag::PStrLoc, l2) => {
                                     if self.tabu_list.contains(&(s1, l2)) {
@@ -341,11 +320,8 @@ impl Iterator for ParallelHeapIter<'_> {
 
                                     let (c, succ_cell) = self.heap.last_str_char_and_tail(l2);
 
-                                    self.stack.push(succ_cell);
-                                    self.stack.push(heap_loc_as_cell!(s1+2));
-
-                                    self.stack.push(char_as_cell!(c));
-                                    self.stack.push(heap_loc_as_cell!(s1+1));
+                                    self.stack.push((heap_loc_as_cell!(s1+2), succ_cell));
+                                    self.stack.push((heap_loc_as_cell!(s1+1), char_as_cell!(c)));
                                 }
                                 _ => {
                                     unreachable!()
