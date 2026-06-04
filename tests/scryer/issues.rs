@@ -182,6 +182,8 @@ async fn sigint_interrupts_nonterminating_goals() {
         format!("PROLOG={:?}.", env!("CARGO_BIN_EXE_scryer-prolog")),
         "ok\n",
     );
+}
+
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 #[cfg_attr(
