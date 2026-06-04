@@ -4723,6 +4723,36 @@ impl Machine {
         Ok(())
     }
 
+    #[inline(always)]
+    fn interrupt_occured(&mut self) -> bool {
+        let interrupted = machine::INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
+
+        match machine::INTERRUPT.compare_exchange(
+            interrupted,
+            false,
+            std::sync::atomic::Ordering::Relaxed,
+            std::sync::atomic::Ordering::Relaxed,
+        ) {
+            Ok(interruption) => {
+                if interruption {
+                    self.machine_st.throw_interrupt_exception();
+                    self.machine_st.backtrack();
+                    // We have extracted control over the Tokio runtime to the calling context for enabling library use case
+                    // (see https://github.com/mthom/scryer-prolog/pull/1880)
+                    // So we only have access to a runtime handle in here and can't shut it down.
+                    // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880
+                    // was not merged, I'm only deactivating it for now.
+                    //let old_runtime = std::mem::replace(&mut self.runtime, tokio::runtime::Runtime::new().unwrap());
+                    //old_runtime.shutdown_background();
+                    return true;
+                }
+            }
+            Err(_) => unreachable!(),
+        }
+
+        return false;
+    }
+
     #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_accept(&mut self) -> CallResult {
@@ -4822,29 +4852,8 @@ impl Machine {
                         break
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        let interrupted = machine::INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
-
-                        match machine::INTERRUPT.compare_exchange(
-                            interrupted,
-                            false,
-                            std::sync::atomic::Ordering::Relaxed,
-                            std::sync::atomic::Ordering::Relaxed,
-                        ) {
-                            Ok(interruption) => {
-                                if interruption {
-                                    self.machine_st.throw_interrupt_exception();
-                                    self.machine_st.backtrack();
-                                    // We have extracted control over the Tokio runtime to the calling context for enabling library use case
-                                    // (see https://github.com/mthom/scryer-prolog/pull/1880)
-                                    // So we only have access to a runtime handle in here and can't shut it down.
-                                    // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880
-                                    // was not merged, I'm only deactivating it for now.
-                                    //let old_runtime = std::mem::replace(&mut self.runtime, tokio::runtime::Runtime::new().unwrap());
-                                    //old_runtime.shutdown_background();
-                                    break
-                                }
-                            }
-                            Err(_) => unreachable!(),
+                        if self.interrupt_occured() {
+                            break;
                         }
                     }
                   Err(_) => {
@@ -7105,6 +7114,7 @@ impl Machine {
         let (tcp_listener, port): (TypedArenaPtr<TcpListener>, _) =
             match TcpListener::bind(server_addr).map_err(|e| e.kind()) {
                 Ok(tcp_listener) => {
+                    let _ = tcp_listener.set_nonblocking(true);
                     let port = tcp_listener.local_addr().map(|addr| addr.port()).ok();
 
                     if let Some(port) = port {
@@ -7170,12 +7180,14 @@ impl Machine {
 
         let culprit = self.deref_register(1);
 
+        use std::io::ErrorKind;
         read_heap_cell!(culprit,
             (HeapCellValueTag::Cons, cons_ptr) => {
                 match_untyped_arena_ptr!(cons_ptr,
                      (ArenaHeaderTag::TcpListener, tcp_listener) => {
-                         match tcp_listener.accept().ok() {
-                             Some((tcp_stream, socket_addr)) => {
+                        loop {
+                         match tcp_listener.accept() {
+                             Ok((tcp_stream, socket_addr)) => {
                                  let client = AtomTable::build_with(&self.machine_st.atom_tbl, &socket_addr.to_string());
 
                                  let mut tcp_stream = Stream::from_tcp_stream(
@@ -7198,11 +7210,22 @@ impl Machine {
 
                                  self.machine_st.bind(client_addr.as_var().unwrap(), client);
                                  self.machine_st.bind(stream_addr.as_var().unwrap(), tcp_stream.into());
+
+                                 break;
                              }
-                             None => {
-                                 self.machine_st.fail = true;
-                             }
+                            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                                std::thread::sleep(std::time::Duration::from_millis(200));
+                                if self.interrupt_occured() {
+                                    break;
+                                }
+                            }
+                            Err(_) => {
+                                println!("IO error");
+                                self.machine_st.fail = true;
+                                break;
+                            }
                          }
+                        }
                      }
                      _ => {
                      }
