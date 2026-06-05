@@ -32,8 +32,6 @@ impl Expectable for &[u8] {
 /// Tests whether the file can be successfully loaded
 /// and produces the expected output during it
 pub(crate) fn load_module_test<T: Expectable>(file: &str, expected: T) {
-    use scryer_prolog::MachineBuilder;
-
     let mut wam = MachineBuilder::default().build();
     expected.assert_eq(wam.test_load_file(file).as_slice());
 }
@@ -43,8 +41,6 @@ pub(crate) fn load_module_test_with_input<T: Expectable>(
     input: impl Into<Cow<'static, str>>,
     expected: T,
 ) {
-    use scryer_prolog::MachineBuilder;
-
     let mut wam = MachineBuilder::default()
         .with_streams(StreamConfig::in_memory().with_user_input(InputStreamConfig::string(input)))
         .build();

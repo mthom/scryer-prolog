@@ -4685,7 +4685,7 @@ impl Machine {
 
             let http_listener = HttpListener {
                 incoming: rx,
-                warp_shutdown: warp_shutdown,
+                warp_shutdown,
             };
             let http_listener: TypedArenaPtr<HttpListener> =
                 arena_alloc!(http_listener, &mut self.machine_st.arena);
@@ -4750,7 +4750,7 @@ impl Machine {
             Err(_) => unreachable!(),
         }
 
-        return false;
+        false
     }
 
     #[cfg(feature = "http")]
