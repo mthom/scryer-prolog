@@ -62,9 +62,9 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
-use std::sync::{LazyLock, OnceLock};
+use std::sync::OnceLock;
 
-pub static INTERRUPT: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
+pub static INTERRUPT: AtomicBool = AtomicBool::new(false);
 
 /// An instance of Scryer Prolog.
 ///

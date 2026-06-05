@@ -40,9 +40,7 @@ crypto-full = ["dep:ring"]
 collapsible_match = "allow"
 
 [lints.rust]
-unexpected_cfgs = { level = "deny", check-cfg = [
-    'cfg(rust_version, values("1.87.0"))',
-] }
+unexpected_cfgs = "deny"
 function_casts_as_integer = "deny"
 
 [build-dependencies]
@@ -53,7 +51,6 @@ strum_macros = "0.26"
 syn = { version = "2.0.72", features = ['full', 'visit', 'extra-traits'] }
 to-syn-value = "0.1.1"
 to-syn-value_derive = "0.1.1"
-version_check = "0.9.5"
 walkdir = "2"
 
 [dependencies]
