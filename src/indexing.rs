@@ -167,7 +167,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
             .push(IndexingLine::IndexedChoice(third_level_index));
 
         match &mut self.indexing_code[self.offset] {
-            IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref mut constants)) => {
+            IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(constants)) => {
                 constants.insert(
                     constant,
                     IndexingCodePtr::Internal(indexing_code_len - self.offset),
@@ -196,7 +196,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
             .push(IndexingLine::DynamicIndexedChoice(third_level_index));
 
         match &mut self.indexing_code[self.offset] {
-            IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref mut constants)) => {
+            IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(constants)) => {
                 constants.insert(
                     constant,
                     IndexingCodePtr::Internal(indexing_code_len - self.offset),
@@ -210,22 +210,22 @@ impl<'a> IndexingCodeMergingPtr<'a> {
 
     fn extend_indexed_choice(&mut self, index: usize) {
         match &mut self.indexing_code[self.offset] {
-            IndexingLine::IndexedChoice(ref mut indexed_choice_instrs)
+            IndexingLine::IndexedChoice(indexed_choice_instrs)
                 if self.append_or_prepend.is_append() =>
             {
                 uncap_choice_seq_with_trust(indexed_choice_instrs.make_contiguous());
                 indexed_choice_instrs.push_back(IndexedChoiceInstruction::Trust(index));
             }
-            IndexingLine::IndexedChoice(ref mut indexed_choice_instrs) => {
+            IndexingLine::IndexedChoice(indexed_choice_instrs) => {
                 uncap_choice_seq_with_try(indexed_choice_instrs.make_contiguous());
                 indexed_choice_instrs.push_front(IndexedChoiceInstruction::Try(index));
             }
-            IndexingLine::DynamicIndexedChoice(ref mut indexed_choice_instrs)
+            IndexingLine::DynamicIndexedChoice(indexed_choice_instrs)
                 if self.append_or_prepend.is_append() =>
             {
                 indexed_choice_instrs.push_back(index);
             }
-            IndexingLine::DynamicIndexedChoice(ref mut indexed_choice_instrs) => {
+            IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
                 indexed_choice_instrs.push_front(index);
             }
             _ => {
@@ -244,7 +244,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
             let indexing_code_len = self.indexing_code.len();
 
             match &mut self.indexing_code[self.offset] {
-                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, ref mut c, ..)) => {
+                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, c, ..)) => {
                     match *c {
                         IndexingCodePtr::Fail if self.is_dynamic => {
                             *c = IndexingCodePtr::DynamicExternal(index);
@@ -322,7 +322,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
             let indexing_code_len = self.indexing_code.len();
 
             match &mut self.indexing_code[self.offset] {
-                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, ref mut c, ..)) => {
+                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, c, ..)) => {
                     match *c {
                         IndexingCodePtr::Fail if self.is_dynamic => {
                             *c = IndexingCodePtr::DynamicExternal(index);
@@ -445,7 +445,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
             .push(IndexingLine::IndexedChoice(third_level_index));
 
         match &mut self.indexing_code[self.offset] {
-            IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref mut structures)) => {
+            IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(structures)) => {
                 structures.insert(
                     key,
                     IndexingCodePtr::Internal(indexing_code_len - self.offset),
@@ -474,7 +474,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
             .push(IndexingLine::DynamicIndexedChoice(third_level_index));
 
         match &mut self.indexing_code[self.offset] {
-            IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref mut structures)) => {
+            IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(structures)) => {
                 structures.insert(
                     key,
                     IndexingCodePtr::Internal(indexing_code_len - self.offset),
@@ -491,33 +491,29 @@ impl<'a> IndexingCodeMergingPtr<'a> {
             let indexing_code_len = self.indexing_code.len();
 
             match &mut self.indexing_code[self.offset] {
-                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                    _,
-                    _,
-                    _,
-                    _,
-                    ref mut s,
-                )) => match *s {
-                    IndexingCodePtr::Fail if self.is_dynamic => {
-                        *s = IndexingCodePtr::DynamicExternal(index);
-                        break;
+                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, _, s)) => {
+                    match *s {
+                        IndexingCodePtr::Fail if self.is_dynamic => {
+                            *s = IndexingCodePtr::DynamicExternal(index);
+                            break;
+                        }
+                        IndexingCodePtr::Fail => {
+                            *s = IndexingCodePtr::External(index);
+                            break;
+                        }
+                        IndexingCodePtr::DynamicExternal(o) => {
+                            *s = IndexingCodePtr::Internal(indexing_code_len - self.offset);
+                            self.internalize_structure(IndexingCodePtr::DynamicExternal(o));
+                        }
+                        IndexingCodePtr::External(o) => {
+                            *s = IndexingCodePtr::Internal(indexing_code_len - self.offset);
+                            self.internalize_structure(IndexingCodePtr::External(o));
+                        }
+                        IndexingCodePtr::Internal(o) => {
+                            self.offset += o;
+                        }
                     }
-                    IndexingCodePtr::Fail => {
-                        *s = IndexingCodePtr::External(index);
-                        break;
-                    }
-                    IndexingCodePtr::DynamicExternal(o) => {
-                        *s = IndexingCodePtr::Internal(indexing_code_len - self.offset);
-                        self.internalize_structure(IndexingCodePtr::DynamicExternal(o));
-                    }
-                    IndexingCodePtr::External(o) => {
-                        *s = IndexingCodePtr::Internal(indexing_code_len - self.offset);
-                        self.internalize_structure(IndexingCodePtr::External(o));
-                    }
-                    IndexingCodePtr::Internal(o) => {
-                        self.offset += o;
-                    }
-                },
+                }
                 IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(structures)) => {
                     match structures.get(&key).cloned() {
                         None | Some(IndexingCodePtr::Fail) if self.is_dynamic => {
@@ -559,52 +555,50 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         let indexing_code_len = self.indexing_code.len();
 
         match &mut self.indexing_code[self.offset] {
-            IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, ref mut l, _)) => {
-                match *l {
-                    IndexingCodePtr::Fail if self.is_dynamic => {
-                        *l = IndexingCodePtr::DynamicExternal(index);
-                    }
-                    IndexingCodePtr::Fail => {
-                        *l = IndexingCodePtr::External(index);
-                    }
-                    IndexingCodePtr::DynamicExternal(o) => {
-                        *l = IndexingCodePtr::Internal(indexing_code_len - self.offset);
-
-                        let third_level_index = if self.append_or_prepend.is_append() {
-                            vec![o, index].into()
-                        } else {
-                            vec![index, o].into()
-                        };
-
-                        self.indexing_code
-                            .push(IndexingLine::DynamicIndexedChoice(third_level_index));
-                    }
-                    IndexingCodePtr::External(o) => {
-                        *l = IndexingCodePtr::Internal(indexing_code_len - self.offset);
-
-                        let third_level_index = if self.append_or_prepend.is_append() {
-                            vec![
-                                IndexedChoiceInstruction::Try(o),
-                                IndexedChoiceInstruction::Trust(index),
-                            ]
-                            .into()
-                        } else {
-                            vec![
-                                IndexedChoiceInstruction::Try(index),
-                                IndexedChoiceInstruction::Trust(o),
-                            ]
-                            .into()
-                        };
-
-                        self.indexing_code
-                            .push(IndexingLine::IndexedChoice(third_level_index));
-                    }
-                    IndexingCodePtr::Internal(o) => {
-                        self.offset += o;
-                        self.extend_indexed_choice(index);
-                    }
+            IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, l, _)) => match *l {
+                IndexingCodePtr::Fail if self.is_dynamic => {
+                    *l = IndexingCodePtr::DynamicExternal(index);
                 }
-            }
+                IndexingCodePtr::Fail => {
+                    *l = IndexingCodePtr::External(index);
+                }
+                IndexingCodePtr::DynamicExternal(o) => {
+                    *l = IndexingCodePtr::Internal(indexing_code_len - self.offset);
+
+                    let third_level_index = if self.append_or_prepend.is_append() {
+                        vec![o, index].into()
+                    } else {
+                        vec![index, o].into()
+                    };
+
+                    self.indexing_code
+                        .push(IndexingLine::DynamicIndexedChoice(third_level_index));
+                }
+                IndexingCodePtr::External(o) => {
+                    *l = IndexingCodePtr::Internal(indexing_code_len - self.offset);
+
+                    let third_level_index = if self.append_or_prepend.is_append() {
+                        vec![
+                            IndexedChoiceInstruction::Try(o),
+                            IndexedChoiceInstruction::Trust(index),
+                        ]
+                        .into()
+                    } else {
+                        vec![
+                            IndexedChoiceInstruction::Try(index),
+                            IndexedChoiceInstruction::Trust(o),
+                        ]
+                        .into()
+                    };
+
+                    self.indexing_code
+                        .push(IndexingLine::IndexedChoice(third_level_index));
+                }
+                IndexingCodePtr::Internal(o) => {
+                    self.offset += o;
+                    self.extend_indexed_choice(index);
+                }
+            },
             _ => {
                 unreachable!()
             }
@@ -632,7 +626,7 @@ pub(crate) fn merge_clause_index(
     );
 
     match &opt_arg_index_key {
-        OptArgIndexKey::Literal(_, index_loc, constant, ref overlapping_constants) => {
+        OptArgIndexKey::Literal(_, index_loc, constant, overlapping_constants) => {
             let offset = new_clause_loc - index_loc + 1;
             merging_ptr.index_constant(HeapCellValue::from(*constant), offset);
 
@@ -676,20 +670,18 @@ pub(crate) fn remove_constant_indices(
     let iter = once(&constant).chain(overlapping_constants.iter());
 
     match &mut indexing_code[index] {
-        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, ref mut c, ..)) => {
-            match *c {
-                IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
-                    *c = IndexingCodePtr::Fail;
-                    return;
-                }
-                IndexingCodePtr::Internal(o) => {
-                    index += o;
-                }
-                IndexingCodePtr::Fail => {
-                    return;
-                }
+        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, c, ..)) => match *c {
+            IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
+                *c = IndexingCodePtr::Fail;
+                return;
             }
-        }
+            IndexingCodePtr::Internal(o) => {
+                index += o;
+            }
+            IndexingCodePtr::Fail => {
+                return;
+            }
+        },
         _ => {
             unreachable!()
         }
@@ -700,9 +692,7 @@ pub(crate) fn remove_constant_indices(
     for constant in iter.map(|l| HeapCellValue::from(*l)) {
         loop {
             match &mut indexing_code[index] {
-                IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
-                    ref mut constants,
-                )) => {
+                IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(constants)) => {
                     constants_index = index;
 
                     match constants.get(&constant).cloned() {
@@ -720,7 +710,7 @@ pub(crate) fn remove_constant_indices(
                         }
                     }
                 }
-                IndexingLine::IndexedChoice(ref mut indexed_choice_instrs) => {
+                IndexingLine::IndexedChoice(indexed_choice_instrs) => {
                     StaticCodeIndices::remove_instruction_with_offset(
                         indexed_choice_instrs,
                         offset,
@@ -734,13 +724,13 @@ pub(crate) fn remove_constant_indices(
                                 IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
                                     _,
                                     _,
-                                    ref mut c,
+                                    c,
                                     ..,
                                 )) => {
                                     *c = ext;
                                 }
                                 IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
-                                    ref mut constants,
+                                    constants,
                                 )) => {
                                     constants.insert(constant, ext);
                                 }
@@ -753,7 +743,7 @@ pub(crate) fn remove_constant_indices(
 
                     break;
                 }
-                IndexingLine::DynamicIndexedChoice(ref mut indexed_choice_instrs) => {
+                IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
                     DynamicCodeIndices::remove_instruction_with_offset(
                         indexed_choice_instrs,
                         offset,
@@ -767,13 +757,13 @@ pub(crate) fn remove_constant_indices(
                                 IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
                                     _,
                                     _,
-                                    ref mut c,
+                                    c,
                                     ..,
                                 )) => {
                                     *c = ext;
                                 }
                                 IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
-                                    ref mut constants,
+                                    constants,
                                 )) => {
                                     constants.insert(constant, ext);
                                 }
@@ -794,11 +784,11 @@ pub(crate) fn remove_constant_indices(
     }
 
     match &indexing_code[constants_index] {
-        IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref constants))
+        IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(constants))
             if constants.is_empty() =>
         {
             match &mut indexing_code[0] {
-                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, ref mut c, ..)) => {
+                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, c, ..)) => {
                     *c = IndexingCodePtr::Fail;
                 }
                 _ => {
@@ -819,20 +809,18 @@ pub(crate) fn remove_structure_index(
     let mut index = 0;
 
     match &mut indexing_code[index] {
-        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, _, ref mut s)) => {
-            match *s {
-                IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
-                    *s = IndexingCodePtr::Fail;
-                    return;
-                }
-                IndexingCodePtr::Internal(o) => {
-                    index += o;
-                }
-                IndexingCodePtr::Fail => {
-                    return;
-                }
+        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, _, s)) => match *s {
+            IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
+                *s = IndexingCodePtr::Fail;
+                return;
             }
-        }
+            IndexingCodePtr::Internal(o) => {
+                index += o;
+            }
+            IndexingCodePtr::Fail => {
+                return;
+            }
+        },
         _ => {
             unreachable!()
         }
@@ -842,7 +830,7 @@ pub(crate) fn remove_structure_index(
 
     loop {
         match &mut indexing_code[index] {
-            IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref mut structures)) => {
+            IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(structures)) => {
                 structures_index = index;
 
                 match structures.get(&(name, arity)).cloned() {
@@ -859,7 +847,7 @@ pub(crate) fn remove_structure_index(
                     }
                 }
             }
-            IndexingLine::IndexedChoice(ref mut indexed_choice_instrs) => {
+            IndexingLine::IndexedChoice(indexed_choice_instrs) => {
                 StaticCodeIndices::remove_instruction_with_offset(indexed_choice_instrs, offset);
 
                 if indexed_choice_instrs.len() == 1 {
@@ -872,12 +860,12 @@ pub(crate) fn remove_structure_index(
                                 _,
                                 _,
                                 _,
-                                ref mut s,
+                                s,
                             )) => {
                                 *s = ext;
                             }
                             IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(
-                                ref mut structures,
+                                structures,
                             )) => {
                                 structures.insert((name, arity), ext);
                             }
@@ -890,7 +878,7 @@ pub(crate) fn remove_structure_index(
 
                 break;
             }
-            IndexingLine::DynamicIndexedChoice(ref mut indexed_choice_instrs) => {
+            IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
                 DynamicCodeIndices::remove_instruction_with_offset(indexed_choice_instrs, offset);
 
                 if indexed_choice_instrs.len() == 1 {
@@ -903,12 +891,12 @@ pub(crate) fn remove_structure_index(
                                 _,
                                 _,
                                 _,
-                                ref mut s,
+                                s,
                             )) => {
                                 *s = ext;
                             }
                             IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(
-                                ref mut structures,
+                                structures,
                             )) => {
                                 structures.insert((name, arity), ext);
                             }
@@ -928,17 +916,11 @@ pub(crate) fn remove_structure_index(
     }
 
     match &indexing_code[structures_index] {
-        IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref structures))
+        IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(structures))
             if structures.is_empty() =>
         {
             match &mut indexing_code[0] {
-                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                    _,
-                    _,
-                    _,
-                    _,
-                    ref mut s,
-                )) => {
+                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, _, s)) => {
                     *s = IndexingCodePtr::Fail;
                 }
                 _ => {
@@ -954,27 +936,25 @@ pub(crate) fn remove_list_index(indexing_code: &mut [IndexingLine], offset: usiz
     let mut index = 0;
 
     match &mut indexing_code[index] {
-        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, ref mut l, _)) => {
-            match *l {
-                IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
-                    *l = IndexingCodePtr::Fail;
-                    return;
-                }
-                IndexingCodePtr::Internal(o) => {
-                    index += o;
-                }
-                IndexingCodePtr::Fail => {
-                    return;
-                }
+        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, l, _)) => match *l {
+            IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
+                *l = IndexingCodePtr::Fail;
+                return;
             }
-        }
+            IndexingCodePtr::Internal(o) => {
+                index += o;
+            }
+            IndexingCodePtr::Fail => {
+                return;
+            }
+        },
         _ => {
             unreachable!()
         }
     }
 
     match &mut indexing_code[index] {
-        IndexingLine::IndexedChoice(ref mut indexed_choice_instrs) => {
+        IndexingLine::IndexedChoice(indexed_choice_instrs) => {
             StaticCodeIndices::remove_instruction_with_offset(indexed_choice_instrs, offset);
 
             if indexed_choice_instrs.len() == 1 {
@@ -986,7 +966,7 @@ pub(crate) fn remove_list_index(indexing_code: &mut [IndexingLine], offset: usiz
                             _,
                             _,
                             _,
-                            ref mut l,
+                            l,
                             _,
                         )) => {
                             *l = ext;
@@ -998,7 +978,7 @@ pub(crate) fn remove_list_index(indexing_code: &mut [IndexingLine], offset: usiz
                 }
             }
         }
-        IndexingLine::DynamicIndexedChoice(ref mut indexed_choice_instrs) => {
+        IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
             DynamicCodeIndices::remove_instruction_with_offset(indexed_choice_instrs, offset);
 
             if indexed_choice_instrs.len() == 1 {
@@ -1010,7 +990,7 @@ pub(crate) fn remove_list_index(indexing_code: &mut [IndexingLine], offset: usiz
                             _,
                             _,
                             _,
-                            ref mut l,
+                            l,
                             _,
                         )) => {
                             *l = ext;
@@ -1034,7 +1014,7 @@ pub(crate) fn remove_index(
     clause_loc: usize,
 ) {
     match opt_arg_index_key {
-        OptArgIndexKey::Literal(_, _, constant, ref overlapping_constants) => {
+        OptArgIndexKey::Literal(_, _, constant, overlapping_constants) => {
             remove_constant_indices(*constant, *overlapping_constants, indexing_code, clause_loc);
         }
         OptArgIndexKey::Structure(_, _, name, arity) => {
@@ -1525,11 +1505,11 @@ impl<I: Indexer> CodeOffsets<I> {
             &mut prelude,
         );
 
-        if let IndexingCodePtr::Internal(ref mut i) = &mut str_loc {
+        if let IndexingCodePtr::Internal(i) = &mut str_loc {
             *i += emitted_switch_on_constant as usize; // con_loc.is_internal() as usize;
         }
 
-        if let IndexingCodePtr::Internal(ref mut i) = &mut lst_loc {
+        if let IndexingCodePtr::Internal(i) = &mut lst_loc {
             *i += emitted_switch_on_constant as usize; // con_loc.is_internal() as usize;
             *i += emitted_switch_on_structure as usize; // str_loc.is_internal() as usize;
         }

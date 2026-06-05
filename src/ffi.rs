@@ -32,7 +32,7 @@ use ordered_float::OrderedFloat;
 use std::alloc::{self, Layout};
 use std::collections::HashMap;
 use std::error::Error;
-use std::ffi::{c_char, c_void, CStr, CString};
+use std::ffi::{CStr, CString, c_char, c_void};
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
@@ -54,7 +54,9 @@ pub struct FunctionImpl {
 
 impl FunctionImpl {
     unsafe fn call_void(&self, args: &[Arg], _: &mut Arena) -> Result<Value, FfiError> {
-        self.cif.call_return_into(self.code_ptr, args, Ret::void());
+        unsafe {
+            self.cif.call_return_into(self.code_ptr, args, Ret::void());
+        }
         Ok(Value::Number(Number::Fixnum(Fixnum::build_with(0))))
     }
 
@@ -63,7 +65,7 @@ impl FunctionImpl {
         Integer: From<T>,
         T: Copy + TryInto<i64> + MightNotFitInFixnum,
     {
-        let n = self.cif.call::<T>(self.code_ptr, args);
+        let n = unsafe { self.cif.call::<T>(self.code_ptr, args) };
         Ok(Value::Number(fixnum!(Number, n, arena)))
     }
 
@@ -71,7 +73,7 @@ impl FunctionImpl {
     where
         T: Into<f64>,
     {
-        let n = self.cif.call::<T>(self.code_ptr, args);
+        let n = unsafe { self.cif.call::<T>(self.code_ptr, args) };
         Ok(Value::Number(Number::Float(OrderedFloat(n.into()))))
     }
 
@@ -147,7 +149,7 @@ impl FunctionImpl {
                 FfiType::Ptr => FunctionImpl::call_ptr,
                 FfiType::CStr => FunctionImpl::call_cstr,
                 FfiType::Struct(name) => {
-                    return unsafe { self.call_struct(name, args, arena, structs_table) }
+                    return unsafe { self.call_struct(name, args, arena, structs_table) };
                 }
             };
         unsafe { call_fn(self, args, arena) }
@@ -202,7 +204,9 @@ impl StructImpl {
                 .extend(Layout::new::<T>())
                 .map_err(|_| FfiError::LayoutError)?;
             *layout = new_layout;
-            ptr.byte_offset(offset as isize).cast::<T>().write(val);
+            unsafe {
+                ptr.byte_offset(offset as isize).cast::<T>().write(val);
+            }
             Ok(())
         }
 
@@ -263,7 +267,7 @@ impl StructImpl {
                     .extend(Layout::new::<T>())
                     .map_err(|_| FfiError::LayoutError)?;
                 *layout = new_layout;
-                let n = std::ptr::read::<T>(ptr.byte_offset(offset as isize).cast());
+                let n = unsafe { std::ptr::read::<T>(ptr.byte_offset(offset as isize).cast()) };
                 Ok(n)
             }
 
@@ -276,7 +280,7 @@ impl StructImpl {
                 T: Copy + TryInto<i64> + MightNotFitInFixnum,
                 Integer: From<T>,
             {
-                let n = read_primitive::<T>(ptr, layout)?;
+                let n = unsafe { read_primitive::<T>(ptr, layout)? };
                 Ok(Value::Number(fixnum!(Number, n, arena)))
             }
 
@@ -287,7 +291,7 @@ impl StructImpl {
             where
                 T: Into<f64>,
             {
-                let n = read_primitive::<T>(ptr, layout)?;
+                let n = unsafe { read_primitive::<T>(ptr, layout)? };
                 Ok(Value::Number(Number::Float(OrderedFloat(n.into()))))
             }
 
@@ -332,7 +336,7 @@ impl StructImpl {
                         Ok(struct_val)
                     }
                     FfiType::Void => {
-                        return Err(FfiError::UnsupportedArgumentType(Some(atom!("void"))))
+                        return Err(FfiError::UnsupportedArgumentType(Some(atom!("void"))));
                     }
                 };
                 returns.push(val?);
@@ -789,7 +793,7 @@ impl ForeignFunctionTable {
             T: Copy + TryInto<i64> + MightNotFitInFixnum,
             Integer: From<T>,
         {
-            let n = ptr.cast::<T>().read();
+            let n = unsafe { ptr.cast::<T>().read() };
             Value::Number(fixnum!(Number, n, arena))
         }
 
@@ -924,7 +928,7 @@ impl Value {
 
     fn as_ptr(&mut self) -> Result<*mut c_void, FfiError> {
         match self {
-            Value::CString(ref mut cstr) => Ok(cstr.as_ptr().cast_mut().cast()),
+            Value::CString(cstr) => Ok(cstr.as_ptr().cast_mut().cast()),
             Value::Number(Number::Fixnum(fixnum)) => Ok(std::ptr::with_exposed_provenance_mut(
                 fixnum.get_num() as usize,
             )),

@@ -2,7 +2,7 @@
 name = "scryer-prolog"
 version = "0.10.0"
 authors = ["Mark Thom <markjordanthom@gmail.com>"]
-edition = "2021"
+edition = "2024"
 description = "A modern Prolog implementation written mostly in Rust."
 readme = "README.md"
 repository = "https://github.com/mthom/scryer-prolog"

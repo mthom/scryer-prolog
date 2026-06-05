@@ -2,17 +2,17 @@ use crate::parser::ast::*;
 
 use crate::atom_table::*;
 use crate::forms::*;
+use crate::machine::ClauseType;
+use crate::machine::MachineStubGen;
 use crate::machine::loader::*;
 use crate::machine::machine_state::*;
 use crate::machine::streams::{Stream, StreamOptions};
-use crate::machine::ClauseType;
-use crate::machine::MachineStubGen;
 use crate::offset_table::*;
 
 use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
 use modular_bitfield::specifiers::*;
-use modular_bitfield::{bitfield, Specifier};
+use modular_bitfield::{Specifier, bitfield};
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -292,7 +292,7 @@ impl IndexStore {
     ) -> Option<&mut PredicateSkeleton> {
         match compilation_target {
             CompilationTarget::User => self.extensible_predicates.get_mut(key),
-            CompilationTarget::Module(ref module_name) => {
+            CompilationTarget::Module(module_name) => {
                 if let Some(module) = self.modules.get_mut(module_name) {
                     module.extensible_predicates.get_mut(key)
                 } else {
@@ -309,7 +309,7 @@ impl IndexStore {
     ) -> Option<&PredicateSkeleton> {
         match compilation_target {
             CompilationTarget::User => self.extensible_predicates.get(key),
-            CompilationTarget::Module(ref module_name) => {
+            CompilationTarget::Module(module_name) => {
                 if let Some(module) = self.modules.get(module_name) {
                     module.extensible_predicates.get(key)
                 } else {
@@ -380,7 +380,7 @@ impl IndexStore {
     ) -> Option<PredicateSkeleton> {
         match compilation_target {
             CompilationTarget::User => self.extensible_predicates.swap_remove(key),
-            CompilationTarget::Module(ref module_name) => {
+            CompilationTarget::Module(module_name) => {
                 if let Some(module) = self.modules.get_mut(module_name) {
                     module.extensible_predicates.swap_remove(key)
                 } else {
@@ -413,7 +413,7 @@ impl IndexStore {
     ) -> Option<&Vec<MetaSpec>> {
         match compilation_target {
             CompilationTarget::User => self.meta_predicates.get(&(name, arity)),
-            CompilationTarget::Module(ref module_name) => match self.modules.get(module_name) {
+            CompilationTarget::Module(module_name) => match self.modules.get(module_name) {
                 Some(module) => module
                     .meta_predicates
                     .get(&(name, arity))

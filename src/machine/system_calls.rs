@@ -24,7 +24,7 @@ use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
-use crate::machine::{get_structure_index, Machine};
+use crate::machine::{Machine, get_structure_index};
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
@@ -48,7 +48,7 @@ use std::ffi::CString;
 use std::fs;
 use std::hash::{BuildHasher, BuildHasherDefault};
 use std::io::{ErrorKind, Read, Write};
-use std::iter::{once, FromIterator};
+use std::iter::{FromIterator, once};
 use std::mem;
 #[cfg(feature = "http")]
 use std::net::{SocketAddr, ToSocketAddrs};
@@ -63,13 +63,13 @@ use std::sync::LazyLock;
 use std::sync::{Arc, Condvar, Mutex};
 use tokio::sync::Notify;
 
-use chrono::{offset::Local, DateTime};
+use chrono::{DateTime, offset::Local};
 #[cfg(not(target_arch = "wasm32"))]
 use cpu_time::ProcessTime;
 use std::time::{Duration, SystemTime};
 
 #[cfg(feature = "repl")]
-use crate::read::user_interaction::{get_key, KeyCode, KeyModifiers};
+use crate::read::user_interaction::{KeyCode, KeyModifiers, get_key};
 
 use blake2::{Blake2b512, Blake2s256};
 
@@ -1252,7 +1252,7 @@ impl Machine {
 
         loop {
             match &self.code[bp] {
-                Instruction::IndexingCode(ref indexing_code) => {
+                Instruction::IndexingCode(indexing_code) => {
                     let indexing_code_ptr = match &indexing_code[0] {
                         &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
                             _,
@@ -1275,10 +1275,10 @@ impl Machine {
                     let boip = extract_ptr!(indexing_code_ptr);
 
                     let boip = match &indexing_code[boip] {
-                        IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref hm)) => {
+                        IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(hm)) => {
                             boip + extract_ptr!(hm.get(&key).cloned().unwrap())
                         }
-                        IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref hm)) => {
+                        IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(hm)) => {
                             boip + extract_ptr!(hm.get(&atom_as_cell!(key.0)).cloned().unwrap())
                         }
                         _ => boip,
@@ -3136,7 +3136,7 @@ impl Machine {
         let addr = self.machine_st.registers[2];
 
         match self.indices.global_variables.get_mut(&key) {
-            Some((ref ball, ref mut loc)) => match loc {
+            Some(&mut (ref ball, ref mut loc)) => match loc {
                 Some(value_loc) => {
                     unify_fn!(self.machine_st, addr, *value_loc);
                 }
@@ -4317,7 +4317,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn maybe(&mut self) {
-        self.machine_st.fail = self.rng.gen();
+        self.machine_st.fail = self.rng.r#gen();
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -7520,8 +7520,8 @@ impl Machine {
         let new_value = self.deref_register(2);
 
         match self.indices.global_variables.get_mut(&key) {
-            Some((_, ref mut loc)) => match loc {
-                Some(ref mut value) => {
+            Some((_, loc)) => match loc {
+                Some(value) => {
                     self.machine_st
                         .trail(TrailRef::BlackboardOffset(key, *value));
                     *value = new_value;
@@ -8665,7 +8665,8 @@ impl Machine {
             .value_to_str_like(self.machine_st.registers[2])
             .unwrap();
 
-        env::set_var(&*key.as_str(), &*value.as_str());
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var(&*key.as_str(), &*value.as_str()) };
     }
 
     #[inline(always)]
@@ -8674,7 +8675,8 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
             .unwrap();
-        env::remove_var(&*key.as_str());
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::remove_var(&*key.as_str()) };
     }
 
     #[inline(always)]

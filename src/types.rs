@@ -762,7 +762,7 @@ impl UntypedArenaPtr {
     where
         T::Payload: Sized,
     {
-        T::typed_ptr(self)
+        unsafe { T::typed_ptr(self) }
     }
 
     #[inline]

@@ -1,6 +1,6 @@
 use crate::arena::*;
 use crate::forms::*;
-use crate::heap_iter::{stackful_preorder_iter, NonListElider};
+use crate::heap_iter::{NonListElider, stackful_preorder_iter};
 use crate::machine::machine_state::*;
 use crate::machine::*;
 use crate::offset_table::*;

@@ -138,9 +138,7 @@ macro_rules! typed_arena_ptr_as_cell {
 }
 
 macro_rules! raw_ptr_as_cell {
-    ($ptr:expr) => {{
-        HeapCellValue::from_arena_header_ptr($ptr)
-    }};
+    ($ptr:expr) => {{ HeapCellValue::from_arena_header_ptr($ptr) }};
 }
 
 macro_rules! untyped_arena_ptr_as_cell {
