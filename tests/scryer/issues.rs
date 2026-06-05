@@ -186,6 +186,7 @@ async fn sigint_interrupts_nonterminating_goals() {
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+// FIXME this shouldn't panic an i686-linux-unknown-gnu, was already broken before d50d42509903dc3cc1841eb757a703753de84754
 #[cfg_attr(
     all(
         target_arch = "x86",
@@ -193,7 +194,7 @@ async fn sigint_interrupts_nonterminating_goals() {
         target_vendor = "unknown",
         target_env = "gnu"
     ),
-    ignore = "FIXME was already broken before d50d42509903dc3cc1841eb757a703753de84754"
+    should_panic
 )]
 fn discussion3359() {
     load_module_test("tests-pl/discussion3359.pl", "");

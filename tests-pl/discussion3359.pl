@@ -1,4 +1,4 @@
-:- use_module(library(clpz)).
+:- use_module(library(dcgs)).
 :- use_module(library(tabling)).
 
 :- table expr//0.
