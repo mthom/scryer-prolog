@@ -531,7 +531,7 @@ impl DebrayAllocator {
     }
 
     fn mark_safe_var(&mut self, var_num: usize, lvl: Level, term_loc: GenContext) {
-        let branch_designator = Arc::new(self.branch_stack.current_branch_designator());
+        let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm(
@@ -575,7 +575,7 @@ impl DebrayAllocator {
         r: RegType,
         arg_c: usize,
     ) -> Instruction {
-        let branch_designator = Arc::new(self.branch_stack.current_branch_designator());
+        let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm(
