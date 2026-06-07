@@ -26,12 +26,12 @@ pub struct BranchOccurrences {
     pub deep_safety: BitSet<usize>,
     pub num_branches: usize,
     pub current_branch_idx: usize,
-    pub current_branch_num: Arc<BranchNumber>,
+    pub current_branch_num: BranchNumber,
     pub subsumed_hits: SubsumedBranchHits,
 }
 
 impl BranchOccurrences {
-    fn new(current_branch_num: Arc<BranchNumber>, num_branches: usize) -> Self {
+    fn new(current_branch_num: BranchNumber, num_branches: usize) -> Self {
         Self {
             hits: BranchHits::with_hasher(FxBuildHasher::default()),
             shallow_safety: BitSet::default(),
@@ -99,7 +99,7 @@ impl BranchStack {
         }
     }
 
-    pub(crate) fn add_branch_stack(&mut self, branch_num: Arc<BranchNumber>, num_branches: usize) {
+    pub(crate) fn add_branch_stack(&mut self, branch_num: BranchNumber, num_branches: usize) {
         self.push(BranchOccurrences::new(branch_num, num_branches));
     }
 
@@ -113,7 +113,7 @@ impl BranchStack {
     }
 
     #[inline]
-    pub(crate) fn incr_current_branch(&mut self, branch_num: Arc<BranchNumber>) {
+    pub(crate) fn incr_current_branch(&mut self, branch_num: BranchNumber) {
         let branch_occurrences = self.last_mut().unwrap();
         branch_occurrences.current_branch_idx += 1;
         branch_occurrences.current_branch_num = branch_num;

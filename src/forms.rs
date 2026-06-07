@@ -26,6 +26,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::{AddAssign, Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 pub type PredicateKey = (Atom, usize); // name, arity.
 
@@ -125,67 +126,95 @@ impl ChunkType {
     }
 }
 
-#[derive(Debug, Clone)] //, PartialOrd, PartialEq, Eq, Hash)]
-pub(crate) struct BranchNumber {
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Hash)]
+pub(crate) struct BranchNumber(pub(crate) Arc<BranchNumberInner>);
+
+impl Default for BranchNumber {
+    fn default() -> Self {
+        static DEFAULT_BRANCH_NUMBER: LazyLock<BranchNumber> = LazyLock::new(|| {
+            BranchNumber(Arc::new(BranchNumberInner {
+                branch_num: Rational::from(0),
+                delta: Rational::from(1u64 << 31),
+            }))
+        });
+        DEFAULT_BRANCH_NUMBER.clone()
+    }
+}
+
+impl Deref for BranchNumber {
+    type Target = BranchNumberInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl BranchNumber {
+    pub(crate) fn split(&self) -> Self {
+        Self(Arc::new(self.0.split()))
+    }
+
+    pub(crate) fn incr_by_delta(&self) -> Self {
+        Self(Arc::new(self.0.incr_by_delta()))
+    }
+
+    pub(crate) fn halve_delta(&self) -> Self {
+        Self(Arc::new(self.0.halve_delta()))
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct BranchNumberInner {
     pub(crate) branch_num: Rational,
     pub(crate) delta: Rational,
 }
 
-impl Default for BranchNumber {
-    fn default() -> Self {
-        Self {
-            branch_num: Rational::from(0),
-            delta: Rational::from(1u64 << 31),
-        }
-    }
-}
-
-impl PartialEq<BranchNumber> for BranchNumber {
+impl PartialEq for BranchNumberInner {
     #[inline]
-    fn eq(&self, rhs: &BranchNumber) -> bool {
+    fn eq(&self, rhs: &Self) -> bool {
         self.branch_num == rhs.branch_num
     }
 }
 
-impl Eq for BranchNumber {}
+impl Eq for BranchNumberInner {}
 
-impl Hash for BranchNumber {
+impl Hash for BranchNumberInner {
     #[inline(always)]
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         self.branch_num.hash(hasher)
     }
 }
 
-impl PartialOrd<BranchNumber> for BranchNumber {
+impl PartialOrd<BranchNumberInner> for BranchNumberInner {
     #[inline]
-    fn partial_cmp(&self, rhs: &BranchNumber) -> Option<Ordering> {
+    fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
         self.branch_num.partial_cmp(&rhs.branch_num)
     }
 }
 
-impl BranchNumber {
+impl BranchNumberInner {
     pub(crate) fn has_as_subbranch(&self, other: &Self) -> bool {
         other.delta <= self.delta
             && other.branch_num >= self.branch_num
             && other.branch_num < &self.branch_num + &self.delta
     }
 
-    pub(crate) fn split(&self) -> BranchNumber {
-        BranchNumber {
+    pub(crate) fn split(&self) -> BranchNumberInner {
+        BranchNumberInner {
             branch_num: self.branch_num.clone() + &self.delta / Rational::from(2),
             delta: &self.delta / Rational::from(4),
         }
     }
 
-    pub(crate) fn incr_by_delta(&self) -> BranchNumber {
-        BranchNumber {
+    pub(crate) fn incr_by_delta(&self) -> BranchNumberInner {
+        BranchNumberInner {
             branch_num: self.branch_num.clone() + &self.delta,
             delta: self.delta.clone(),
         }
     }
 
-    pub(crate) fn halve_delta(&self) -> BranchNumber {
-        BranchNumber {
+    pub(crate) fn halve_delta(&self) -> BranchNumberInner {
+        BranchNumberInner {
             branch_num: self.branch_num.clone(),
             delta: &self.delta / Rational::from(2),
         }
@@ -195,7 +224,7 @@ impl BranchNumber {
 #[derive(Debug)]
 pub enum ChunkedTerms {
     Branch {
-        branch_nums: Vec<Arc<BranchNumber>>,
+        branch_nums: Vec<BranchNumber>,
         arms: Vec<VecDeque<ChunkedTerms>>,
     },
     Chunk {
