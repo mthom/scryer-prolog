@@ -3,7 +3,7 @@
     Author:        Markus Triska
     E-mail:        triska@metalevel.at
     WWW:           https://www.metalevel.at
-    Copyright (C): 2016-2024 Markus Triska
+    Copyright (C): 2016-2026 Markus Triska
 
     This library provides CLP(ℤ):
 
@@ -6844,6 +6844,22 @@ gcc_global(Vs, KNs) -->
         % the propagator of tuples_in/2). Hence: We need this only if
         % an example shows it, ideally found by a systematic search
         % that can be used to test the implementation.
+        %
+        % UPDATE: A case that requires gcc_check//1 was recently found,
+        % see: https://github.com/mthom/scryer-prolog/issues/3369.
+        %
+        % We need to study carefully what exactly happens in this case.
+        % The example involves reified constraints, which post constraints
+        % in their propagators. The example also involves multiple queues,
+        % because not all reified constraints use variables_same_queue/1
+        % (for instance (#==>)/2 does not), and variables_same_queue/1 would
+        % in fact need changes to handle cases where variables no longer
+        % have a clpz attribute attached. Such cases arise for variables
+        % involved in entailed reified constraints.
+
+        gcc_check(KNs),  % see comment above.
+        do_queue,        % is this needed? this (also) needs more analysis.
+
         { with_local_attributes(Vs,
               (gcc_arcs(KNs, S, Vals),
                variables_with_num_occurrences(Vs, VNs),
