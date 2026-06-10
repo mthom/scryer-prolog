@@ -199,3 +199,9 @@ async fn sigint_interrupts_nonterminating_goals() {
 fn discussion3359() {
     load_module_test("tests-pl/discussion3359.pl", "");
 }
+
+
+#[test]
+fn issue3370_call() {
+    load_module_test("tests-pl/issue3370_current_predicate_call.pl", "");
+}
