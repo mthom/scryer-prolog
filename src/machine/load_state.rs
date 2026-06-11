@@ -682,12 +682,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let code_index_tbl = &mut LS::machine_st(&mut self.payload).arena.code_index_tbl;
 
         if module_name == atom!("user") {
-            *self
-                .wam_prelude
-                .indices
-                .code_dir
-                .entry(key)
-                .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), code_index_tbl))
+            if let Some(ci) = self.wam_prelude.indices.code_dir.get(&key) {
+                *ci
+            } else {
+                CodeIndex::new(IndexPtr::undefined(), code_index_tbl)
+            }
         } else {
             self.get_or_insert_local_code_index(module_name, key)
         }
