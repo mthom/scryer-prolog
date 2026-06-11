@@ -201,6 +201,7 @@ fn discussion3359() {
 }
 
 #[test]
-fn issue3370_call() {
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue3370_current_predicate_call() {
     load_module_test("tests-pl/issue3370_current_predicate_call.pl", "");
 }
