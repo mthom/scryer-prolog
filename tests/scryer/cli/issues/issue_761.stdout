@@ -1,0 +1,10 @@
+   true.
+   true.
+   true.
+allocate(1).
+get_variable(y(1),1).
+call(a,1).
+put_value(y(1),1).
+deallocate.
+execute(b,1).
+   Is = [allocate(1),get_variable(y(1),1),call(a,1),put_value(y(1),1),deallocate,execute(b,1)].
