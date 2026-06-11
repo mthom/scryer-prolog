@@ -1303,8 +1303,10 @@ impl Machine {
                                 // the last clause of the retract
                                 // helper to delay deallocation of its
                                 // environment frame.
-                                let clause_b = self.machine_st.stack.top();
-                                self.machine_st.stack.index_or_frame(clause_b).prelude.biip as usize
+                                unsafe {
+                                    self.machine_st.stack.index_dangling_or_frame().prelude.biip
+                                        as usize
+                                }
                             };
 
                             return (

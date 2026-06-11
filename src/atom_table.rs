@@ -306,8 +306,7 @@ impl Atom {
             AtomTableRef::try_map(atom_table.inner.read(), |buf| unsafe {
                 let ptr = buf
                     .block
-                    .base
-                    .add(self.flat_index() as usize - STRINGS.len());
+                    .get_unchecked(self.flat_index() as usize - STRINGS.len());
                 // TODO use std::ptr::from_raw_parts instead when feature ptr_metadata is stable rust-lang/rust#81513
                 let atom_data = &*(std::ptr::slice_from_raw_parts(ptr, 0) as *const AtomData);
                 let len = atom_data.header.len();
@@ -520,12 +519,13 @@ impl AtomTable {
                     }
                 };
 
-                let ptr_base = block_epoch.block.base.addr();
+                // SAFETY: `len_ptr` was obtained from `block_epoch.block.alloc()`
+                let len_offset = block_epoch.block.get_offset(len_ptr);
 
                 write_to_ptr(string, len_ptr);
 
                 let atom = AtomCell::new()
-                    .with_name((STRINGS.len() + len_ptr.addr() - ptr_base) as u64)
+                    .with_name((STRINGS.len() + len_offset) as u64)
                     .with_arity(0)
                     .with_f(false)
                     .with_m(false)
