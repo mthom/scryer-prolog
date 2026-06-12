@@ -6,9 +6,7 @@ use arcu::Rcu;
 use arcu::atomic::Arcu;
 use arcu::epoch_counters::GlobalEpochCounterPool;
 use arcu::rcu_ref::RcuRef;
-use fxhash::FxBuildHasher;
-use indexmap::IndexMap;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::{RwLock};
 
 use crate::machine::heap::AllocError;
 use crate::machine::machine_indices::IndexPtr;
@@ -203,6 +201,29 @@ impl OffsetTable<IndexPtr> for OffsetTableImpl<IndexPtr> {
     }
 }
 
+impl OffsetTable<OrderedFloat<f64>> for OffsetTableImpl<OrderedFloat<f64>> {
+    type Offset = F64Offset;
+
+    fn build_with(&mut self, value: OrderedFloat<f64>) -> F64Offset {
+        F64Offset(self.0.build_with(value))
+    }
+
+    #[inline]
+    fn with_entry<R, F: FnOnce(&OrderedFloat<f64>) -> R>(&self, offset: F64Offset, f: F) -> R {
+        self.0.with_entry(offset.into(), f)
+    }
+
+    #[inline]
+    fn with_entry_mut<R, F: FnOnce(&mut OrderedFloat<f64>) -> R>(
+        &mut self,
+        offset: F64Offset,
+        f: F,
+    ) -> R {
+        self.0.with_entry_mut(offset.into(), f)
+    }
+}
+
+
 impl<T: RawBlockTraits> SerialOffsetTable<T> {
     #[inline]
     fn new() -> Result<Self, AllocError> {
@@ -359,152 +380,8 @@ impl<T: fmt::Debug + RawBlockTraits> Default for ConcurrentOffsetTable<T> {
     }
 }
 
-/*
- * indirection_tbl maps f64 values to unique offsets so predicate indices on floats work correctly.
-*/
-
-#[derive(Debug)]
-pub struct ConcurrentF64Table {
-    indirection_tbl: Mutex<IndexMap<OrderedFloat<f64>, F64Offset, FxBuildHasher>>,
-    offset_tbl: ConcurrentOffsetTable<OrderedFloat<f64>>,
-}
-
-#[derive(Debug)]
-pub struct SerialF64Table {
-    indirection_tbl: IndexMap<OrderedFloat<f64>, F64Offset, FxBuildHasher>,
-    offset_tbl: SerialOffsetTable<OrderedFloat<f64>>,
-}
-
-#[derive(Debug)]
-pub enum F64Table {
-    Serial(SerialF64Table),
-    #[allow(dead_code)]
-    Concurrent(Arc<ConcurrentF64Table>),
-}
-
-impl F64Table {
-    pub fn new() -> Result<Self, AllocError> {
-        Ok(Self::Serial(SerialF64Table {
-            indirection_tbl: IndexMap::with_hasher(FxBuildHasher::new()),
-            offset_tbl: SerialOffsetTable::new()?,
-        }))
-    }
-
-    pub fn build_with(&mut self, value: OrderedFloat<f64>) -> F64Offset {
-        match self {
-            F64Table::Serial(serial_tbl) => {
-                if let Some(offset) = serial_tbl.indirection_tbl.get(&value).cloned() {
-                    return offset;
-                }
-
-                let offset = F64Offset(unsafe { serial_tbl.offset_tbl.build_with(value) });
-                serial_tbl.indirection_tbl.insert(value, offset);
-
-                offset
-            }
-            F64Table::Concurrent(concurrent_tbl) => {
-                // FIXME: there is a race condition here when called on two Eq value's
-                // which breaks the invariant indirection_tbl is meant to enforce.
-                // Since this branch is never invoked, it does no harm, but that
-                // that will eventually change.
-                //
-                // Note: may be indirectly fixed by the use of the new RawBlockConcurrency trait.
-                {
-                    let indirection_tbl = concurrent_tbl.indirection_tbl.lock();
-
-                    if let Some(offset) = indirection_tbl.get(&value).cloned() {
-                        return offset;
-                    }
-                }
-
-                let offset = F64Offset(concurrent_tbl.offset_tbl.build_with(value));
-                concurrent_tbl.indirection_tbl.lock().insert(value, offset);
-                offset
-            }
-        }
-    }
-
-    #[inline]
-    pub fn get_entry(&self, offset: F64Offset) -> OrderedFloat<f64> {
-        match self {
-            F64Table::Serial(serial_tbl) => unsafe { *serial_tbl.offset_tbl.lookup(offset.into()) },
-            F64Table::Concurrent(concurrent_tbl) => concurrent_tbl
-                .offset_tbl
-                .with_entry(offset.into(), |value| *value),
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn entry_count(&self) -> usize {
-        match self {
-            F64Table::Serial(serial_tbl) => serial_tbl.indirection_tbl.len(),
-            F64Table::Concurrent(concurrent_tbl) => concurrent_tbl.indirection_tbl.lock().len(),
-        }
-    }
-
-    #[must_use = "the returned concurrent table must be absorbed into the owned F64Table"]
-    pub fn single_to_concurrent(&mut self) -> Arc<ConcurrentF64Table> {
-        match self {
-            F64Table::Serial(serial_tbl) => {
-                let offset_tbl = serial_tbl.offset_tbl.to_concurrent();
-
-                Arc::new(ConcurrentF64Table {
-                    indirection_tbl: Mutex::new(mem::replace(
-                        &mut serial_tbl.indirection_tbl,
-                        IndexMap::with_hasher(FxBuildHasher::new()),
-                    )),
-                    offset_tbl,
-                })
-            }
-            F64Table::Concurrent(concurrent_tbl) => concurrent_tbl.clone(),
-        }
-    }
-
-    #[must_use = "the transition to a single-threaded offset table may fail if the concurrent table is held from multiple places"]
-    pub fn concurrent_to_single(&mut self) -> Result<(), ()> {
-        match self {
-            F64Table::Serial { .. } => Ok(()),
-            F64Table::Concurrent(concurrent_f64_tbl) => {
-                let table_arc = std::mem::replace(
-                    concurrent_f64_tbl,
-                    Arc::new(ConcurrentF64Table {
-                        indirection_tbl: Mutex::new(IndexMap::with_hasher(FxBuildHasher::new())),
-                        offset_tbl: ConcurrentOffsetTable::default(),
-                    }),
-                );
-
-                match Arc::try_unwrap(table_arc) {
-                    Ok(ConcurrentF64Table {
-                        indirection_tbl,
-                        offset_tbl,
-                    }) => {
-                        // this was the only instance of the concurrent table, as such
-                        // at this point no build_with/with_entry{_mut} call can be in-progress/made
-
-                        // this shouldn't be able to fail
-                        let raw_block =
-                            Arc::try_unwrap(offset_tbl.block.replace(RawBlock::empty_block()))
-                                .unwrap();
-                        *self = Self::Serial(SerialF64Table {
-                            indirection_tbl: indirection_tbl.into_inner(),
-                            offset_tbl: SerialOffsetTable {
-                                block: raw_block.into(),
-                            },
-                        });
-
-                        Ok(())
-                    }
-                    Err(table_arc) => {
-                        *concurrent_f64_tbl = table_arc;
-                        Err(())
-                    }
-                }
-            }
-        }
-    }
-}
-
 pub type CodeIndexTable = OffsetTableImpl<IndexPtr>;
+pub type F64Table = OffsetTableImpl<OrderedFloat<f64>>;
 
 #[derive(Clone, Copy, Debug)]
 pub struct F64Offset(usize);
