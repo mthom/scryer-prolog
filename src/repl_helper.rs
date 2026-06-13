@@ -74,6 +74,7 @@ impl Completer for Helper {
 
             let mut matching = index_set
                 .iter()
+                .map(|ahbs| &**ahbs)
                 .chain(STATIC_ATOMS_MAP.values())
                 .map(|a| a.as_str())
                 .filter(|a| a.starts_with(sub_str))

@@ -987,7 +987,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn heap_stackless_iter_tests() {
         let mut wam = MockWAM::new();
 

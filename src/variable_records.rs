@@ -7,7 +7,6 @@ use indexmap::{IndexMap, IndexSet};
 use num_order::NumOrd;
 
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct TempVarData {
@@ -18,13 +17,13 @@ pub struct TempVarData {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BranchDesignator {
-    pub branch_num: Arc<BranchNumber>,
+    pub branch_num: BranchNumber,
 }
 
 impl BranchDesignator {
     #[inline]
     pub fn is_sub_branch(&self) -> bool {
-        self.branch_num.branch_num.num_gt(&0)
+        self.branch_num.0.branch_num.num_gt(&0)
     }
 }
 
@@ -49,7 +48,7 @@ impl VarSafetyStatus {
     pub(crate) fn needed_if(needed: bool, branch_designator: &BranchDesignator) -> Self {
         if needed {
             VarSafetyStatus::Needed
-        } else if branch_designator.branch_num.branch_num.num_eq(&0) {
+        } else if branch_designator.branch_num.0.branch_num.is_zero() {
             VarSafetyStatus::GloballyUnneeded
         } else {
             VarSafetyStatus::LocallyUnneeded(branch_designator.clone())
