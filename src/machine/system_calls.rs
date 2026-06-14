@@ -1370,7 +1370,6 @@ impl Machine {
         arity: usize,
         call_at_index: impl Fn(&mut Machine, Atom, usize, IndexPtr) -> CallResult,
     ) -> CallResult {
-        //println!("fast_call");
         let load_registers = |machine_st: &mut MachineState,
                               goal: HeapCellValue,
                               goal_arity: usize| {
@@ -1402,19 +1401,16 @@ impl Machine {
 
         let (mut name, mut goal_arity, index_cell_opt) = read_heap_cell!(goal,
             (HeapCellValueTag::Str, s) => {
-                //println!("str heap val");
                 let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
                     .get_name_and_arity();
 
                 (name, arity, get_structure_index(self.machine_st.heap[s.saturating_sub(1)]))
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
-                //println!("atom heap val");
                 debug_assert_eq!(arity, 0);
                 (name, arity, None)
             }
             _ => {
-                //println!("first machine_st.fail = true");
                 self.machine_st.fail = true;
                 return Ok(());
             }
@@ -1424,7 +1420,6 @@ impl Machine {
         let mut module_name = self
             .quantification_to_module_name(module_quantification)
             .map_err(|err| {
-                //println!("quantification error");
                 let stub = functor_stub(atom!("call"), arity);
                 self.machine_st.error_form(err, stub)
             })?;
@@ -1479,12 +1474,8 @@ impl Machine {
                 self.machine_st.neck_cut();
                 return call_at_index(self, name, arity, index_ptr);
             }
-            //else {
-            //     println!("index_ptr is undefined");
-            // }
         }
 
-        //println!("mashine_st.fail = true");
         self.machine_st.fail = true;
         Ok(())
     }
