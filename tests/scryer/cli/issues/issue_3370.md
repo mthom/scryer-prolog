@@ -34,6 +34,22 @@ ok
 # Issues associated with consult
 
 ```trycmd
-$ echo "a :- b.\na1 :- b(1)." > issue_3070_test_tmp.pl; scryer-prolog -f --no-add-history -g 'consult(issue_3070_test_tmp), current_predicate(a/0), current_predicate(a1/0), \+ current_predicate(b/0), \+ current_predicate(b/1), write(ok); write(fail).'; rm issue_3070_test_tmp.pl
-ok
+$ scryer-prolog -f --no-add-history consult.pl -g test
 ```
+
+```trycmd
+$ scryer-prolog -f --no-add-history consult_same_file.pl -g test
+```
+
+```trycmd
+$ scryer-prolog -f --no-add-history consult_update.pl -g test
+```
+
+```trycmd
+$ scryer-prolog -f --no-add-history consult_dynamic.pl -g test
+```
+
+TODO: a bigger issue is that dynamic terms are not cleaned up once a file having their definition is
+updated. Uncomment the test below after that is fixed.
+
+$ scryer-prolog -f --no-add-history consult_dynamic_update.pl -g test
