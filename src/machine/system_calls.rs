@@ -3948,7 +3948,11 @@ impl Machine {
         );
     }
 
-    fn predicate_exists(&self, name: Atom, arity: usize, module_name: Atom) -> bool {
+    fn user_predicate_exists(&self, name: Atom, arity: usize, module_name: Atom) -> bool {
+        if self.indices.builtin_property((name, arity)) {
+            return false;
+        }
+
         let index_cell_opt = self
             .indices
             .get_predicate_code_index(name, arity, module_name);
@@ -3972,7 +3976,7 @@ impl Machine {
         let arity =
             unsafe { self.deref_register(3).to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
 
-        self.machine_st.fail = !self.predicate_exists(name, arity, module_name);
+        self.machine_st.fail = !self.user_predicate_exists(name, arity, module_name);
     }
 
     #[inline(always)]
@@ -4038,7 +4042,7 @@ impl Machine {
         };
 
         for (name, arity) in code_dir.keys().cloned() {
-            if !self.predicate_exists(name, arity, module_name) {
+            if !self.user_predicate_exists(name, arity, module_name) {
                 continue;
             }
 

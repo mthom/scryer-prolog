@@ -1,7 +1,7 @@
-# Builtin predicates should be visible
+By the standard, builtin properties are not visible:
 
 ```trycmd
-$ scryer-prolog -f --no-add-history -g 'current_predicate(true/0), write(ok); write(fail).'
+$ scryer-prolog -f --no-add-history -g 'current_predicate(true/0), write(fail); write(ok).'
 ok
 ```
 
@@ -53,3 +53,14 @@ TODO: a bigger issue is that dynamic terms are not cleaned up once a file having
 updated. Uncomment the test below after that is fixed.
 
 $ scryer-prolog -f --no-add-history consult_dynamic_update.pl -g test
+
+Check that backtracking version works too:
+
+```trycmd
+$ scryer-prolog -f --no-add-history retract.pl -g test
+0
+1
+2
+4
+
+```
