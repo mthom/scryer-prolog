@@ -467,7 +467,7 @@ enum SystemClauseType {
     SocketServerAccept,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$socket_server_close")))]
     SocketServerClose,
-    #[strum_discriminants(strum(props(Arity = "4", Name = "$tls_accept_client")))]
+    #[strum_discriminants(strum(props(Arity = "5", Name = "$tls_accept_client")))]
     TLSAcceptClient,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$tls_client_connect")))]
     TLSClientConnect,

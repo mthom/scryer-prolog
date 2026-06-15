@@ -35,7 +35,7 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::TryRecvError;
 
 #[cfg(feature = "tls")]
-use native_tls::TlsStream;
+use rustls::{ClientConnection, ServerConnection, StreamOwned as RustlsStreamOwned};
 
 #[cfg(feature = "http")]
 use warp::hyper;
@@ -249,10 +249,65 @@ impl Write for NamedTcpStream {
 }
 
 #[cfg(feature = "tls")]
-#[derive(Debug)]
+pub enum TlsStream {
+    Client(RustlsStreamOwned<ClientConnection, Stream>),
+    Server(RustlsStreamOwned<ServerConnection, Stream>),
+}
+
+#[cfg(feature = "tls")]
+impl TlsStream {
+    #[inline]
+    pub fn send_close_notify(&mut self) {
+        match self {
+            TlsStream::Client(s) => s.conn.send_close_notify(),
+            TlsStream::Server(s) => s.conn.send_close_notify(),
+        }
+    }
+}
+
+#[cfg(feature = "tls")]
+impl Read for TlsStream {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            TlsStream::Client(s) => s.read(buf),
+            TlsStream::Server(s) => s.read(buf),
+        }
+    }
+}
+
+#[cfg(feature = "tls")]
+impl Write for TlsStream {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            TlsStream::Client(s) => s.write(buf),
+            TlsStream::Server(s) => s.write(buf),
+        }
+    }
+
+    #[inline]
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            TlsStream::Client(s) => s.flush(),
+            TlsStream::Server(s) => s.flush(),
+        }
+    }
+}
+
+#[cfg(feature = "tls")]
 pub struct NamedTlsStream {
     address: Atom,
-    tls_stream: TlsStream<Stream>,
+    tls_stream: TlsStream,
+}
+
+#[cfg(feature = "tls")]
+impl fmt::Debug for NamedTlsStream {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NamedTlsStream")
+            .field("address", &self.address)
+            .finish_non_exhaustive()
+    }
 }
 
 #[cfg(feature = "tls")]
@@ -1452,11 +1507,7 @@ impl Stream {
 
     #[cfg(feature = "tls")]
     #[inline]
-    pub(crate) fn from_tls_stream(
-        address: Atom,
-        tls_stream: TlsStream<Stream>,
-        arena: &mut Arena,
-    ) -> Self {
+    pub(crate) fn from_tls_stream(address: Atom, tls_stream: TlsStream, arena: &mut Arena) -> Self {
         Stream::NamedTls(arena_alloc!(
             StreamLayout::new(CharReader::new(NamedTlsStream {
                 address,
@@ -1531,10 +1582,23 @@ impl Stream {
     pub(crate) fn close(&mut self) -> Result<(), std::io::Error> {
         match self {
             Stream::NamedTcp(ref mut tcp_stream) => {
-                tcp_stream.inner_mut().tcp_stream.shutdown(Shutdown::Both)
+                let result = tcp_stream.inner_mut().tcp_stream.shutdown(Shutdown::Both);
+                // Release the underlying socket immediately instead of waiting
+                // for the arena to be garbage-collected.
+                tcp_stream.drop_payload();
+                result
             }
             #[cfg(feature = "tls")]
-            Stream::NamedTls(ref mut tls_stream) => tls_stream.inner_mut().tls_stream.shutdown(),
+            Stream::NamedTls(ref mut tls_stream) => {
+                let inner = tls_stream.inner_mut();
+                inner.tls_stream.send_close_notify();
+                let result = inner.tls_stream.flush();
+                // Release the rustls connection state (buffers, ServerConfig)
+                // immediately instead of waiting for the arena to be
+                // garbage-collected.
+                tls_stream.drop_payload();
+                result
+            }
             #[cfg(feature = "http")]
             Stream::HttpRead(ref mut http_stream) => {
                 http_stream.drop_payload();
