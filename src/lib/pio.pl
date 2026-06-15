@@ -140,11 +140,17 @@ buffer_prepare_for_n(Stream, BufferId, BufferPosId, BufferLenId, N) :-
             ;   chars_to_read(CharsToRead),
                 get_n_chars(Stream, CharsToRead, Chars),
                 length(Chars, NChars),
-                partial_string(Chars, BufferTail, _),
-                bb_put(BufferId, Buffer),
-                BufferLen1 is BufferLen + NChars,
-                bb_put(BufferLenId, BufferLen1),
-                buffer_prepare_for_n(Stream, BufferId, BufferPosId, BufferLenId, N)
+                (   NChars =:= 0 ->
+                    % get_n_chars returning [] means EOF, even on streams
+                    % whose at_end_of_stream/1 never reports true (pipes).
+                    BufferTail = [],
+                    bb_put(BufferId, Buffer)
+                ;   partial_string(Chars, BufferTail, _),
+                    bb_put(BufferId, Buffer),
+                    BufferLen1 is BufferLen + NChars,
+                    bb_put(BufferLenId, BufferLen1),
+                    buffer_prepare_for_n(Stream, BufferId, BufferPosId, BufferLenId, N)
+                )
             )
         ;   true
         )
