@@ -4948,6 +4948,14 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.socket_server_close(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
+                    &Instruction::CallCopyStream => {
+                        try_or_throw!(self.machine_st, self.copy_stream(), continue);
+                        step_or_fail!(self.machine_st, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteCopyStream => {
+                        try_or_throw!(self.machine_st, self.copy_stream(), continue);
+                        step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallTLSAcceptClient => {
                         #[cfg(feature = "tls")]
                         try_or_throw!(self.machine_st, self.tls_accept_client(), continue);

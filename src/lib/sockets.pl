@@ -8,6 +8,7 @@ In both cases, with a stream, you can use the usual predicates to read and write
                     socket_server_open/2,
                     socket_server_accept/4,
                     socket_server_close/1,
+                    copy_stream/2,
                     current_hostname/1]).
 
 :- use_module(library(error)).
@@ -92,3 +93,11 @@ socket_server_close(ServerSocket) :-
 % Returns the current hostname of the computer in which Scryer Prolog is executing right now
 current_hostname(HostName) :-
     '$current_hostname'(HostName).
+
+%% copy_stream(+InputStream, +OutputStream).
+%
+% Copies all remaining bytes from InputStream to OutputStream in a single
+% native call, without materialising the contents on the Prolog heap.
+% Intended for streaming binary content (e.g. file -> TLS socket).
+copy_stream(In, Out) :-
+    '$copy_stream'(In, Out).

@@ -7340,6 +7340,47 @@ impl Machine {
     }
 
     #[inline(always)]
+    pub(crate) fn copy_stream(&mut self) -> CallResult {
+        let mut input = self.machine_st.get_stream_or_alias(
+            self.machine_st.registers[1],
+            &self.indices,
+            atom!("$copy_stream"),
+            2,
+        )?;
+        let mut output = self.machine_st.get_stream_or_alias(
+            self.machine_st.registers[2],
+            &self.indices,
+            atom!("$copy_stream"),
+            2,
+        )?;
+
+        let stub_gen = || functor_stub(atom!("$copy_stream"), 2);
+        let mut buf = [0u8; 65536];
+
+        loop {
+            let n = match input.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => n,
+                Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+                Err(_) => {
+                    let err = self
+                        .machine_st
+                        .existence_error(ExistenceError::Stream(input.into()));
+                    return Err(self.machine_st.error_form(err, stub_gen()));
+                }
+            };
+            if output.write_all(&buf[..n]).is_err() {
+                let err = self
+                    .machine_st
+                    .existence_error(ExistenceError::Stream(output.into()));
+                return Err(self.machine_st.error_form(err, stub_gen()));
+            }
+        }
+
+        Ok(())
+    }
+
+    #[inline(always)]
     pub(crate) fn socket_server_close(&mut self) -> CallResult {
         let culprit = self.deref_register(1);
 

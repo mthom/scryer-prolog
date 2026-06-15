@@ -836,6 +836,7 @@ impl Instruction {
             | &Instruction::CallSocketServerOpen
             | &Instruction::CallSocketServerAccept
             | &Instruction::CallSocketServerClose
+            | &Instruction::CallCopyStream
             | &Instruction::CallTLSAcceptClient
             | &Instruction::CallTLSClientConnect
             | &Instruction::CallSucceed
@@ -1096,6 +1097,7 @@ impl Instruction {
             | &Instruction::ExecuteSocketServerOpen
             | &Instruction::ExecuteSocketServerAccept
             | &Instruction::ExecuteSocketServerClose
+            | &Instruction::ExecuteCopyStream
             | &Instruction::ExecuteTLSAcceptClient
             | &Instruction::ExecuteTLSClientConnect
             | &Instruction::ExecuteSucceed
