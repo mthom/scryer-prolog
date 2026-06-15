@@ -65,6 +65,8 @@ socket_server_open(Addr, ServerSocket) :-
 % Given a ServerSocket and a list of Options, accepts a incoming connection, returning data from the Client and
 % a Stream to read or write data.
 %
+% This call is interruptible by SIGINT.
+%
 % The following options are available:
 %
 %  * `alias(+Alias)`: Set an alias to the stream
@@ -72,7 +74,7 @@ socket_server_open(Addr, ServerSocket) :-
 %  * `reposition(+Boolean)`: Specifies whether repositioning is required for the stream. `false` is the default.
 %  * `type(+Type)`: Type can be `text` or `binary`. Defines the type of the stream, if it's optimized for plain text
 %    or just binary
-% 
+%
 socket_server_accept(ServerSocket, Client, Stream, Options) :-
     must_be(var, Client),
     must_be(var, Stream),
