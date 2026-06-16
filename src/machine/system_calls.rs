@@ -3093,7 +3093,7 @@ impl Machine {
                         let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
                         let lower_str = step_or_resource_error!(
                             self.machine_st,
-                            self.machine_st.heap.allocate_cstr(&c.to_uppercase().to_string())
+                            self.machine_st.heap.allocate_cstr(&c.to_lowercase().to_string())
                         );
 
                         unify!(self.machine_st, reg, lower_str);
