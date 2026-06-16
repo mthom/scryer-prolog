@@ -4737,8 +4737,6 @@ impl Machine {
         ) {
             Ok(interruption) => {
                 if interruption {
-                    self.machine_st.throw_interrupt_exception();
-                    self.machine_st.backtrack();
                     // We have extracted control over the Tokio runtime to the calling context for enabling library use case
                     // (see https://github.com/mthom/scryer-prolog/pull/1880)
                     // So we only have access to a runtime handle in here and can't shut it down.
@@ -4855,7 +4853,9 @@ impl Machine {
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         if self.interrupt_occured() {
-                            break;
+                            let err = self.machine_st.interrupt_error();
+                            let src = functor_stub(atom!("repl"), 0);
+                            return Err(self.machine_st.error_form(err, src));
                         }
                     }
                   Err(_) => {
@@ -7218,7 +7218,9 @@ impl Machine {
                             Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                                 std::thread::sleep(std::time::Duration::from_millis(200));
                                 if self.interrupt_occured() {
-                                    break;
+                                    let err = self.machine_st.interrupt_error();
+                                    let src = functor_stub(atom!("repl"), 0);
+                                    return Err(self.machine_st.error_form(err, src));
                                 }
                             }
                             Err(_) => {
