@@ -58,9 +58,11 @@ use std::process::Child;
 use std::process::Stdio;
 #[cfg(feature = "http")]
 use std::str::FromStr;
+#[cfg(any(feature = "http", feature = "tls"))]
+use std::sync::Arc;
 use std::sync::LazyLock;
 #[cfg(feature = "http")]
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Condvar, Mutex};
 use tokio::sync::Notify;
 
 use chrono::{offset::Local, DateTime};
@@ -87,7 +89,16 @@ use crrl::{ed25519, secp256k1, x25519};
 pub(crate) mod special_math;
 
 #[cfg(feature = "tls")]
-use native_tls::{Identity, TlsAcceptor, TlsConnector};
+use aws_lc_rs;
+#[cfg(feature = "tls")]
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+#[cfg(feature = "tls")]
+use rustls::server::danger::*;
+#[cfg(feature = "tls")]
+use rustls::{
+    ClientConfig, ClientConnection, DistinguishedName, RootCertStore, ServerConfig,
+    ServerConnection, SignatureScheme,
+};
 
 use base64;
 use roxmltree;
@@ -7254,9 +7265,19 @@ impl Machine {
                 3,
             )?;
 
-            let connector = TlsConnector::new().unwrap();
-            let stream = match connector.connect(&hostname.as_str(), stream0) {
-                Ok(tls_stream) => tls_stream,
+            let mut roots = RootCertStore::empty();
+            if let Ok(certs) = rustls_native_certs::load_native_certs() {
+                for cert in certs {
+                    let _ = roots.add(cert);
+                }
+            }
+
+            let config = ClientConfig::builder()
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+
+            let server_name = match ServerName::try_from(hostname.as_str().to_string()) {
+                Ok(name) => name,
                 Err(_) => {
                     return Err(self.machine_st.open_permission_error(
                         self.machine_st.registers[1],
@@ -7266,8 +7287,31 @@ impl Machine {
                 }
             };
 
+            let mut conn = match ClientConnection::new(Arc::new(config), server_name) {
+                Ok(conn) => conn,
+                Err(_) => {
+                    return Err(self.machine_st.open_permission_error(
+                        self.machine_st.registers[1],
+                        atom!("tls_client_negotiate"),
+                        3,
+                    ));
+                }
+            };
+
+            let mut sock = stream0;
+            if conn.complete_io(&mut sock).is_err() {
+                return Err(self.machine_st.open_permission_error(
+                    self.machine_st.registers[1],
+                    atom!("tls_client_negotiate"),
+                    3,
+                ));
+            }
+
+            let tls_stream =
+                crate::machine::streams::TlsStream::Client(rustls::StreamOwned::new(conn, sock));
+
             let addr = atom!("TLS");
-            let stream = Stream::from_tls_stream(addr, stream, &mut self.machine_st.arena);
+            let stream = Stream::from_tls_stream(addr, tls_stream, &mut self.machine_st.arena);
 
             self.indices
                 .add_stream(stream, atom!("tls_client_negotiate"), 3)
@@ -7286,55 +7330,143 @@ impl Machine {
     #[cfg(feature = "tls")]
     #[inline(always)]
     pub(crate) fn tls_accept_client(&mut self) -> CallResult {
-        let pkcs12 = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
+        use std::cell::RefCell;
 
-        if let Some(password) = self
-            .machine_st
-            .value_to_str_like(self.machine_st.registers[2])
-        {
-            let identity = match Identity::from_pkcs12(&pkcs12, &password.as_str()) {
-                Ok(identity) => identity,
-                Err(_) => {
-                    return Err(self.machine_st.open_permission_error(
-                        self.machine_st.registers[1],
-                        atom!("tls_server_negotiate"),
-                        3,
-                    ));
-                }
-            };
+        // A new TLS connection is negotiated for every incoming request. Building
+        // a fresh ServerConfig each time means re-parsing the certificate chain
+        // and (potentially large) private key on every connection. Cache the most
+        // recently built config, keyed by the raw cert/key bytes, and reuse it.
+        thread_local! {
+            static CONFIG_CACHE: RefCell<Option<(Vec<u8>, Vec<u8>, Arc<ServerConfig>)>> =
+                RefCell::new(None);
+        }
 
-            let stream0 = self.machine_st.get_stream_or_alias(
+        let cert_pem = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
+        let key_pem = self.string_encoding_bytes(self.machine_st.registers[2], atom!("octet"));
+
+        let stream0 = self.machine_st.get_stream_or_alias(
+            self.machine_st.registers[3],
+            &self.indices,
+            atom!("tls_server_negotiate"),
+            3,
+        )?;
+
+        let cached_config = CONFIG_CACHE.with(|cache| {
+            cache.borrow().as_ref().and_then(|(cert, key, config)| {
+                (cert == &cert_pem && key == &key_pem).then(|| config.clone())
+            })
+        });
+
+        let config = match cached_config {
+            Some(config) => config,
+            None => {
+                let cert_chain: Vec<CertificateDer<'static>> = match rustls_pemfile::certs(
+                    &mut &cert_pem[..],
+                )
+                .collect::<Result<Vec<_>, _>>()
+                {
+                    Ok(certs) if !certs.is_empty() => certs,
+                    _ => {
+                        return Err(self.machine_st.open_permission_error(
+                            self.machine_st.registers[1],
+                            atom!("tls_server_negotiate"),
+                            3,
+                        ));
+                    }
+                };
+
+                let private_key: PrivateKeyDer<'static> =
+                    match rustls_pemfile::private_key(&mut &key_pem[..]) {
+                        Ok(Some(key)) => key,
+                        _ => {
+                            return Err(self.machine_st.open_permission_error(
+                                self.machine_st.registers[2],
+                                atom!("tls_server_negotiate"),
+                                3,
+                            ));
+                        }
+                    };
+
+                let config = match ServerConfig::builder()
+                    .with_client_cert_verifier(Arc::new(TrivialClientVerifier))
+                    .with_single_cert(cert_chain, private_key)
+                {
+                    Ok(config) => Arc::new(config),
+                    Err(_) => {
+                        return Err(self.machine_st.open_permission_error(
+                            self.machine_st.registers[1],
+                            atom!("tls_server_negotiate"),
+                            3,
+                        ));
+                    }
+                };
+
+                CONFIG_CACHE.with(|cache| {
+                    *cache.borrow_mut() = Some((cert_pem.clone(), key_pem.clone(), config.clone()));
+                });
+
+                config
+            }
+        };
+
+        let mut conn = match ServerConnection::new(config) {
+            Ok(conn) => conn,
+            Err(_) => {
+                return Err(self.machine_st.open_permission_error(
+                    self.machine_st.registers[3],
+                    atom!("tls_server_negotiate"),
+                    3,
+                ));
+            }
+        };
+
+        let mut sock = stream0;
+        if conn.complete_io(&mut sock).is_err() {
+            return Err(self.machine_st.open_permission_error(
                 self.machine_st.registers[3],
-                &self.indices,
                 atom!("tls_server_negotiate"),
                 3,
-            )?;
-
-            let acceptor = TlsAcceptor::new(identity).unwrap();
-
-            let stream = match acceptor.accept(stream0) {
-                Ok(tls_stream) => tls_stream,
-                Err(_) => {
-                    return Err(self.machine_st.open_permission_error(
-                        self.machine_st.registers[3],
-                        atom!("tls_server_negotiate"),
-                        3,
-                    ));
-                }
-            };
-
-            let stream = Stream::from_tls_stream(atom!("TLS"), stream, &mut self.machine_st.arena);
-
-            self.indices
-                .add_stream(stream, atom!("tls_server_negotiate"), 3)
-                .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
-
-            let stream_addr = self.deref_register(4);
-            self.machine_st
-                .bind(stream_addr.as_var().unwrap(), stream.into());
-        } else {
-            unreachable!();
+            ));
         }
+
+        let client_digest = conn.peer_certificates().and_then(|peer_certs| {
+            peer_certs.first().map(|client_cert| {
+                let cert_bytes = client_cert.as_ref();
+                aws_lc_rs::digest::digest(&aws_lc_rs::digest::SHA256, cert_bytes)
+            })
+        });
+
+        let tls_stream =
+            crate::machine::streams::TlsStream::Server(rustls::StreamOwned::new(conn, sock));
+        let stream = Stream::from_tls_stream(atom!("TLS"), tls_stream, &mut self.machine_st.arena);
+
+        self.indices
+            .add_stream(stream, atom!("tls_server_negotiate"), 3)
+            .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+
+        let stream_addr = self.deref_register(4);
+        self.machine_st
+            .bind(stream_addr.as_var().unwrap(), stream.into());
+
+        let digest_cell = match client_digest {
+            Some(digest) => {
+                let bytes = digest.as_ref();
+                resource_error_call_result!(
+                    self.machine_st,
+                    sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        bytes.len(),
+                        bytes
+                            .iter()
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
+                    )
+                )
+            }
+            None => atom_as_cell!(atom!("none")),
+        };
+
+        self.machine_st
+            .bind(self.deref_register(5).as_var().unwrap(), digest_cell);
 
         Ok(())
     }
@@ -9596,5 +9728,57 @@ struct MyKey<T: core::fmt::Debug + PartialEq>(T);
 impl hkdf::KeyType for MyKey<usize> {
     fn len(&self) -> usize {
         self.0
+    }
+}
+
+#[cfg(feature = "tls")]
+#[derive(Debug)]
+struct TrivialClientVerifier;
+
+#[cfg(feature = "tls")]
+impl ClientCertVerifier for TrivialClientVerifier {
+    fn offer_client_auth(&self) -> bool {
+        true
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        false
+    }
+
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        &[]
+    }
+
+    fn verify_client_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<ClientCertVerified, rustls::Error> {
+        Ok(ClientCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        rustls::crypto::aws_lc_rs::default_provider()
+            .signature_verification_algorithms
+            .supported_schemes()
     }
 }
