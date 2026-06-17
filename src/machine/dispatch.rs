@@ -4909,11 +4909,11 @@ impl Machine {
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallSleep => {
-                        self.sleep();
+                        try_or_throw!(self.machine_st, self.sleep(), continue);
                         self.machine_st.p += 1;
                     }
                     &Instruction::ExecuteSleep => {
-                        self.sleep();
+                        try_or_throw!(self.machine_st, self.sleep(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
                     &Instruction::CallSocketClientOpen => {
