@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/term_expansion_empty_list.pl", "-f", "-g", "use_module(library(term_expansion_empty_list_tests)), term_expansion_empty_list_tests:main_quiet(term_expansion_empty_list_tests)"]
