@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/syntax_errors.pl", "-f", "-g", "use_module(library(syntax_errors_tests)), syntax_errors_tests:main_quiet(syntax_errors_tests)"]
