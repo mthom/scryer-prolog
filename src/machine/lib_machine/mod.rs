@@ -11,7 +11,7 @@ use crate::machine::{
     ArenaHeaderTag, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS,
 };
 use crate::offset_table::*;
-use crate::parser::ast::{Var, VarPtr};
+use crate::parser::ast::{Literal as ParsedLiteral, Term as ParsedTerm, Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};
 use crate::types::UntypedArenaPtr;
@@ -42,6 +42,32 @@ pub enum LeafAnswer {
         bindings: BTreeMap<String, Term>,
         //residual_goals: Vec<Term>,
     },
+}
+
+/// Sanitized status classes for an embeddable checked facade.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckedFacadeStatus {
+    /// A program string was accepted by the checked facade.
+    ProgramLoaded,
+    /// A query string parsed without entering the execution path.
+    QueryParsed,
+    /// Program parsing or loading failed before a usable module was available.
+    MalformedProgram,
+    /// Query parsing failed before execution.
+    MalformedQuery,
+    /// Execution or machine setup failed without exposing backend details.
+    InternalFailure,
+}
+
+/// Sanitized classification classes for accepted-subset validation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckedClassification {
+    /// Parsed term is inside the minimal accepted local-user subset.
+    AcceptedSubset,
+    /// Parsed term uses host, path, network, process, FFI, or terminal surfaces.
+    BoundaryDenied,
+    /// Parsed term is valid Prolog but outside the minimal local-user subset.
+    UnsupportedSubset,
 }
 
 impl LeafAnswer {
@@ -537,6 +563,133 @@ impl Iterator for QueryState<'_> {
 }
 
 impl Machine {
+    /// Parses and classifies a program term without exposing parsed source.
+    pub fn classify_program_term_checked(
+        &mut self,
+        program: impl Into<String>,
+    ) -> Result<CheckedClassification, CheckedFacadeStatus> {
+        let term = self.parse_term_for_checked_classification(
+            program,
+            CheckedFacadeStatus::MalformedProgram,
+        )?;
+        Ok(classify_program_term(&term))
+    }
+
+    /// Parses and classifies a query term without exposing parsed source.
+    pub fn classify_query_term_checked(
+        &mut self,
+        query: impl Into<String>,
+    ) -> Result<CheckedClassification, CheckedFacadeStatus> {
+        let term =
+            self.parse_term_for_checked_classification(query, CheckedFacadeStatus::MalformedQuery)?;
+        Ok(classify_query_term(&term))
+    }
+
+    fn parse_term_for_checked_classification(
+        &mut self,
+        input: impl Into<String>,
+        parse_error: CheckedFacadeStatus,
+    ) -> Result<ParsedTerm, CheckedFacadeStatus> {
+        let mut parser = Parser::new(
+            Stream::from_owned_string(input.into(), &mut self.machine_st.arena),
+            &mut self.machine_st,
+        );
+        let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
+        parser
+            .read_term(&op_dir, Tokens::Default)
+            .map_err(|_| parse_error)
+    }
+
+    /// Parses a query and returns only a sanitized checked-facade status.
+    pub fn parse_query_checked(
+        &mut self,
+        query: impl Into<String>,
+    ) -> Result<CheckedFacadeStatus, CheckedFacadeStatus> {
+        let mut parser = Parser::new(
+            Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
+            &mut self.machine_st,
+        );
+        let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
+        parser
+            .read_term(&op_dir, Tokens::Default)
+            .map(|_| CheckedFacadeStatus::QueryParsed)
+            .map_err(|_| CheckedFacadeStatus::MalformedQuery)
+    }
+
+    /// Loads a module from a string while returning only sanitized status.
+    pub fn load_module_string_checked(
+        &mut self,
+        module_name: &str,
+        program: impl Into<String>,
+    ) -> Result<CheckedFacadeStatus, CheckedFacadeStatus> {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.load_module_string(module_name, program);
+        }));
+
+        match result {
+            Ok(()) => Ok(CheckedFacadeStatus::ProgramLoaded),
+            Err(_) => Err(CheckedFacadeStatus::MalformedProgram),
+        }
+    }
+
+    /// Runs a query without relying on the legacy parse-failure panic path.
+    pub fn run_query_checked(
+        &mut self,
+        query: impl Into<String>,
+    ) -> Result<QueryState<'_>, CheckedFacadeStatus> {
+        let mut parser = Parser::new(
+            Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
+            &mut self.machine_st,
+        );
+        let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
+        let term = parser
+            .read_term(&op_dir, Tokens::Default)
+            .map_err(|_| CheckedFacadeStatus::MalformedQuery)?;
+
+        self.allocate_stub_choice_point()
+            .map_err(|_| CheckedFacadeStatus::InternalFailure)?;
+
+        let term_write_result = write_term_to_heap(&term, &mut self.machine_st.heap)
+            .map_err(|_| CheckedFacadeStatus::InternalFailure)?;
+
+        let var_names: IndexMap<_, _> = term_write_result
+            .var_dict
+            .iter()
+            .map(|(var_key, cell)| match var_key {
+                VarKey::AnonVar(h) => (*cell, VarPtr::from(Var::InSitu(*h))),
+                VarKey::VarPtr(var_ptr) => (*cell, var_ptr.clone()),
+            })
+            .collect();
+
+        self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
+
+        self.machine_st.cp = LIB_QUERY_SUCCESS;
+        let call_index_p = self
+            .indices
+            .code_dir
+            .get(&(atom!("call"), 1))
+            .cloned()
+            .map(|offset| {
+                self.machine_st
+                    .arena
+                    .code_index_tbl
+                    .get_entry(offset.into())
+                    .p() as usize
+            })
+            .ok_or(CheckedFacadeStatus::InternalFailure)?;
+
+        self.machine_st.execute_at_index(1, call_index_p);
+
+        let stub_b = self.machine_st.b;
+        Ok(QueryState {
+            machine: self,
+            term: term_write_result,
+            stub_b,
+            var_names,
+            called: false,
+        })
+    }
+
     /// Loads a module into the [`Machine`] from a string.
     pub fn load_module_string(&mut self, module_name: &str, program: impl Into<String>) {
         let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
@@ -640,6 +793,144 @@ impl Machine {
             called: false,
         }
     }
+}
+
+fn classify_program_term(term: &ParsedTerm) -> CheckedClassification {
+    match term {
+        ParsedTerm::Clause(_, name, terms) if &*name.as_str() == ":-" && terms.len() == 2 => {
+            merge_classifications([
+                classify_predicate_head(&terms[0]),
+                classify_body_or_query(&terms[1]),
+            ])
+        }
+        ParsedTerm::Clause(_, name, terms) if &*name.as_str() == ":-" && terms.len() == 1 => {
+            CheckedClassification::UnsupportedSubset
+        }
+        _ => classify_predicate_head(term),
+    }
+}
+
+fn classify_query_term(term: &ParsedTerm) -> CheckedClassification {
+    classify_body_or_query(term)
+}
+
+fn classify_predicate_head(term: &ParsedTerm) -> CheckedClassification {
+    match term {
+        ParsedTerm::Clause(_, name, terms) => classify_callable_name(&*name.as_str())
+            .unwrap_or_else(|| merge_classifications(terms.iter().map(classify_argument))),
+        ParsedTerm::Literal(_, ParsedLiteral::Atom(name)) => {
+            classify_callable_name(&*name.as_str()).unwrap_or(CheckedClassification::AcceptedSubset)
+        }
+        ParsedTerm::Var(..) | ParsedTerm::AnonVar | ParsedTerm::Literal(..) => {
+            CheckedClassification::AcceptedSubset
+        }
+        ParsedTerm::Cons(..) | ParsedTerm::PartialString(..) | ParsedTerm::CompleteString(..) => {
+            CheckedClassification::UnsupportedSubset
+        }
+    }
+}
+
+fn classify_body_or_query(term: &ParsedTerm) -> CheckedClassification {
+    match term {
+        ParsedTerm::Clause(_, name, terms) if &*name.as_str() == "," => {
+            merge_classifications(terms.iter().map(classify_body_or_query))
+        }
+        ParsedTerm::Clause(_, name, terms) => classify_callable_name(&*name.as_str())
+            .unwrap_or_else(|| merge_classifications(terms.iter().map(classify_argument))),
+        ParsedTerm::Literal(_, ParsedLiteral::Atom(name)) => {
+            classify_callable_name(&*name.as_str()).unwrap_or(CheckedClassification::AcceptedSubset)
+        }
+        ParsedTerm::Var(..) | ParsedTerm::AnonVar | ParsedTerm::Literal(..) => {
+            CheckedClassification::AcceptedSubset
+        }
+        ParsedTerm::Cons(..) | ParsedTerm::PartialString(..) | ParsedTerm::CompleteString(..) => {
+            CheckedClassification::UnsupportedSubset
+        }
+    }
+}
+
+fn classify_argument(term: &ParsedTerm) -> CheckedClassification {
+    match term {
+        ParsedTerm::Literal(..) | ParsedTerm::Var(..) | ParsedTerm::AnonVar => {
+            CheckedClassification::AcceptedSubset
+        }
+        ParsedTerm::Clause(_, name, terms) => classify_callable_name(&*name.as_str())
+            .unwrap_or_else(|| merge_classifications(terms.iter().map(classify_argument))),
+        ParsedTerm::Cons(..) | ParsedTerm::PartialString(..) | ParsedTerm::CompleteString(..) => {
+            CheckedClassification::UnsupportedSubset
+        }
+    }
+}
+
+fn classify_callable_name(name: &str) -> Option<CheckedClassification> {
+    if matches!(
+        name,
+        "open"
+            | "absolute_file_name"
+            | "consult"
+            | "load_files"
+            | "use_module"
+            | "shell"
+            | "process_create"
+            | "http_get"
+            | "http_post"
+            | "socket"
+            | "tcp_connect"
+            | "load_foreign_library"
+            | "foreign"
+            | "getenv"
+            | "setenv"
+            | "current_prolog_flag"
+    ) {
+        return Some(CheckedClassification::BoundaryDenied);
+    }
+
+    if matches!(
+        name,
+        "assert"
+            | "asserta"
+            | "assertz"
+            | "retract"
+            | "abolish"
+            | "clause"
+            | "dynamic"
+            | "current_predicate"
+            | "call"
+            | "findall"
+            | "bagof"
+            | "setof"
+            | "listing"
+            | ";"
+            | "!"
+            | "\\+"
+            | "not"
+            | "is"
+            | "->"
+            | "-->"
+            | "{}"
+    ) {
+        return Some(CheckedClassification::UnsupportedSubset);
+    }
+
+    None
+}
+
+fn merge_classifications(
+    classifications: impl IntoIterator<Item = CheckedClassification>,
+) -> CheckedClassification {
+    let mut merged = CheckedClassification::AcceptedSubset;
+
+    for classification in classifications {
+        match classification {
+            CheckedClassification::BoundaryDenied => return CheckedClassification::BoundaryDenied,
+            CheckedClassification::UnsupportedSubset => {
+                merged = CheckedClassification::UnsupportedSubset;
+            }
+            CheckedClassification::AcceptedSubset => {}
+        }
+    }
+
+    merged
 }
 
 #[test]
