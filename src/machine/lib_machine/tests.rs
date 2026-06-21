@@ -35,111 +35,11 @@ fn checked_facade_loads_program_status_only() {
 }
 
 #[test]
-fn checked_facade_classification_uses_query_status_for_query_parse_errors() {
+fn checked_facade_maps_malformed_program_without_panicking() {
     let mut machine = MachineBuilder::default().build();
-
     assert_eq!(
-        machine.classify_query_term_checked("parent("),
-        Err(CheckedFacadeStatus::MalformedQuery)
-    );
-    assert_eq!(
-        machine.classify_program_term_checked("parent("),
+        machine.load_module_string_checked("facts", "parent("),
         Err(CheckedFacadeStatus::MalformedProgram)
-    );
-}
-
-#[test]
-fn checked_facade_classifies_accepted_subset_terms() {
-    let mut machine = MachineBuilder::default().build();
-
-    for program in [
-        "parent(alice, bob).",
-        "ancestor(X, Y) :- parent(X, Y).",
-        "ancestor(X, Y) :- parent(X, Z), ancestor(Z, Y).",
-    ] {
-        assert_eq!(
-            machine.classify_program_term_checked(program),
-            Ok(CheckedClassification::AcceptedSubset),
-            "program should classify as accepted subset"
-        );
-    }
-
-    for query in ["true.", "parent(X, bob).", "parent(X, Y), ancestor(Y, Z)."] {
-        assert_eq!(
-            machine.classify_query_term_checked(query),
-            Ok(CheckedClassification::AcceptedSubset),
-            "query should classify as accepted subset"
-        );
-    }
-}
-
-#[test]
-fn checked_facade_classifies_boundary_denied_terms() {
-    let mut machine = MachineBuilder::default().build();
-
-    for query in [
-        "open(file, read, Stream).",
-        "absolute_file_name(foo, Path).",
-        "consult(file).",
-        "load_files(file).",
-        "use_module(library(lists)).",
-        "shell(cmd).",
-        "process_create(path, args, opts).",
-        "http_get(url, Body, Options).",
-        "http_post(url, Data, Reply, Options).",
-        "socket(Address).",
-        "tcp_connect(Host, Port).",
-        "load_foreign_library(lib).",
-        "foreign(symbol).",
-        "getenv(name, Value).",
-        "setenv(name, Value).",
-        "current_prolog_flag(hostname, Host).",
-    ] {
-        assert_eq!(
-            machine.classify_query_term_checked(query),
-            Ok(CheckedClassification::BoundaryDenied),
-            "query should classify as boundary denied"
-        );
-    }
-}
-
-#[test]
-fn checked_facade_classifies_unsupported_subset_terms() {
-    let mut machine = MachineBuilder::default().build();
-
-    for query in [
-        "assert(foo).",
-        "asserta(foo).",
-        "assertz(foo).",
-        "retract(foo).",
-        "abolish(foo, 1).",
-        "clause(foo, Body).",
-        "dynamic(foo/1).",
-        "current_predicate(foo/1).",
-        "call(foo).",
-        "findall(X, foo(X), Xs).",
-        "bagof(X, foo(X), Xs).",
-        "setof(X, foo(X), Xs).",
-        "listing(foo).",
-        "foo ; bar.",
-        "!.",
-        "\\+ foo.",
-        "not(foo).",
-        "X is 1 + 1.",
-        "foo -> bar.",
-        "member(X, [a]).",
-        "{tag: value}.",
-    ] {
-        assert_eq!(
-            machine.classify_query_term_checked(query),
-            Ok(CheckedClassification::UnsupportedSubset),
-            "query should classify as unsupported subset"
-        );
-    }
-
-    assert_eq!(
-        machine.classify_program_term_checked("phrase(foo, X) --> [a]."),
-        Ok(CheckedClassification::UnsupportedSubset)
     );
 }
 
