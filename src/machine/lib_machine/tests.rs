@@ -8,9 +8,10 @@ fn checked_facade_maps_malformed_query_without_panicking() {
     assert!(parse_status.is_err());
 
     match machine.run_query_checked("parent(") {
-        Err(err) => {
+        Err(RunQueryError::Parser(err)) => {
             let _: ParserError = err;
         }
+        Err(RunQueryError::Allocation(_)) => panic!("malformed query should not allocate"),
         Ok(_) => panic!("malformed query should not run"),
     };
 }
@@ -26,6 +27,21 @@ fn checked_facade_runs_valid_query() {
         .collect::<Result<Vec<_>, _>>()
         .expect("checked query should execute");
     assert_eq!(answers, [LeafAnswer::True]);
+}
+
+#[test]
+fn checked_query_error_type_exposes_allocation_errors() {
+    fn assert_error_type<'a>(
+        result: Result<QueryState<'a>, RunQueryError>,
+    ) -> Result<QueryState<'a>, RunQueryError> {
+        result
+    }
+
+    let mut machine = MachineBuilder::default().build();
+    assert!(assert_error_type(machine.run_query_checked("true.")).is_ok());
+
+    let allocation_error = RunQueryError::Allocation(AllocError);
+    let _ = format!("{allocation_error:?}");
 }
 
 #[test]

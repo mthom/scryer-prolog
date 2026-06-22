@@ -5,7 +5,8 @@ use std::rc::Rc;
 
 use crate::atom_table;
 use crate::heap_iter::{stackful_post_order_iter, NonListElider};
-use crate::machine::heap::AllocError;
+pub use crate::machine::heap::AllocError;
+use crate::machine::machine_errors::CompilationError;
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{
@@ -59,6 +60,28 @@ impl LeafAnswer {
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct LoadModuleError;
+
+/// A checked query could not be prepared for execution.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum RunQueryError {
+    /// The query string could not be parsed.
+    Parser(ParserError),
+    /// The machine could not allocate memory while preparing the query.
+    Allocation(AllocError),
+}
+
+impl From<ParserError> for RunQueryError {
+    fn from(err: ParserError) -> Self {
+        Self::Parser(err)
+    }
+}
+
+impl From<AllocError> for RunQueryError {
+    fn from(err: AllocError) -> Self {
+        Self::Allocation(err)
+    }
+}
 
 /// Represents a Prolog term.
 #[non_exhaustive]
@@ -622,15 +645,19 @@ impl Machine {
     pub fn run_query_checked(
         &mut self,
         query: impl Into<String>,
-    ) -> Result<QueryState<'_>, ParserError> {
+    ) -> Result<QueryState<'_>, RunQueryError> {
         let term = self.parse_query_term(query)?;
 
-        self.allocate_stub_choice_point()
-            .expect("failed to allocate stub choice point");
+        self.allocate_stub_choice_point()?;
 
         // Write parsed term to heap
-        let term_write_result = write_term_to_heap(&term, &mut self.machine_st.heap)
-            .expect("couldn't write term to heap");
+        let term_write_result = match write_term_to_heap(&term, &mut self.machine_st.heap) {
+            Ok(result) => result,
+            Err(CompilationError::FiniteMemoryInHeap(err)) => {
+                return Err(RunQueryError::Allocation(err));
+            }
+            Err(err) => panic!("couldn't write term to heap: {err:?}"),
+        };
 
         let var_names: IndexMap<_, _> = term_write_result
             .var_dict
@@ -676,8 +703,11 @@ impl Machine {
 
     /// Runs a query.
     pub fn run_query(&mut self, query: impl Into<String>) -> QueryState<'_> {
-        self.run_query_checked(query)
-            .expect("Failed to parse query")
+        match self.run_query_checked(query) {
+            Ok(query_state) => query_state,
+            Err(RunQueryError::Parser(_)) => panic!("Failed to parse query"),
+            Err(RunQueryError::Allocation(_)) => panic!("Failed to allocate query state"),
+        }
     }
 }
 
