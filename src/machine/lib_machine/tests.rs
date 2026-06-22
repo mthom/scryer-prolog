@@ -4,20 +4,21 @@ use crate::MachineBuilder;
 #[test]
 fn checked_facade_maps_malformed_query_without_panicking() {
     let mut machine = MachineBuilder::default().build();
-    let status = machine.parse_query_checked("parent(");
-    assert_eq!(status, Err(CheckedFacadeStatus::MalformedQuery));
+    let parse_status: Result<(), ParserError> = machine.parse_query_checked("parent(");
+    assert!(parse_status.is_err());
 
-    let status = machine.run_query_checked("parent(");
-    assert_eq!(status.err(), Some(CheckedFacadeStatus::MalformedQuery));
+    match machine.run_query_checked("parent(") {
+        Err(err) => {
+            let _: ParserError = err;
+        }
+        Ok(_) => panic!("malformed query should not run"),
+    };
 }
 
 #[test]
 fn checked_facade_runs_valid_query() {
     let mut machine = MachineBuilder::default().build();
-    assert_eq!(
-        machine.parse_query_checked("true."),
-        Ok(CheckedFacadeStatus::QueryParsed)
-    );
+    assert!(machine.parse_query_checked("true.").is_ok());
 
     let answers = machine
         .run_query_checked("true.")
@@ -30,24 +31,31 @@ fn checked_facade_runs_valid_query() {
 #[test]
 fn checked_facade_loads_program_status_only() {
     let mut machine = MachineBuilder::default().build();
-    let status = machine.load_module_string_checked("facts", "parent(alice, bob).");
-    assert_eq!(status, Ok(CheckedFacadeStatus::ProgramLoaded));
+    let status: Result<(), LoadModuleError> =
+        machine.load_module_string_checked("facts", "parent(alice, bob).");
+    assert!(status.is_ok());
+
+    let answers = machine
+        .run_query_checked("parent(alice, bob).")
+        .expect("checked query should parse")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("checked query should execute");
+    assert_eq!(answers, [LeafAnswer::True]);
 }
 
 #[test]
-fn checked_facade_maps_malformed_program_without_panicking() {
+fn checked_facade_maps_loader_failure_without_panicking() {
     let mut machine = MachineBuilder::default().build();
-    assert_eq!(
-        machine.load_module_string_checked("facts", "parent("),
-        Err(CheckedFacadeStatus::MalformedProgram)
-    );
+    let status: Result<(), LoadModuleError> =
+        machine.load_module_string_checked("facts", ":- throw(load_failed).");
+    assert!(status.is_err());
 }
 
 #[test]
 #[should_panic(expected = "Failed to load module string")]
-fn load_module_string_panics_on_malformed_program() {
+fn load_module_string_panics_on_loader_failure() {
     let mut machine = MachineBuilder::default().build();
-    machine.load_module_string("facts", "parent(");
+    machine.load_module_string("facts", ":- throw(load_failed).");
 }
 
 #[test]

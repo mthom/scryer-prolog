@@ -12,7 +12,8 @@ use crate::machine::{
     ArenaHeaderTag, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS,
 };
 use crate::offset_table::*;
-use crate::parser::ast::{ParserErrorKind, Var, VarPtr};
+pub use crate::parser::ast::ParserError;
+use crate::parser::ast::{Term as ASTTerm, Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};
 use crate::types::UntypedArenaPtr;
@@ -45,21 +46,6 @@ pub enum LeafAnswer {
     },
 }
 
-/// Sanitized status classes for an embeddable checked facade.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CheckedFacadeStatus {
-    /// A program string was accepted by the checked facade.
-    ProgramLoaded,
-    /// A query string parsed without entering the execution path.
-    QueryParsed,
-    /// Program parsing or loading failed before a usable module was available.
-    MalformedProgram,
-    /// Query parsing failed before execution.
-    MalformedQuery,
-    /// Execution or machine setup failed without exposing backend details.
-    InternalFailure,
-}
-
 impl LeafAnswer {
     /// Creates a leaf answer with no residual goals.
     pub fn from_bindings<S: Into<String>>(bindings: impl IntoIterator<Item = (S, Term)>) -> Self {
@@ -68,6 +54,11 @@ impl LeafAnswer {
         }
     }
 }
+
+/// A module failed to load from an in-memory program string.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct LoadModuleError;
 
 /// Represents a Prolog term.
 #[non_exhaustive]
@@ -553,116 +544,40 @@ impl Iterator for QueryState<'_> {
 }
 
 impl Machine {
-    /// Parses a query and returns only a sanitized checked-facade status.
-    pub fn parse_query_checked(
-        &mut self,
-        query: impl Into<String>,
-    ) -> Result<CheckedFacadeStatus, CheckedFacadeStatus> {
+    fn parse_query_term(&mut self, query: impl Into<String>) -> Result<ASTTerm, ParserError> {
         let mut parser = Parser::new(
             Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
             &mut self.machine_st,
         );
         let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
-        parser
-            .read_term(&op_dir, Tokens::Default)
-            .map(|_| CheckedFacadeStatus::QueryParsed)
-            .map_err(|_| CheckedFacadeStatus::MalformedQuery)
+        parser.read_term(&op_dir, Tokens::Default)
     }
 
-    /// Loads a module from a string while returning only sanitized status.
+    /// Parses a query string without entering the execution path.
+    pub fn parse_query_checked(&mut self, query: impl Into<String>) -> Result<(), ParserError> {
+        self.parse_query_term(query).map(|_| ())
+    }
+
+    /// Loads a module from a string without panicking on loader failure.
     pub fn load_module_string_checked(
         &mut self,
         module_name: &str,
         program: impl Into<String>,
-    ) -> Result<CheckedFacadeStatus, CheckedFacadeStatus> {
-        let program = program.into();
-        let mut parser = Parser::new(
-            Stream::from_owned_string(program.clone(), &mut self.machine_st.arena),
-            &mut self.machine_st,
-        );
-        let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
-
-        if let Err(err) = parser.read_term(&op_dir, Tokens::Default) {
-            if err.is_unexpected_eof() || matches!(err.kind, ParserErrorKind::IncompleteReduction) {
-                return Err(CheckedFacadeStatus::MalformedProgram);
-            }
+    ) -> Result<(), LoadModuleError> {
+        let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
+        match self.load_file(module_name, stream) {
+            ExitCode::SUCCESS => Ok(()),
+            _ => Err(LoadModuleError),
         }
-
-        self.machine_st.registers[1] =
-            Stream::from_owned_string(program, &mut self.machine_st.arena).into();
-        self.machine_st.registers[2] = atom_as_cell!(atom_table::AtomTable::build_with(
-            &self.machine_st.atom_tbl,
-            module_name
-        ));
-
-        match self.run_module_predicate(atom!("loader"), (atom!("file_load"), 2)) {
-            ExitCode::SUCCESS => Ok(CheckedFacadeStatus::ProgramLoaded),
-            _ => Err(CheckedFacadeStatus::MalformedProgram),
-        }
-    }
-
-    /// Runs a query without relying on the legacy parse-failure panic path.
-    pub fn run_query_checked(
-        &mut self,
-        query: impl Into<String>,
-    ) -> Result<QueryState<'_>, CheckedFacadeStatus> {
-        let mut parser = Parser::new(
-            Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
-            &mut self.machine_st,
-        );
-        let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
-        let term = parser
-            .read_term(&op_dir, Tokens::Default)
-            .map_err(|_| CheckedFacadeStatus::MalformedQuery)?;
-
-        self.allocate_stub_choice_point()
-            .map_err(|_| CheckedFacadeStatus::InternalFailure)?;
-
-        let term_write_result = write_term_to_heap(&term, &mut self.machine_st.heap)
-            .map_err(|_| CheckedFacadeStatus::InternalFailure)?;
-
-        let var_names: IndexMap<_, _> = term_write_result
-            .var_dict
-            .iter()
-            .map(|(var_key, cell)| match var_key {
-                VarKey::AnonVar(h) => (*cell, VarPtr::from(Var::InSitu(*h))),
-                VarKey::VarPtr(var_ptr) => (*cell, var_ptr.clone()),
-            })
-            .collect();
-
-        self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
-
-        self.machine_st.cp = LIB_QUERY_SUCCESS;
-        let call_index_p = self
-            .indices
-            .code_dir
-            .get(&(atom!("call"), 1))
-            .cloned()
-            .map(|offset| {
-                self.machine_st
-                    .arena
-                    .code_index_tbl
-                    .get_entry(offset.into())
-                    .p() as usize
-            })
-            .ok_or(CheckedFacadeStatus::InternalFailure)?;
-
-        self.machine_st.execute_at_index(1, call_index_p);
-
-        let stub_b = self.machine_st.b;
-        Ok(QueryState {
-            machine: self,
-            term: term_write_result,
-            stub_b,
-            var_names,
-            called: false,
-        })
     }
 
     /// Loads a module into the [`Machine`] from a string.
     pub fn load_module_string(&mut self, module_name: &str, program: impl Into<String>) {
-        self.load_module_string_checked(module_name, program)
-            .expect("Failed to load module string");
+        let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
+        match self.load_file(module_name, stream) {
+            ExitCode::SUCCESS => {}
+            _ => panic!("Failed to load module string"),
+        }
     }
 
     /// Consults a module into the [`Machine`] from a string.
@@ -703,14 +618,66 @@ impl Machine {
         Ok(())
     }
 
+    /// Runs a query without panicking on parse failure.
+    pub fn run_query_checked(
+        &mut self,
+        query: impl Into<String>,
+    ) -> Result<QueryState<'_>, ParserError> {
+        let term = self.parse_query_term(query)?;
+
+        self.allocate_stub_choice_point()
+            .expect("failed to allocate stub choice point");
+
+        // Write parsed term to heap
+        let term_write_result = write_term_to_heap(&term, &mut self.machine_st.heap)
+            .expect("couldn't write term to heap");
+
+        let var_names: IndexMap<_, _> = term_write_result
+            .var_dict
+            .iter()
+            .map(|(var_key, cell)| match var_key {
+                // NOTE: not the intention behind Var::InSitu here but
+                // we can hijack it to store anonymous variables
+                // without creating problems.
+                VarKey::AnonVar(h) => (*cell, VarPtr::from(Var::InSitu(*h))),
+                VarKey::VarPtr(var_ptr) => (*cell, var_ptr.clone()),
+            })
+            .collect();
+
+        // Write term to heap
+        self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
+
+        self.machine_st.cp = LIB_QUERY_SUCCESS; // BREAK_FROM_DISPATCH_LOOP_LOC;
+        let call_index_p = self
+            .indices
+            .code_dir
+            .get(&(atom!("call"), 1))
+            .cloned()
+            .map(|offset| {
+                self.machine_st
+                    .arena
+                    .code_index_tbl
+                    .get_entry(offset.into())
+                    .p() as usize
+            })
+            .expect("couldn't get code index");
+
+        self.machine_st.execute_at_index(1, call_index_p);
+
+        let stub_b = self.machine_st.b;
+        Ok(QueryState {
+            machine: self,
+            term: term_write_result,
+            stub_b,
+            var_names,
+            called: false,
+        })
+    }
+
     /// Runs a query.
     pub fn run_query(&mut self, query: impl Into<String>) -> QueryState<'_> {
-        match self.run_query_checked(query) {
-            Ok(query_state) => query_state,
-            Err(CheckedFacadeStatus::MalformedQuery) => panic!("Failed to parse query"),
-            Err(CheckedFacadeStatus::InternalFailure) => panic!("Failed to run query"),
-            Err(status) => panic!("Unexpected checked query status: {status:?}"),
-        }
+        self.run_query_checked(query)
+            .expect("Failed to parse query")
     }
 }
 

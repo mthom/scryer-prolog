@@ -268,12 +268,21 @@ impl Machine {
         unreachable!();
     }
 
-    fn load_file(&mut self, path: &str, stream: Stream) {
+    fn load_file(&mut self, path: &str, stream: Stream) -> ExitCode {
         self.machine_st.registers[1] = stream.into();
         self.machine_st.registers[2] =
             atom_as_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, path));
 
-        self.run_module_predicate(atom!("loader"), (atom!("file_load"), 2));
+        let exit_code = self.run_module_predicate(atom!("loader"), (atom!("file_load_checked"), 2));
+        let load_failed = !self.machine_st.ball.stub.is_empty();
+        self.machine_st.fail = false;
+
+        if load_failed {
+            self.machine_st.ball.reset();
+            ExitCode::FAILURE
+        } else {
+            exit_code
+        }
     }
 
     fn load_top_level(&mut self, program: Cow<'static, str>) {

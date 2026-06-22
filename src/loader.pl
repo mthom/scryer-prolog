@@ -129,6 +129,12 @@ file_load(Stream, Path) :-
     false.        %% Clear the heap.
 file_load(_, _).
 
+% Rust observes loader errors via the exception ball; this intentional failure
+% preserves the heap-clearing backtracking behavior of file_load/2.
+file_load_checked(Stream, Path) :-
+    file_load(Stream, Path, _),
+    false.        %% Clear the heap.
+
 file_load_init(Stream, Evacuable) :-
     load_loop(Stream, Evacuable),
     run_initialization_goals.

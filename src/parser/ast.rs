@@ -441,6 +441,7 @@ impl Location {
     }
 }
 
+/// An error produced while parsing Prolog source.
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct ParserError {
