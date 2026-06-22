@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::process::ExitCode;
 use std::rc::Rc;
 
 use crate::atom_table;
@@ -11,9 +12,9 @@ use crate::machine::{
     ArenaHeaderTag, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS,
 };
 use crate::offset_table::*;
-use crate::parser::ast::{Var, VarPtr};
+use crate::parser::ast::{ParserErrorKind, Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
-use crate::read::{devour_whitespace, write_term_to_heap, TermWriteResult};
+use crate::read::{write_term_to_heap, TermWriteResult};
 use crate::types::UntypedArenaPtr;
 
 use dashu::{Integer, Rational};
@@ -581,27 +582,22 @@ impl Machine {
         );
         let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
 
-        loop {
-            parser.reset();
-
-            if devour_whitespace(&mut parser.lexer)
-                .map_err(|_| CheckedFacadeStatus::MalformedProgram)?
-            {
-                break;
+        if let Err(err) = parser.read_term(&op_dir, Tokens::Default) {
+            if err.is_unexpected_eof() || matches!(err.kind, ParserErrorKind::IncompleteReduction) {
+                return Err(CheckedFacadeStatus::MalformedProgram);
             }
-
-            parser
-                .read_term(&op_dir, Tokens::Default)
-                .map_err(|_| CheckedFacadeStatus::MalformedProgram)?;
         }
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.load_module_string(module_name, program);
-        }));
+        self.machine_st.registers[1] =
+            Stream::from_owned_string(program, &mut self.machine_st.arena).into();
+        self.machine_st.registers[2] = atom_as_cell!(atom_table::AtomTable::build_with(
+            &self.machine_st.atom_tbl,
+            module_name
+        ));
 
-        match result {
-            Ok(()) => Ok(CheckedFacadeStatus::ProgramLoaded),
-            Err(_) => Err(CheckedFacadeStatus::MalformedProgram),
+        match self.run_module_predicate(atom!("loader"), (atom!("file_load"), 2)) {
+            ExitCode::SUCCESS => Ok(CheckedFacadeStatus::ProgramLoaded),
+            _ => Err(CheckedFacadeStatus::MalformedProgram),
         }
     }
 
@@ -665,8 +661,8 @@ impl Machine {
 
     /// Loads a module into the [`Machine`] from a string.
     pub fn load_module_string(&mut self, module_name: &str, program: impl Into<String>) {
-        let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
-        self.load_file(module_name, stream);
+        self.load_module_string_checked(module_name, program)
+            .expect("Failed to load module string");
     }
 
     /// Consults a module into the [`Machine`] from a string.
@@ -709,61 +705,11 @@ impl Machine {
 
     /// Runs a query.
     pub fn run_query(&mut self, query: impl Into<String>) -> QueryState<'_> {
-        let mut parser = Parser::new(
-            Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
-            &mut self.machine_st,
-        );
-        let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
-        let term = parser
-            .read_term(&op_dir, Tokens::Default)
-            .expect("Failed to parse query");
-
-        self.allocate_stub_choice_point()
-            .expect("failed to allocate stub choice point");
-
-        // Write parsed term to heap
-        let term_write_result = write_term_to_heap(&term, &mut self.machine_st.heap)
-            .expect("couldn't write term to heap");
-
-        let var_names: IndexMap<_, _> = term_write_result
-            .var_dict
-            .iter()
-            .map(|(var_key, cell)| match var_key {
-                // NOTE: not the intention behind Var::InSitu here but
-                // we can hijack it to store anonymous variables
-                // without creating problems.
-                VarKey::AnonVar(h) => (*cell, VarPtr::from(Var::InSitu(*h))),
-                VarKey::VarPtr(var_ptr) => (*cell, var_ptr.clone()),
-            })
-            .collect();
-
-        // Write term to heap
-        self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
-
-        self.machine_st.cp = LIB_QUERY_SUCCESS; // BREAK_FROM_DISPATCH_LOOP_LOC;
-        let call_index_p = self
-            .indices
-            .code_dir
-            .get(&(atom!("call"), 1))
-            .cloned()
-            .map(|offset| {
-                self.machine_st
-                    .arena
-                    .code_index_tbl
-                    .get_entry(offset.into())
-                    .p() as usize
-            })
-            .expect("couldn't get code index");
-
-        self.machine_st.execute_at_index(1, call_index_p);
-
-        let stub_b = self.machine_st.b;
-        QueryState {
-            machine: self,
-            term: term_write_result,
-            stub_b,
-            var_names,
-            called: false,
+        match self.run_query_checked(query) {
+            Ok(query_state) => query_state,
+            Err(CheckedFacadeStatus::MalformedQuery) => panic!("Failed to parse query"),
+            Err(CheckedFacadeStatus::InternalFailure) => panic!("Failed to run query"),
+            Err(status) => panic!("Unexpected checked query status: {status:?}"),
         }
     }
 }

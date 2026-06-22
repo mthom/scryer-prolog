@@ -44,6 +44,13 @@ fn checked_facade_maps_malformed_program_without_panicking() {
 }
 
 #[test]
+#[should_panic(expected = "Failed to load module string")]
+fn load_module_string_panics_on_malformed_program() {
+    let mut machine = MachineBuilder::default().build();
+    machine.load_module_string("facts", "parent(");
+}
+
+#[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn programmatic_query() {
     let mut machine = MachineBuilder::default().build();
