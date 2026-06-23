@@ -576,8 +576,8 @@ impl Machine {
         parser.read_term(&op_dir, Tokens::Default)
     }
 
-    /// Parses a query string without entering the execution path.
-    pub fn parse_query_checked(&mut self, query: impl Into<String>) -> Result<(), ParserError> {
+    /// Validates a query term without entering the execution path.
+    pub fn validate_query_term(&mut self, query: impl Into<String>) -> Result<(), ParserError> {
         self.parse_query_term(query).map(|_| ())
     }
 
@@ -656,7 +656,7 @@ impl Machine {
             Err(CompilationError::FiniteMemoryInHeap(err)) => {
                 return Err(RunQueryError::Allocation(err));
             }
-            Err(err) => panic!("couldn't write term to heap: {err:?}"),
+            Err(err) => panic!("couldn't write query term to heap: {err:?}"),
         };
 
         let var_names: IndexMap<_, _> = term_write_result
