@@ -60,6 +60,55 @@ fn checked_facade_loads_program_status_only() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn checked_facade_repeated_loads_keep_heap_and_atoms_stable() {
+    fn probe_atom_count(machine: &crate::Machine) -> usize {
+        // The atom table is process-global; count only this test's long
+        // dynamic atoms so parallel tests cannot perturb the assertion.
+        machine
+            .machine_st
+            .atom_tbl
+            .active_table()
+            .iter()
+            .filter(|atom| atom.as_str().starts_with("checked_loader_probe_"))
+            .count()
+    }
+
+    let mut machine = MachineBuilder::default().build();
+    let program = r#"
+        :- discontiguous(checked_loader_probe_predicate/2).
+        checked_loader_probe_predicate(
+            checked_loader_probe_subject,
+            checked_loader_probe_object).
+        "#;
+
+    machine
+        .load_module_string_checked("facts", program)
+        .expect("warm-up load should succeed");
+
+    let heap_len = machine.machine_st.heap.cell_len();
+    let atom_count = probe_atom_count(&machine);
+    assert!(atom_count > 0);
+
+    for _ in 0..100 {
+        machine
+            .load_module_string_checked("facts", program)
+            .expect("repeated load should succeed");
+        assert_eq!(machine.machine_st.heap.cell_len(), heap_len);
+        assert_eq!(probe_atom_count(&machine), atom_count);
+    }
+
+    let answers = machine
+        .run_query_checked(
+            "checked_loader_probe_predicate(checked_loader_probe_subject, checked_loader_probe_object).",
+        )
+        .expect("checked query should parse")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("checked query should execute");
+    assert_eq!(answers, [LeafAnswer::True]);
+}
+
+#[test]
 fn checked_facade_maps_loader_failure_without_panicking() {
     let mut machine = MachineBuilder::default().build();
     let status: Result<(), LoadModuleError> =
