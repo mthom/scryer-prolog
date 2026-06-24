@@ -1788,13 +1788,15 @@ impl Machine {
 
         read_heap_cell!(load_state_payload,
             (HeapCellValueTag::Cons, cons_ptr) => {
-                match_untyped_arena_ptr!(cons_ptr,
-                    (ArenaHeaderTag::LiveLoadState, payload) => {
-                        let mut payload = payload;
-                        payload.drop_payload()
+                // Successful live loaders are evacuated by retagging the payload
+                // inactive before Prolog calls this cleanup predicate.
+                match cons_ptr.get_tag() {
+                    ArenaHeaderTag::LiveLoadState | ArenaHeaderTag::InactiveLoadState => {
+                        let mut payload = unsafe { cons_ptr.as_typed_ptr::<LiveLoadState>() };
+                        payload.drop_payload();
                     }
                     _ => {}
-                );
+                }
             }
             _ => {}
         );

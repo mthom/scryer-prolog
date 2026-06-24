@@ -494,6 +494,24 @@ impl Arena {
             code_index_tbl: CodeIndexTable::new()?,
         })
     }
+
+    #[cfg(test)]
+    pub(crate) fn slab_count_by_tag(&self, tag: ArenaHeaderTag) -> usize {
+        let mut count = 0;
+        let mut slab = self.base.as_ref();
+
+        while let Some(current_slab) = slab {
+            let current_slab = unsafe { current_slab.slab.as_ref() };
+
+            if current_slab.header.get_tag() == tag {
+                count += 1;
+            }
+
+            slab = current_slab.next.as_ref();
+        }
+
+        count
+    }
 }
 
 unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {

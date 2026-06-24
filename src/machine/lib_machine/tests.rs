@@ -1,5 +1,102 @@
 use super::*;
+use crate::arena::ArenaHeaderTag;
 use crate::MachineBuilder;
+
+const REPEATED_LOAD_PROBE_PROGRAM: &str = r#"
+    :- discontiguous(repeated_loader_probe_predicate/2).
+    repeated_loader_probe_predicate(
+        repeated_loader_probe_subject,
+        repeated_loader_probe_object).
+    "#;
+
+const REPEATED_LOAD_FLOAT_PROGRAM: &str = r#"
+    repeated_float_probe_value(1.25).
+    "#;
+
+fn repeated_loader_probe_atom_count(machine: &crate::Machine) -> usize {
+    // The atom table is process-global; count only this test's long
+    // dynamic atoms so parallel tests cannot perturb the assertion.
+    machine
+        .machine_st
+        .atom_tbl
+        .active_table()
+        .iter()
+        .filter(|atom| atom.as_str().starts_with("repeated_loader_probe_"))
+        .count()
+}
+
+fn inactive_load_state_count(machine: &crate::Machine) -> usize {
+    machine
+        .machine_st
+        .arena
+        .slab_count_by_tag(ArenaHeaderTag::InactiveLoadState)
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn repeated_module_loads_keep_heap_and_atoms_stable() {
+    let mut machine = MachineBuilder::default().build();
+
+    machine.load_module_string("facts", REPEATED_LOAD_PROBE_PROGRAM);
+
+    let heap_len = machine.machine_st.heap.cell_len();
+    let atom_count = repeated_loader_probe_atom_count(&machine);
+    assert!(atom_count > 0);
+
+    for _ in 0..100 {
+        machine.load_module_string("facts", REPEATED_LOAD_PROBE_PROGRAM);
+        assert_eq!(machine.machine_st.heap.cell_len(), heap_len);
+        assert_eq!(repeated_loader_probe_atom_count(&machine), atom_count);
+    }
+
+    let answers = machine
+        .run_query(
+            "repeated_loader_probe_predicate(repeated_loader_probe_subject, repeated_loader_probe_object).",
+        )
+        .collect::<Result<Vec<_>, _>>()
+        .expect("query should execute");
+    assert_eq!(answers, [LeafAnswer::True]);
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn repeated_module_loads_keep_loader_state_and_stack_stable() {
+    let mut machine = MachineBuilder::default().build();
+
+    machine.load_module_string("facts", REPEATED_LOAD_PROBE_PROGRAM);
+
+    let stack_top = machine.machine_st.stack.top();
+    let trail_entries = machine.machine_st.trail.len();
+    let load_contexts = machine.load_contexts.len();
+    let inactive_load_states = inactive_load_state_count(&machine);
+
+    for _ in 0..100 {
+        machine.load_module_string("facts", REPEATED_LOAD_PROBE_PROGRAM);
+        assert_eq!(machine.machine_st.stack.top(), stack_top);
+        assert_eq!(machine.machine_st.trail.len(), trail_entries);
+        assert_eq!(machine.load_contexts.len(), load_contexts);
+        assert_eq!(inactive_load_state_count(&machine), inactive_load_states);
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn repeated_float_loads_keep_float_table_stable() {
+    let mut machine = MachineBuilder::default().build();
+
+    machine.load_module_string("facts", REPEATED_LOAD_FLOAT_PROGRAM);
+
+    let float_entries = machine.machine_st.arena.f64_tbl.entry_count();
+    assert!(float_entries > 0);
+
+    for _ in 0..100 {
+        machine.load_module_string("facts", REPEATED_LOAD_FLOAT_PROGRAM);
+        assert_eq!(
+            machine.machine_st.arena.f64_tbl.entry_count(),
+            float_entries
+        );
+    }
+}
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
