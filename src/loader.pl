@@ -124,10 +124,10 @@ run_initialization_goals :-
     ;  true
     ).
 
+% Run side-effect-only loaders under double negation so the inner \+ backtracks
+% over temporary heap state, while thrown loader errors still propagate.
 file_load(Stream, Path) :-
-    file_load(Stream, Path, _),
-    false.        %% Clear the heap.
-file_load(_, _).
+    \+ \+ file_load(Stream, Path, _).
 
 file_load_init(Stream, Evacuable) :-
     load_loop(Stream, Evacuable),
@@ -156,14 +156,15 @@ file_load(Stream, Path, Evacuable) :-
     '$pop_load_context'.
 
 
+% Same heap cleanup pattern as file_load/2 for stream-only loads.
 load(Stream) :-
-    create_load_context(Stream, Evacuable),
-    catch(loader:file_load_init(Stream, Evacuable),
-          E,
-          loader:file_load_cleanup(Evacuable, E)),
-    '$pop_load_context',
-    false.        %% Clear the heap.
-load(_).
+    \+ \+ (
+        create_load_context(Stream, Evacuable),
+        catch(loader:file_load_init(Stream, Evacuable),
+              E,
+              loader:file_load_cleanup(Evacuable, E)),
+        '$pop_load_context'
+    ).
 
 
 print_comma_separated_list([VN=_]) :-

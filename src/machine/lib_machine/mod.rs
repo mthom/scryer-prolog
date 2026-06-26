@@ -1,17 +1,20 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::process::ExitCode;
 use std::rc::Rc;
 
 use crate::atom_table;
 use crate::heap_iter::{stackful_post_order_iter, NonListElider};
-use crate::machine::heap::AllocError;
+pub use crate::machine::heap::AllocError;
+use crate::machine::machine_errors::CompilationError;
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{
     ArenaHeaderTag, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS,
 };
 use crate::offset_table::*;
-use crate::parser::ast::{Var, VarPtr};
+pub use crate::parser::ast::ParserError;
+use crate::parser::ast::{Term as ASTTerm, Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};
 use crate::types::UntypedArenaPtr;
@@ -50,6 +53,33 @@ impl LeafAnswer {
         LeafAnswer::LeafAnswer {
             bindings: bindings.into_iter().map(|(k, v)| (k.into(), v)).collect(),
         }
+    }
+}
+
+/// A module failed to load from an in-memory program string.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct LoadModuleError;
+
+/// A checked query could not be prepared for execution.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum RunQueryError {
+    /// The query string could not be parsed.
+    Parser(ParserError),
+    /// The machine could not allocate memory while preparing the query.
+    Allocation(AllocError),
+}
+
+impl From<ParserError> for RunQueryError {
+    fn from(err: ParserError) -> Self {
+        Self::Parser(err)
+    }
+}
+
+impl From<AllocError> for RunQueryError {
+    fn from(err: AllocError) -> Self {
+        Self::Allocation(err)
     }
 }
 
@@ -537,10 +567,40 @@ impl Iterator for QueryState<'_> {
 }
 
 impl Machine {
+    fn parse_query_term(&mut self, query: impl Into<String>) -> Result<ASTTerm, ParserError> {
+        let mut parser = Parser::new(
+            Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
+            &mut self.machine_st,
+        );
+        let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
+        parser.read_term(&op_dir, Tokens::Default)
+    }
+
+    /// Validates a query term without entering the execution path.
+    pub fn validate_query_term(&mut self, query: impl Into<String>) -> Result<(), ParserError> {
+        self.parse_query_term(query).map(|_| ())
+    }
+
+    /// Loads a module from a string without panicking on loader failure.
+    pub fn load_module_string_checked(
+        &mut self,
+        module_name: &str,
+        program: impl Into<String>,
+    ) -> Result<(), LoadModuleError> {
+        let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
+        match self.load_file(module_name, stream) {
+            ExitCode::SUCCESS => Ok(()),
+            _ => Err(LoadModuleError),
+        }
+    }
+
     /// Loads a module into the [`Machine`] from a string.
     pub fn load_module_string(&mut self, module_name: &str, program: impl Into<String>) {
         let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
-        self.load_file(module_name, stream);
+        match self.load_file(module_name, stream) {
+            ExitCode::SUCCESS => {}
+            _ => panic!("Failed to load module string"),
+        }
     }
 
     /// Consults a module into the [`Machine`] from a string.
@@ -581,23 +641,26 @@ impl Machine {
         Ok(())
     }
 
-    /// Runs a query.
-    pub fn run_query(&mut self, query: impl Into<String>) -> QueryState<'_> {
-        let mut parser = Parser::new(
-            Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
-            &mut self.machine_st,
-        );
-        let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
-        let term = parser
-            .read_term(&op_dir, Tokens::Default)
-            .expect("Failed to parse query");
+    /// Runs a query without panicking on parse failure.
+    pub fn run_query_checked(
+        &mut self,
+        query: impl Into<String>,
+    ) -> Result<QueryState<'_>, RunQueryError> {
+        let term = self.parse_query_term(query)?;
+        self.run_query_term_checked(term)
+    }
 
-        self.allocate_stub_choice_point()
-            .expect("failed to allocate stub choice point");
+    fn run_query_term_checked(&mut self, term: ASTTerm) -> Result<QueryState<'_>, RunQueryError> {
+        self.allocate_stub_choice_point()?;
 
         // Write parsed term to heap
-        let term_write_result = write_term_to_heap(&term, &mut self.machine_st.heap)
-            .expect("couldn't write term to heap");
+        let term_write_result = match write_term_to_heap(&term, &mut self.machine_st.heap) {
+            Ok(result) => result,
+            Err(CompilationError::FiniteMemoryInHeap(err)) => {
+                return Err(RunQueryError::Allocation(err));
+            }
+            Err(err) => panic!("couldn't write query term to heap: {err:?}"),
+        };
 
         let var_names: IndexMap<_, _> = term_write_result
             .var_dict
@@ -632,12 +695,21 @@ impl Machine {
         self.machine_st.execute_at_index(1, call_index_p);
 
         let stub_b = self.machine_st.b;
-        QueryState {
+        Ok(QueryState {
             machine: self,
             term: term_write_result,
             stub_b,
             var_names,
             called: false,
+        })
+    }
+
+    /// Runs a query.
+    pub fn run_query(&mut self, query: impl Into<String>) -> QueryState<'_> {
+        match self.run_query_checked(query) {
+            Ok(query_state) => query_state,
+            Err(RunQueryError::Parser(_)) => panic!("Failed to parse query"),
+            Err(RunQueryError::Allocation(_)) => panic!("Failed to allocate query state"),
         }
     }
 }

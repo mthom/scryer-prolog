@@ -235,7 +235,10 @@ impl Machine {
     }
 
     /// Runs the predicate `key` in `module_name` until completion.
-    /// Silently ignores failure, thrown errors and choice points.
+    ///
+    /// The returned `ExitCode` does not describe Prolog failure, thrown errors,
+    /// or choice points. Low-level callers that care about throw state must
+    /// inspect `machine_st` before clearing it.
     ///
     /// Consider using [`Machine::run_query`] if you wish to handle
     /// predicates that may fail, leave a choice point or throw.
@@ -268,12 +271,23 @@ impl Machine {
         unreachable!();
     }
 
-    fn load_file(&mut self, path: &str, stream: Stream) {
+    fn load_file(&mut self, path: &str, stream: Stream) -> ExitCode {
         self.machine_st.registers[1] = stream.into();
         self.machine_st.registers[2] =
             atom_as_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, path));
 
-        self.run_module_predicate(atom!("loader"), (atom!("file_load"), 2));
+        let exit_code = self.run_module_predicate(atom!("loader"), (atom!("file_load"), 2));
+        // run_module_predicate backtracks to its stub; after that, thrown loader
+        // errors are observable via the exception ball rather than `fail`.
+        let load_failed = !self.machine_st.ball.stub.is_empty();
+        self.machine_st.fail = false;
+
+        if load_failed {
+            self.machine_st.ball.reset();
+            ExitCode::FAILURE
+        } else {
+            exit_code
+        }
     }
 
     fn load_top_level(&mut self, program: Cow<'static, str>) {
@@ -1261,5 +1275,8 @@ mod tests {
             .build();
 
         machine.run_module_predicate(atom!("$toplevel"), (atom!("repl"), 0));
+
+        assert!(!machine.machine_st.ball.stub.is_empty());
+        assert!(!machine.machine_st.fail);
     }
 }

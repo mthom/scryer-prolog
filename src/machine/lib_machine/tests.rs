@@ -2,6 +2,79 @@ use super::*;
 use crate::MachineBuilder;
 
 #[test]
+fn checked_query_maps_malformed_query_without_panicking() {
+    let mut machine = MachineBuilder::default().build();
+    let validation_status: Result<(), ParserError> = machine.validate_query_term("parent(");
+    assert!(validation_status.is_err());
+
+    match machine.run_query_checked("parent(") {
+        Err(RunQueryError::Parser(err)) => {
+            let _: ParserError = err;
+        }
+        Err(RunQueryError::Allocation(_)) => panic!("malformed query should not allocate"),
+        Ok(_) => panic!("malformed query should not run"),
+    };
+}
+
+#[test]
+fn checked_query_runs_valid_query() {
+    let mut machine = MachineBuilder::default().build();
+    assert!(machine.validate_query_term("true.").is_ok());
+
+    let answers = machine
+        .run_query_checked("true.")
+        .expect("checked query should parse")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("checked query should execute");
+    assert_eq!(answers, [LeafAnswer::True]);
+}
+
+#[test]
+fn checked_query_error_type_exposes_allocation_errors() {
+    fn assert_error_type<'a>(
+        result: Result<QueryState<'a>, RunQueryError>,
+    ) -> Result<QueryState<'a>, RunQueryError> {
+        result
+    }
+
+    let mut machine = MachineBuilder::default().build();
+    assert!(assert_error_type(machine.run_query_checked("true.")).is_ok());
+
+    let allocation_error = RunQueryError::Allocation(AllocError);
+    let _ = format!("{allocation_error:?}");
+}
+
+#[test]
+fn checked_module_load_loads_program_status_only() {
+    let mut machine = MachineBuilder::default().build();
+    let status: Result<(), LoadModuleError> =
+        machine.load_module_string_checked("facts", "parent(alice, bob).");
+    assert!(status.is_ok());
+
+    let answers = machine
+        .run_query_checked("parent(alice, bob).")
+        .expect("checked query should parse")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("checked query should execute");
+    assert_eq!(answers, [LeafAnswer::True]);
+}
+
+#[test]
+fn checked_module_load_maps_loader_failure_without_panicking() {
+    let mut machine = MachineBuilder::default().build();
+    let status: Result<(), LoadModuleError> =
+        machine.load_module_string_checked("facts", ":- throw(load_failed).");
+    assert!(status.is_err());
+}
+
+#[test]
+#[should_panic(expected = "Failed to load module string")]
+fn load_module_string_panics_on_loader_failure() {
+    let mut machine = MachineBuilder::default().build();
+    machine.load_module_string("facts", ":- throw(load_failed).");
+}
+
+#[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn programmatic_query() {
     let mut machine = MachineBuilder::default().build();
