@@ -647,7 +647,10 @@ impl Machine {
         query: impl Into<String>,
     ) -> Result<QueryState<'_>, RunQueryError> {
         let term = self.parse_query_term(query)?;
+        self.run_query_term_checked(term)
+    }
 
+    fn run_query_term_checked(&mut self, term: ASTTerm) -> Result<QueryState<'_>, RunQueryError> {
         self.allocate_stub_choice_point()?;
 
         // Write parsed term to heap

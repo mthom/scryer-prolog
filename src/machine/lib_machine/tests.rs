@@ -2,7 +2,7 @@ use super::*;
 use crate::MachineBuilder;
 
 #[test]
-fn checked_facade_maps_malformed_query_without_panicking() {
+fn checked_query_maps_malformed_query_without_panicking() {
     let mut machine = MachineBuilder::default().build();
     let validation_status: Result<(), ParserError> = machine.validate_query_term("parent(");
     assert!(validation_status.is_err());
@@ -17,7 +17,7 @@ fn checked_facade_maps_malformed_query_without_panicking() {
 }
 
 #[test]
-fn checked_facade_runs_valid_query() {
+fn checked_query_runs_valid_query() {
     let mut machine = MachineBuilder::default().build();
     assert!(machine.validate_query_term("true.").is_ok());
 
@@ -45,7 +45,7 @@ fn checked_query_error_type_exposes_allocation_errors() {
 }
 
 #[test]
-fn checked_facade_loads_program_status_only() {
+fn checked_module_load_loads_program_status_only() {
     let mut machine = MachineBuilder::default().build();
     let status: Result<(), LoadModuleError> =
         machine.load_module_string_checked("facts", "parent(alice, bob).");
@@ -60,7 +60,7 @@ fn checked_facade_loads_program_status_only() {
 }
 
 #[test]
-fn checked_facade_maps_loader_failure_without_panicking() {
+fn checked_module_load_maps_loader_failure_without_panicking() {
     let mut machine = MachineBuilder::default().build();
     let status: Result<(), LoadModuleError> =
         machine.load_module_string_checked("facts", ":- throw(load_failed).");
