@@ -7915,7 +7915,7 @@ impl Machine {
         #[cfg(not(feature = "crypto-full"))]
         {
             let stub_gen = || functor_stub(atom!("crypto_random_byte"), 1);
-            let err = self.machine_st.missing_feature_error(atom!("crypto"));
+            let err = self.machine_st.missing_feature_error(atom!("crypto-full"));
             let exception = self.machine_st.error_form(err, stub_gen());
             self.machine_st.throw_exception(exception);
         }
@@ -8079,7 +8079,7 @@ impl Machine {
                 #[cfg(not(feature = "crypto-full"))]
                 {
                     let stub_gen = || functor_stub(atom!("crypto_data_hash"), 1);
-                    let err = self.machine_st.missing_feature_error(atom!("crypto"));
+                    let err = self.machine_st.missing_feature_error(atom!("crypto-full"));
                     let exception = self.machine_st.error_form(err, stub_gen());
                     self.machine_st.throw_exception(exception);
                     return;
@@ -8132,7 +8132,7 @@ impl Machine {
 
         #[cfg(not(feature = "crypto-full"))]
         {
-            let err = self.machine_st.missing_feature_error(atom!("crypto"));
+            let err = self.machine_st.missing_feature_error(atom!("crypto-full"));
             let exception = self.machine_st.error_form(err, stub_gen());
             self.machine_st.throw_exception(exception);
         }
@@ -8215,7 +8215,7 @@ impl Machine {
 
         #[cfg(not(feature = "crypto-full"))]
         {
-            let err = self.machine_st.missing_feature_error(atom!("crypto"));
+            let err = self.machine_st.missing_feature_error(atom!("crypto-full"));
             let exception = self.machine_st.error_form(err, stub1_gen());
             self.machine_st.throw_exception(exception);
         }
@@ -8283,7 +8283,7 @@ impl Machine {
 
         #[cfg(not(feature = "crypto-full"))]
         {
-            let err = self.machine_st.missing_feature_error(atom!("crypto"));
+            let err = self.machine_st.missing_feature_error(atom!("crypto-full"));
             let exception = self.machine_st.error_form(err, stub1_gen());
             self.machine_st.throw_exception(exception);
         }
@@ -8409,152 +8409,111 @@ impl Machine {
     pub(crate) fn crypto_curve_scalar_mult(&mut self) {
         let stub_gen = || functor_stub(atom!("crypto_curve_scalar_mult"), 4);
 
-        {
-            let scalar_bytes = self
-                .machine_st
-                .integers_to_bytevec(self.machine_st.registers[2], stub_gen);
-            let point_bytes = self
-                .machine_st
-                .integers_to_bytevec(self.machine_st.registers[3], stub_gen);
+        let scalar_bytes = self
+            .machine_st
+            .integers_to_bytevec(self.machine_st.registers[2], stub_gen);
+        let point_bytes = self
+            .machine_st
+            .integers_to_bytevec(self.machine_st.registers[3], stub_gen);
 
-            let mut point = secp256k1::Point::decode(&point_bytes).unwrap();
-            let scalar = secp256k1::Scalar::decode_reduce(&scalar_bytes);
-            point *= scalar;
+        let mut point = secp256k1::Point::decode(&point_bytes).unwrap();
+        let scalar = secp256k1::Scalar::decode_reduce(&scalar_bytes);
+        point *= scalar;
 
-            let uncompressed = step_or_resource_error!(
-                self.machine_st,
-                self.u8s_to_string(&point.encode_uncompressed())
-            );
+        let uncompressed = step_or_resource_error!(
+            self.machine_st,
+            self.u8s_to_string(&point.encode_uncompressed())
+        );
 
-            unify!(self.machine_st, self.machine_st.registers[4], uncompressed);
-        }
-
-        {
-            let err = self.machine_st.missing_feature_error(atom!("crypto"));
-            let exception = self.machine_st.error_form(err, stub_gen());
-            self.machine_st.throw_exception(exception);
-        }
+        unify!(self.machine_st, self.machine_st.registers[4], uncompressed);
     }
 
     #[inline(always)]
     pub(crate) fn ed25519_seed_to_public_key(&mut self) {
         let stub_gen = || functor_stub(atom!("ed25519_seed_keypair"), 2);
 
-        {
-            let seed_bytes = self
-                .machine_st
-                .integers_to_bytevec(self.machine_st.registers[1], stub_gen);
+        let seed_bytes = self
+            .machine_st
+            .integers_to_bytevec(self.machine_st.registers[1], stub_gen);
 
-            let skey = ed25519::PrivateKey::from_seed(&seed_bytes);
+        let skey = ed25519::PrivateKey::from_seed(&seed_bytes);
 
-            let complete_string = step_or_resource_error!(
-                self.machine_st,
-                self.u8s_to_string(skey.public_key.encoded.as_ref())
-            );
+        let complete_string = step_or_resource_error!(
+            self.machine_st,
+            self.u8s_to_string(skey.public_key.encoded.as_ref())
+        );
 
-            unify!(
-                self.machine_st,
-                self.machine_st.registers[2],
-                complete_string
-            );
-        }
-
-        {
-            let err = self.machine_st.missing_feature_error(atom!("crypto"));
-            let exception = self.machine_st.error_form(err, stub_gen());
-            self.machine_st.throw_exception(exception);
-        }
+        unify!(
+            self.machine_st,
+            self.machine_st.registers[2],
+            complete_string
+        );
     }
 
     #[inline(always)]
     pub(crate) fn ed25519_sign_raw(&mut self) {
         let stub_gen = || functor_stub(atom!("ed25519_sign"), 4);
 
-        {
-            let seed_bytes = self
-                .machine_st
-                .integers_to_bytevec(self.machine_st.registers[1], stub_gen);
+        let seed_bytes = self
+            .machine_st
+            .integers_to_bytevec(self.machine_st.registers[1], stub_gen);
 
-            let skey = ed25519::PrivateKey::from_seed(&seed_bytes);
+        let skey = ed25519::PrivateKey::from_seed(&seed_bytes);
 
-            let encoding = cell_as_atom!(self.deref_register(3));
-            let data = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
+        let encoding = cell_as_atom!(self.deref_register(3));
+        let data = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
 
-            let sig = skey.sign_raw(&data);
-            let sig_list = step_or_resource_error!(
-                self.machine_st,
-                sized_iter_to_heap_list(
-                    &mut self.machine_st.heap,
-                    sig.as_ref().len(),
-                    sig.as_ref()
-                        .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
-                )
-            );
+        let sig = skey.sign_raw(&data);
+        let sig_list = step_or_resource_error!(
+            self.machine_st,
+            sized_iter_to_heap_list(
+                &mut self.machine_st.heap,
+                sig.as_ref().len(),
+                sig.as_ref()
+                    .iter()
+                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
+            )
+        );
 
-            unify!(self.machine_st, self.machine_st.registers[4], sig_list);
-        }
-
-        {
-            let err = self.machine_st.missing_feature_error(atom!("crypto"));
-            let exception = self.machine_st.error_form(err, stub_gen());
-            self.machine_st.throw_exception(exception);
-        }
+        unify!(self.machine_st, self.machine_st.registers[4], sig_list);
     }
 
     #[inline(always)]
     pub(crate) fn ed25519_verify_raw(&mut self) {
         let stub_gen = || functor_stub(atom!("ed25519_verify"), 4);
 
-        {
-            let key_bytes =
-                self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
-            let pkey = ed25519::PublicKey::decode(&key_bytes).unwrap();
+        let key_bytes = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
+        let pkey = ed25519::PublicKey::decode(&key_bytes).unwrap();
 
-            let encoding = cell_as_atom!(self.deref_register(3));
-            let data = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
+        let encoding = cell_as_atom!(self.deref_register(3));
+        let data = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
 
-            let signature = self
-                .machine_st
-                .integers_to_bytevec(self.machine_st.registers[4], stub_gen);
+        let signature = self
+            .machine_st
+            .integers_to_bytevec(self.machine_st.registers[4], stub_gen);
 
-            self.machine_st.fail = !pkey.verify_raw(&signature, &data);
-        }
-
-        {
-            let err = self.machine_st.missing_feature_error(atom!("crypto"));
-            let exception = self.machine_st.error_form(err, stub_gen());
-            self.machine_st.throw_exception(exception);
-        }
+        self.machine_st.fail = !pkey.verify_raw(&signature, &data);
     }
 
     #[inline(always)]
     pub(crate) fn curve25519_scalar_mult(&mut self) {
         let stub_gen = || functor_stub(atom!("curve25519_scalar_mult"), 3);
 
-        {
-            let scalar_bytes = self
-                .machine_st
-                .integers_to_bytevec(self.machine_st.registers[1], stub_gen);
-            let point_bytes = self
-                .machine_st
-                .integers_to_bytevec(self.machine_st.registers[2], stub_gen);
+        let scalar_bytes = self
+            .machine_st
+            .integers_to_bytevec(self.machine_st.registers[1], stub_gen);
+        let point_bytes = self
+            .machine_st
+            .integers_to_bytevec(self.machine_st.registers[2], stub_gen);
 
-            let result = x25519::x25519(
-                &<[u8; 32]>::try_from(&point_bytes[..]).unwrap(),
-                &<[u8; 32]>::try_from(&scalar_bytes[..]).unwrap(),
-            );
+        let result = x25519::x25519(
+            &<[u8; 32]>::try_from(&point_bytes[..]).unwrap(),
+            &<[u8; 32]>::try_from(&scalar_bytes[..]).unwrap(),
+        );
 
-            let string = step_or_resource_error!(self.machine_st, self.u8s_to_string(&result[..]));
+        let string = step_or_resource_error!(self.machine_st, self.u8s_to_string(&result[..]));
 
-            unify!(self.machine_st, self.machine_st.registers[3], string);
-        }
-
-        {
-            let err = self.machine_st.missing_feature_error(atom!("crypto"));
-            let exception = self.machine_st.error_form(err, stub_gen());
-            self.machine_st.throw_exception(exception);
-        }
+        unify!(self.machine_st, self.machine_st.registers[3], string);
     }
 
     #[inline(always)]
