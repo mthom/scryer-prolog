@@ -6959,7 +6959,7 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn sleep(&mut self) {
+    pub(crate) fn sleep(&mut self) -> CallResult {
         let time = self.deref_register(1);
 
         let time = match Number::try_from((time, &self.machine_st.arena.f64_tbl)) {
@@ -6972,9 +6972,27 @@ impl Machine {
         };
 
         let duration = Duration::new(1, 0);
-        let duration = duration.mul_f64(time);
+        let mut remaining = duration.mul_f64(time);
 
-        std::thread::sleep(duration);
+        // Sleep in small slices, checking for a pending interrupt (e.g. Ctrl-C)
+        // between each one. A single blocking `std::thread::sleep` would run to
+        // completion regardless of SIGINT, leaving the interrupt unobserved
+        // until well after the sleep returns.
+        let slice = Duration::from_millis(50);
+
+        while !remaining.is_zero() {
+            let step = remaining.min(slice);
+            std::thread::sleep(step);
+            remaining -= step;
+
+            if self.interrupt_occured() {
+                let err = self.machine_st.interrupt_error();
+                let src = functor_stub(atom!("repl"), 0);
+                return Err(self.machine_st.error_form(err, src));
+            }
+        }
+
+        Ok(())
     }
 
     #[inline(always)]
