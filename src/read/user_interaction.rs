@@ -1,4 +1,4 @@
-use crossterm::event::{read, Event, KeyEventKind};
+use crossterm::event::{Event, KeyEventKind, read};
 pub(crate) use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use crossterm::tty::IsTty;

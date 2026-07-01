@@ -61,8 +61,8 @@ use std::env;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::atomic::AtomicBool;
 use std::sync::OnceLock;
+use std::sync::atomic::AtomicBool;
 
 pub static INTERRUPT: AtomicBool = AtomicBool::new(false);
 
@@ -1224,7 +1224,7 @@ impl Machine {
                     let key = Atom::from(h as u64);
 
                     match self.indices.global_variables.get_mut(&key) {
-                        Some((_, ref mut loc)) => *loc = None,
+                        Some((_, loc)) => *loc = None,
                         None => unreachable!(),
                     }
                 }
@@ -1233,7 +1233,7 @@ impl Machine {
                     let value_cell = HeapCellValue::from(u64::from(self.machine_st.trail[i + 1]));
 
                     match self.indices.global_variables.get_mut(&key) {
-                        Some((_, ref mut loc)) => *loc = Some(value_cell),
+                        Some((_, loc)) => *loc = Some(value_cell),
                         None => unreachable!(),
                     }
                 }

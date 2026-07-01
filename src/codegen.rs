@@ -345,10 +345,10 @@ impl<'a> AddToFreeList<'a, QueryInstruction> for CodeGenerator {
 
 fn structure_cell(term: &Term) -> Option<&Cell<RegType>> {
     match term {
-        &Term::Cons(ref cell, ..)
-        | &Term::Clause(ref cell, ..)
-        | Term::PartialString(ref cell, ..)
-        | Term::CompleteString(ref cell, ..) => Some(cell),
+        Term::Cons(cell, ..)
+        | Term::Clause(cell, ..)
+        | Term::PartialString(cell, ..)
+        | Term::CompleteString(cell, ..) => Some(cell),
         _ => None,
     }
 }
@@ -401,18 +401,18 @@ impl CodeGenerator {
             &Term::AnonVar => {
                 Self::add_or_increment_void_instr::<Target>(target);
             }
-            &Term::Cons(ref cell, ..)
-            | &Term::Clause(ref cell, ..)
-            | Term::PartialString(ref cell, ..)
-            | Term::CompleteString(ref cell, ..) => {
+            Term::Cons(cell, ..)
+            | Term::Clause(cell, ..)
+            | Term::PartialString(cell, ..)
+            | Term::CompleteString(cell, ..) => {
                 self.marker
                     .mark_non_var::<Target>(Level::Deep, term_loc, cell, target);
                 target.push_back(Target::clause_arg_to_instr(cell.get()));
             }
-            Term::Literal(_, ref constant) => {
+            Term::Literal(_, constant) => {
                 target.push_back(Target::constant_subterm(*constant));
             }
-            Term::Var(ref cell, ref var_ptr) => {
+            Term::Var(cell, var_ptr) => {
                 self.deep_var_instr::<Target>(
                     cell,
                     var_ptr.to_var_num().unwrap(),
@@ -572,7 +572,7 @@ impl CodeGenerator {
                 Term::Literal(_, Literal::Atom(..)) => {
                     instr!("$succeed")
                 }
-                Term::Var(ref vr, ref name) => {
+                Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
@@ -600,7 +600,7 @@ impl CodeGenerator {
                 Term::Literal(..) => {
                     instr!("$succeed")
                 }
-                Term::Var(ref vr, ref name) => {
+                Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
@@ -621,7 +621,7 @@ impl CodeGenerator {
                 | Term::CompleteString(..) => {
                     instr!("$succeed")
                 }
-                Term::Var(ref vr, ref name) => {
+                Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
@@ -733,7 +733,7 @@ impl CodeGenerator {
                 Term::Literal(_, Literal::Integer(_)) | Term::Literal(_, Literal::Fixnum(_)) => {
                     instr!("$succeed")
                 }
-                Term::Var(ref vr, name) => {
+                Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
@@ -828,7 +828,7 @@ impl CodeGenerator {
                     self.marker
                         .mark_anon_var::<QueryInstruction>(Level::Shallow, term_loc, code);
 
-                    if let Term::Var(ref vr, ref var) = &terms[1] {
+                    if let Term::Var(vr, var) = &terms[1] {
                         let var_num = var.to_var_num().unwrap();
 
                         // if var is an anonymous variable, insert
