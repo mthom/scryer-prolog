@@ -2,12 +2,8 @@ use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::heap_iter::*;
-use crate::indexing_iter::IndexedClauseView;
-use crate::indexing_iter::IndexingLineIter;
-use crate::indexing_iter::IndexingLineOffset;
-use crate::indexing_iter::IndexingLinePlace;
 use crate::indexing_iter::remove_clause_index;
-use crate::indexing_iter::try_split_indexing_line_at;
+use crate::indexing_iter::{IndexedClauseView, abolish_clause};
 use crate::instructions::*;
 use crate::machine::load_state::*;
 use crate::machine::machine_errors::*;
@@ -18,14 +14,12 @@ use crate::machine::*;
 use crate::parser::ast::*;
 use crate::types::*;
 
-use fxhash::FxHasher;
 use indexmap::IndexSet;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt;
-use std::num::NonZero;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
@@ -74,7 +68,6 @@ pub(crate) enum RetractionRecord {
     AddedUserPredicate(PredicateKey),
     ReplacedUserPredicate(PredicateKey, IndexPtr),
     AddedIndex(usize, usize), //, Vec<usize>),
-    RemovedIndex(usize, usize),
     ReplacedChoiceOffset(usize, usize),
     AppendedTrustMe(usize, usize, bool),
     ReplacedSwitchOnTermVarIndex(usize, usize),
@@ -89,7 +82,7 @@ pub(crate) enum RetractionRecord {
     SkeletonClauseTruncateBack(CompilationTarget, PredicateKey, usize),
     SkeletonClauseStartReplaced(CompilationTarget, PredicateKey, usize, usize),
     RemovedSkeletonClause(CompilationTarget, PredicateKey, usize, ClauseIndex, usize),
-    ReplacedIndexingLine(usize, ExternalIndexingCodePtr, Vec<IndexingLine>),
+    ReplacedIndexingLine(usize, ExternalIndexingCodePtr, IndexingSpecs, usize, Vec<IndexingLine>),
     RemovedLocalSkeletonClauseLocations(
         CompilationTarget,
         CompilationTarget,
@@ -110,7 +103,7 @@ pub(crate) enum RetractionRecord {
  * is shared by all modules, including the default "user" module.
 */
 
-pub(super) struct RetractionInfo {
+pub(crate) struct RetractionInfo {
     orig_code_extent: usize,
     records: Vec<RetractionRecord>,
 }
@@ -535,14 +528,19 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         match decl {
             Declaration::Dynamic(name, arity) => {
                 let compilation_target = self.payload.compilation_target;
+
                 self.add_dynamic_predicate(compilation_target, name, arity)?;
 
-                let clause_clause_compilation_target = match compilation_target {
-                    CompilationTarget::User => CompilationTarget::Module(atom!("builtins")),
-                    _ => compilation_target,
+                let clause_clause_module_name = match compilation_target {
+                    CompilationTarget::User => atom!("builtins"),
+                    CompilationTarget::Module(module_name) => module_name,
                 };
 
-                self.add_dynamic_predicate(clause_clause_compilation_target, atom!("$clause"), 5)?;
+                self.declare_clause_clause_dynamic(clause_clause_module_name)?;
+            }
+            Declaration::Indexing(name, indexing_specs) => {
+                let compilation_target = self.payload.compilation_target;
+                self.add_indexing_specs(compilation_target, name, indexing_specs);
             }
             Declaration::MetaPredicate(module_name, name, meta_specs) => {
                 self.add_meta_predicate_record(module_name, name, meta_specs);
@@ -754,11 +752,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         );
                     }
                 }
-                RetractionRecord::RemovedIndex(_index_loc, _clause_loc) => {
-                    // TODO: this needs to be fixed! RemovedIndex doesn't provide
-                    // enough information to restore the index. Correct that, then
-                    // write the retraction logic of this arm.
-                }
                 RetractionRecord::ReplacedChoiceOffset(instr_loc, offset) => {
                     match &mut self.wam_prelude.code[instr_loc] {
                         Instruction::TryMeElse(o)
@@ -779,7 +772,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     };
                 }
                 RetractionRecord::ReplacedSwitchOnTermVarIndex(index_loc, old_v) => {
-                    if let Instruction::IndexingCode(var_offset, _) = &mut self.wam_prelude.code[index_loc] {
+                    if let Instruction::IndexingCode { var_offset, .. } = &mut self.wam_prelude.code[index_loc] {
                         var_offset.set_offset(old_v);
                     }
                 }
@@ -937,8 +930,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             .insert(target_pos, clause_index_info);
                     }
                 }
-                RetractionRecord::ReplacedIndexingLine(index_loc, var_offset, indexing_code) => {
-                    self.wam_prelude.code[index_loc] = Instruction::IndexingCode(var_offset, indexing_code);
+                RetractionRecord::ReplacedIndexingLine(index_loc, var_offset, specs, arity, code) => {
+                    self.wam_prelude.code[index_loc] = Instruction::IndexingCode {
+                        var_offset, arity, specs, code, is_extensible: true,
+                    };
                 }
                 RetractionRecord::RemovedLocalSkeletonClauseLocations(
                     compilation_target,
@@ -1026,6 +1021,43 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             _ => {
                 return Err(CompilationError::InadmissibleFact);
             }
+        }
+
+        Ok(())
+    }
+
+    pub(super) fn declare_clause_clause_dynamic(&mut self, module_name: Atom) -> Result<(), SessionError> {
+        let clause_clause_is_dynamic_predicate = self
+            .wam_prelude
+            .indices
+            .is_dynamic_predicate(module_name, (atom!("$clause"), 6));
+
+        if !clause_clause_is_dynamic_predicate {
+            let clause_clause_compilation_target = CompilationTarget::Module(module_name);
+            let old_payload_ct = self.payload.compilation_target;
+
+            self.payload.compilation_target = CompilationTarget::Module(module_name);
+            self.add_dynamic_predicate(clause_clause_compilation_target, atom!("$clause"), 6)
+                .inspect_err(|_e| self.payload.compilation_target = old_payload_ct)?;
+
+            self.payload.compilation_target = old_payload_ct;
+
+            // ensure only the head argument of clause/2 is
+            // indexed after the module is stripped away.
+            let cc_indexing_specs = vec![
+                IndexingSpec::InstOnly,
+                IndexingSpec::NoIndexing,
+                IndexingSpec::NoIndexing,
+                IndexingSpec::NoIndexing,
+                IndexingSpec::NoIndexing,
+                IndexingSpec::NoIndexing,
+            ];
+
+            self.add_indexing_specs(
+                clause_clause_compilation_target,
+                atom!("$clause"),
+                cc_indexing_specs,
+            );
         }
 
         Ok(())
@@ -1527,7 +1559,14 @@ impl Machine {
     pub(crate) fn add_dynamic_predicate(&mut self) -> CallResult {
         self.add_extensible_predicate_declaration(
             |loader, compilation_target, clause_name, arity| {
-                loader.add_dynamic_predicate(compilation_target, clause_name, arity)
+                loader.add_dynamic_predicate(compilation_target, clause_name, arity)?;
+
+                let clause_clause_module_name = match compilation_target {
+                    CompilationTarget::User => atom!("builtins"),
+                    CompilationTarget::Module(module_name) => module_name,
+                };
+
+                loader.declare_clause_clause_dynamic(clause_clause_module_name)
             },
         )
     }
@@ -1538,7 +1577,7 @@ impl Machine {
             |loader, compilation_target, clause_name, arity| {
                 loader.add_multifile_predicate(compilation_target, clause_name, arity)
             },
-        )
+        )        
     }
 
     fn add_extensible_predicate_declaration(
@@ -2006,8 +2045,17 @@ impl Machine {
                 vec![head.clone(), body.clone()],
             );
 
-            // if a new predicate was just created, make it dynamic.
-            loader.add_dynamic_predicate(compilation_target, name, arity)?;
+            if !is_dynamic_predicate {
+                // if a new predicate was just created, make it dynamic.
+                loader.add_dynamic_predicate(compilation_target, name, arity)?;
+
+                let clause_clause_module_name = match compilation_target {
+                    CompilationTarget::User => atom!("builtins"),
+                    CompilationTarget::Module(module_name) => module_name,
+                };
+
+                loader.declare_clause_clause_dynamic(clause_clause_module_name)?;
+            }
 
             loader.incremental_compile_clause(
                 (name, arity),
@@ -2016,13 +2064,6 @@ impl Machine {
                 false,
                 append_or_prepend,
             )?;
-
-            let clause_clause_compilation_target = match compilation_target {
-                CompilationTarget::User => CompilationTarget::Module(atom!("builtins")),
-                _ => compilation_target,
-            };
-
-            loader.add_dynamic_predicate(clause_clause_compilation_target, atom!("$clause"), 5)?;
 
             loader.compile_clause_clauses(
                 (name, arity),
@@ -2091,109 +2132,26 @@ impl Machine {
                 .indices
                 .get_predicate_skeleton_mut(
                     &clause_clause_compilation_target,
-                    &(atom!("$clause"), 5),
+                    &(atom!("$clause"), 6),
                 )
                 .and_then(|skeleton| skeleton.clause_indices[0].index_loc)
             {
                 if let Some(view) = IndexedClauseView::try_from_code(
                     &mut loader.wam_prelude.code[index_loc ..],
-                ) {
-                    let opt_arg_index_keys = [OptArgIndexKey::Structure(key.0, key.1)];
-                    let mut iter = IndexingLineIter::new(view, &opt_arg_index_keys);
-                    let mut result = None;
-
-                    let f64_tbl = &LiveLoadAndMachineState::machine_st(&mut loader.payload)
-                        .arena
-                        .f64_tbl;
-
-                    while let Some(place) = iter.next(f64_tbl) {
-                        match place {
-                            IndexingLinePlace::SwitchOnTermPtr(str_ptr, ..) => {
-                                match str_ptr {
-                                    TermIndexingCodePtr::Fail => {},
-                                    TermIndexingCodePtr::TableOffset(_) => continue,
-                                    &mut TermIndexingCodePtr::External(o) => {
-                                        result = Some(IndexingCodePtr::External(o));
-                                    }
-                                    &mut TermIndexingCodePtr::DynamicExternal(o) => {
-                                        result = Some(IndexingCodePtr::DynamicExternal(o));
-                                    }
-                                    &mut TermIndexingCodePtr::Internal(o) => {
-                                        result = Some(IndexingCodePtr::Internal(o));
-                                    }
-                                }
-
-                                break;
-                            }
-                            IndexingLinePlace::SwitchOnStructurePtr(str_map, ..) => {
-                                let cell = atom_as_cell!(key.0, key.1);
-                                let hash = cell.syntactic_hash(f64_tbl, FxHasher::default());
-
-                                if let Some(&(_, indexing_ptr)) = str_map
-                                    .find(hash, |&((name, arity), _indexing_code_ptr)| {
-                                        let other_cell = atom_as_cell!(name, arity);
-                                        cell.syntactic_eq(f64_tbl, other_cell)
-                                    })
-                                {
-                                    result = Some(indexing_ptr);
-                                }
-
-                                break;
-                            }
-                            _ => break,
-                        }
-                    }
-
-                    match result {
-                        Some(IndexingCodePtr::DynamicExternal(o) | IndexingCodePtr::External(o)) => {
-                            let code = &mut loader.wam_prelude.code;
-                            let global_clock = LiveLoadAndMachineState::machine_st(&mut loader.payload)
-                                .global_clock;
-
-                            retract_dynamic_clause(o + index_loc, code, Some(index_loc), global_clock);
-                        }
-                        Some(IndexingCodePtr::Internal(o)) => {
-                            let code = &mut loader.wam_prelude.code;
-                            let (line, rest) = code.split_at_mut(index_loc);
-
-                            match &mut line[0] {
-                                Instruction::IndexingCode(_, tables) => {
-                                    match try_split_indexing_line_at(tables, o) {
-                                        Some((_, offsets)) => {
-                                            let global_clock = LiveLoadAndMachineState::machine_st(&mut loader.payload)
-                                                .global_clock;
-                                            let mut kill_clause = |o| {
-                                                match &mut rest[o - 2] { // skip the IndexingCode and walk 1 back to choice instruction
-                                                    Instruction::DynamicInternalElse(_, d, _) => {
-                                                        *d = Death::Finite(global_clock);
-                                                    }
-                                                    _ => {}
-                                                }
-                                            };
-                                            
-                                            match offsets {
-                                                IndexingLineOffset::Static(offsets) => {
-                                                    for offset in offsets {
-                                                        kill_clause(offset.offset());
-                                                    }
-                                                }
-                                                IndexingLineOffset::Dynamic(offsets) => {
-                                                    for offset in offsets {
-                                                        kill_clause(offset.offset());
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        None => {}
-                                    }
-                                }
-                                _=> {}
-                            }
-                        }
-                        None => {}
-                    }
+                ) {                    
+                    let head_key = if key.1 > 0 {
+                        OptArgIndexKey::Structure(key.0, key.1)
+                    } else {
+                        OptArgIndexKey::Literal(atom_as_cell!(key.0))
+                    };
+                    
+                    abolish_clause(
+                        view,
+                        &LiveLoadAndMachineState::machine_st(&mut loader.payload).arena.f64_tbl,
+                        head_key,
+                    );
                 }
-            }
+            };
 
             let offset = loader.get_or_insert_code_index(key, compilation_target);
 
@@ -2233,18 +2191,19 @@ impl Machine {
 
         let index_loc = self.deref_register(2);
 
-        let index_loc = match Number::try_from((index_loc, &self.machine_st.arena.f64_tbl)) {
-            Ok(Number::Integer(n)) => {
-                let value: usize = (&*n).try_into().unwrap();
-                value
-            }
-            Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
-            _ => unreachable!(),
+        let index_loc = match Number::try_from(
+            (index_loc, &self.machine_st.arena.f64_tbl),
+        ) {
+            Ok(Number::Integer(n)) => (&*n).try_into().ok(),
+            Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
+            _ => None,
         };
 
         let clause_clause_loc = self.deref_register(3);
 
-        let clause_clause_loc = match Number::try_from((clause_clause_loc, &self.machine_st.arena.f64_tbl)) {
+        let clause_clause_loc = match Number::try_from(
+            (clause_clause_loc, &self.machine_st.arena.f64_tbl),
+        ) {
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
                 value
@@ -2253,10 +2212,20 @@ impl Machine {
             _ => unreachable!(),
         };
 
+        let clause_clause_index_loc = self.deref_register(4);
+
+        let clause_clause_index_loc_opt = match Number::try_from(
+            (clause_clause_index_loc, &self.machine_st.arena.f64_tbl),
+        ) {
+            Ok(Number::Integer(n)) => (&*n).try_into().ok(),
+            Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
+            _ => None,
+        };
+
         let global_clock = self.machine_st.global_clock;
         
-        retract_dynamic_clause(clause_loc, &mut self.code, Some(index_loc), global_clock);
-        retract_dynamic_clause(clause_clause_loc, &mut self.code, None, global_clock);
+        retract_dynamic_clause(clause_loc, &mut self.code, index_loc, global_clock);
+        retract_dynamic_clause(clause_clause_loc, &mut self.code, clause_clause_index_loc_opt, global_clock);
 
         // the global clock is incremented after each retraction.
         self.machine_st.global_clock += 1;
@@ -2395,6 +2364,54 @@ impl Machine {
                 self.machine_st.fail = true;
             }
         }
+    }
+
+    pub(crate) fn indexing_property(&mut self) {
+        let module_name = cell_as_atom!(self.deref_register(1));
+        let (name, arity) = self
+            .machine_st
+            .read_predicate_key(self.machine_st[temp_v!(2)], self.machine_st[temp_v!(3)]);
+
+        let compilation_target = match module_name {
+            atom!("user") => CompilationTarget::User,
+            _ => CompilationTarget::Module(module_name),
+        };
+
+        let indexing_specs = self
+            .indices
+            .get_indexing_specs(name, arity, compilation_target);
+
+        let (num_atoms, atoms) = if let Some(specs) = indexing_specs.as_slice() {
+            (specs.len(), specs.iter().map(|spec| atom_as_cell!(spec.as_atom())))
+        } else {
+            self.machine_st.fail = true;
+            return;
+        };
+
+        let term_loc = self.machine_st.heap.cell_len();
+        let mut writer = match self.machine_st.heap.reserve(1 + num_atoms) {
+            Ok(writer) => writer,
+            Err(err) => {
+                self.machine_st.throw_resource_error(err);
+                return;
+            }
+        };
+
+        let target_cell = if arity == 0 {
+            heap_loc_as_cell!(term_loc)
+        } else {
+            str_loc_as_cell!(term_loc)
+        };
+
+        writer.write_with(|section| {
+            section.push_cell(atom_as_cell!(name, arity));
+
+            for atom_cell in atoms {
+                section.push_cell(atom_cell);
+            }
+        });
+
+        unify!(self.machine_st, self.machine_st.registers[4], target_cell);
     }
 
     pub(crate) fn dynamic_property(&mut self) {

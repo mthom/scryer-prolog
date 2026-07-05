@@ -1092,7 +1092,7 @@ setof(Template, Goal, Solution) :-
           '$fail'
        ;  '$head_is_dynamic'(Module, H) ->
           '$clause_body_is_valid'(B),
-          '$call'(Module:'$clause'(H, B, _, _, _))
+          '$module_call'(Module, '$clause'(H, B, _, _, _, _))
        ;  throw(error(permission_error(access, private_procedure, Name/Arity),
                       clause/2))
        )
@@ -1115,7 +1115,7 @@ clause(H, B) :-
           '$fail'
        ;  '$head_is_dynamic'(user, H) ->
           '$clause_body_is_valid'(B),
-          '$clause'(H, B, _, _, _)
+          '$clause'(H, B, _, _, _, _)
        ;  throw(error(permission_error(access, private_procedure, Name/Arity),
                       clause/2))
        )
@@ -1177,8 +1177,8 @@ call_retract(Head, Body, Module) :-
        ClauseQualifier = builtins
     ;  ClauseQualifier = Module
     ),
-    '$call'(ClauseQualifier:'$clause'(Head, Body, ClauseLoc, IndexLoc, ClauseClauseLoc)),
-    '$retract_clause'(ClauseLoc, IndexLoc, ClauseClauseLoc).
+    '$module_call'(ClauseQualifier, '$clause'(Head, Body, ClauseLoc, IndexLoc, CCLoc, CCIndexLoc)),
+    '$retract_clause'(ClauseLoc, IndexLoc, CCLoc, CCIndexLoc).
 
 retract_clause(Head, Body) :-
     (  var(Head) ->
@@ -2071,8 +2071,12 @@ is_stream_position(position_and_lines_read(P, L)) :-
     ( var(L) ; integer(L), L >= 0 ),
     !.
 
-check_stream_property(D, direction, D) :-
-    ( var(D) -> true ; lists:member(D, [input, output, input_output]), ! ).
+check_stream_property(input, direction, D) :-
+    ( var(D) -> true ; D = input ).
+check_stream_property(output, direction, D) :-
+    ( var(D) -> true ; D = output ).
+check_stream_property(input_output, direction, D) :-
+    ( var(D) -> true ; D = input_output ).
 check_stream_property(file_name(F), file_name, F) :-
     ( var(F) -> true ; atom(F) ).
 check_stream_property(mode(M), mode, M) :-

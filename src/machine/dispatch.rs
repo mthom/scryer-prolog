@@ -1274,7 +1274,7 @@ impl Machine {
         let p = self.machine_st.p;
 
         let indexed_choice_instrs = match &self.code[p] {
-            Instruction::IndexingCode(_, indexing_code) => match &indexing_code[oi as usize] {
+            Instruction::IndexingCode { code: indexing_code, .. } => match &indexing_code[oi as usize] {
                 IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
                     indexed_choice_instrs
                 }
@@ -1284,7 +1284,7 @@ impl Machine {
         };
 
         loop {
-            match indexed_choice_instrs.offsets.get(ii as usize).cloned() {
+            match indexed_choice_instrs.offsets.get(ii as usize).map(Appended::offset) {
                 Some(offset) => match &self.code[p + offset - 1] {
                     &Instruction::DynamicInternalElse(birth, death, next_or_fail) => {
                         if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death
@@ -1391,13 +1391,13 @@ impl Machine {
                     break;
                 }
 
-                let Some(inst) = self.code.get(self.machine_st.p) else {
+                let Some(inst) = self.code.get_mut(self.machine_st.p) else {
                     // a separate function marked #[cold] to make the compiler/branch-predictor prefer the happy path
                     handle_code_index_oob(self.code.len(), self.machine_st.p);
                 };
 
                 match inst {
-                    &Instruction::BreakFromDispatchLoop => {
+                    Instruction::BreakFromDispatchLoop => {
                         break 'outer;
                     }
                     Instruction::RunVerifyAttr => {
@@ -1422,7 +1422,7 @@ impl Machine {
                                 | Instruction::DefaultTrustMe(_)
                                 | Instruction::DynamicElse(..)
                                 | Instruction::DynamicInternalElse(..)
-                                | Instruction::IndexingCode(..)
+                                | Instruction::IndexingCode { .. }
                         ) {
                             continue;
                         }
@@ -3449,10 +3449,9 @@ impl Machine {
                     Instruction::Proceed => {
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    // TODO probably add an is_extensible flag here??
-                    &mut Instruction::IndexingCode(var_offset, _) => {
+                    &mut Instruction::IndexingCode { var_offset, is_extensible, .. } => {
                         if self.machine_st.oip == 0 && self.machine_st.iip == 0 {
-                            if let Some(mut view) = IndexedClauseView::try_from_code(
+                            if let Some(view) = IndexedClauseView::try_from_code(
                                 &mut self.code[self.machine_st.p..],
                             ) {
                                 #[inline(always)]
@@ -3470,7 +3469,7 @@ impl Machine {
                                     true
                                 }
 
-                                match self.machine_st.switch_on_term(&mut view) {
+                                match self.machine_st.switch_on_term(view, is_extensible) {
                                     SwitchOnTermResult::Fail => {
                                         self.machine_st.fail = true;
                                         self.machine_st.backtrack();
@@ -3482,6 +3481,7 @@ impl Machine {
                                         // DynamicInternalElse, or just ahead of
                                         // one. Or neither!
                                         let p = self.machine_st.p;
+                                        let o = o.offset();
 
                                         if !dynamic_external_of_clause_is_valid(self, p + o) {
                                             self.machine_st.fail = true;
@@ -3507,7 +3507,21 @@ impl Machine {
                                         self.machine_st.iip = 0;
                                     }
                                     SwitchOnTermResult::Variadic => {
-                                        self.machine_st.p += var_offset.offset();
+                                        if let ExternalIndexingCodePtr::Dynamic(o) = var_offset {
+                                            let p = self.machine_st.p;
+
+                                            if !dynamic_external_of_clause_is_valid(self, p + o) {
+                                                self.machine_st.fail = true;
+                                                self.machine_st.backtrack();
+
+                                                continue;
+                                            } else {
+                                                self.machine_st.p += o;
+                                            }
+                                        } else {
+                                            self.machine_st.p += var_offset.offset();
+                                        }
+
                                         continue;
                                     }
                                 }
@@ -3518,29 +3532,29 @@ impl Machine {
                             }
                         }
 
-                        if let Instruction::IndexingCode(_, indexing) = &self.code[self.machine_st.p] {
-                            match &indexing[self.machine_st.oip as usize] {
-                                IndexingLine::IndexedChoice(indexed_choice) => {
+                        if let Instruction::IndexingCode { code: indexing_code, .. } = &self.code[self.machine_st.p] {
+                            match &indexing_code[self.machine_st.oip as usize] {
+                                IndexingLine::StaticIndexedChoice(indexed_choice) => {
                                     match &indexed_choice.offsets[self.machine_st.iip as usize] {
-                                        &IndexedChoiceInstructionOffset::Try(offset) => {
+                                        &StaticIndexedChoiceInstructionOffset::Try(offset) => {
                                             backtrack_on_resource_error!(
                                                 self.machine_st,
                                                 self.indexed_try(offset),
                                                 continue
                                             );
                                         }
-                                        &IndexedChoiceInstructionOffset::Retry(l) => {
+                                        &StaticIndexedChoiceInstructionOffset::Retry(l) => {
                                             self.retry(l);
                                             increment_call_count!(self.machine_st);
                                         }
-                                        &IndexedChoiceInstructionOffset::DefaultRetry(l) => {
+                                        &StaticIndexedChoiceInstructionOffset::DefaultRetry(l) => {
                                             self.retry(l);
                                         }
-                                        &IndexedChoiceInstructionOffset::Trust(l) => {
+                                        &StaticIndexedChoiceInstructionOffset::Trust(l) => {
                                             self.trust(l);
                                             increment_call_count!(self.machine_st);
                                         }
-                                        &IndexedChoiceInstructionOffset::DefaultTrust(l) => {
+                                        &StaticIndexedChoiceInstructionOffset::DefaultTrust(l) => {
                                             self.trust(l);
                                         }
                                     }
@@ -3568,7 +3582,7 @@ impl Machine {
                                                     // clause so we avoid generating a choice
                                                     // point in case there isn't.
                                                     match self.find_living_dynamic(oi, ii + 1) {
-                                                        Some(_) => {
+                                                        Some((_, _, ii, _)) => {
                                                             self.machine_st.registers
                                                                 [self.machine_st.num_of_args + 1] = fixnum_as_cell!(
                                                                     /* FIXME this is not safe */
@@ -3580,6 +3594,9 @@ impl Machine {
                                                                 );
 
                                                             self.machine_st.num_of_args += 1;
+                                                            // indexed_try is about to increment the
+                                                            // register so decrement it
+                                                            self.machine_st.iip = ii - 1;
                                                             backtrack_on_resource_error!(
                                                                 self.machine_st,
                                                                 self.indexed_try(offset),
@@ -3614,14 +3631,20 @@ impl Machine {
                                                     if is_next_clause {
                                                         match self.find_living_dynamic(
                                                             self.machine_st.oip,
-                                                            self.machine_st.iip + 1,
+                                                            ii + 1,
                                                         ) {
                                                             // if we're executing the last instruction
                                                             // of the internal block pointed to by
                                                             // self.machine_st.iip, we want trust, not retry.
                                                             // this is true iff ii + 1 < len.
-                                                            Some(_) => {
+                                                            Some((_, _, ii, _)) => {
                                                                 self.retry(offset);
+                                                                self.machine_st
+                                                                    .stack
+                                                                    .index_or_frame_mut(b)
+                                                                    .prelude
+                                                                    .biip = ii;
+
                                                                 increment_call_count!(self.machine_st);
                                                             }
                                                             _ => {
@@ -4141,12 +4164,12 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.install_inference_counter(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallInferenceCount => {
+                    &mut Instruction::CallInferenceCount => {
                         let global_count = self.machine_st.cwil.global_count;
                         self.inference_count(self.machine_st.registers[1], global_count);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteInferenceCount => {
+                    &mut Instruction::ExecuteInferenceCount => {
                         let global_count = self.machine_st.cwil.global_count;
                         self.inference_count(self.machine_st.registers[1], global_count);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
@@ -4562,17 +4585,17 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.http_listen(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallHttpListenStop => {
+                    &mut Instruction::CallHttpListenStop => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_listen_stop(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecuteHttpListenStop => {
+                    &mut Instruction::ExecuteHttpListenStop => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_listen_stop(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallHttpAccept => {
+                    &mut Instruction::CallHttpAccept => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_accept(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
@@ -5522,6 +5545,14 @@ impl Machine {
                         self.meta_predicate_property();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
+                    Instruction::CallIndexingProperty => {
+                        self.indexing_property();
+                        step_or_fail!(self.machine_st, self.machine_st.p += 1);
+                    }
+                    Instruction::ExecuteIndexingProperty => {
+                        self.indexing_property();
+                        step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
+                    }
                     Instruction::CallMultifileProperty => {
                         self.multifile_property();
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
@@ -5692,7 +5723,9 @@ impl Machine {
                     }
                     &mut Instruction::CallFastCallN(arity) => {
                         let call_at_index =
-                            |wam: &mut Machine, name, arity, ptr| wam.try_call(name, arity, ptr);
+                            |wam: &mut Machine, name: Atom, arity, ptr| {
+                                wam.try_call(name, arity, ptr)
+                            };
 
                         try_or_throw!(
                             self.machine_st,
@@ -5706,7 +5739,9 @@ impl Machine {
                     }
                     &mut Instruction::ExecuteFastCallN(arity) => {
                         let call_at_index =
-                            |wam: &mut Machine, name, arity, ptr| wam.try_execute(name, arity, ptr);
+                            |wam: &mut Machine, name: Atom, arity, ptr| {
+                                wam.try_execute(name, arity, ptr)
+                            };
 
                         try_or_throw!(
                             self.machine_st,

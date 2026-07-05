@@ -412,11 +412,23 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     }
                 }
             }
-        } else {            
-            for target_pos_opt in clause_target_poses {
+        } else {
+            let skeleton = self
+                .wam_prelude
+                .indices
+                .get_predicate_skeleton_mut(&compilation_target, &key)
+                .unwrap();
+            let code = &mut self.wam_prelude.code;
+            let mut index_ptr_opt = None;
+
+            for target_pos_opt in clause_target_poses.iter().cloned() {
                 match target_pos_opt {
                     Some(target_pos) => {
-                        self.retract_clause(key, target_pos);
+                        let result = retract_clause::<LS>(code, key, skeleton, &mut self.payload, target_pos);
+
+                        if result.is_some() {
+                            index_ptr_opt = result;
+                        }
                     }
                     None => {
                         // Here because the clause was been removed
@@ -424,6 +436,25 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         // local skeleton. In this case, do nothing.
                     }
                 }
+            }
+
+            for target_pos_opt in clause_target_poses.iter().cloned().rev() {
+                if let Some(target_pos) = target_pos_opt {
+                    delete_from_skeleton(
+                        self.payload.compilation_target,
+                        key,
+                        skeleton,
+                        target_pos,
+                        &mut self.payload.retraction_info,
+                    );
+                }
+            }
+
+            if let Some(index_ptr) = index_ptr_opt {
+                let compilation_target = self.payload.compilation_target;
+                let code_idx_offset = self.get_or_insert_code_index(key, self.payload.compilation_target);
+
+                set_code_index::<LS>(&mut self.payload, &compilation_target, key, code_idx_offset, index_ptr);
             }
         }
 
@@ -435,7 +466,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         clause_clause_compilation_target: CompilationTarget,
         clause_indices: &VecDeque<usize>,
     ) {
-        let key = (atom!("$clause"), 5);
+        let key = (atom!("$clause"), 6);
         let listing_src_file_name = self.listing_src_file_name();
 
         match self.wam_prelude.indices.get_local_predicate_skeleton_mut(
@@ -924,6 +955,29 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .push_record(RetractionRecord::AddedMetaPredicate(module_name, key));
                 }
             },
+        }
+    }
+
+    pub(super) fn add_indexing_specs(
+        &mut self,
+        compilation_target: CompilationTarget,
+        name: Atom,
+        indexing_specs: Vec<IndexingSpec>,
+    ) {
+        let arity = indexing_specs.len();
+        let key = (name, arity);
+        let indexing_specs = std::rc::Rc::new(indexing_specs);
+
+        match &compilation_target {
+            CompilationTarget::User => {
+                self.wam_prelude.indices.indexing_specs.insert(key, indexing_specs);
+            }
+            CompilationTarget::Module(module_name) => {
+                self.wam_prelude.indices.modules.get_mut(module_name)
+                    .map(move |module| {
+                        module.indexing_specs.insert(key, indexing_specs);
+                    });
+            }
         }
     }
 

@@ -1,6 +1,6 @@
 use crate::atom_table::*;
+use crate::machine::machine_indices::IndexingSpecs;
 use crate::offset_table::F64Table;
-use crate::parser::ast::*;
 
 use crate::forms::*;
 use crate::instructions::*;
@@ -12,46 +12,20 @@ use indexmap::IndexMap;
 
 use std::collections::VecDeque;
 
+pub(crate) type ClauseArgData = IndexMap<usize, Vec<OptArgIndexKey>, FxBuildHasher>;
+
 #[inline]
-pub(crate) fn cap_choice_seq_with_trust(prelude: &mut [IndexedChoiceInstructionOffset]) {
-    if let Some(instr) = prelude.last_mut() {
-        match instr {
-            IndexedChoiceInstructionOffset::Retry(i) => {
-                *instr = IndexedChoiceInstructionOffset::Trust(*i);
-            }
-            IndexedChoiceInstructionOffset::DefaultRetry(i) => {
-                *instr = IndexedChoiceInstructionOffset::DefaultTrust(*i);
-            }
-            _ => {}
+pub(crate) fn cap_choice_seq_with_trust(
+    instr: &mut StaticIndexedChoiceInstructionOffset,
+) {
+    match instr {
+        StaticIndexedChoiceInstructionOffset::Retry(i) => {
+            *instr = StaticIndexedChoiceInstructionOffset::Trust(*i);
         }
-    }
-}
-
-#[derive(Clone, Copy)]
-enum NumberOfKeys {
-    Fail,
-    External(HeapCellValue),
-    Internal,
-}
-
-impl NumberOfKeys {
-    fn extend(&mut self, cell: HeapCellValue) {
-        *self = match *self {
-            NumberOfKeys::Fail => NumberOfKeys::External(cell),
-            NumberOfKeys::External(other_cell) => {
-                if other_cell == cell {
-                    *self
-                } else {
-                    NumberOfKeys::Internal
-                }
-            }
-            _ => *self,
-        };
-    }
-
-    #[inline]
-    fn is_internal(&self) -> bool {
-        matches!(self, NumberOfKeys::Internal)
+        StaticIndexedChoiceInstructionOffset::DefaultRetry(i) => {
+            *instr = StaticIndexedChoiceInstructionOffset::DefaultTrust(*i);
+        }
+        _ => {}
     }
 }
 
@@ -62,7 +36,7 @@ pub(crate) struct CodeIndices<I: SecondLevelIndexType> {
     structures: HashTable<((Atom, usize), SecondLevelTable<I>)>,
 }
 
-impl<I: SecondLevelIndexType> CodeIndices<I> {
+impl<I: Indexer> CodeIndices<I> {
     fn new() -> Self {
         Self {
             constants: HashTable::new(),
@@ -79,6 +53,10 @@ pub(crate) trait Indexer: SecondLevelIndexType {
         non_counted_bt: bool,
     ) -> Self::ThirdLevelIndex;
 
+    fn populate_root_offsets<Iter: Iterator<Item = Self::ThirdLevelIndex>>(
+        iter: Iter,
+    ) -> VecDeque<Self::ThirdLevelIndex>;
+
     fn second_level_index<IndexKey>(
         indices: &mut HashTable<(IndexKey, SecondLevelTable<Self>)>,
         hash_fn: impl Fn(&IndexKey) -> u64,
@@ -86,34 +64,58 @@ pub(crate) trait Indexer: SecondLevelIndexType {
     ) -> HashTable<(IndexKey, IndexingCodePtr)>;
 
     fn switch_on<IndexKey>(
-        instr_fn: impl FnMut(HashTable<(IndexKey, IndexingCodePtr)>) -> IndexedChoiceInstructionTable,
         indices: &mut HashTable<(IndexKey, SecondLevelTable<Self>)>,
         hash_fn: impl Fn(&IndexKey) -> u64,
-        leading: &mut SecondLevelTable<Self>,
         prelude: &mut VecDeque<IndexingLine>,
-    ) -> TermIndexingCodePtr;
+    ) -> TermIndexingCodePtr<IndexKey> {
+        let indices = Self::second_level_index(indices, hash_fn, prelude);
 
-    fn switch_on_list(
+        if indices.len() > 1 {
+            TermIndexingCodePtr::SwitchOnType(Box::new(indices))
+        } else {
+            indices
+                .into_iter()
+                .next()
+                .map(|(_, v)| TermIndexingCodePtr::from(v))
+                .unwrap_or(TermIndexingCodePtr::Fail)
+        }
+    }
+
+    fn switch_on_lists(
         lists: &mut SecondLevelTable<Self>,
         prelude: &mut VecDeque<IndexingLine>,
-    ) -> TermIndexingCodePtr;
+    ) -> Option<IndexingCodePtr>;
 
     fn var_offset_wrapper(var_offset: usize) -> ExternalIndexingCodePtr;
 }
 
-impl Indexer for IndexedChoiceInstruction {
+impl Indexer for StaticIndexedChoiceInstruction {
     fn compute_index(
         is_initial_index: bool,
         index: usize,
         non_counted_bt: bool,
-    ) -> IndexedChoiceInstructionOffset {
+    ) -> StaticIndexedChoiceInstructionOffset {
         if is_initial_index {
-            IndexedChoiceInstructionOffset::Try(index + 1)
+            StaticIndexedChoiceInstructionOffset::Try(index + 1)
         } else if non_counted_bt {
-            IndexedChoiceInstructionOffset::DefaultRetry(index + 1)
+            StaticIndexedChoiceInstructionOffset::DefaultRetry(index + 1)
         } else {
-            IndexedChoiceInstructionOffset::Retry(index + 1)
+            StaticIndexedChoiceInstructionOffset::Retry(index + 1)
         }
+    }
+
+    fn populate_root_offsets<Iter: Iterator<Item = Self::ThirdLevelIndex>>(
+        iter: Iter,
+    ) -> VecDeque<Self::ThirdLevelIndex> {
+        let mut offsets = VecDeque::from_iter(iter);
+
+        if offsets.len() > 1 {
+            if let Some(instr) = offsets.back_mut() {
+                cap_choice_seq_with_trust(instr);
+            }
+        }
+
+        offsets
     }
 
     fn second_level_index<IndexKey>(
@@ -126,7 +128,7 @@ impl Indexer for IndexedChoiceInstruction {
         for (key, mut code) in indices.drain() {
             debug_assert!(matches!(
                 code.offsets[0],
-                IndexedChoiceInstructionOffset::Try(_)
+                StaticIndexedChoiceInstructionOffset::Try(_)
             ));
 
             let hash = hash_fn(&key);
@@ -138,9 +140,10 @@ impl Indexer for IndexedChoiceInstruction {
                     |(key, _)| hash_fn(key),
                 );
 
-                // index_locs.insert(key, IndexingCodePtr::Internal(prelude.len() + 1));
-                cap_choice_seq_with_trust(code.offsets.make_contiguous());
-                prelude.push_back(IndexingLine::IndexedChoice(code));
+                if let Some(instr) = code.offsets.back_mut() {
+                    cap_choice_seq_with_trust(instr);
+                }
+                prelude.push_back(IndexingLine::StaticIndexedChoice(code));
             } else {
                 index_locs.insert_unique(
                     hash,
@@ -153,45 +156,25 @@ impl Indexer for IndexedChoiceInstruction {
         index_locs
     }
 
-    fn switch_on<IndexKey>(
-        mut instr_fn: impl FnMut(
-            HashTable<(IndexKey, IndexingCodePtr)>,
-        ) -> IndexedChoiceInstructionTable,
-        indices: &mut HashTable<(IndexKey, SecondLevelTable<Self>)>,
-        hash_fn: impl Fn(&IndexKey) -> u64,
-        leading: &mut SecondLevelTable<Self>,
-        prelude: &mut VecDeque<IndexingLine>,
-    ) -> TermIndexingCodePtr {
-        let indices = Self::second_level_index(indices, hash_fn, prelude);
-
-        if indices.len() > 1 {
-            leading.tables.push_front(instr_fn(indices));
-            TermIndexingCodePtr::TableOffset(1)
-        } else {
-            indices
-                .into_iter()
-                .next()
-                .map(|(_, v)| TermIndexingCodePtr::from(v))
-                .unwrap_or(TermIndexingCodePtr::Fail)
-        }
-    }
-
-    fn switch_on_list(
+    fn switch_on_lists(
         lists: &mut SecondLevelTable<Self>,
         prelude: &mut VecDeque<IndexingLine>,
-    ) -> TermIndexingCodePtr {
+    ) -> Option<IndexingCodePtr> {
         if lists.offsets.len() > 1 {
-            cap_choice_seq_with_trust(lists.offsets.make_contiguous());
-            let lists = std::mem::replace(lists, SecondLevelTable::new());
-            prelude.push_back(IndexingLine::IndexedChoice(lists));
+            let mut lists = std::mem::replace(lists, SecondLevelTable::new());
+            let internal_offset = prelude.len() + 1; // compensate for leading at front
 
-            TermIndexingCodePtr::Internal(1)
+            if let Some(instr) = lists.offsets.back_mut() {
+                cap_choice_seq_with_trust(instr);
+            }
+
+            prelude.push_back(IndexingLine::StaticIndexedChoice(lists));
+            Some(IndexingCodePtr::Internal(internal_offset))
         } else {
             lists
                 .offsets
                 .front()
-                .map(|i| TermIndexingCodePtr::External(i.offset()))
-                .unwrap_or(TermIndexingCodePtr::Fail)
+                .map(|i| IndexingCodePtr::External(i.offset()))
         }
     }
 
@@ -204,7 +187,13 @@ impl Indexer for IndexedChoiceInstruction {
 impl Indexer for DynamicIndexedChoiceInstruction {
     #[inline]
     fn compute_index(_: bool, index: usize, _: bool) -> Self::ThirdLevelIndex {
-        index + 1
+        Appended::Z(index + 1)
+    }
+
+    fn populate_root_offsets<Iter: Iterator<Item = Self::ThirdLevelIndex>>(
+        iter: Iter,
+    ) -> VecDeque<Self::ThirdLevelIndex> {
+        VecDeque::from_iter(iter)
     }
 
     fn second_level_index<IndexKey>(
@@ -224,15 +213,13 @@ impl Indexer for DynamicIndexedChoiceInstruction {
                     |(key, _)| hash_fn(key),
                 );
 
-                // index_locs.insert(key, IndexingCodePtr::Internal(prelude.len() + 1));
-                // cap_choice_seq_with_trust(code.offsets.make_contiguous());
                 prelude.push_back(IndexingLine::DynamicIndexedChoice(code));
             } else {
                 index_locs.insert_unique(
                     hash,
                     (
                         key,
-                        IndexingCodePtr::DynamicExternal(code.offsets[0].offset()),
+                        IndexingCodePtr::DynamicExternal(code.offsets[0])
                     ),
                     |(key, _)| hash_fn(key),
                 );
@@ -242,43 +229,21 @@ impl Indexer for DynamicIndexedChoiceInstruction {
         index_locs
     }
 
-    fn switch_on<IndexKey>(
-        mut instr_fn: impl FnMut(
-            HashTable<(IndexKey, IndexingCodePtr)>,
-        ) -> IndexedChoiceInstructionTable,
-        indices: &mut HashTable<(IndexKey, SecondLevelTable<Self>)>,
-        hash_fn: impl Fn(&IndexKey) -> u64,
-        leading: &mut SecondLevelTable<Self>,
-        prelude: &mut VecDeque<IndexingLine>,
-    ) -> TermIndexingCodePtr {
-        let indices = Self::second_level_index(indices, hash_fn, prelude);
-
-        if indices.len() > 1 {
-            leading.tables.push_front(instr_fn(indices));
-            TermIndexingCodePtr::TableOffset(1)
-        } else {
-            indices
-                .into_iter()
-                .next()
-                .map(|(_, v)| TermIndexingCodePtr::from(v))
-                .unwrap_or(TermIndexingCodePtr::Fail)
-        }
-    }
-
-    fn switch_on_list(
+    fn switch_on_lists(
         lists: &mut SecondLevelTable<Self>,
         prelude: &mut VecDeque<IndexingLine>,
-    ) -> TermIndexingCodePtr {
+    ) -> Option<IndexingCodePtr> {
         if lists.offsets.len() > 1 {
             let lists = std::mem::replace(lists, SecondLevelTable::new());
+            let internal_offset = prelude.len() + 1; // compensate for leading at front
+
             prelude.push_back(IndexingLine::DynamicIndexedChoice(lists));
-            TermIndexingCodePtr::Internal(1)
+            Some(IndexingCodePtr::Internal(internal_offset))
         } else {
             lists
                 .offsets
                 .front()
-                .map(|i| TermIndexingCodePtr::DynamicExternal(i.offset()))
-                .unwrap_or(TermIndexingCodePtr::Fail)
+                .map(|i| IndexingCodePtr::DynamicExternal(*i))
         }
     }
 
@@ -292,10 +257,10 @@ impl Indexer for DynamicIndexedChoiceInstruction {
 pub(crate) struct CodeOffsets<'a, I: Indexer> {
     indices: CodeIndices<I>,
     f64_tbl: &'a F64Table,
-    clause_offsets_to_arg_keys: IndexMap<usize, Vec<OptArgIndexKey>, FxBuildHasher>,
+    clause_offsets_to_arg_keys: ClauseArgData,
     arity: usize,
     non_counted_bt: bool,
-    is_extensible: bool,
+    var_count: usize,
 }
 
 impl<'a, I: Indexer> CodeOffsets<'a, I> {
@@ -303,15 +268,14 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
         f64_tbl: &'a F64Table,
         non_counted_bt: bool,
         arity: usize,
-        is_extensible: bool,
     ) -> Self {
         CodeOffsets {
             indices: CodeIndices::new(),
             f64_tbl,
-            clause_offsets_to_arg_keys: IndexMap::with_hasher(FxBuildHasher::default()),
+            clause_offsets_to_arg_keys: ClauseArgData::with_hasher(FxBuildHasher::default()),
             arity,
             non_counted_bt,
-            is_extensible,
+            var_count: 0,
         }
     }
 
@@ -319,7 +283,7 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
         optimal_index: usize,
     ) -> impl for<'b> FnOnce(
         &'b [I::ThirdLevelIndex],
-        &'b IndexMap<usize, Vec<OptArgIndexKey>, FxBuildHasher>,
+        &'b ClauseArgData,
     ) -> Box<dyn Iterator<Item = (usize, OptArgIndexKey)> + 'b> {
         move |code, clause_offsets_to_arg_keys| {
             let iter = code
@@ -333,7 +297,7 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
         }
     }
 
-    fn map_clause_offset_to_arg_key(
+    pub(crate) fn map_clause_offset_to_arg_key(
         &mut self,
         arg_index: usize,
         key: OptArgIndexKey,
@@ -341,7 +305,7 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
     ) {
         let entry = self
             .clause_offsets_to_arg_keys
-            .entry(clause_offset + 1)  // 1 to offset incoming IndexingCode at front
+            .entry(clause_offset + 1) // 1 to offset incoming IndexingCode at front
             .or_insert_with(|| vec![OptArgIndexKey::None; self.arity]);
 
         entry[arg_index] = key;
@@ -350,100 +314,66 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
     fn on_demand_second_level_index(
         code: &mut SecondLevelTable<I>,
         optimal_index: usize,
-        clause_offsets_to_arg_keys: &IndexMap<usize, Vec<OptArgIndexKey>, FxBuildHasher>,
+        clause_offsets_to_arg_keys: &ClauseArgData,
         arity: usize,
+        specs: &IndexingSpecs,
         is_extensible: bool,
     ) {
         let map_offsets_to_index_keys = Self::map_offsets_to_index_keys(optimal_index);
-
-        /*
-        if is_extensible {
-            for arg_index in optimal_index + 1..arity {
-                code.tables
-                    .push_front(IndexedChoiceInstructionTable::OnDemandStructure {
-                        reg_num: arg_index + 1,
-                        arity,
-                    });
-                code.tables
-                    .push_front(IndexedChoiceInstructionTable::OnDemandConstant {
-                        reg_num: arg_index + 1,
-                        arity,
-                    });
-                code.tables
-                    .push_front(IndexedChoiceInstructionTable::OnDemandTerm {
-                        var_offset: 3,
-                        arg_num: arg_index + 1,
-                        arity,
-                    });
-            }
-
-            return;
-        }
-        */
-
-        let mut arg_structure_keys = vec![NumberOfKeys::Fail; arity];
-        let mut arg_constant_keys = vec![NumberOfKeys::Fail; arity];
-        let mut arg_list_keys = vec![false; arity];
+        let mut arg_var_keys = vec![0; arity];
 
         for (arg_index, arg_key) in
             map_offsets_to_index_keys(code.offsets.make_contiguous(), clause_offsets_to_arg_keys)
         {
+            if matches!(specs.get(arg_index), IndexingSpec::NoIndexing) {
+                continue;
+            }
+
             match arg_key {
-                OptArgIndexKey::Structure(name, arity) => {
-                    arg_structure_keys[arg_index].extend(atom_as_cell!(name, arity));
+                OptArgIndexKey::None => {
+                    arg_var_keys[arg_index] += 1;
                 }
-                OptArgIndexKey::Literal(literal) => {
-                    arg_constant_keys[arg_index].extend(HeapCellValue::from(literal));
+                _ => {
                 }
-                OptArgIndexKey::List => {
-                    arg_list_keys[arg_index] = true;
-                }
-                _ => {}
             };
         }
 
         for arg_index in optimal_index + 1..arity {
-            let mut var_offset = 1;
-
-            if arg_structure_keys[arg_index].is_internal() {
-                var_offset += 1;
-                code.tables
-                    .push_front(IndexedChoiceInstructionTable::OnDemandStructure {
-                        reg_num: arg_index + 1,
-                        arity,
-                    });
+            if matches!(specs.get(arg_index), IndexingSpec::NoIndexing) {
+                continue;
             }
 
-            if arg_constant_keys[arg_index].is_internal() {
-                var_offset += 1;
-                code.tables
-                    .push_front(IndexedChoiceInstructionTable::OnDemandConstant {
-                        reg_num: arg_index + 1,
-                        arity,
-                    });
+            if !is_extensible && arg_var_keys[arg_index] > 0 {
+                // if there are any variables among the columns, don't
+                // generate an OnDemandTerm or child instructions.
+                continue;
             }
 
-            if arg_constant_keys[arg_index].is_internal()
-                || arg_structure_keys[arg_index].is_internal()
-                || arg_list_keys[arg_index]
-            {
+            if arg_var_keys[arg_index] == 0 {
                 code.tables
-                    .push_front(IndexedChoiceInstructionTable::OnDemandTerm {
-                        var_offset,
+                    .push_back(IndexedChoiceInstructionTable::OnDemandTerm {
                         arg_num: arg_index + 1,
-                        arity,
                     });
+            } else if is_extensible {
+                // TODO DeadIndices!
             }
         }
     }
 
-    pub(crate) fn index_list(&mut self, clause_offset: usize) {
+    fn index_list(
+        &mut self,
+        to_offset_instr: impl FnOnce(bool, bool) -> I::ThirdLevelIndex,
+    ) {
         let is_initial_index = self.indices.lists.offsets.is_empty();
-        let offset_instr = I::compute_index(is_initial_index, clause_offset, self.non_counted_bt);
+        let offset_instr = to_offset_instr(is_initial_index, self.non_counted_bt);
         self.indices.lists.offsets.push_back(offset_instr);
     }
 
-    pub(crate) fn index_constant(&mut self, cell: HeapCellValue, clause_offset: usize) {
+    fn index_constant(
+        &mut self,
+        cell: HeapCellValue,
+        to_offset_instr: impl FnOnce(bool, bool) -> I::ThirdLevelIndex,
+    ) {
         let hash = cell.syntactic_hash(self.f64_tbl, FxHasher::default());
 
         let mut binding = self
@@ -461,14 +391,16 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
         let code = &mut binding.get_mut().1;
         let is_initial_index = code.offsets.is_empty();
 
-        code.offsets.push_back(I::compute_index(
-            is_initial_index,
-            clause_offset,
-            self.non_counted_bt,
-        ));
+        let offset_instr = to_offset_instr(is_initial_index, self.non_counted_bt);
+        code.offsets.push_back(offset_instr);
     }
 
-    pub(crate) fn index_structure(&mut self, name: Atom, arity: usize, clause_offset: usize) -> usize {
+    fn index_structure(
+        &mut self,
+        name: Atom,
+        arity: usize,
+        to_offset_instr: impl FnOnce(bool, bool) -> I::ThirdLevelIndex,
+    ) {
         let cell = atom_as_cell!(name, arity);
         let hash = cell.syntactic_hash(self.f64_tbl, FxHasher::default());
 
@@ -489,64 +421,31 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
             .or_insert_with(|| ((name, arity), SecondLevelTable::new()));
 
         let code = &mut binding.get_mut().1;
-        let code_len = code.offsets.len();
         let is_initial_index = code.offsets.is_empty();
 
-        code.offsets.push_back(I::compute_index(
-            is_initial_index,
-            clause_offset,
-            self.non_counted_bt,
-        ));
-
-        code_len
+        let offset_instr = to_offset_instr(is_initial_index, self.non_counted_bt);
+        code.offsets.push_back(offset_instr);
     }
 
-    pub(crate) fn index_term(
+    pub(crate) fn index_key(
         &mut self,
-        arg_index: usize,
-        arg: &Term,
-        clause_offset: usize,
-        optimal_index: usize,
+        index_key: OptArgIndexKey,
+        to_offset_instr: impl FnOnce(bool, bool) -> I::ThirdLevelIndex,
     ) {
-        let index_key = match arg {
-            &Term::Clause(_, atom!("."), ref terms) if terms.len() == 2 => {
-                if arg_index == optimal_index {
-                    self.index_list(clause_offset);
-                }
-
-                OptArgIndexKey::List
+        match index_key {
+            OptArgIndexKey::Structure(name, arity) => {
+                self.index_structure(name, arity, to_offset_instr)
             }
-            &Term::Cons(..) | &Term::PartialString(..) | &Term::CompleteString(..) => {
-                if arg_index == optimal_index {
-                    self.index_list(clause_offset);
-                }
-
-                OptArgIndexKey::List
+            OptArgIndexKey::List => {
+                self.index_list(to_offset_instr)
             }
-            &Term::Clause(_, name, ref terms) => {
-                if arg_index == optimal_index {
-                    self.index_structure(name, terms.len(), clause_offset);
-                }
-
-                OptArgIndexKey::Structure(name, terms.len())
+            OptArgIndexKey::Literal(literal) => {
+                self.index_constant(literal, to_offset_instr)
             }
-            &Term::Literal(_, constant) => {
-                let literal = HeapCellValue::from(constant);
-
-                if arg_index == optimal_index {
-                    self.index_constant(literal, clause_offset)
-                }
-
-                OptArgIndexKey::Literal(literal)
+            OptArgIndexKey::None => {
+                self.var_count += 1;
             }
-            _ => return,
         };
-
-        self.map_clause_offset_to_arg_key(
-            arg_index,
-            index_key,
-            clause_offset,
-        );
     }
 
     pub(crate) fn no_indices(&mut self) -> bool {
@@ -559,43 +458,37 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
 
     pub(crate) fn compute_indices(
         mut self,
+        is_extensible: bool,
         optimal_index: usize,
+        specs: &IndexingSpecs,
         skip_stub_try_me_else: bool,
     ) -> (ExternalIndexingCodePtr, Vec<IndexingLine>) {
         let mut leading = SecondLevelTable::<I>::new();
         let mut prelude = VecDeque::new();
 
-        let mut emitted_switch_on_structure = false;
-        let mut emitted_switch_on_constant = false;
-
-        leading.offsets.extend(
-            // these are for on_demand_second_level_index to work on leading.
-            // the first and third arguments (is_initial_index, non_counted_bt)
-            // do not matter because they're only used to contain the offsets.
+        leading.offsets = I::populate_root_offsets(
             self.clause_offsets_to_arg_keys
-                .keys()
-                .cloned()
-                .map(|index| I::compute_index(true, index - 1, self.non_counted_bt)),
-            // subtract 1 to compensate for compute_index action of + 1
+                .iter()
+                .enumerate()
+                .map(|(n, (&index, _keys))| {
+                    let is_initial_index = n == 0;
+                    // subtract 1 to compensate for compute_index action of + 1
+                    I::compute_index(is_initial_index, index - 1, self.non_counted_bt)
+                }),
         );
 
-        Self::on_demand_second_level_index(
-            &mut leading,
-            optimal_index,
-            &self.clause_offsets_to_arg_keys,
-            self.arity,
-            self.is_extensible,
-        );
+        for table in [&mut leading, &mut self.indices.lists] {
+            Self::on_demand_second_level_index(
+                table,
+                optimal_index,
+                &self.clause_offsets_to_arg_keys,
+                self.arity,
+                specs,
+                is_extensible,
+            );
+        }
 
-        Self::on_demand_second_level_index(
-            &mut self.indices.lists,
-            optimal_index,
-            &self.clause_offsets_to_arg_keys,
-            self.arity,
-            self.is_extensible,
-        );
-
-        let mut lst_loc = I::switch_on_list(&mut self.indices.lists, &mut prelude);
+        let lists = I::switch_on_lists(&mut self.indices.lists, &mut prelude);
 
         for (_, code) in self.indices.structures.iter_mut() {
             Self::on_demand_second_level_index(
@@ -603,21 +496,17 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
                 optimal_index,
                 &self.clause_offsets_to_arg_keys,
                 self.arity,
-                self.is_extensible,
+                specs,
+                is_extensible,
             );
         }
 
-        let mut str_loc = I::switch_on(
-            |index| {
-                emitted_switch_on_structure = true;
-                IndexedChoiceInstructionTable::SwitchOnStructure(index)
-            },
+        let structures = I::switch_on(
             &mut self.indices.structures,
             |(name, arity)| {
                 let cell = atom_as_cell!(name, *arity);
                 cell.syntactic_hash(self.f64_tbl, FxHasher::default())
             },
-            &mut leading,
             &mut prelude,
         );
 
@@ -627,43 +516,29 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
                 optimal_index,
                 &self.clause_offsets_to_arg_keys,
                 self.arity,
-                self.is_extensible,
+                specs,
+                is_extensible,
             );
         }
 
-        let con_loc = I::switch_on(
-            |index| {
-                emitted_switch_on_constant = true;
-                IndexedChoiceInstructionTable::SwitchOnConstant(index)
-            },
+        let constants = I::switch_on(
             &mut self.indices.constants,
             |cell| cell.syntactic_hash(self.f64_tbl, FxHasher::default()),
-            &mut leading,
             &mut prelude,
         );
 
-        if let TermIndexingCodePtr::TableOffset(i) = &mut str_loc {
-            *i += emitted_switch_on_constant as usize;
-        }
-
-        if let TermIndexingCodePtr::TableOffset(i) = &mut lst_loc {
-            *i += emitted_switch_on_constant as usize;
-            *i += emitted_switch_on_structure as usize;
-        }
+        let switch_on_term = IndexedChoiceInstructionTable::SwitchOnTerm {
+            arg_num: optimal_index + 1, // in the WAM, register indices are 1-indexed
+            constants,
+            structures,
+            lists,
+        };
 
         let var_offset = 1 + skip_stub_try_me_else as usize;
 
-        leading
-            .tables
-            .push_front(IndexedChoiceInstructionTable::SwitchOnTerm(
-                optimal_index + 1, // from the WAM perspective, register indices are 1-indexed
-                1 + emitted_switch_on_structure as usize + emitted_switch_on_constant as usize,
-                con_loc,
-                lst_loc,
-                str_loc,
-            ));
-
+        leading.tables.push_front(switch_on_term);
         prelude.push_front(I::to_indexing_line(leading));
+
         (I::var_offset_wrapper(var_offset), prelude.into())
     }
 }

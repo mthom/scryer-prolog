@@ -29,6 +29,7 @@ struct Death;
 struct ExternalIndexingCodePtr;
 struct HeapCellValue;
 struct IndexingLine;
+struct IndexingSpecs;
 struct Level;
 // struct Literal;
 struct NextOrFail;
@@ -187,6 +188,8 @@ enum ReplCodePtr {
     BuiltInProperty,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$meta_predicate_property")))]
     MetaPredicateProperty,
+    #[strum_discriminants(strum(props(Arity = "4", Name = "indexing_property")))]
+    IndexingProperty,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$multifile_property")))]
     MultifileProperty,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$discontiguous_property")))]
@@ -199,7 +202,7 @@ enum ReplCodePtr {
     Asserta,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$assertz")))]
     Assertz,
-    #[strum_discriminants(strum(props(Arity = "3", Name = "$retract_clause")))]
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$retract_clause")))]
     Retract,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$is_consistent_with_term_queue")))]
     IsConsistentWithTermQueue,
@@ -823,9 +826,14 @@ enum InstructionTemplate {
     #[strum_discriminants(strum(props(Arity = "0", Name = "proceed")))]
     Proceed,
     // indexing.
-    #[strum_discriminants(strum(props(Arity = "2", Name = "indexing_code")))]
-
-    IndexingCode(ExternalIndexingCodePtr, Vec<IndexingLine>),
+    #[strum_discriminants(strum(props(Arity = "5", Name = "indexing_code")))]
+    IndexingCode {
+        var_offset: ExternalIndexingCodePtr,
+        arity: usize,
+        specs: IndexingSpecs,
+        code: Vec<IndexingLine>,
+        is_extensible: bool,
+    },
     // break from loop instruction.
     #[strum_discriminants(strum(props(Arity = "0", Name = "break_from_dispatch")))]
     BreakFromDispatchLoop,
@@ -904,7 +912,8 @@ where
 }
 
 pub fn generate_instructions_rs() -> TokenStream {
-    let input = InstructionTemplate::to_derive_input();
+    let input =
+        InstructionTemplate::to_derive_input();
     let mut instr_data = InstructionData::new();
 
     instr_data.generate_instruction_enum_loop(input);
@@ -1655,10 +1664,10 @@ pub fn generate_instructions_rs() -> TokenStream {
         .map(|(name, arity, _, variant)| {
             let ident = &variant.ident;
 
-            let enum_arity = if let Fields::Unnamed(fields) = &variant.fields {
-                fields.unnamed.len()
-            } else {
-                0
+            let (is_named, enum_arity) = match variant.fields {
+                Fields::Named(fields) => (true, fields.named.len()),
+                Fields::Unnamed(fields) => (false,  fields.unnamed.len()),
+                Fields::Unit => (false, 0),
             };
 
             match arity {
@@ -1666,7 +1675,11 @@ pub fn generate_instructions_rs() -> TokenStream {
                     quote! { Instruction::#ident => (atom!(#name), #arity) }
                 }
                 Arity::Static(_) => {
-                    quote! { Instruction::#ident(..) => (atom!(#name), #arity) }
+                    if is_named {
+                        quote! { Instruction::#ident { .. } => (atom!(#name), #arity) }
+                    } else {
+                        quote! { Instruction::#ident(..) => (atom!(#name), #arity) }
+                    }
                 }
                 Arity::Ident(_) if enum_arity == 0 => {
                     quote! { &Instruction::#ident(#arity) => (atom!(#name), #arity) }

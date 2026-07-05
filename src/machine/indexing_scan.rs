@@ -1,5 +1,5 @@
-use fxhash::FxHasher;
-use hashbrown::HashTable;
+use fxhash::{FxBuildHasher, FxHasher};
+use indexmap::IndexSet;
 
 use crate::atom_table::*;
 use crate::forms::{Number, OptArgIndexKey};
@@ -23,329 +23,410 @@ fn is_non_counted_bt(instrs: &[Instruction]) -> bool {
     }
 }
 
-fn indices_of_arg<'a, I: Indexer>(
+trait PropagatingIndexer: Indexer {
+    // preserve the offset but recompute surrounding try/retry/trust as needed
+    fn recompute_index(index: Self::ThirdLevelIndex) -> impl FnOnce(bool, bool) -> Self::ThirdLevelIndex;
+}
+
+impl PropagatingIndexer for StaticIndexedChoiceInstruction {
+    fn recompute_index(index: StaticIndexedChoiceInstructionOffset) -> impl FnOnce(bool, bool) -> Self::ThirdLevelIndex
+    {
+        let offset = index.offset() - 1;
+        move |is_initial_index, non_counted_bt| {
+            Self::compute_index(is_initial_index, offset, non_counted_bt)
+        }
+    }
+}
+
+impl PropagatingIndexer for DynamicIndexedChoiceInstruction {
+    fn recompute_index(index: Appended) -> impl FnOnce(bool, bool) -> Self::ThirdLevelIndex {
+        move |_is_initial_index, _non_counted_bt| {
+            // must preserve prepend or append information
+            index
+        }
+    }
+}
+
+enum OnDemandResult<'a, I: Indexer> {
+    DeadIndices(Vec<usize>),
+    CodeOffsets(CodeOffsets<'a, I>),
+}
+
+fn indices_of_arg<'a, I: PropagatingIndexer>(
     f64_tbl: &'a F64Table,
     arg_num: usize,
-    offsets: &[I::ThirdLevelIndex],
+    offset_iter: impl Iterator<Item = I::ThirdLevelIndex>,
     arity: usize,
     rest: &[Instruction],
-) -> CodeOffsets<'a, I> {
+    clause_arg_data: &mut ClauseArgData,
+) -> OnDemandResult<'a, I> {
     let is_non_counted_bt = is_non_counted_bt(rest);
+    let mut var_offsets = vec![];
 
-    // since subsequent OnDemand instructions should be generated for remaining
-    // arg_num's < arity, we should consider the predicate to be extensible here,
-    // even if it's not under the old definition.
-    let mut code_offsets = CodeOffsets::<I>::new(f64_tbl, is_non_counted_bt, arity, true);
+    // since subsequent OnDemand instructions should be generated for
+    // remaining arg_num's < arity.
+    let mut code_offsets = CodeOffsets::<I>::new(
+        f64_tbl, is_non_counted_bt, arity,
+    );
 
-    for offset_instr in offsets {
+    for offset_instr in offset_iter {
         let clause_offset = offset_instr.offset() - 1;
-        let index_key = rest[clause_offset..]
-            .iter()
-            .find_map(|head_instr| {
-                match extract_index_arg(head_instr) {
-                    InstructionArg::ArgedHead(instr_arg_num, index_key) if arg_num == instr_arg_num => {
-                        Some(Ok(index_key))
-                    }
-                    InstructionArg::NonHead => Some(Err(())), // stop, can find nothing beyond this point
-                    _ => None,
-                }
+        let key_indices = clause_arg_data
+            .entry(clause_offset)
+            .or_insert_with(|| {
+                collect_opt_arg_index_keys(&rest[clause_offset ..])
             });
+        let index_key = key_indices.get(arg_num - 1).copied().unwrap_or(OptArgIndexKey::None);
 
-        let index_key = match index_key {
-            Some(Ok(index_key)) => index_key,
-            _ => continue,
-        };
-
-        match index_key {
-            OptArgIndexKey::Structure(name, arity) => {
-                code_offsets.index_structure(name, arity, clause_offset);
-            }
-            OptArgIndexKey::Literal(constant) => {
-                code_offsets.index_constant(constant, clause_offset);
-            }
-            OptArgIndexKey::List => {
-                code_offsets.index_list(clause_offset);
-            }
-            OptArgIndexKey::None => {
+        if matches!(index_key, OptArgIndexKey::None) {
+            var_offsets.push(clause_offset + 1);
+        } else if var_offsets.is_empty() {
+            code_offsets.index_key(index_key, I::recompute_index(offset_instr));
+            
+            for arg_index in arg_num + 1 ..= arity {
+                let index_key = key_indices.get(arg_index - 1).copied().unwrap_or(OptArgIndexKey::None);
+                code_offsets.map_clause_offset_to_arg_key(arg_index - 1, index_key, clause_offset);
             }
         }
     }
 
-    code_offsets
-}
-
-#[inline]
-fn incr_internal_term_ptr(ptr: &mut TermIndexingCodePtr, internal_offset: &mut usize) {
-    if let TermIndexingCodePtr::Internal(i) = ptr {
-        *i += *internal_offset;
-        *internal_offset += 1;
+    if var_offsets.is_empty() {
+        OnDemandResult::CodeOffsets(code_offsets)
+    } else {
+        OnDemandResult::DeadIndices(var_offsets)
     }
 }
 
 #[inline]
-fn incr_internal_ptr(ptr: &mut IndexingCodePtr, internal_offset: &mut usize) {
+fn incr_internal_ptr(ptr: &mut IndexingCodePtr, internal_offset: usize) {
     if let IndexingCodePtr::Internal(i) = ptr {
-        *i += *internal_offset;
-        *internal_offset += 1;
+        *i += internal_offset;
+    }
+}
+
+#[inline]
+fn incr_internal_term_ptr<IndexKey>(
+    ptr: &mut TermIndexingCodePtr<IndexKey>,
+    internal_offset: usize,
+) {
+    match ptr {
+        TermIndexingCodePtr::Internal(i) => {
+            *i += internal_offset;
+        }
+        TermIndexingCodePtr::SwitchOnType(tbl) => {
+            for (_, indexing_code_ptr) in tbl.iter_mut() {
+                incr_internal_ptr(indexing_code_ptr, internal_offset);
+            }
+        }
+        _ => {}
     }
 }
 
 pub(crate) enum SwitchOnTermResult {
     Fail,
-    DynamicExternal(usize),
+    DynamicExternal(Appended),
+    DynamicInternal(usize),
     External(usize),
     Internal(usize),
-    DynamicInternal(usize),
     Variadic,
+}
+
+enum SwitchOnTermPtrResult {
+    Continue(TableLocation),
+    End(SwitchOnTermResult),
+}
+
+fn switch_on_indexing_code_ptr(
+    cursor: TableLocation,
+    indexing_code_ptr: IndexingCodePtr,
+) -> SwitchOnTermPtrResult {
+    match indexing_code_ptr {
+        IndexingCodePtr::DynamicExternal(o) => SwitchOnTermPtrResult::End(
+            SwitchOnTermResult::DynamicExternal(o),
+        ),
+        IndexingCodePtr::External(o) => SwitchOnTermPtrResult::End(
+            SwitchOnTermResult::External(o),
+        ),
+        IndexingCodePtr::Internal(o) => SwitchOnTermPtrResult::Continue(
+            TableLocation {
+                table_loc: cursor.table_loc + o,
+                table_offset: 0,
+            }
+        ),
+    }
+}
+
+fn switch_on_term_ptr<IndexKey>(
+    key: IndexKey,
+    hash_fn: impl Fn(&IndexKey) -> u64,
+    eq_fn: impl Fn(&IndexKey, &IndexKey) -> bool,
+    cursor: TableLocation,
+    term_ptr: &TermIndexingCodePtr<IndexKey>,
+) -> SwitchOnTermPtrResult {
+    match downcast_term_indexing_code_ptr(term_ptr) {
+        TermIndexingCodePtrDowncast::Ptr(indexing_code_ptr) => {
+            switch_on_indexing_code_ptr(cursor, indexing_code_ptr)
+        }
+        TermIndexingCodePtrDowncast::Fail => SwitchOnTermPtrResult::End(
+            SwitchOnTermResult::Fail,
+        ),
+        TermIndexingCodePtrDowncast::Table(tbl) => {
+            let indexing_code_ptr = match tbl.find(
+                hash_fn(&key),
+                |(other_key, _indexing_code_ptr)| eq_fn(&key, other_key),
+            ) {
+                Some(&(_, indexing_code_ptr)) => indexing_code_ptr,
+                None => {
+                    return SwitchOnTermPtrResult::End(SwitchOnTermResult::Fail);
+                }
+            };
+
+            match indexing_code_ptr {
+                IndexingCodePtr::External(o) => {
+                    SwitchOnTermPtrResult::End(SwitchOnTermResult::External(o))
+                }
+                IndexingCodePtr::DynamicExternal(o) => {
+                    SwitchOnTermPtrResult::End(SwitchOnTermResult::DynamicExternal(o))
+                }
+                IndexingCodePtr::Internal(o) => {
+                    SwitchOnTermPtrResult::Continue(
+                        TableLocation {
+                            table_loc: cursor.table_loc + o,
+                            table_offset: 0,
+                        }
+                    )
+                }
+            }
+        }
+    }
 }
 
 impl MachineState {
     #[inline(always)]
-    pub(crate) fn switch_on_term(&self, view: &mut IndexedClauseView) -> SwitchOnTermResult {
-        let mut oip = 0; // external index
+    pub(crate) fn switch_on_term(
+        &self,
+        clause_view: IndexedClauseView,
+        is_extensible: bool,
+    ) -> SwitchOnTermResult {
+        let mut clause_arg_data = ClauseArgData::with_hasher(FxBuildHasher::default());
+        let mut iter = IndexingLineIter::new(clause_view);
+        let key_fn = |arg_num| {
+            let cell = self.store(self.deref(self.registers[arg_num]));
 
-        'outer: while oip < view.index.len() {
-            let mut iip = 0; // internal index
-            let mut key_type = None;
+            read_heap_cell!(cell,
+                (HeapCellValueTag::Str, s_offset) => {
+                    let (name, arity) = cell_as_atom_cell!(self.heap[s_offset]).get_name_and_arity();
 
-            loop {
-                let index_len = view.index.len();
+                    if name == atom!(".") && arity == 2 {
+                        OptArgIndexKey::List
+                    } else {
+                        OptArgIndexKey::Structure(name, arity)
+                    }
+                }
+                (HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar | HeapCellValueTag::Var) => {
+                    OptArgIndexKey::None
+                }
+                (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc) => {
+                    OptArgIndexKey::List
+                }
+                (HeapCellValueTag::Atom) => {
+                    OptArgIndexKey::Literal(cell)
+                }
+                _ => {
+                    if Number::try_from((cell, &self.arena.f64_tbl)).is_ok() {
+                        OptArgIndexKey::Literal(cell)
+                    } else {
+                        OptArgIndexKey::None
+                    }
+                }
+            )
+        };
 
-                match view.index[oip].tables_mut().get_mut(iip) {
-                    Some(IndexedChoiceInstructionTable::SwitchOnTerm(reg_num, v, c, l, s)) => {
-                        key_type = None;
-
-                        let cell = self.store(self.deref(self.registers[*reg_num]));
-                        let term_ptr;
-
-                        (key_type, term_ptr) = read_heap_cell!(cell,
-                            (HeapCellValueTag::Str, s_offset) => {
-                                let (name, arity) = cell_as_atom_cell!(self.heap[s_offset]).get_name_and_arity();
-
-                                if name == atom!(".") && arity == 2 {
-                                    (Some(OptArgIndexKeyType::List), *l)
-                                } else {
-                                    (Some(OptArgIndexKeyType::Structure(name, arity)), *s)
-                                }
+        while let Some(place) = iter.next(key_fn) {
+            match place {
+                IndexingLinePlace::SwitchOnNonePtr(cursor) => {
+                    iter.stack.push(cursor.skip_by(1));
+                }
+                IndexingLinePlace::SwitchOnConstantPtr(
+                    cursor, _, cell, term_ptr,
+                ) => {
+                    match switch_on_term_ptr(
+                        cell,
+                        |&cell| cell.syntactic_hash(&self.arena.f64_tbl, FxHasher::default()),
+                        |&cell_1, &cell_2| cell_1.syntactic_eq(&self.arena.f64_tbl, cell_2),
+                        cursor,
+                        term_ptr,
+                    ) {
+                        SwitchOnTermPtrResult::Continue(cursor) => iter.stack.push(cursor),
+                        SwitchOnTermPtrResult::End(result) => return result,
+                    }
+                }
+                IndexingLinePlace::SwitchOnStructurePtr(
+                    cursor, _, name, arity, term_ptr,
+                ) => {
+                    match switch_on_term_ptr(
+                        (name, arity),
+                        |&(name, arity)| {
+                            let cell = atom_as_cell!(name, arity);
+                            cell.syntactic_hash(&self.arena.f64_tbl, FxHasher::default())
+                        },
+                        |pi_1, pi_2| pi_1 == pi_2,
+                        cursor,
+                        term_ptr,
+                    ) {
+                        SwitchOnTermPtrResult::Continue(cursor) => iter.stack.push(cursor),
+                        SwitchOnTermPtrResult::End(result) => return result,
+                    }
+                }
+                IndexingLinePlace::SwitchOnListPtr(cursor, _, indexing_code_ptr_opt) => {
+                    if let Some(indexing_code_ptr) = *indexing_code_ptr_opt {
+                        match switch_on_indexing_code_ptr(cursor, indexing_code_ptr) {
+                            SwitchOnTermPtrResult::Continue(cursor) => {
+                                iter.stack.push(cursor);
                             }
-                            (HeapCellValueTag::AttrVar |
-                             HeapCellValueTag::StackVar |
-                             HeapCellValueTag::Var) => {
-                                iip += *v;
-                                continue;
-                            }
-                            (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc) => {
-                                (Some(OptArgIndexKeyType::List), *l)
-                            }
-                            (HeapCellValueTag::Atom) => {
-                                (Some(OptArgIndexKeyType::Literal(cell)), *c)
-                            }
-                            _ => {
-                                if Number::try_from((cell, &self.arena.f64_tbl)).is_ok() {
-                                    (Some(OptArgIndexKeyType::Literal(cell)), *c)
-                                } else {
-                                    iip += *v;
-                                    continue;
-                                }
-                            }
-                        );
-
-                        match term_ptr {
-                            TermIndexingCodePtr::Fail => {
-                                return SwitchOnTermResult::Fail;
-                            }
-                            TermIndexingCodePtr::External(o) => {
-                                return SwitchOnTermResult::External(o);
-                            }
-                            TermIndexingCodePtr::DynamicExternal(o) => {
-                                return SwitchOnTermResult::DynamicExternal(o);
-                            }
-                            TermIndexingCodePtr::TableOffset(iip_delta) => {
-                                iip += iip_delta;
-                            }
-                            TermIndexingCodePtr::Internal(oip_delta) => {
-                                oip += oip_delta;
-                                continue 'outer;
+                            SwitchOnTermPtrResult::End(result) => {
+                                return result;
                             }
                         }
                     }
-                    Some(instr) => {
-                        let indexing_code_ptr = match instr {
-                            IndexedChoiceInstructionTable::SwitchOnConstant(constant_map) => {
-                                if let Some(OptArgIndexKeyType::Literal(cell)) = key_type {
-                                    let hash = cell
-                                        .syntactic_hash(&self.arena.f64_tbl, FxHasher::default());
+                }
+                IndexingLinePlace::DeadIndices(cursor, ..) => {
+                    iter.stack.push(cursor.skip_by(1));
+                }
+                IndexingLinePlace::StaticOffsets(cursor, _offsets) => {
+                    return if cursor.table_loc == 0 {
+                        SwitchOnTermResult::Variadic
+                    } else {
+                        SwitchOnTermResult::Internal(cursor.table_loc)
+                    };
+                }
+                IndexingLinePlace::DynamicOffsets(cursor, _offsets) => {
+                    return if cursor.table_loc == 0 {
+                        SwitchOnTermResult::Variadic
+                    } else {
+                        SwitchOnTermResult::DynamicInternal(cursor.table_loc)
+                    };
+                }
+                IndexingLinePlace::OnDemandInstr(cursor, indexing_code_len) => {
+                    let cell = self.store(self.deref(self.registers[iter.arg_num]));
 
-                                    match constant_map.find(
-                                        hash,
-                                        |(other_cell, _indexing_code_ptr)| {
-                                            cell.syntactic_eq(&self.arena.f64_tbl, *other_cell)
-                                        },
-                                    ) {
-                                        Some(&(_, indexing_code_ptr)) => indexing_code_ptr,
-                                        None => {
-                                            return SwitchOnTermResult::Fail;
-                                        }
-                                    }
-                                } else {
-                                    iip += 1;
+                    if cell.is_var() {
+                        iter.stack.push(cursor.skip_by(1));
+                        continue;
+                    }
+
+                    let (_var_offset, mut indices) = match &mut iter.view.index[cursor.table_loc] {
+                        IndexingLine::StaticIndexedChoice(SecondLevelTable { offsets, .. }) => {
+                            let result = indices_of_arg::<StaticIndexedChoiceInstruction>(
+                                &self.arena.f64_tbl,
+                                iter.arg_num,
+                                offsets.iter().cloned(),
+                                iter.view.arity,
+                                iter.view.rest,
+                                &mut clause_arg_data,
+                            );
+
+                            match result {
+                                OnDemandResult::DeadIndices(items) => {
+                                    let mut indices = IndexSet::with_hasher(FxBuildHasher::default());
+                                    indices.extend(items);
+
+                                    iter.view.index[cursor.table_loc].tables_mut()[cursor.table_offset] =
+                                        IndexedChoiceInstructionTable::DeadIndices {
+                                            arg_num: iter.arg_num,
+                                            indices,
+                                        };
+                                    iter.stack.push(cursor.skip_by(1));
                                     continue;
+                                }
+                                OnDemandResult::CodeOffsets(code_offsets) => {
+                                    // false to skip_stub_try_me_else
+                                    code_offsets.compute_indices(
+                                        is_extensible,
+                                        iter.arg_num - 1,
+                                        &iter.view.specs,
+                                        false,
+                                    )
                                 }
                             }
-                            IndexedChoiceInstructionTable::SwitchOnStructure(str_map) => {
-                                if let Some(OptArgIndexKeyType::Structure(name, arity)) = key_type {
-                                    let cell = atom_as_cell!(name, arity);
-                                    let hash = cell
-                                        .syntactic_hash(&self.arena.f64_tbl, FxHasher::default());
+                        }
+                        IndexingLine::DynamicIndexedChoice(SecondLevelTable { offsets, .. }) => {
+                            let result = indices_of_arg::<DynamicIndexedChoiceInstruction>(
+                                &self.arena.f64_tbl,
+                                iter.arg_num,
+                                offsets.iter().cloned(),
+                                iter.view.arity,
+                                iter.view.rest,
+                                &mut clause_arg_data,
+                            );
 
-                                    match str_map.find(
-                                        hash,
-                                        |((name, arity), _indexing_code_ptr)| {
-                                            let other_cell = atom_as_cell!(name, *arity);
-                                            cell.syntactic_eq(&self.arena.f64_tbl, other_cell)
-                                        },
-                                    ) {
-                                        Some(&(_, indexing_code_ptr)) => indexing_code_ptr,
-                                        None => {
-                                            return SwitchOnTermResult::Fail;
-                                        }
-                                    }
-                                } else {
-                                    iip += 1;
+                            match result {
+                                OnDemandResult::DeadIndices(items) => {
+                                    let mut indices = IndexSet::with_hasher(FxBuildHasher::default());
+                                    indices.extend(items);
+
+                                    iter.view.index[cursor.table_loc].tables_mut()[cursor.table_offset] =
+                                        IndexedChoiceInstructionTable::DeadIndices {
+                                            arg_num: iter.arg_num,
+                                            indices,
+                                        };
+                                    iter.stack.push(cursor.skip_by(1));
                                     continue;
+                                }
+                                OnDemandResult::CodeOffsets(code_offsets) => {
+                                    // false to skip_stub_try_me_else
+                                    code_offsets.compute_indices(
+                                        is_extensible,
+                                        iter.arg_num - 1,
+                                        &iter.view.specs,
+                                        false,
+                                    )
                                 }
                             }
-                            &mut IndexedChoiceInstructionTable::OnDemandTerm {
-                                var_offset,
-                                arg_num,
-                                arity,
-                            } => {
-                                let cell = self.store(self.deref(self.registers[arg_num]));
+                        }
+                    };
 
-                                if cell.is_var() {
-                                    iip += var_offset;
-                                    continue;
-                                }
+                    let internal_offset = indexing_code_len - cursor.table_loc - 1;
+                    let leading_instr = std::mem::replace(
+                        &mut indices[0].tables_mut()[0],
+                        IndexedChoiceInstructionTable::OnDemandTerm { arg_num: 0 },
+                    );
 
-                                let (_var_offset, mut indices) = match &mut view.index[oip] {
-                                    IndexingLine::IndexedChoice(SecondLevelTable { offsets, .. }) => {
-                                        let code_offsets = indices_of_arg::<IndexedChoiceInstruction>(
-                                            &self.arena.f64_tbl,
-                                            arg_num,
-                                            offsets.make_contiguous(),
-                                            arity,
-                                            &view.rest,
-                                        );
+                    match leading_instr {
+                        IndexedChoiceInstructionTable::SwitchOnTerm {
+                            arg_num,
+                            mut constants,
+                            lists: mut lists_opt,
+                            mut structures,
+                        } => {
+                            // this order reflects that of the compute_indices function
+                            // and so shouldn't be changed.
+                            if let Some(lists) = &mut lists_opt {
+                                incr_internal_ptr(lists, internal_offset);
+                            }
 
-                                        // false to skip_stub_try_me_else
-                                        code_offsets.compute_indices(arg_num - 1, false)
-                                    }
-                                    IndexingLine::DynamicIndexedChoice(SecondLevelTable { offsets, .. }) => {
-                                        let code_offsets = indices_of_arg::<DynamicIndexedChoiceInstruction>(
-                                            &self.arena.f64_tbl,
-                                            arg_num,
-                                            offsets.make_contiguous(),
-                                            arity,
-                                            &view.rest,
-                                        );
+                            incr_internal_term_ptr(&mut structures, internal_offset);
+                            incr_internal_term_ptr(&mut constants,  internal_offset);
 
-                                        // false to skip_stub_try_me_else
-                                        code_offsets.compute_indices(arg_num - 1, false)
-                                    }
+                            iter.view.index[cursor.table_loc].tables_mut()[cursor.table_offset] =
+                                IndexedChoiceInstructionTable::SwitchOnTerm {
+                                    arg_num,
+                                    constants,
+                                    lists: lists_opt,
+                                    structures,
                                 };
 
-                                let mut internal_offset = index_len - oip - 1;
-                                // it's important we don't modify iip in what follows.
-                                // we still need a local cursor however.
-                                let mut local_iip = iip;
-
-                                for table in indices[0].tables_mut().drain(..) {
-                                    match table {
-                                        IndexedChoiceInstructionTable::SwitchOnTerm(
-                                            arg_num, var_offset, mut c, mut l, mut s,
-                                        ) => {
-                                            // this order reflects that of the compute_indices function
-                                            // and so shouldn't be changed.
-                                            incr_internal_term_ptr(&mut l, &mut internal_offset);
-                                            incr_internal_term_ptr(&mut s, &mut internal_offset);
-                                            incr_internal_term_ptr(&mut c, &mut internal_offset);
-
-                                            view.index[oip].tables_mut()[local_iip] =
-                                                IndexedChoiceInstructionTable::SwitchOnTerm(arg_num, var_offset, c, l, s);
-                                            local_iip += 1;
-                                        }
-                                        IndexedChoiceInstructionTable::SwitchOnConstant(mut constant_map) => {
-                                            for (_, value) in constant_map.iter_mut() {
-                                                incr_internal_ptr(value, &mut internal_offset);
-                                            }
-
-                                            view.index[oip].tables_mut()[local_iip] =
-                                                IndexedChoiceInstructionTable::SwitchOnConstant(constant_map);
-                                            local_iip += 1;
-                                        }
-                                        IndexedChoiceInstructionTable::SwitchOnStructure(mut structure_map) => {
-                                            for (_, value) in structure_map.iter_mut() {
-                                                incr_internal_ptr(value, &mut internal_offset);
-                                            }
-
-                                            view.index[oip].tables_mut()[local_iip] =
-                                                IndexedChoiceInstructionTable::SwitchOnStructure(structure_map);
-                                            local_iip += 1;
-                                        }
-                                        _ => break,
-                                    }
-                                }
-
-                                view.index.extend(indices.drain(1 ..));
-                                continue;
-                            }
-                            IndexedChoiceInstructionTable::OnDemandConstant { .. } => {
-                                // change this to an empty static table in case the predicate is extensible and
-                                // this instruction remains after its preceding OnDemandTerm was changed to SwitchOnTerm
-                                view.index[oip].tables_mut()[iip] = IndexedChoiceInstructionTable::SwitchOnConstant(
-                                    HashTable::new(),
-                                );
-                                continue;
-                            }
-                            IndexedChoiceInstructionTable::OnDemandStructure { .. } => {
-                                // likewise.
-                                view.index[oip].tables_mut()[iip] = IndexedChoiceInstructionTable::SwitchOnStructure(
-                                    HashTable::new(),
-                                );
-                                continue;
-                            }
-                            IndexedChoiceInstructionTable::SwitchOnTerm(..) => {
-                                unreachable!();
-                            }
-                        };
-
-                        match indexing_code_ptr {
-                            IndexingCodePtr::External(o) => {
-                                return SwitchOnTermResult::External(o);
-                            }
-                            IndexingCodePtr::DynamicExternal(o) => {
-                                return SwitchOnTermResult::DynamicExternal(o)
-                            }
-                            IndexingCodePtr::Internal(oip_delta) => {
-                                oip += oip_delta;
-                            }
+                            iter.view.index.extend(indices.drain(1 ..));
                         }
+                        _ => unreachable!("CodeOffsets::compute_indices must have generated something"),
                     }
-                    None => break 'outer,
+
+                    // return to the newly generated SwitchOnTerm
+                    iter.stack.push(cursor);
                 }
             }
         }
 
-        if oip == 0 {
-            // resort to ordinary
-            // try_me/retry_me_else/trust_me if no
-            // eligible indices are found
-            SwitchOnTermResult::Variadic
-        } else {
-            match &view.index[oip] {
-                IndexingLine::IndexedChoice(..) => SwitchOnTermResult::Internal(oip),
-                IndexingLine::DynamicIndexedChoice(..) => SwitchOnTermResult::DynamicInternal(oip),
-            }
-        }
+        SwitchOnTermResult::Fail
     }
 }

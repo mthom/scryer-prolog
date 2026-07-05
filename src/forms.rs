@@ -493,9 +493,26 @@ pub enum MetaSpec {
     RequiresExpansionWithArgument(usize),
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub enum IndexingSpec {
+    #[default]
+    InstOnly,     // +
+    NoIndexing,   // -
+}
+
+impl IndexingSpec {
+    pub fn as_atom(self) -> Atom {
+        match self {
+            IndexingSpec::InstOnly => atom!("+"),
+            IndexingSpec::NoIndexing => atom!("-"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Declaration {
     Dynamic(Atom, usize),
+    Indexing(Atom, Vec<IndexingSpec>),
     MetaPredicate(Atom, Atom, Vec<MetaSpec>), // module name, name, meta-specs
     Module(ModuleDecl),
     NonCountedBacktracking(Atom, usize), // name, arity
@@ -676,6 +693,7 @@ pub struct Module {
     pub(crate) extensible_predicates: ExtensiblePredicates,
     pub(crate) local_extensible_predicates: LocalExtensiblePredicates,
     pub(crate) listing_src: ListingSource,
+    pub(super) indexing_specs: IndexingSpecDir,
 }
 
 // Module's and related types are defined in forms.
@@ -691,6 +709,7 @@ impl Module {
                 FxBuildHasher::default(),
             ),
             listing_src,
+            indexing_specs: IndexingSpecDir::with_hasher(FxBuildHasher::default()),
         }
     }
 
@@ -705,6 +724,7 @@ impl Module {
                 FxBuildHasher::default(),
             ),
             listing_src: ListingSource::DynamicallyGenerated,
+            indexing_specs: IndexingSpecDir::with_hasher(FxBuildHasher::default()),
         }
     }
 }
@@ -913,41 +933,26 @@ pub(crate) enum OptArgIndexKey {
     Structure(Atom, usize), // name, arity
 }
 
-impl OptArgIndexKey {
-    #[inline]
-    pub(crate) fn take(&mut self) -> OptArgIndexKey {
-        std::mem::replace(self, OptArgIndexKey::None)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct ClauseIndexInfo {
-    pub(crate) index_loc: usize,
-    pub(crate) index_keys: Vec<OptArgIndexKey>,
-}
-
-impl ClauseIndexInfo {
-    #[inline]
-    pub(crate) fn new(index_loc: usize, arity: usize) -> Self {
-        Self {
-            index_loc,
-            index_keys: vec![OptArgIndexKey::None; arity],
+impl From<&'_ Term> for OptArgIndexKey {
+    fn from(term: &'_ Term) -> OptArgIndexKey {
+        match term {
+            &Term::Clause(_, atom!("."), ref terms) if terms.len() == 2 => {
+                OptArgIndexKey::List
+            }
+            &Term::Cons(..) | &Term::PartialString(..) | &Term::CompleteString(..) => {
+                OptArgIndexKey::List
+            }
+            &Term::Clause(_, name, ref terms) => {
+                OptArgIndexKey::Structure(name, terms.len())
+            }
+            &Term::Literal(_, constant) => {
+                let literal = HeapCellValue::from(constant);
+                OptArgIndexKey::Literal(literal)
+            }
+            &Term::Var(..) | &Term::AnonVar => {
+                OptArgIndexKey::None
+            }
         }
-    }
-
-    #[inline]
-    pub(crate) fn index_keys(&self) -> &[OptArgIndexKey] {
-        &self.index_keys
-    }
-
-    #[inline]
-    pub(crate) fn index_keys_mut(&mut self) -> &mut [OptArgIndexKey] {
-        &mut self.index_keys
-    }
-
-    #[inline]
-    pub(crate) fn opt_arg_index_key(&self, arg: usize) -> &OptArgIndexKey {
-        &self.index_keys[arg]
     }
 }
 
@@ -1033,7 +1038,6 @@ impl LocalPredicateSkeleton {
 #[derive(Clone, Debug)]
 pub(crate) struct PredicateSkeleton {
     pub(crate) core: LocalPredicateSkeleton,
-    // pub(crate) retracted_dynamic_clauses: Option<Vec<ClauseIndexInfo>>, // always None if non-dynamic.
     pub(crate) clause_indices: VecDeque<ClauseIndex>, // sorted in clause order, descending/ascending around prepend_append_margin    
 }
 

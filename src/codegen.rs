@@ -6,6 +6,7 @@ use crate::forms::*;
 use crate::indexing::*;
 use crate::instructions::*;
 use crate::iterators::*;
+use crate::machine::machine_indices::IndexingSpecs;
 use crate::offset_table::F64Table;
 use crate::parser::ast::*;
 use crate::targets::*;
@@ -15,6 +16,9 @@ use crate::variable_records::*;
 use crate::machine::disjuncts::*;
 use crate::machine::machine_errors::*;
 
+use bitvec::BitArr;
+use bitvec::bitarr;
+use bitvec::order::Lsb0;
 use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
 
@@ -174,11 +178,7 @@ impl CodeGenSettings {
             Instruction::DynamicInternalElse(
                 global_clock_time,
                 Death::Infinity,
-                if offset == 0 {
-                    NextOrFail::Next(0)
-                } else {
-                    NextOrFail::Next(offset)
-                },
+                NextOrFail::Next(offset),
             )
         } else {
             Instruction::TryMeElse(offset)
@@ -198,12 +198,10 @@ impl CodeGenSettings {
             Instruction::DynamicInternalElse(
                 global_clock_tick,
                 Death::Infinity,
-                if offset == 0 {
-                    NextOrFail::Next(0)
-                } else {
-                    NextOrFail::Next(offset)
-                },
+                NextOrFail::Next(offset),
             )
+        } else if self.non_counted_bt {
+            Instruction::DefaultRetryMeElse(offset)
         } else {
             Instruction::RetryMeElse(offset)
         }
@@ -257,6 +255,7 @@ impl CodeGenSettings {
 #[derive(Debug)]
 pub(crate) struct CodeGenerator<'a> {
     f64_tbl: &'a F64Table,
+    indexing_specs: IndexingSpecs,
     marker: DebrayAllocator,
     settings: CodeGenSettings,
     pub(crate) skeleton: PredicateSkeleton,
@@ -341,9 +340,14 @@ fn structure_cell(term: &Term) -> Option<&Cell<RegType>> {
 }
 
 impl<'a> CodeGenerator<'a> {
-    pub(crate) fn new(f64_tbl: &'a F64Table, settings: CodeGenSettings) -> Self {
+    pub(crate) fn new(
+        f64_tbl: &'a F64Table,
+        indexing_specs: IndexingSpecs,
+        settings: CodeGenSettings,
+    ) -> Self {
         CodeGenerator {
             f64_tbl,
+            indexing_specs,
             marker: DebrayAllocator::new(),
             settings,
             skeleton: PredicateSkeleton::new(),
@@ -1098,56 +1102,55 @@ impl<'a> CodeGenerator<'a> {
 
     fn split_predicate(clauses: &[PredicateClause]) -> Vec<ClauseSpan> {
         let mut subseqs = Vec::new();
-        let mut left = 0;
-        let mut optimal_index = 0;
+        let mut idx = 0;
 
-        'outer: for (right, clause) in clauses.iter().enumerate() {
-            for (instantiated_arg_index, arg) in clause.args().iter().enumerate() {
+        type ArgMask = BitArr!(for MAX_ARITY, in u64);
+
+        fn nonvar_positions(clause: &PredicateClause) -> ArgMask {
+            let mut mask = bitarr![u64, Lsb0; 0; MAX_ARITY];
+            for (idx, arg) in clause.args().iter().enumerate() {
                 if !matches!(arg, Term::Var(..) | Term::AnonVar) {
-                    if optimal_index != instantiated_arg_index + 1 {
-                        if left >= right {
-                            optimal_index = instantiated_arg_index + 1;
-                            continue 'outer;
-                        }
-
-                        subseqs.push(ClauseSpan {
-                            left,
-                            right,
-                            instantiated_arg_index: NonZero::new(optimal_index),
-                        });
-
-                        optimal_index = instantiated_arg_index + 1;
-                        left = right;
-                    }
-
-                    continue 'outer;
+                    mask.set(idx, true);
                 }
             }
-
-            if left < right {
-                subseqs.push(ClauseSpan {
-                    left,
-                    right,
-                    instantiated_arg_index: NonZero::new(optimal_index),
-                });
-            }
-
-            optimal_index = 0;
-
-            subseqs.push(ClauseSpan {
-                left: right,
-                right: right + 1,
-                instantiated_arg_index: None,
-            });
-
-            left = right + 1;
+            mask
         }
 
-        if left < clauses.len() {
+        // choose the earliest argument index "chosen" at which the
+        // widest span of clauses beginning from clauses[idx ..] is
+        // instantiated and push it
+        while idx < clauses.len() {
+            let start = idx;
+            let mut candidates = nonvar_positions(&clauses[idx]);
+
+            if candidates.not_any() {
+                // fully unbound clause: standalone span, no index
+                subseqs.push(ClauseSpan { left: idx, right: idx + 1, instantiated_arg_index: None });
+                idx += 1;
+                continue;
+            }
+
+            idx += 1;
+
+            while idx < clauses.len() {
+                let next = nonvar_positions(&clauses[idx]);
+                let intersected = candidates & next;
+
+                if intersected.not_any() {
+                    break;
+                }
+
+                candidates = intersected;
+                idx += 1;
+            }
+
+            // get the index of the rightmost 1, this is the instantiated_arg_index
+            let chosen = candidates.first_one().and_then(|idx| NonZero::new(idx + 1));
+
             subseqs.push(ClauseSpan {
-                left,
-                right: clauses.len(),
-                instantiated_arg_index: NonZero::new(optimal_index),
+                left: start,
+                right: idx,
+                instantiated_arg_index: chosen,
             });
         }
 
@@ -1158,13 +1161,13 @@ impl<'a> CodeGenerator<'a> {
         &mut self,
         clauses: &mut [PredicateClause],
         optimal_index: Option<NonZero<usize>>, // if None, the predicate is unindexed
+        is_last_subseq: bool,
     ) -> Result<Code, CompilationError> {
         let mut code = VecDeque::new();
         let mut code_offsets = CodeOffsets::<I>::new(
             self.f64_tbl,
             self.settings.non_counted_bt,
             clauses[0].arity(),
-            self.settings.is_extensible,
         );
 
         let mut skip_stub_try_me_else = false;
@@ -1217,16 +1220,31 @@ impl<'a> CodeGenerator<'a> {
                 skip_stub_try_me_else = !self.settings.is_dynamic();
             }
 
-            if let Some(optimal_index) = optimal_index {
+            if let Some(optimal_index) = optimal_index.map(NonZero::get)
+                && (clauses_len > 1 || self.settings.is_extensible)
+            {
                 let clause_offset = code.len();
 
-                for (arg_index, arg) in clause.args().iter().enumerate() {
-                    code_offsets.index_term(
-                        arg_index,
-                        arg,
-                        clause_offset,
-                        optimal_index.get() - 1, // go from 1-based to 0-based index
-                    );
+                for (arg_index, arg) in clause.args().iter().enumerate().skip(optimal_index - 1) {
+                    // go from 1-based to 0-based index
+                    let index_key = OptArgIndexKey::from(arg);
+
+                    if !matches!(self.indexing_specs.get(arg_index), IndexingSpec::NoIndexing) {
+                        if arg_index == optimal_index - 1 {
+                            code_offsets.index_key(
+                                index_key,
+                                |is_initial_index, non_counted_bt| {
+                                    I::compute_index(is_initial_index, clause_offset, non_counted_bt)
+                                },
+                            );
+                        }
+
+                        code_offsets.map_clause_offset_to_arg_key(
+                            arg_index,
+                            index_key,
+                            clause_offset,
+                        );
+                    }
                 }
             }
 
@@ -1245,18 +1263,37 @@ impl<'a> CodeGenerator<'a> {
         let index_code_is_empty = if let Some(optimal_index) = optimal_index
             && !code_offsets.no_indices()
         {
+            let is_extensible = self.skeleton.core.is_dynamic ||
+                ((self.skeleton.core.is_multifile || self.skeleton.core.is_discontiguous) &&
+                 is_last_subseq);
+
             let (var_offset, index_code) = code_offsets.compute_indices(
+                is_extensible,
                 optimal_index.get() - 1,
+                &self.indexing_specs,
                 skip_stub_try_me_else,
             );
 
             if !index_code.is_empty() {
-                code.push_front(Instruction::IndexingCode(var_offset, index_code));
+                code.push_front(Instruction::IndexingCode {
+                    var_offset,
+                    code: index_code,
+                    specs: self.indexing_specs.clone(),
+                    arity: clauses[0].arity(),
+                    is_extensible,
+                });
+
                 false
             } else {
                 true
             }
         } else {
+            if optimal_index.is_some() {
+                for clause_index in &mut self.skeleton.clause_indices {
+                    clause_index.index_loc = None;
+                }
+            }
+
             true
         };
 
@@ -1278,7 +1315,7 @@ impl<'a> CodeGenerator<'a> {
     ) -> Result<Code, CompilationError> {
         let mut code = Code::new();
         let split_pred = Self::split_predicate(&clauses);
-        let multi_seq = split_pred.len() > 1;
+        let num_segments = split_pred.len();
 
         for ClauseSpan {
             left,
@@ -1291,17 +1328,19 @@ impl<'a> CodeGenerator<'a> {
                 self.compile_pred_subseq::<DynamicIndexedChoiceInstruction>(
                     &mut clauses[left..right],
                     instantiated_arg_index,
+                    right == num_segments,
                 )?
             } else {
-                self.compile_pred_subseq::<IndexedChoiceInstruction>(
+                self.compile_pred_subseq::<StaticIndexedChoiceInstruction>(
                     &mut clauses[left..right],
                     instantiated_arg_index,
+                    right == num_segments,
                 )?
             };
 
             let clause_start_offset = code.len();
 
-            if multi_seq {
+            if num_segments > 1 {
                 let choice = match left {
                     0 => self.settings.try_me_else(code_segment.len() + 1),
                     _ if right == clauses.len() => self.settings.trust_me(),
@@ -1314,17 +1353,14 @@ impl<'a> CodeGenerator<'a> {
             }
 
             if self.settings.is_extensible {
-                let segment_is_indexed = matches!(code_segment[0], Instruction::IndexingCode(..));
+                let segment_is_indexed = matches!(code_segment[0], Instruction::IndexingCode { .. });
 
                 for clause_index_info in
                     self.skeleton.clause_indices.make_contiguous()[skel_lower_bound..].iter_mut()
                 {
                     clause_index_info.clause_start += clause_start_offset +
                         2 * (segment_is_indexed as usize);
-
-                    if clause_index_info.index_loc.is_some() {
-                        clause_index_info.add_to_index_loc(clause_start_offset + 1);
-                    }
+                    clause_index_info.add_to_index_loc(clause_start_offset + 1);
                 }
             }
 

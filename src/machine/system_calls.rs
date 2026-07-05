@@ -4,6 +4,7 @@ use num_order::NumOrd;
 
 use crate::arena::*;
 use crate::atom_table::*;
+use crate::codegen::CodeGenSettings;
 #[cfg(feature = "ffi")]
 use crate::ffi::*;
 use crate::forms::*;
@@ -15,15 +16,20 @@ use crate::http::{HttpListener, HttpRequest, HttpRequestData, HttpResponse};
 use crate::instructions::*;
 use crate::machine;
 use crate::machine::code_walker::*;
+use crate::machine::compile::StandaloneCompileResult;
 use crate::machine::copier::*;
 use crate::machine::heap::AllocError;
 use crate::machine::heap::*;
+use crate::machine::loader::InlineLoadState;
+use crate::machine::loader::Loader;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
+use crate::machine::preprocessor::Preprocessor;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
+use crate::machine::term_stream::InlineTermStream;
 use crate::machine::{Machine, get_structure_index};
 use crate::offset_table::*;
 use crate::parser::ast::*;
@@ -1507,14 +1513,46 @@ impl Machine {
                 .collect();
 
             let helper_clause_loc = self.code.len();
+            let body_term = self.machine_st.read_term_from_heap(self.machine_st.registers[1]);
 
-            match self.compile_standalone_clause(temp_v!(1), &vars) {
+            let compile = || {
+                let mut loader: Loader<'_, InlineLoadState<'_>> =
+                    Loader::new(self, InlineTermStream {});
+
+                let settings = CodeGenSettings {
+                    global_clock_tick: None,
+                    is_extensible: false,
+                    non_counted_bt: true,
+                };
+
+                let mut preprocessor = Preprocessor::new(settings);
+                let num_vars = vars.len();
+
+                // build the helper term
+                let head_term  = Term::Clause(Cell::default(), atom!(""), vars.to_vec());
+                let rule_terms = vec![head_term, body_term];
+                let rule_body  = Term::Clause(Cell::default(), atom!(":-"), rule_terms);
+
+                let clause = preprocessor.try_term_to_tl(&mut loader, rule_body)?;
+                let compilation_target = loader.payload.compilation_target;
+
+                loader.compile_standalone_clause(
+                    (atom!(""), num_vars),
+                    compilation_target,
+                    clause,
+                    settings,
+                )
+            };
+
+            match compile() {
                 Err(e) => {
                     let err = self.machine_st.session_error(e);
                     let stub = functor_stub(atom!("call"), result.key.1);
                     return Err(self.machine_st.error_form(err, stub));
                 }
-                Ok(()) => {
+                Ok(StandaloneCompileResult { clause_code, .. }) => {
+                    self.code.extend(clause_code);
+
                     let h = self.machine_st.heap.cell_len();
                     let mut writer = resource_error_call_result!(
                         self.machine_st,

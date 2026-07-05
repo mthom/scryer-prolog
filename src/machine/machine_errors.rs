@@ -817,6 +817,7 @@ pub enum CompilationError {
     InadmissibleFact,
     InadmissibleQueryTerm,
     InvalidDirective(DirectiveError),
+    InvalidIndexingDecl,
     InvalidMetaPredicateDecl,
     InvalidModuleDecl,
     InvalidModuleExport,
@@ -883,6 +884,9 @@ impl CompilationError {
             }
             CompilationError::InvalidDirective(_) => {
                 functor!(atom!("directive_error"))
+            }
+            CompilationError::InvalidIndexingDecl => {
+                functor!(atom!("invalid_indexing_decl"))
             }
             CompilationError::InvalidMetaPredicateDecl => {
                 functor!(atom!("invalid_meta_predicate_decl"))

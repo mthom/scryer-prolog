@@ -127,13 +127,6 @@ fn setup_module_export(mut term: Term) -> Result<ModuleExport, CompilationError>
         })
 }
 
-pub(crate) fn build_rule_body(vars: &[Term], body_term: Term) -> Term {
-    let head_term = Term::Clause(Cell::default(), atom!(""), vars.to_vec());
-    let rule = vec![head_term, body_term];
-
-    Term::Clause(Cell::default(), atom!(":-"), rule)
-}
-
 pub(super) fn setup_module_export_list(
     mut export_list: Term,
 ) -> Result<Vec<ModuleExport>, CompilationError> {
@@ -316,6 +309,43 @@ fn setup_meta_predicate<'a, LS: LoadState<'a>>(
     }
 }
 
+fn setup_indexing(mut terms: Vec<Term>) -> Result<(Atom, Vec<IndexingSpec>), CompilationError> {
+    fn get_indexing_specs(
+        terms: &mut [Term],
+    ) -> Result<Vec<IndexingSpec>, CompilationError> {
+        let mut indexing_specs = vec![];
+
+        for indexing in terms.iter_mut() {
+            match indexing {
+                Term::Literal(_, Literal::Atom(indexing_spec)) => {
+                    let meta_spec = match indexing_spec {
+                        atom!("+") => IndexingSpec::InstOnly,
+                        atom!("-") => IndexingSpec::NoIndexing,
+                        _ => return Err(CompilationError::InvalidIndexingDecl),
+                    };
+
+                    indexing_specs.push(meta_spec);
+                }
+                _ => {
+                    return Err(CompilationError::InvalidIndexingDecl);
+                }
+            }
+        }
+
+        Ok(indexing_specs)
+    }
+
+    match terms.pop().unwrap() {
+        Term::Clause(_, name, mut terms) => {
+            return Ok((name, get_indexing_specs(&mut terms)?));
+        }
+        Term::Literal(_, Literal::Atom(name)) => {
+            return Ok((name, vec![]));
+        }
+        _ => return Err(CompilationError::InvalidIndexingDecl),
+    }
+}
+
 pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
     loader: &mut Loader<'a, LS>,
     mut terms: Vec<Term>,
@@ -342,6 +372,10 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
             (atom!("meta_predicate"), 1) => {
                 let (module_name, name, meta_specs) = setup_meta_predicate(terms, loader)?;
                 Ok(Declaration::MetaPredicate(module_name, name, meta_specs))
+            }
+            (atom!("indexing"), 1) => {
+                let (name, indexing_specs) = setup_indexing(terms)?;
+                Ok(Declaration::Indexing(name, indexing_specs))
             }
             _ => Err(CompilationError::InvalidDirective(
                 DirectiveError::InvalidDirective(name, terms.len()),
@@ -563,7 +597,6 @@ impl Preprocessor {
         body: Term,
     ) -> Result<(Rule, VarData), CompilationError> {
         let classifier = VariableClassifier::new(self.settings.default_call_policy());
-
         let (head, clauses, var_data) = classifier.classify_rule(loader, head, body)?;
 
         match head {
