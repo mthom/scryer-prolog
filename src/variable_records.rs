@@ -219,13 +219,11 @@ impl VariableRecords {
                             temp_var_data,
                             ..
                         } = &mut record.allocation
+                            && cn_u == term_loc.chunk_num()
+                            && u != var_gen_index
+                            && !temp_var_data.uses_reg(reg)
                         {
-                            if cn_u == term_loc.chunk_num()
-                                && u != var_gen_index
-                                && !temp_var_data.uses_reg(reg)
-                            {
-                                temp_var_data.no_use_set.insert(reg);
-                            }
+                            temp_var_data.no_use_set.insert(reg);
                         }
                     }
                 }

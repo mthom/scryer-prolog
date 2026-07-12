@@ -462,11 +462,12 @@ impl Iterator for QueryState<'_> {
             let exception_term =
                 Term::from_heapcell(machine, machine.machine_st.heap[h], &mut var_names.clone());
 
-            if let Term::Compound(functor, args) = &exception_term {
-                if functor == "error" && args.len() == 2 {
-                    // We have an error
-                    return Some(Err(exception_term));
-                }
+            if let Term::Compound(functor, args) = &exception_term
+                && functor == "error"
+                && args.len() == 2
+            {
+                // We have an error
+                return Some(Err(exception_term));
             }
 
             // We have an exception that is not an error
@@ -513,13 +514,13 @@ impl Iterator for QueryState<'_> {
                     .unwrap();
                 let term_idx =
                     var_dict.get_index_of(&VarKey::VarPtr(Var::from(term_str.clone()).into()));
-                if let Some(idx) = term_idx {
-                    if idx < var_name_idx {
-                        let new_term = Term::Var(var_name);
-                        let new_var_name = term_str.into();
-                        term = new_term;
-                        var_name = new_var_name;
-                    }
+                if let Some(idx) = term_idx
+                    && idx < var_name_idx
+                {
+                    let new_term = Term::Var(var_name);
+                    let new_var_name = term_str.into();
+                    term = new_term;
+                    var_name = new_var_name;
                 }
             }
 

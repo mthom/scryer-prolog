@@ -342,14 +342,13 @@ impl<'a> LoadState<'a> for LiveLoadAndMachineState<'a> {
             return Err(SessionError::CannotOverwriteBuiltIn(key));
         }
 
-        if let Some(builtins) = loader.wam_prelude.indices.modules.get(&atom!("builtins")) {
-            if builtins
+        if let Some(builtins) = loader.wam_prelude.indices.modules.get(&atom!("builtins"))
+            && builtins
                 .module_decl
                 .exports
                 .contains(&ModuleExport::PredicateKey(key))
-            {
-                return Err(SessionError::CannotOverwriteBuiltIn(key));
-            }
+        {
+            return Err(SessionError::CannotOverwriteBuiltIn(key));
         }
 
         Ok(())
@@ -644,10 +643,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         CompilationTarget::Module(module_name) => {
                             if let Some(ref mut module) =
                                 self.wam_prelude.indices.modules.get_mut(&module_name)
+                                && let Some(skeleton) = module.extensible_predicates.get_mut(&key)
                             {
-                                if let Some(skeleton) = module.extensible_predicates.get_mut(&key) {
-                                    skeleton.core.is_discontiguous = false;
-                                }
+                                skeleton.core.is_discontiguous = false;
                             }
                         }
                     }
@@ -664,12 +662,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         CompilationTarget::Module(module_name) => {
                             if let Some(ref mut module) =
                                 self.wam_prelude.indices.modules.get_mut(&module_name)
+                                && let Some(skeleton) = module.extensible_predicates.get_mut(&key)
                             {
-                                if let Some(skeleton) = module.extensible_predicates.get_mut(&key) {
-                                    skeleton.core.is_dynamic = false;
-                                    skeleton.core.retracted_dynamic_clauses = None;
-                                };
-                            }
+                                skeleton.core.is_dynamic = false;
+                                skeleton.core.retracted_dynamic_clauses = None;
+                            };
                         }
                     }
                 }
@@ -685,10 +682,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         CompilationTarget::Module(module_name) => {
                             if let Some(ref mut module) =
                                 self.wam_prelude.indices.modules.get_mut(&module_name)
+                                && let Some(skeleton) = module.extensible_predicates.get_mut(&key)
                             {
-                                if let Some(skeleton) = module.extensible_predicates.get_mut(&key) {
-                                    skeleton.core.is_multifile = false;
-                                }
+                                skeleton.core.is_multifile = false;
                             }
                         }
                     }
@@ -718,12 +714,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 RetractionRecord::ReplacedModulePredicate(module_name, key, old_code_idx) => {
                     if let Some(ref mut module) =
                         self.wam_prelude.indices.modules.get_mut(&module_name)
+                        && let Some(code_idx) = module.code_dir.get_mut(&key)
                     {
-                        if let Some(code_idx) = module.code_dir.get_mut(&key) {
-                            let code_index_tbl =
-                                &mut LS::machine_st(&mut self.payload).arena.code_index_tbl;
-                            code_idx.set(code_index_tbl, old_code_idx);
-                        }
+                        let code_index_tbl =
+                            &mut LS::machine_st(&mut self.payload).arena.code_index_tbl;
+                        code_idx.set(code_index_tbl, old_code_idx);
                     }
                 }
                 RetractionRecord::AddedExtensiblePredicate(compilation_target, key) => {
@@ -818,12 +813,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 RetractionRecord::ReplacedSwitchOnTermVarIndex(index_loc, old_v) => {
                     if let Instruction::IndexingCode(ref mut indexing_code) =
                         self.wam_prelude.code[index_loc]
-                    {
-                        if let IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, ..)) =
+                        && let IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, ..)) =
                             &mut indexing_code[0]
-                        {
-                            *v = old_v;
-                        }
+                    {
+                        *v = old_v;
                     }
                 }
                 RetractionRecord::ModifiedTryMeElse(instr_loc, o) => {
@@ -945,18 +938,16 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .wam_prelude
                         .indices
                         .get_predicate_skeleton_mut(&compilation_target, &key)
+                        && let Some(removed_clauses) = &mut skeleton.core.retracted_dynamic_clauses
                     {
-                        if let Some(removed_clauses) = &mut skeleton.core.retracted_dynamic_clauses
-                        {
-                            let clause_index_info = removed_clauses.pop().unwrap();
+                        let clause_index_info = removed_clauses.pop().unwrap();
 
-                            skeleton
-                                .core
-                                .clause_clause_locs
-                                .insert(target_pos, clause_clause_loc);
+                        skeleton
+                            .core
+                            .clause_clause_locs
+                            .insert(target_pos, clause_clause_loc);
 
-                            skeleton.clauses.insert(target_pos, clause_index_info);
-                        }
+                        skeleton.clauses.insert(target_pos, clause_index_info);
                     }
                 }
                 RetractionRecord::RemovedSkeletonClause(
@@ -1667,14 +1658,14 @@ impl Machine {
                 None => None,
             };
 
-            if let Some(indexing_term) = indexing_arg {
-                if let Some(indexing_name) = indexing_term.name() {
-                    loader
-                        .wam_prelude
-                        .indices
-                        .goal_expansion_indices
-                        .insert((indexing_name, indexing_term.arity()));
-                }
+            if let Some(indexing_term) = indexing_arg
+                && let Some(indexing_name) = indexing_term.name()
+            {
+                loader
+                    .wam_prelude
+                    .indices
+                    .goal_expansion_indices
+                    .insert((indexing_name, indexing_term.arity()));
             }
 
             loader.incremental_compile_clause(
@@ -1930,16 +1921,15 @@ impl Machine {
     }
 
     pub(crate) fn load_context_directory(&mut self) {
-        if let Some(load_context) = self.load_contexts.last() {
-            if let Some(directory) = load_context.path.parent() {
-                let directory_str = directory.to_str().unwrap();
-                let directory_atom =
-                    AtomTable::build_with(&self.machine_st.atom_tbl, directory_str);
+        if let Some(load_context) = self.load_contexts.last()
+            && let Some(directory) = load_context.path.parent()
+        {
+            let directory_str = directory.to_str().unwrap();
+            let directory_atom = AtomTable::build_with(&self.machine_st.atom_tbl, directory_str);
 
-                self.machine_st
-                    .unify_atom(directory_atom, self.machine_st.registers[1]);
-                return;
-            }
+            self.machine_st
+                .unify_atom(directory_atom, self.machine_st.registers[1]);
+            return;
         }
 
         self.machine_st.fail = true;

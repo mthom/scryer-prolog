@@ -351,10 +351,10 @@ pub(crate) struct ClauseIterator<'a> {
 }
 
 fn state_from_chunked_terms(chunk_vec: &VecDeque<ChunkedTerms>) -> ClauseIteratorState<'_> {
-    if chunk_vec.len() == 1 {
-        if let Some(ChunkedTerms::Branch { branch_nums, arms }) = chunk_vec.front() {
-            return ClauseIteratorState::RemainingBranches(branch_nums, arms, 0);
-        }
+    if chunk_vec.len() == 1
+        && let Some(ChunkedTerms::Branch { branch_nums, arms }) = chunk_vec.front()
+    {
+        return ClauseIteratorState::RemainingBranches(branch_nums, arms, 0);
     }
 
     ClauseIteratorState::RemainingChunks(chunk_vec, 0)

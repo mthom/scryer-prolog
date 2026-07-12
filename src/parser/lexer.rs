@@ -651,12 +651,13 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             if single_quote_char!(c) {
                 self.skip_char(c);
 
-                if !token.is_empty() && token.chars().nth(1).is_none() {
-                    if let Some(c) = token.chars().next() {
-                        return Ok(Token::Literal(Literal::Atom(
-                            AtomCell::new_char_inlined(c).get_name(),
-                        )));
-                    }
+                // use exactly_one once stable in our msrv https://github.com/rust-lang/rust/issues/149266
+                if let Some(c) = token.chars().next()
+                    && token.chars().nth(1).is_none()
+                {
+                    return Ok(Token::Literal(Literal::Atom(
+                        AtomCell::new_char_inlined(c).get_name(),
+                    )));
                 }
             } else {
                 return Err(self.located_error(ParserErrorKind::InvalidSingleQuotedCharacter(c)));

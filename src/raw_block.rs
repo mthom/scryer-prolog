@@ -373,7 +373,7 @@ impl<T: RawBlockTraits, C: RawBlockConcurrency> RawBlock<T, C> {
     pub unsafe fn get_offset(&self, ptr: *const u8) -> usize {
         // SAFETY:
         // - Guaranteed by caller: `ptr` is still valid
-        // - Guranteed by caller: `ptr` was obtained from `get()` or `alloc()`
+        // - Guaranteed by caller: `ptr` was obtained from `get()` or `alloc()`
         // - get() and alloc() return pointers in the same allocation as `self.base`
         // - All functions modifying `self.base` invalidate pointers in their contract
         // - Thus `ptr` and `self.base` originate from the same allocation

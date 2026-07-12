@@ -11,15 +11,15 @@ pub(crate) fn get_key() -> KeyEvent {
         enable_raw_mode().expect("failed to enable raw mode");
         loop {
             let key_ = read();
-            if let Ok(Event::Key(key_)) = key_ {
-                if key_.kind != KeyEventKind::Release {
-                    match key_.code {
-                        KeyCode::Char(_) | KeyCode::Enter | KeyCode::Tab => {
-                            key = key_;
-                            break;
-                        }
-                        _ => (),
+            if let Ok(Event::Key(key_)) = key_
+                && key_.kind != KeyEventKind::Release
+            {
+                match key_.code {
+                    KeyCode::Char(_) | KeyCode::Enter | KeyCode::Tab => {
+                        key = key_;
+                        break;
                     }
+                    _ => (),
                 }
             }
         }

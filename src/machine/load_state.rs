@@ -474,25 +474,24 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 continue;
             }
 
-            if let Some(code_index) = removed_module.code_dir.get_mut(key) {
-                if let Some(global_skeleton) = self
+            if let Some(code_index) = removed_module.code_dir.get_mut(key)
+                && let Some(global_skeleton) = self
                     .wam_prelude
                     .indices
                     .get_predicate_skeleton(local_compilation_target, key)
-                {
-                    let old_index_ptr = code_index.replace(
-                        &mut LS::machine_st(&mut self.payload).arena.code_index_tbl,
-                        if global_skeleton.core.is_dynamic {
-                            IndexPtr::dynamic_undefined()
-                        } else {
-                            IndexPtr::undefined()
-                        },
-                    );
+            {
+                let old_index_ptr = code_index.replace(
+                    &mut LS::machine_st(&mut self.payload).arena.code_index_tbl,
+                    if global_skeleton.core.is_dynamic {
+                        IndexPtr::dynamic_undefined()
+                    } else {
+                        IndexPtr::undefined()
+                    },
+                );
 
-                    self.payload.retraction_info.push_record(
-                        RetractionRecord::ReplacedModulePredicate(module_name, *key, old_index_ptr),
-                    );
-                }
+                self.payload.retraction_info.push_record(
+                    RetractionRecord::ReplacedModulePredicate(module_name, *key, old_index_ptr),
+                );
             }
         }
 
@@ -766,12 +765,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         match payload_compilation_target {
             CompilationTarget::User => {
-                if let Some(filename) = listing_src_file_name {
-                    if let Some(ref mut module) =
+                if let Some(filename) = listing_src_file_name
+                    && let Some(ref mut module) =
                         self.wam_prelude.indices.modules.get_mut(&filename)
-                    {
-                        op_decl.insert_into_op_dir(&mut module.op_dir);
-                    }
+                {
+                    op_decl.insert_into_op_dir(&mut module.op_dir);
                 }
 
                 add_op_decl(

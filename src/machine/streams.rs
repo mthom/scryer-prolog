@@ -2073,10 +2073,10 @@ impl MachineState {
             return Err(self.stream_permission_error(permission, err_atom, stream, caller, arity));
         }
 
-        if let Some(input) = input {
-            if stream.past_end_of_stream() {
-                self.eof_action(input, stream, caller, arity)?;
-            }
+        if let Some(input) = input
+            && stream.past_end_of_stream()
+        {
+            self.eof_action(input, stream, caller, arity)?;
         }
 
         Ok(())
@@ -2096,10 +2096,10 @@ impl MachineState {
         }
 
         // 8.11.5.3l)
-        if let Some(alias) = options.get_alias() {
-            if indices.has_stream(alias) {
-                return Err(self.occupied_alias_permission_error(alias, atom!("open"), 4));
-            }
+        if let Some(alias) = options.get_alias()
+            && indices.has_stream(alias)
+        {
+            return Err(self.occupied_alias_permission_error(alias, atom!("open"), 4));
         }
 
         let mode = cell_as_atom!(self.store(MachineState::deref(self, self.registers[2])));
@@ -2172,13 +2172,12 @@ impl MachineState {
                 }
             };
 
-            if path.extension().is_none() {
-                if let Ok(metadata) = file.metadata() {
-                    if metadata.is_dir() {
-                        path.set_extension("pl");
-                        continue;
-                    }
-                }
+            if path.extension().is_none()
+                && let Ok(metadata) = file.metadata()
+                && metadata.is_dir()
+            {
+                path.set_extension("pl");
+                continue;
             }
 
             return Ok(if is_input_file {

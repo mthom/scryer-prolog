@@ -1210,13 +1210,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 return None;
             }
 
-            if let Some(path_str) = load_context.path.to_str() {
-                if !path_str.is_empty() {
-                    return Some(AtomTable::build_with(
-                        &LS::machine_st(&mut self.payload).atom_tbl,
-                        path_str,
-                    ));
-                }
+            if let Some(path_str) = load_context.path.to_str()
+                && !path_str.is_empty()
+            {
+                return Some(AtomTable::build_with(
+                    &LS::machine_st(&mut self.payload).atom_tbl,
+                    path_str,
+                ));
             }
         }
 
@@ -2220,23 +2220,23 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             let predicates = self.payload.predicates.take();
             let offset = self.compile(key, predicates, settings)?;
 
-            if let Some(filename) = self.listing_src_file_name() {
-                if let Some(ref mut module) = self.wam_prelude.indices.modules.get_mut(&filename) {
-                    let index_ptr = LS::machine_st(&mut self.payload)
-                        .arena
-                        .code_index_tbl
-                        .get_entry(offset.into());
+            if let Some(filename) = self.listing_src_file_name()
+                && let Some(ref mut module) = self.wam_prelude.indices.modules.get_mut(&filename)
+            {
+                let index_ptr = LS::machine_st(&mut self.payload)
+                    .arena
+                    .code_index_tbl
+                    .get_entry(offset.into());
 
-                    let offset = *module.code_dir.entry(key).or_insert(offset);
+                let offset = *module.code_dir.entry(key).or_insert(offset);
 
-                    set_code_index::<LS>(
-                        &mut self.payload,
-                        &CompilationTarget::Module(filename),
-                        key,
-                        offset,
-                        index_ptr,
-                    );
-                }
+                set_code_index::<LS>(
+                    &mut self.payload,
+                    &CompilationTarget::Module(filename),
+                    key,
+                    offset,
+                    index_ptr,
+                );
             }
         }
 

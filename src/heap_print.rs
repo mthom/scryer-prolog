@@ -123,15 +123,15 @@ impl<'a, ElideLists> StackfulPreOrderHeapIter<'a, ElideLists> {
                 (HeapCellValueTag::Str, s) => {
                     read_heap_cell!(self.heap[s],
                         (HeapCellValueTag::Atom, (name, _arity)) => {
-                            if let Some(spec) = fetch_atom_op_spec(name, None, op_dir) {
-                                if spec.get_spec().is_postfix()  || spec.get_spec().is_infix() {
-                                    if needs_bracketing(spec, &parent_spec) {
-                                        return false;
-                                    } else {
-                                        h = IterStackLoc::iterable_loc(s + 1, HeapOrStackTag::Heap);
-                                        parent_spec = DirectedOp::Right(name, spec);
-                                        continue;
-                                    }
+                            if let Some(spec) = fetch_atom_op_spec(name, None, op_dir)
+                                && (spec.get_spec().is_postfix()  || spec.get_spec().is_infix())
+                            {
+                                if needs_bracketing(spec, &parent_spec) {
+                                    return false;
+                                } else {
+                                    h = IterStackLoc::iterable_loc(s + 1, HeapOrStackTag::Heap);
+                                    parent_spec = DirectedOp::Right(name, spec);
+                                    continue;
                                 }
                             }
 
@@ -457,10 +457,10 @@ pub fn fmt_float(mut fl: f64) -> String {
      * case.
      */
 
-    if let Some(e_index) = fl_str.find('e') {
-        if !fl_str[0..e_index].contains('.') {
-            return fl_str[0..e_index].to_string() + ".0" + &fl_str[e_index..];
-        }
+    if let Some(e_index) = fl_str.find('e')
+        && !fl_str[0..e_index].contains('.')
+    {
+        return fl_str[0..e_index].to_string() + ".0" + &fl_str[e_index..];
     }
 
     fl_str.to_string()
@@ -585,10 +585,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     }
 
     fn set_parent_of_first_op(&mut self, parent_op: Option<DirectedOp>) {
-        if let Some(op) = parent_op {
-            if op.is_left() && op.is_prefix() {
-                self.parent_of_first_op = Some((op, self.last_item_idx));
-            }
+        if let Some(op) = parent_op
+            && op.is_left()
+            && op.is_prefix()
+        {
+            self.parent_of_first_op = Some((op, self.last_item_idx));
         }
     }
 
@@ -1356,11 +1357,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     }
 
     fn close_list(&mut self, switch: Rc<Cell<(bool, usize)>>) -> Option<Rc<Cell<(bool, usize)>>> {
-        if let Some(TokenOrRedirect::Op(_, op_desc)) = self.state_stack.last() {
-            if op_desc.get_spec().is_postfix() || op_desc.get_spec().is_infix() {
-                self.state_stack.push(TokenOrRedirect::ChildCloseList);
-                return None;
-            }
+        if let Some(TokenOrRedirect::Op(_, op_desc)) = self.state_stack.last()
+            && (op_desc.get_spec().is_postfix() || op_desc.get_spec().is_infix())
+        {
+            self.state_stack.push(TokenOrRedirect::ChildCloseList);
+            return None;
         }
 
         self.state_stack
@@ -1452,13 +1453,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     });
 
                 for op in &[op, parent_op] {
-                    if let Some(op) = &op {
-                        if op.is_left()
-                            && (op.is_prefix() || requires_space(&op.as_atom().as_str(), "("))
-                        {
-                            self.state_stack.push(TokenOrRedirect::Space);
-                            return;
-                        }
+                    if let Some(op) = &op
+                        && op.is_left()
+                        && (op.is_prefix() || requires_space(&op.as_atom().as_str(), "("))
+                    {
+                        self.state_stack.push(TokenOrRedirect::Space);
+                        return;
                     }
                 }
             }
@@ -1627,10 +1627,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             if name == atom!("[]") && arity == 0 {
                 if let Some(TokenOrRedirect::CloseList(_) | TokenOrRedirect::ChildCloseList) =
                     printer.state_stack.last()
+                    && printer.at_cdr("")
                 {
-                    if printer.at_cdr("") {
-                        return;
-                    }
+                    return;
                 }
 
                 append_str!(printer, "[]");

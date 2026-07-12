@@ -580,23 +580,21 @@ impl MachineState {
 
             read_heap_cell!(addr,
                 (HeapCellValueTag::Atom, (name, arity)) => {
-                    if arity == 0 {
-                        if let Some(c) = name.as_char() {
+                    if arity == 0
+                        && let Some(c) = name.as_char() {
                             chars.push(c);
                             continue;
                         }
-                    }
                 }
                 (HeapCellValueTag::Str, s) => {
                     let (name, arity) = cell_as_atom_cell!(self.heap[s])
                         .get_name_and_arity();
 
-                    if arity == 0 {
-                        if let Some(c) = name.as_char() {
+                    if arity == 0
+                        && let Some(c) = name.as_char() {
                             chars.push(c);
                             continue;
                         }
-                    }
                 }
                 _ => {
                 }
@@ -751,10 +749,10 @@ impl MachineState {
         let mut var_list = Vec::with_capacity(singleton_var_set.len());
 
         for (var_name, addr) in term_write_result.var_dict {
-            if let Some(var) = addr.as_var() {
-                if let Some(idx) = singleton_var_set.get_index_of(&var) {
-                    var_list.push((var_name, addr, idx));
-                }
+            if let Some(var) = addr.as_var()
+                && let Some(idx) = singleton_var_set.get_index_of(&var)
+            {
+                var_list.push((var_name, addr, idx));
             }
         }
 
@@ -1142,10 +1140,10 @@ impl CWIL {
 
     #[inline(always)]
     pub(crate) fn remove_limit(&mut self, block: usize) -> u128 {
-        if let Some((_, bl)) = self.limits.last() {
-            if bl == &block {
-                self.limits.pop();
-            }
+        if let Some((_, bl)) = self.limits.last()
+            && bl == &block
+        {
+            self.limits.pop();
         }
 
         self.local_count

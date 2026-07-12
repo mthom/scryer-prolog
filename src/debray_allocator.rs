@@ -337,13 +337,11 @@ impl DebrayAllocator {
 
                 if let VarAlloc::Temp { temp_var_data, .. } =
                     &self.var_data.records[t_var].allocation
-                {
-                    if !temp_var_data
+                    && !temp_var_data
                         .use_set
                         .contains(&(GenContext::Last(chunk_num), k))
-                    {
-                        return Some((t_var, self.alloc_with_ca(t_var)));
-                    }
+                {
+                    return Some((t_var, self.alloc_with_ca(t_var)));
                 }
 
                 None
