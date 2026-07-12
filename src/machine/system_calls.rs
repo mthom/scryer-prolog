@@ -8547,7 +8547,7 @@ impl Machine {
                 .tree
                 .root()
                 .children()
-                .map(|child| self.html_node_to_term(child))
+                .filter_map(|child| self.html_node_to_term(child).transpose())
                 .collect::<Result<Vec<_>, _>>()?;
 
             let nodes = sized_iter_to_heap_list(
@@ -9425,10 +9425,14 @@ impl Machine {
     pub(super) fn html_node_to_term(
         &mut self,
         node: ego_tree::NodeRef<'_, scraper::Node>,
-    ) -> Result<HeapCellValue, AllocError> {
+    ) -> Result<Option<HeapCellValue>, AllocError> {
         match node.value() {
-            scraper::Node::Document | scraper::Node::Fragment => {
+            scraper::Node::Document => {
                 unreachable!("we never iterate the root itself only its children")
+            }
+            scraper::Node::Fragment => {
+                // TODO should we represent the fragment somehow?  skipping it for now
+                Ok(None)
             }
             scraper::Node::Doctype(doctype) => {
                 // what about public and system id?
@@ -9442,7 +9446,7 @@ impl Machine {
                     section.push_cell(name);
                 });
 
-                Ok(result)
+                Ok(Some(result))
             }
             scraper::Node::Comment(comment) => {
                 let comment = self.machine_st.heap.allocate_cstr(comment)?;
@@ -9455,9 +9459,9 @@ impl Machine {
                     section.push_cell(comment);
                 });
 
-                Ok(result)
+                Ok(Some(result))
             }
-            scraper::Node::Text(text) => self.machine_st.heap.allocate_cstr(&text.text),
+            scraper::Node::Text(text) => self.machine_st.heap.allocate_cstr(&text.text).map(Some),
             scraper::Node::Element(element) => {
                 let mut avec = Vec::new();
 
@@ -9484,7 +9488,7 @@ impl Machine {
 
                 let cvec = node
                     .children()
-                    .map(|child| self.html_node_to_term(child))
+                    .filter_map(|child| self.html_node_to_term(child).transpose())
                     .collect::<Result<Vec<_>, _>>()?;
 
                 let children = sized_iter_to_heap_list(
@@ -9504,7 +9508,7 @@ impl Machine {
                     section.push_cell(children);
                 });
 
-                Ok(result)
+                Ok(Some(result))
             }
             scraper::Node::ProcessingInstruction(processing_instruction) => {
                 let target = self
@@ -9525,7 +9529,7 @@ impl Machine {
                     section.push_cell(data);
                 });
 
-                Ok(result)
+                Ok(Some(result))
             }
         }
     }
