@@ -116,9 +116,9 @@ impl<R: Read> CharReader<R> {
         // to tell the compiler that the pos..cap slice is always valid.
         if self.pos >= self.buf.len() {
             // make some space in buf
-            if self.buf.len() > 4 {
-                // keep 4 bytes so that put_back_char can put back at least one char
-                self.buf.drain(4..);
+            if self.buf.len() > char::MAX_LEN_UTF8 {
+                // keep char::MAX_LEN_UTF8 (4) bytes so that put_back_char can put back at least one char
+                self.buf.drain(char::MAX_LEN_UTF8..);
             }
             self.pos = self.buf.len();
 
@@ -144,7 +144,7 @@ impl<R: Read> CharRead for CharReader<R> {
         }
 
         fn bad_bytes_error(buf: &[u8]) -> std::io::Error {
-            // If we have 4 bytes that still don't make up
+            // If we have char::MAX_LEN_UTF8 (4) bytes that still don't make up
             // a valid code point, then we have garbage.
 
             // We have bad data in the buffer. Remove
@@ -171,10 +171,14 @@ impl<R: Read> CharRead for CharReader<R> {
             // buf must be non-empty
             let buf = &self.buf[self.pos..];
 
-            // we need at most 4 bytes for a char so don't decode the whole buffer
+            // we need at most char::MAX_LEN_UTF8 (4) bytes for a char so don't decode the whole buffer
             // as it can be quite large and we are going to discard the remaining chars anyway
             // if there is a valid prefix
-            let prefix = if buf.len() > 4 { &buf[..4] } else { buf };
+            let prefix = if buf.len() > char::MAX_LEN_UTF8 {
+                &buf[..char::MAX_LEN_UTF8]
+            } else {
+                buf
+            };
 
             let e = match str::from_utf8(prefix) {
                 Ok(s) => {
@@ -208,10 +212,10 @@ impl<R: Read> CharRead for CharReader<R> {
             // we need to read more data from the underlying stream
             // so that we can determine its validity
 
-            if self.buf.len() > 4 {
-                // keep a prefix of 4 bytes so that we can put back at least one char
-                self.buf.drain(4..self.pos);
-                self.pos = 4;
+            if self.buf.len() > char::MAX_LEN_UTF8 {
+                // keep a prefix of char::MAX_LEN_UTF8 (4) bytes so that we can put back at least one char
+                self.buf.drain(char::MAX_LEN_UTF8..self.pos);
+                self.pos = char::MAX_LEN_UTF8;
             }
 
             match self.read_chunk() {
@@ -232,10 +236,8 @@ impl<R: Read> CharRead for CharReader<R> {
         if c_len <= self.pos {
             self.pos -= c_len;
         } else {
-            self.buf.insert_from_slice(
-                0,
-                &[0u8; 4/* char::MAX_LEN_UTF8 once msrv reached 1.93 */][..c_len - self.pos],
-            );
+            self.buf
+                .insert_from_slice(0, &[0u8; char::MAX_LEN_UTF8][..c_len - self.pos]);
             self.pos = 0;
         }
 
