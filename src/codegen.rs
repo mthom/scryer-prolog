@@ -366,7 +366,7 @@ impl CodeGenerator {
     where
         Target: crate::targets::CompilationTarget<'a>,
     {
-        if let Some(ref mut instr) = target.back_mut()
+        if let Some(instr) = target.back_mut()
             && Target::is_void_instr(instr)
         {
             Target::incr_void_instr(instr);

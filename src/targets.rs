@@ -74,7 +74,7 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
     }
 
     fn incr_void_instr(instr: &mut Instruction) {
-        if let &mut Instruction::UnifyVoid(ref mut incr) = instr {
+        if let Instruction::UnifyVoid(incr) = instr {
             *incr += 1
         }
     }
@@ -144,7 +144,7 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
     }
 
     fn incr_void_instr(instr: &mut Instruction) {
-        if let &mut Instruction::SetVoid(ref mut incr) = instr {
+        if let Instruction::SetVoid(incr) = instr {
             *incr += 1
         }
     }

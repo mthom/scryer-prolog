@@ -565,11 +565,11 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         .push(Term::Clause(Cell::default(), name, subterms));
                 }
 
-                if let Some(&mut TokenDesc {
-                    ref mut tt,
-                    ref mut priority,
-                    ref mut spec,
-                    ref mut unfold_bounds,
+                if let Some(TokenDesc {
+                    tt,
+                    priority,
+                    spec,
+                    unfold_bounds,
                 }) = self.stack.last_mut()
                 {
                     if *spec == BTERM {
@@ -748,7 +748,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             return Ok(false);
         }
 
-        if let Some(ref mut td) = self.stack.last_mut()
+        if let Some(td) = self.stack.last_mut()
             && td.tt == TokenType::OpenCurly
         {
             td.tt = TokenType::Term;

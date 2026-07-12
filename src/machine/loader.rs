@@ -580,7 +580,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             .modules
                             .get_mut(&target_module_name)
                         {
-                            Some(ref mut module) => {
+                            Some(module) => {
                                 module.meta_predicates.swap_remove(&key);
                             }
                             _ => {
@@ -603,7 +603,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             .modules
                             .get_mut(&target_module_name)
                         {
-                            Some(ref mut module) => {
+                            Some(module) => {
                                 module
                                     .meta_predicates
                                     .insert((name, meta_specs.len()), meta_specs);
@@ -622,7 +622,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     listing_src,
                     local_extensible_predicates,
                 ) => match self.wam_prelude.indices.modules.get_mut(&module_decl.name) {
-                    Some(ref mut module) => {
+                    Some(module) => {
                         module.module_decl = module_decl;
                         module.listing_src = listing_src;
                         module.local_extensible_predicates = local_extensible_predicates;
@@ -641,7 +641,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             }
                         }
                         CompilationTarget::Module(module_name) => {
-                            if let Some(ref mut module) =
+                            if let Some(module) =
                                 self.wam_prelude.indices.modules.get_mut(&module_name)
                                 && let Some(skeleton) = module.extensible_predicates.get_mut(&key)
                             {
@@ -660,7 +660,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             }
                         }
                         CompilationTarget::Module(module_name) => {
-                            if let Some(ref mut module) =
+                            if let Some(module) =
                                 self.wam_prelude.indices.modules.get_mut(&module_name)
                                 && let Some(skeleton) = module.extensible_predicates.get_mut(&key)
                             {
@@ -680,7 +680,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             }
                         }
                         CompilationTarget::Module(module_name) => {
-                            if let Some(ref mut module) =
+                            if let Some(module) =
                                 self.wam_prelude.indices.modules.get_mut(&module_name)
                                 && let Some(skeleton) = module.extensible_predicates.get_mut(&key)
                             {
@@ -690,30 +690,23 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     }
                 }
                 RetractionRecord::AddedModuleOp(module_name, mut op_decl) => {
-                    if let Some(ref mut module) =
-                        self.wam_prelude.indices.modules.get_mut(&module_name)
-                    {
+                    if let Some(module) = self.wam_prelude.indices.modules.get_mut(&module_name) {
                         op_decl.remove(&mut module.op_dir);
                     }
                 }
                 RetractionRecord::ReplacedModuleOp(module_name, mut op_decl, op_desc) => {
-                    if let Some(ref mut module) =
-                        self.wam_prelude.indices.modules.get_mut(&module_name)
-                    {
+                    if let Some(module) = self.wam_prelude.indices.modules.get_mut(&module_name) {
                         op_decl.op_desc = op_desc;
                         op_decl.insert_into_op_dir(&mut module.op_dir);
                     }
                 }
                 RetractionRecord::AddedModulePredicate(module_name, key) => {
-                    if let Some(ref mut module) =
-                        self.wam_prelude.indices.modules.get_mut(&module_name)
-                    {
+                    if let Some(module) = self.wam_prelude.indices.modules.get_mut(&module_name) {
                         module.code_dir.swap_remove(&key);
                     }
                 }
                 RetractionRecord::ReplacedModulePredicate(module_name, key, old_code_idx) => {
-                    if let Some(ref mut module) =
-                        self.wam_prelude.indices.modules.get_mut(&module_name)
+                    if let Some(module) = self.wam_prelude.indices.modules.get_mut(&module_name)
                         && let Some(code_idx) = module.code_dir.get_mut(&key)
                     {
                         let code_index_tbl =
@@ -792,10 +785,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     // write the retraction logic of this arm.
                 }
                 RetractionRecord::ReplacedChoiceOffset(instr_loc, offset) => {
-                    match self.wam_prelude.code[instr_loc] {
-                        Instruction::TryMeElse(ref mut o)
-                        | Instruction::RetryMeElse(ref mut o)
-                        | Instruction::DefaultRetryMeElse(ref mut o) => {
+                    match &mut self.wam_prelude.code[instr_loc] {
+                        Instruction::TryMeElse(o)
+                        | Instruction::RetryMeElse(o)
+                        | Instruction::DefaultRetryMeElse(o) => {
                             *o = offset;
                         }
                         _ => {
@@ -811,8 +804,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     };
                 }
                 RetractionRecord::ReplacedSwitchOnTermVarIndex(index_loc, old_v) => {
-                    if let Instruction::IndexingCode(ref mut indexing_code) =
-                        self.wam_prelude.code[index_loc]
+                    if let Instruction::IndexingCode(indexing_code) =
+                        &mut self.wam_prelude.code[index_loc]
                         && let IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, ..)) =
                             &mut indexing_code[0]
                     {
@@ -1009,18 +1002,18 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     }
                 }
                 RetractionRecord::ReplacedDynamicElseOffset(instr_loc, next) => {
-                    match self.wam_prelude.code[instr_loc] {
-                        Instruction::DynamicElse(_, _, NextOrFail::Next(ref mut o))
-                        | Instruction::DynamicInternalElse(_, _, NextOrFail::Next(ref mut o)) => {
+                    match &mut self.wam_prelude.code[instr_loc] {
+                        Instruction::DynamicElse(_, _, NextOrFail::Next(o))
+                        | Instruction::DynamicInternalElse(_, _, NextOrFail::Next(o)) => {
                             *o = next;
                         }
                         _ => {}
                     }
                 }
                 RetractionRecord::AppendedNextOrFail(instr_loc, fail) => {
-                    match self.wam_prelude.code[instr_loc] {
-                        Instruction::DynamicElse(_, _, ref mut next_or_fail)
-                        | Instruction::DynamicInternalElse(_, _, ref mut next_or_fail) => {
+                    match &mut self.wam_prelude.code[instr_loc] {
+                        Instruction::DynamicElse(_, _, next_or_fail)
+                        | Instruction::DynamicInternalElse(_, _, next_or_fail) => {
                             *next_or_fail = fail;
                         }
                         _ => {}
@@ -1100,8 +1093,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             }
             CompilationTarget::Module(module_name) => {
                 match self.wam_prelude.indices.modules.get_mut(module_name) {
-                    Some(ref mut module) => match module.extensible_predicates.get_mut(&key) {
-                        Some(ref mut skeleton) => {
+                    Some(module) => match module.extensible_predicates.get_mut(&key) {
+                        Some(skeleton) => {
                             if !*flag_accessor(&mut skeleton.core) {
                                 *flag_accessor(&mut skeleton.core) = true;
 

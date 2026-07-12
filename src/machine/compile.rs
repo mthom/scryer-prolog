@@ -2221,7 +2221,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             let offset = self.compile(key, predicates, settings)?;
 
             if let Some(filename) = self.listing_src_file_name()
-                && let Some(ref mut module) = self.wam_prelude.indices.modules.get_mut(&filename)
+                && let Some(module) = self.wam_prelude.indices.modules.get_mut(&filename)
             {
                 let index_ptr = LS::machine_st(&mut self.payload)
                     .arena

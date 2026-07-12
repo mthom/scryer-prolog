@@ -629,7 +629,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         key: PredicateKey,
     ) -> CodeIndex {
         match self.wam_prelude.indices.modules.get_mut(&module_name) {
-            Some(ref mut module) => *module.code_dir.entry(key).or_insert_with(|| {
+            Some(module) => *module.code_dir.entry(key).or_insert_with(|| {
                 CodeIndex::new(
                     IndexPtr::undefined(),
                     &mut LS::machine_st(&mut self.payload).arena.code_index_tbl,
@@ -639,7 +639,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 self.add_dynamically_generated_module(module_name);
 
                 match self.wam_prelude.indices.modules.get_mut(&module_name) {
-                    Some(ref mut module) => *module.code_dir.entry(key).or_insert_with(|| {
+                    Some(module) => *module.code_dir.entry(key).or_insert_with(|| {
                         CodeIndex::new(
                             IndexPtr::undefined(),
                             &mut LS::machine_st(&mut self.payload).arena.code_index_tbl,
@@ -766,8 +766,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         match payload_compilation_target {
             CompilationTarget::User => {
                 if let Some(filename) = listing_src_file_name
-                    && let Some(ref mut module) =
-                        self.wam_prelude.indices.modules.get_mut(&filename)
+                    && let Some(module) = self.wam_prelude.indices.modules.get_mut(&filename)
                 {
                     op_decl.insert_into_op_dir(&mut module.op_dir);
                 }
@@ -781,7 +780,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             }
             CompilationTarget::Module(ref module_name) => {
                 match self.wam_prelude.indices.modules.get_mut(module_name) {
-                    Some(ref mut module) => {
+                    Some(module) => {
                         add_op_decl_as_module_export::<LS>(
                             &mut self.payload,
                             &mut module.op_dir,
@@ -1089,7 +1088,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .modules
                         .get_mut(defining_module_name)
                     {
-                        Some(ref mut target_module) => {
+                        Some(target_module) => {
                             import_module_exports_into_module::<LS>(
                                 &mut self.payload,
                                 &payload_compilation_target,
@@ -1142,17 +1141,15 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .modules
                         .get_mut(defining_module_name)
                     {
-                        Some(ref mut target_module) => {
-                            import_qualified_module_exports_into_module::<LS>(
-                                &mut self.payload,
-                                &module,
-                                &exports,
-                                &mut target_module.code_dir,
-                                &mut target_module.op_dir,
-                                &mut target_module.meta_predicates,
-                                &mut self.wam_prelude.indices.op_dir,
-                            )
-                        }
+                        Some(target_module) => import_qualified_module_exports_into_module::<LS>(
+                            &mut self.payload,
+                            &module,
+                            &exports,
+                            &mut target_module.code_dir,
+                            &mut target_module.op_dir,
+                            &mut target_module.meta_predicates,
+                            &mut self.wam_prelude.indices.op_dir,
+                        ),
                         None => Err(SessionError::ModuleCannotImportSelf(module_name)),
                     }
                 }
