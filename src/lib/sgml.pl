@@ -39,6 +39,8 @@ represented as a list of elements where each is of the form:
 
   * `processing_instruction(Target, Data)`
 
+  * `fragment(Children)`
+
 Currently, Options are ignored. In the future, more options may be
 provided to control parsing.
 

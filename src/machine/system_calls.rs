@@ -9431,8 +9431,26 @@ impl Machine {
                 unreachable!("we never iterate the root itself only its children")
             }
             scraper::Node::Fragment => {
-                // TODO should we represent the fragment somehow?  skipping it for now
-                Ok(None)
+                let cvec = node
+                    .children()
+                    .filter_map(|child| self.html_node_to_term(child).transpose())
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let children = sized_iter_to_heap_list(
+                    &mut self.machine_st.heap,
+                    cvec.len(),
+                    cvec.into_iter(),
+                )?;
+
+                let result = str_loc_as_cell!(self.machine_st.heap.cell_len());
+                let mut writer = self.machine_st.heap.reserve(2)?;
+
+                writer.write_with(|section| {
+                    section.push_cell(atom_as_cell!(atom!("fragment"), 1));
+                    section.push_cell(children);
+                });
+
+                Ok(Some(result))
             }
             scraper::Node::Doctype(doctype) => {
                 // what about public and system id?

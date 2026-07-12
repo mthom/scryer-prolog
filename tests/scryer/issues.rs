@@ -27,7 +27,7 @@ fn issue2588_load_html() {
 fn issue3400_load_html() {
     load_module_test(
         "tests-pl/issue3400.pl",
-        "[element(html,[],[element(head,[],[element(template,[],[])]),element(body,[],[])])]",
+        "[element(html,[],[element(head,[],[element(template,[],[fragment([[H,e,l,l,o,!]])])]),element(body,[],[])])]",
     );
 }
 
