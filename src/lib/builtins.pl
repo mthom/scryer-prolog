@@ -2071,6 +2071,8 @@ is_stream_position(position_and_lines_read(P, L)) :-
     ( var(L) ; integer(L), L >= 0 ),
     !.
 
+:- indexing(check_stream_property(+, -, -)).
+
 check_stream_property(input, direction, D) :-
     ( var(D) -> true ; D = input ).
 check_stream_property(output, direction, D) :-

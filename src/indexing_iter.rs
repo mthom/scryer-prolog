@@ -211,7 +211,7 @@ impl<'code> IndexingLineOffset<'code> {
                 if let Some(instr) = offsets.front_mut() {
                     uncap_choice_seq_with_try(instr, false);
                 }
-                
+
                 offsets.push_front(
                     StaticIndexedChoiceInstructionOffset::Try(clause_offset),
                 );
@@ -336,7 +336,7 @@ pub(crate) enum IndexingLinePlace<'a> {
     DeadIndices(
         TableLocation,
         usize, // arg_num
-        &'a mut IndexSet<usize, FxBuildHasher>, 
+        &'a mut IndexSet<usize, FxBuildHasher>,
     ),
     OnDemandInstr(TableLocation, usize), // cursor, indexing_code_len
     StaticOffsets(TableLocation, &'a mut VecDeque<StaticIndexedChoiceInstructionOffset>),
@@ -484,7 +484,7 @@ impl<'code> IndexingLineIter<'code> {
                                                 cursor,
                                                 indexing_code_len,
                                                 lists,
-                                            ))                                                
+                                            ))
                                         }
                                         OptArgIndexKey::None => {
                                             Some(IndexingLinePlace::SwitchOnNonePtr(cursor))
@@ -804,7 +804,7 @@ pub(crate) fn add_clause_index<'code>(
                     append_or_prepend,
                     indexing_code_len,
                 );
-                
+
                 iter.implement_map_promotion(map_promotion, cursor, append_or_prepend, clause_offset);
                 cursor
             }

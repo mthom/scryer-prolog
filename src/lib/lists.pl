@@ -178,10 +178,7 @@ memberchk(X, Xs) :- member(X, Xs), !.
 %     ?- reverse([1,2,3], [3,2,1]).
 %        true.
 %
-reverse(Xs, Ys) :-
-    (  nonvar(Xs) -> reverse(Xs, Ys, [], Xs)
-    ;  reverse(Ys, Xs, [], Ys)
-    ).
+reverse(Xs, Ys) :- reverse(Xs, Ys, [], Xs).
 
 reverse([], [], YsRev, YsRev).
 reverse([_|Xs], [Y1|Ys], YsPreludeRev, Xss) :-

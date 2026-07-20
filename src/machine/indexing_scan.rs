@@ -82,7 +82,7 @@ fn indices_of_arg<'a, I: PropagatingIndexer>(
             var_offsets.push(clause_offset + 1);
         } else if var_offsets.is_empty() {
             code_offsets.index_key(index_key, I::recompute_index(offset_instr));
-            
+
             for arg_index in arg_num + 1 ..= arity {
                 let index_key = key_indices.get(arg_index - 1).copied().unwrap_or(OptArgIndexKey::None);
                 code_offsets.map_clause_offset_to_arg_key(arg_index - 1, index_key, clause_offset);
