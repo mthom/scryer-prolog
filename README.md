@@ -74,7 +74,7 @@ Extend Scryer Prolog to include the following, among other features:
   - [x] Greatly reducing the number of instructions used to compile disjunctives.
   - [x] Storing short atoms to heap cells without writing them to the atom table.
 - [ ] Configurable JIT/on-demand indexing over all arguments
-      (documented in "[Demand-Driven Indexing of Prolog Clauses](https://user.it.uu.se/~kostis/Papers/iclp07.pdf)." (_in progress_)
+      (documented in "[Demand-Driven Indexing of Prolog Clauses](https://user.it.uu.se/~kostis/Papers/iclp07.pdf)"). (_in progress_)
 - [ ] A compacting garbage collector satisfying the five properties of
       "[Precise Garbage Collection in Prolog](https://www.complang.tuwien.ac.at/ulrich/papers/PDF/2008-ciclops.pdf)." (_in progress_)
 
