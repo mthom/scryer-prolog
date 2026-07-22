@@ -512,20 +512,18 @@ impl OpDecl {
     ) -> Result<(), SessionError> {
         let (spec, name) = (self.op_desc.get_spec(), self.name);
 
-        if spec.is_infix() {
-            if let Some(desc) = existing_desc {
-                if desc.post > 0 {
-                    return Err(SessionError::OpIsInfixAndPostFix(name));
-                }
-            }
+        if spec.is_infix()
+            && let Some(desc) = existing_desc
+            && desc.post > 0
+        {
+            return Err(SessionError::OpIsInfixAndPostFix(name));
         }
 
-        if spec.is_postfix() {
-            if let Some(desc) = existing_desc {
-                if desc.inf > 0 {
-                    return Err(SessionError::OpIsInfixAndPostFix(name));
-                }
-            }
+        if spec.is_postfix()
+            && let Some(desc) = existing_desc
+            && desc.inf > 0
+        {
+            return Err(SessionError::OpIsInfixAndPostFix(name));
         }
 
         self.insert_into_op_dir(op_dir);
@@ -582,13 +580,13 @@ pub(crate) fn fetch_op_spec_from_existing(
     op_desc: Option<OpDesc>,
     op_dir: &OpDir,
 ) -> Option<OpDesc> {
-    if let Some(op_desc) = &op_desc {
-        if op_desc.arity() != arity {
-            /* it's possible to extend operator functors with
-             * additional terms. When that happens,
-             * void the op_spec by returning None. */
-            return None;
-        }
+    if let Some(op_desc) = &op_desc
+        && op_desc.arity() != arity
+    {
+        /* it's possible to extend operator functors with
+         * additional terms. When that happens,
+         * void the op_spec by returning None. */
+        return None;
     }
 
     op_desc.or_else(|| fetch_op_spec(name, arity, op_dir))
@@ -604,10 +602,10 @@ pub(crate) fn fetch_op_spec(name: Atom, arity: usize, op_dir: &OpDir) -> Option<
             }
         }),
         1 => {
-            if let Some(op_desc) = op_dir.get(&(name, Fixity::Pre)) {
-                if op_desc.get_prec() > 0 {
-                    return Some(*op_desc);
-                }
+            if let Some(op_desc) = op_dir.get(&(name, Fixity::Pre))
+                && op_desc.get_prec() > 0
+            {
+                return Some(*op_desc);
             }
 
             op_dir.get(&(name, Fixity::Post)).and_then(|op_desc| {

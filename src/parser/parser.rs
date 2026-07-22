@@ -326,41 +326,40 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     fn push_binary_op(&mut self, td: TokenDesc, spec: Specifier) {
-        if let Some(arg2) = self.terms.pop() {
-            if let Some(name) = self.get_term_name(td) {
-                if let Some(arg1) = self.terms.pop() {
-                    let term = Term::Clause(Cell::default(), name, vec![arg1, arg2]);
+        if let Some(arg2) = self.terms.pop()
+            && let Some(name) = self.get_term_name(td)
+            && let Some(arg1) = self.terms.pop()
+        {
+            let term = Term::Clause(Cell::default(), name, vec![arg1, arg2]);
 
-                    self.terms.push(term);
-                    self.stack.push(TokenDesc {
-                        tt: TokenType::Term,
-                        priority: td.priority,
-                        spec,
-                        unfold_bounds: 0,
-                    });
-                }
-            }
+            self.terms.push(term);
+            self.stack.push(TokenDesc {
+                tt: TokenType::Term,
+                priority: td.priority,
+                spec,
+                unfold_bounds: 0,
+            });
         }
     }
 
     fn push_unary_op(&mut self, td: TokenDesc, spec: Specifier, assoc: OpDeclSpec) {
-        if let Some(mut arg1) = self.terms.pop() {
-            if let Some(mut name) = self.terms.pop() {
-                if assoc.is_postfix() {
-                    mem::swap(&mut arg1, &mut name);
-                }
+        if let Some(mut arg1) = self.terms.pop()
+            && let Some(mut name) = self.terms.pop()
+        {
+            if assoc.is_postfix() {
+                mem::swap(&mut arg1, &mut name);
+            }
 
-                if let Term::Literal(_, Literal::Atom(name)) = name {
-                    let term = Term::Clause(Cell::default(), name, vec![arg1]);
+            if let Term::Literal(_, Literal::Atom(name)) = name {
+                let term = Term::Clause(Cell::default(), name, vec![arg1]);
 
-                    self.terms.push(term);
-                    self.stack.push(TokenDesc {
-                        tt: TokenType::Term,
-                        priority: td.priority,
-                        spec,
-                        unfold_bounds: 0,
-                    });
-                }
+                self.terms.push(term);
+                self.stack.push(TokenDesc {
+                    tt: TokenType::Term,
+                    priority: td.priority,
+                    spec,
+                    unfold_bounds: 0,
+                });
             }
         }
     }
@@ -566,11 +565,11 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         .push(Term::Clause(Cell::default(), name, subterms));
                 }
 
-                if let Some(&mut TokenDesc {
-                    ref mut tt,
-                    ref mut priority,
-                    ref mut spec,
-                    ref mut unfold_bounds,
+                if let Some(TokenDesc {
+                    tt,
+                    priority,
+                    spec,
+                    unfold_bounds,
                 }) = self.stack.last_mut()
                 {
                     if *spec == BTERM {
@@ -669,16 +668,16 @@ impl<'a, R: CharRead> Parser<'a, R> {
             return Ok(false);
         }
 
-        if let Some(ref mut td) = self.stack.last_mut() {
-            if td.tt == TokenType::OpenList {
-                td.spec = TERM;
-                td.tt = TokenType::Term;
-                td.priority = 0;
+        if let Some(td) = self.stack.last_mut()
+            && td.tt == TokenType::OpenList
+        {
+            td.spec = TERM;
+            td.tt = TokenType::Term;
+            td.priority = 0;
 
-                self.terms
-                    .push(Term::Literal(Cell::default(), Literal::Atom(atom!("[]"))));
-                return Ok(true);
-            }
+            self.terms
+                .push(Term::Literal(Cell::default(), Literal::Atom(atom!("[]"))));
+            return Ok(true);
         }
 
         self.reduce_op(1000);
@@ -749,44 +748,43 @@ impl<'a, R: CharRead> Parser<'a, R> {
             return Ok(false);
         }
 
-        if let Some(ref mut td) = self.stack.last_mut() {
-            if td.tt == TokenType::OpenCurly {
-                td.tt = TokenType::Term;
-                td.priority = 0;
-                td.spec = TERM;
+        if let Some(td) = self.stack.last_mut()
+            && td.tt == TokenType::OpenCurly
+        {
+            td.tt = TokenType::Term;
+            td.priority = 0;
+            td.spec = TERM;
 
-                let term = Term::Literal(Cell::default(), Literal::Atom(atom!("{}")));
+            let term = Term::Literal(Cell::default(), Literal::Atom(atom!("{}")));
 
-                self.terms.push(term);
-                return Ok(true);
-            }
+            self.terms.push(term);
+            return Ok(true);
         }
 
         self.reduce_op(1201);
 
-        if self.stack.len() > 1 {
-            if let Some(td) = self.stack.pop() {
-                if let Some(ref mut oc) = self.stack.last_mut() {
-                    if td.tt != TokenType::Term {
-                        return Ok(false);
-                    }
+        if self.stack.len() > 1
+            && let Some(td) = self.stack.pop()
+            && let Some(oc) = self.stack.last_mut()
+        {
+            if td.tt != TokenType::Term {
+                return Ok(false);
+            }
 
-                    if oc.tt == TokenType::OpenCurly {
-                        oc.tt = TokenType::Term;
-                        oc.priority = 0;
-                        oc.spec = TERM;
+            if oc.tt == TokenType::OpenCurly {
+                oc.tt = TokenType::Term;
+                oc.priority = 0;
+                oc.spec = TERM;
 
-                        let term = match self.terms.pop() {
-                            Some(term) => term,
-                            _ => return Err(self.lexer.incomplete_reduction()),
-                        };
+                let term = match self.terms.pop() {
+                    Some(term) => term,
+                    _ => return Err(self.lexer.incomplete_reduction()),
+                };
 
-                        self.terms
-                            .push(Term::Clause(Cell::default(), atom!("{}"), vec![term]));
+                self.terms
+                    .push(Term::Clause(Cell::default(), atom!("{}"), vec![term]));
 
-                        return Ok(true);
-                    }
-                }
+                return Ok(true);
             }
         }
 
@@ -898,25 +896,24 @@ impl<'a, R: CharRead> Parser<'a, R> {
         Negator: Fn(N, &mut Arena) -> N,
         ToLiteral: Fn(N) -> Literal,
     {
-        if let Some(desc) = self.stack.last().cloned() {
-            if let Some(term) = self.terms.last().cloned() {
-                match term {
-                    Term::Literal(_, Literal::Atom(name))
-                        if name == atom!("-")
-                            && (is_prefix!(desc.spec) || is_negate!(desc.spec)) =>
-                    {
-                        self.stack.pop();
-                        self.terms.pop();
+        if let Some(desc) = self.stack.last().cloned()
+            && let Some(term) = self.terms.last().cloned()
+        {
+            match term {
+                Term::Literal(_, Literal::Atom(name))
+                    if name == atom!("-") && (is_prefix!(desc.spec) || is_negate!(desc.spec)) =>
+                {
+                    self.stack.pop();
+                    self.terms.pop();
 
-                        let arena = &mut self.lexer.machine_st.arena;
-                        let literal = constr(negator(n, arena));
+                    let arena = &mut self.lexer.machine_st.arena;
+                    let literal = constr(negator(n, arena));
 
-                        self.shift(Token::Literal(literal), 0, TERM);
+                    self.shift(Token::Literal(literal), 0, TERM);
 
-                        return;
-                    }
-                    _ => {}
+                    return;
                 }
+                _ => {}
             }
         }
 

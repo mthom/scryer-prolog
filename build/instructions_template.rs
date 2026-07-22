@@ -2013,11 +2013,11 @@ impl InstructionData {
     fn generate_instruction_enum_loop(&mut self, input: syn::DeriveInput) {
         if let Data::Enum(DataEnum { variants, .. }) = input.data {
             for mut variant in variants {
-                if let Some(field) = variant.fields.iter().next() {
-                    if let Some(input) = derive_input(&field.ty) {
-                        self.generate_instruction_enum_loop(input);
-                        continue;
-                    }
+                if let Some(field) = variant.fields.iter().next()
+                    && let Some(input) = derive_input(&field.ty)
+                {
+                    self.generate_instruction_enum_loop(input);
+                    continue;
                 }
 
                 if input.ident == "InstructionTemplate" {

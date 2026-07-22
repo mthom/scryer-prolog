@@ -298,10 +298,10 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
     }
 
     fn unify_constant(&mut self, ptr: UntypedArenaPtr, value: HeapCellValue) {
-        if let Some(ptr2) = value.to_untyped_arena_ptr() {
-            if ptr.get_ptr() == ptr2.get_ptr() {
-                return;
-            }
+        if let Some(ptr2) = value.to_untyped_arena_ptr()
+            && ptr.get_ptr() == ptr2.get_ptr()
+        {
+            return;
         }
 
         match_untyped_arena_ptr!(ptr,
@@ -347,12 +347,9 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
     fn unify_internal(&mut self) {
         debug_assert!(self.unify_tabu_list.is_empty());
 
-        while let Some((s1, s2)) = self.pdl.pop() {
-            if self.fail {
-                // FIXME(msrv) FIXME(edition2024) use let chain to move this to check this in the while condition
-                break;
-            }
-
+        while !self.fail
+            && let Some((s1, s2)) = self.pdl.pop()
+        {
             let s1 = (self.deref() as &MachineState).deref(s1);
             let s2 = (self.deref() as &MachineState).deref(s2);
 
@@ -470,11 +467,11 @@ fn bind_with_occurs_check<U: Unifier>(unifier: &mut U, r: Ref, value: HeapCellVa
         {
             let cell = unmark_cell_bits!(cell);
 
-            if let Some(inner_r) = cell.as_var() {
-                if r == inner_r {
-                    occurs_triggered = true;
-                    break;
-                }
+            if let Some(inner_r) = cell.as_var()
+                && r == inner_r
+            {
+                occurs_triggered = true;
+                break;
             }
         }
     }

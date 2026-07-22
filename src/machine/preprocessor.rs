@@ -362,104 +362,102 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
     let mut arg_terms = Vec::with_capacity(terms.len());
 
     for (term, meta_spec) in terms.into_iter().zip(meta_specs.iter()) {
-        if let MetaSpec::RequiresExpansionWithArgument(supp_args) = meta_spec {
-            if let Some(name) = term.name() {
-                if name == atom!("$call") {
-                    arg_terms.push(term);
-                    continue;
-                }
-
-                let arity = term.arity();
-
-                fn get_qualified_name(
-                    module_term: &Term,
-                    qualified_term: &Term,
-                ) -> Option<(Atom, Atom)> {
-                    if let Term::Literal(_, Literal::Atom(module_name)) = module_term {
-                        if let Some(name) = qualified_term.name() {
-                            return Some((*module_name, name));
-                        }
-                    }
-
-                    None
-                }
-
-                fn identity_fn(_module_name: Atom, term: Term) -> Term {
-                    term
-                }
-
-                fn tag_with_module_name(module_name: Atom, term: Term) -> Term {
-                    Term::Clause(
-                        Cell::default(),
-                        atom!(":"),
-                        vec![
-                            Term::Literal(Cell::default(), Literal::Atom(module_name)),
-                            term,
-                        ],
-                    )
-                }
-
-                let process_term: fn(Atom, Term) -> Term;
-
-                let (module_name, key, term) = match term {
-                    Term::Clause(cell, atom!(":"), mut terms) if terms.len() == 2 => {
-                        if let Some((module_name, name)) = get_qualified_name(&terms[0], &terms[1])
-                        {
-                            process_term = tag_with_module_name;
-                            (
-                                module_name,
-                                (name, terms[1].arity() + supp_args),
-                                terms.pop().unwrap(),
-                            )
-                        } else {
-                            arg_terms.push(Term::Clause(cell, atom!(":"), terms));
-                            continue;
-                        }
-                    }
-                    term => {
-                        process_term = identity_fn;
-                        (module_name, (name, arity + supp_args), term)
-                    }
-                };
-
-                let term = match term {
-                    Term::Clause(cell, name, mut terms) => {
-                        if let Some(Term::Literal(_, Literal::CodeIndexOffset(_))) = terms.last() {
-                            arg_terms
-                                .push(process_term(module_name, Term::Clause(cell, name, terms)));
-
-                            continue;
-                        }
-
-                        let idx = loader.get_or_insert_qualified_code_index(module_name, key);
-
-                        terms.push(Term::Literal(
-                            Cell::default(),
-                            Literal::CodeIndexOffset(idx.into()),
-                        ));
-                        process_term(module_name, Term::Clause(cell, name, terms))
-                    }
-                    Term::Literal(cell, Literal::Atom(name)) => {
-                        let idx = loader.get_or_insert_qualified_code_index(module_name, key);
-
-                        process_term(
-                            module_name,
-                            Term::Clause(
-                                cell,
-                                name,
-                                vec![Term::Literal(
-                                    Cell::default(),
-                                    Literal::CodeIndexOffset(idx.into()),
-                                )],
-                            ),
-                        )
-                    }
-                    term => term,
-                };
-
+        if let MetaSpec::RequiresExpansionWithArgument(supp_args) = meta_spec
+            && let Some(name) = term.name()
+        {
+            if name == atom!("$call") {
                 arg_terms.push(term);
                 continue;
             }
+
+            let arity = term.arity();
+
+            fn get_qualified_name(
+                module_term: &Term,
+                qualified_term: &Term,
+            ) -> Option<(Atom, Atom)> {
+                if let Term::Literal(_, Literal::Atom(module_name)) = module_term
+                    && let Some(name) = qualified_term.name()
+                {
+                    return Some((*module_name, name));
+                }
+
+                None
+            }
+
+            fn identity_fn(_module_name: Atom, term: Term) -> Term {
+                term
+            }
+
+            fn tag_with_module_name(module_name: Atom, term: Term) -> Term {
+                Term::Clause(
+                    Cell::default(),
+                    atom!(":"),
+                    vec![
+                        Term::Literal(Cell::default(), Literal::Atom(module_name)),
+                        term,
+                    ],
+                )
+            }
+
+            let process_term: fn(Atom, Term) -> Term;
+
+            let (module_name, key, term) = match term {
+                Term::Clause(cell, atom!(":"), mut terms) if terms.len() == 2 => {
+                    if let Some((module_name, name)) = get_qualified_name(&terms[0], &terms[1]) {
+                        process_term = tag_with_module_name;
+                        (
+                            module_name,
+                            (name, terms[1].arity() + supp_args),
+                            terms.pop().unwrap(),
+                        )
+                    } else {
+                        arg_terms.push(Term::Clause(cell, atom!(":"), terms));
+                        continue;
+                    }
+                }
+                term => {
+                    process_term = identity_fn;
+                    (module_name, (name, arity + supp_args), term)
+                }
+            };
+
+            let term = match term {
+                Term::Clause(cell, name, mut terms) => {
+                    if let Some(Term::Literal(_, Literal::CodeIndexOffset(_))) = terms.last() {
+                        arg_terms.push(process_term(module_name, Term::Clause(cell, name, terms)));
+
+                        continue;
+                    }
+
+                    let idx = loader.get_or_insert_qualified_code_index(module_name, key);
+
+                    terms.push(Term::Literal(
+                        Cell::default(),
+                        Literal::CodeIndexOffset(idx.into()),
+                    ));
+                    process_term(module_name, Term::Clause(cell, name, terms))
+                }
+                Term::Literal(cell, Literal::Atom(name)) => {
+                    let idx = loader.get_or_insert_qualified_code_index(module_name, key);
+
+                    process_term(
+                        module_name,
+                        Term::Clause(
+                            cell,
+                            name,
+                            vec![Term::Literal(
+                                Cell::default(),
+                                Literal::CodeIndexOffset(idx.into()),
+                            )],
+                        ),
+                    )
+                }
+                term => term,
+            };
+
+            arg_terms.push(term);
+            continue;
         }
 
         arg_terms.push(term);

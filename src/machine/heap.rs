@@ -271,7 +271,6 @@ impl ReservedHeapSection {
             return 0;
         }
 
-        let cells_written;
         let str_byte_len = src.len();
 
         unsafe {
@@ -287,7 +286,7 @@ impl ReservedHeapSection {
 
         unsafe { ptr::write_bytes(self.heap_ptr.add(zero_region_idx), 0u8, align_offset) };
 
-        cells_written = if align_offset == 1 {
+        let cells_written = if align_offset == 1 {
             unsafe {
                 ptr::write_bytes(
                     self.heap_ptr.add(zero_region_idx + 1),

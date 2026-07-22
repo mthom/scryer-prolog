@@ -329,10 +329,10 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
                 let n = Number::Fixnum(n1);
                 Err(numerical_type_error(ValidType::Float, n, stub_gen))
             } else {
-                if let Ok(n2_u) = u32::try_from(n2_i) {
-                    if let Some(result) = n1_i.checked_pow(n2_u) {
-                        return Ok(Number::arena_from(result, arena));
-                    }
+                if let Ok(n2_u) = u32::try_from(n2_i)
+                    && let Some(result) = n1_i.checked_pow(n2_u)
+                {
+                    return Ok(Number::arena_from(result, arena));
                 }
 
                 let n1 = Integer::from(n1_i);

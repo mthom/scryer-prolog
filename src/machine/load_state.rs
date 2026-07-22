@@ -474,25 +474,24 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 continue;
             }
 
-            if let Some(code_index) = removed_module.code_dir.get_mut(key) {
-                if let Some(global_skeleton) = self
+            if let Some(code_index) = removed_module.code_dir.get_mut(key)
+                && let Some(global_skeleton) = self
                     .wam_prelude
                     .indices
                     .get_predicate_skeleton(local_compilation_target, key)
-                {
-                    let old_index_ptr = code_index.replace(
-                        &mut LS::machine_st(&mut self.payload).arena.code_index_tbl,
-                        if global_skeleton.core.is_dynamic {
-                            IndexPtr::dynamic_undefined()
-                        } else {
-                            IndexPtr::undefined()
-                        },
-                    );
+            {
+                let old_index_ptr = code_index.replace(
+                    &mut LS::machine_st(&mut self.payload).arena.code_index_tbl,
+                    if global_skeleton.core.is_dynamic {
+                        IndexPtr::dynamic_undefined()
+                    } else {
+                        IndexPtr::undefined()
+                    },
+                );
 
-                    self.payload.retraction_info.push_record(
-                        RetractionRecord::ReplacedModulePredicate(module_name, *key, old_index_ptr),
-                    );
-                }
+                self.payload.retraction_info.push_record(
+                    RetractionRecord::ReplacedModulePredicate(module_name, *key, old_index_ptr),
+                );
             }
         }
 
@@ -630,7 +629,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         key: PredicateKey,
     ) -> CodeIndex {
         match self.wam_prelude.indices.modules.get_mut(&module_name) {
-            Some(ref mut module) => *module.code_dir.entry(key).or_insert_with(|| {
+            Some(module) => *module.code_dir.entry(key).or_insert_with(|| {
                 CodeIndex::new(
                     IndexPtr::undefined(),
                     &mut LS::machine_st(&mut self.payload).arena.code_index_tbl,
@@ -640,7 +639,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 self.add_dynamically_generated_module(module_name);
 
                 match self.wam_prelude.indices.modules.get_mut(&module_name) {
-                    Some(ref mut module) => *module.code_dir.entry(key).or_insert_with(|| {
+                    Some(module) => *module.code_dir.entry(key).or_insert_with(|| {
                         CodeIndex::new(
                             IndexPtr::undefined(),
                             &mut LS::machine_st(&mut self.payload).arena.code_index_tbl,
@@ -766,12 +765,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         match payload_compilation_target {
             CompilationTarget::User => {
-                if let Some(filename) = listing_src_file_name {
-                    if let Some(ref mut module) =
-                        self.wam_prelude.indices.modules.get_mut(&filename)
-                    {
-                        op_decl.insert_into_op_dir(&mut module.op_dir);
-                    }
+                if let Some(filename) = listing_src_file_name
+                    && let Some(module) = self.wam_prelude.indices.modules.get_mut(&filename)
+                {
+                    op_decl.insert_into_op_dir(&mut module.op_dir);
                 }
 
                 add_op_decl(
@@ -783,7 +780,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             }
             CompilationTarget::Module(ref module_name) => {
                 match self.wam_prelude.indices.modules.get_mut(module_name) {
-                    Some(ref mut module) => {
+                    Some(module) => {
                         add_op_decl_as_module_export::<LS>(
                             &mut self.payload,
                             &mut module.op_dir,
@@ -1091,7 +1088,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .modules
                         .get_mut(defining_module_name)
                     {
-                        Some(ref mut target_module) => {
+                        Some(target_module) => {
                             import_module_exports_into_module::<LS>(
                                 &mut self.payload,
                                 &payload_compilation_target,
@@ -1144,17 +1141,15 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .modules
                         .get_mut(defining_module_name)
                     {
-                        Some(ref mut target_module) => {
-                            import_qualified_module_exports_into_module::<LS>(
-                                &mut self.payload,
-                                &module,
-                                &exports,
-                                &mut target_module.code_dir,
-                                &mut target_module.op_dir,
-                                &mut target_module.meta_predicates,
-                                &mut self.wam_prelude.indices.op_dir,
-                            )
-                        }
+                        Some(target_module) => import_qualified_module_exports_into_module::<LS>(
+                            &mut self.payload,
+                            &module,
+                            &exports,
+                            &mut target_module.code_dir,
+                            &mut target_module.op_dir,
+                            &mut target_module.meta_predicates,
+                            &mut self.wam_prelude.indices.op_dir,
+                        ),
                         None => Err(SessionError::ModuleCannotImportSelf(module_name)),
                     }
                 }

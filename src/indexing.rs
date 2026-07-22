@@ -716,27 +716,27 @@ pub(crate) fn remove_constant_indices(
                         offset,
                     );
 
-                    if indexed_choice_instrs.len() == 1 {
-                        if let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back() {
-                            let ext = IndexingCodePtr::External(indexed_choice_instr.offset());
+                    if indexed_choice_instrs.len() == 1
+                        && let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back()
+                    {
+                        let ext = IndexingCodePtr::External(indexed_choice_instr.offset());
 
-                            match &mut indexing_code[constants_index] {
-                                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                                    _,
-                                    _,
-                                    c,
-                                    ..,
-                                )) => {
-                                    *c = ext;
-                                }
-                                IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
-                                    constants,
-                                )) => {
-                                    constants.insert(constant, ext);
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
+                        match &mut indexing_code[constants_index] {
+                            IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
+                                _,
+                                _,
+                                c,
+                                ..,
+                            )) => {
+                                *c = ext;
+                            }
+                            IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
+                                constants,
+                            )) => {
+                                constants.insert(constant, ext);
+                            }
+                            _ => {
+                                unreachable!()
                             }
                         }
                     }
@@ -749,27 +749,27 @@ pub(crate) fn remove_constant_indices(
                         offset,
                     );
 
-                    if indexed_choice_instrs.len() == 1 {
-                        if let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back() {
-                            let ext = IndexingCodePtr::DynamicExternal(indexed_choice_instr);
+                    if indexed_choice_instrs.len() == 1
+                        && let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back()
+                    {
+                        let ext = IndexingCodePtr::DynamicExternal(indexed_choice_instr);
 
-                            match &mut indexing_code[constants_index] {
-                                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                                    _,
-                                    _,
-                                    c,
-                                    ..,
-                                )) => {
-                                    *c = ext;
-                                }
-                                IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
-                                    constants,
-                                )) => {
-                                    constants.insert(constant, ext);
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
+                        match &mut indexing_code[constants_index] {
+                            IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
+                                _,
+                                _,
+                                c,
+                                ..,
+                            )) => {
+                                *c = ext;
+                            }
+                            IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
+                                constants,
+                            )) => {
+                                constants.insert(constant, ext);
+                            }
+                            _ => {
+                                unreachable!()
                             }
                         }
                     }
@@ -850,28 +850,28 @@ pub(crate) fn remove_structure_index(
             IndexingLine::IndexedChoice(indexed_choice_instrs) => {
                 StaticCodeIndices::remove_instruction_with_offset(indexed_choice_instrs, offset);
 
-                if indexed_choice_instrs.len() == 1 {
-                    if let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back() {
-                        let ext = IndexingCodePtr::External(indexed_choice_instr.offset());
+                if indexed_choice_instrs.len() == 1
+                    && let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back()
+                {
+                    let ext = IndexingCodePtr::External(indexed_choice_instr.offset());
 
-                        match &mut indexing_code[structures_index] {
-                            IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                                _,
-                                _,
-                                _,
-                                _,
-                                s,
-                            )) => {
-                                *s = ext;
-                            }
-                            IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(
-                                structures,
-                            )) => {
-                                structures.insert((name, arity), ext);
-                            }
-                            _ => {
-                                unreachable!()
-                            }
+                    match &mut indexing_code[structures_index] {
+                        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
+                            _,
+                            _,
+                            _,
+                            _,
+                            s,
+                        )) => {
+                            *s = ext;
+                        }
+                        IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(
+                            structures,
+                        )) => {
+                            structures.insert((name, arity), ext);
+                        }
+                        _ => {
+                            unreachable!()
                         }
                     }
                 }
@@ -881,28 +881,28 @@ pub(crate) fn remove_structure_index(
             IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
                 DynamicCodeIndices::remove_instruction_with_offset(indexed_choice_instrs, offset);
 
-                if indexed_choice_instrs.len() == 1 {
-                    if let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back() {
-                        let ext = IndexingCodePtr::DynamicExternal(indexed_choice_instr);
+                if indexed_choice_instrs.len() == 1
+                    && let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back()
+                {
+                    let ext = IndexingCodePtr::DynamicExternal(indexed_choice_instr);
 
-                        match &mut indexing_code[structures_index] {
-                            IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                                _,
-                                _,
-                                _,
-                                _,
-                                s,
-                            )) => {
-                                *s = ext;
-                            }
-                            IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(
-                                structures,
-                            )) => {
-                                structures.insert((name, arity), ext);
-                            }
-                            _ => {
-                                unreachable!()
-                            }
+                    match &mut indexing_code[structures_index] {
+                        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
+                            _,
+                            _,
+                            _,
+                            _,
+                            s,
+                        )) => {
+                            *s = ext;
+                        }
+                        IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(
+                            structures,
+                        )) => {
+                            structures.insert((name, arity), ext);
+                        }
+                        _ => {
+                            unreachable!()
                         }
                     }
                 }
@@ -957,23 +957,17 @@ pub(crate) fn remove_list_index(indexing_code: &mut [IndexingLine], offset: usiz
         IndexingLine::IndexedChoice(indexed_choice_instrs) => {
             StaticCodeIndices::remove_instruction_with_offset(indexed_choice_instrs, offset);
 
-            if indexed_choice_instrs.len() == 1 {
-                if let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back() {
-                    let ext = IndexingCodePtr::External(indexed_choice_instr.offset());
+            if indexed_choice_instrs.len() == 1
+                && let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back()
+            {
+                let ext = IndexingCodePtr::External(indexed_choice_instr.offset());
 
-                    match &mut indexing_code[0] {
-                        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                            _,
-                            _,
-                            _,
-                            l,
-                            _,
-                        )) => {
-                            *l = ext;
-                        }
-                        _ => {
-                            unreachable!()
-                        }
+                match &mut indexing_code[0] {
+                    IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, l, _)) => {
+                        *l = ext;
+                    }
+                    _ => {
+                        unreachable!()
                     }
                 }
             }
@@ -981,23 +975,17 @@ pub(crate) fn remove_list_index(indexing_code: &mut [IndexingLine], offset: usiz
         IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
             DynamicCodeIndices::remove_instruction_with_offset(indexed_choice_instrs, offset);
 
-            if indexed_choice_instrs.len() == 1 {
-                if let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back() {
-                    let ext = IndexingCodePtr::DynamicExternal(indexed_choice_instr);
+            if indexed_choice_instrs.len() == 1
+                && let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back()
+            {
+                let ext = IndexingCodePtr::DynamicExternal(indexed_choice_instr);
 
-                    match &mut indexing_code[0] {
-                        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                            _,
-                            _,
-                            _,
-                            l,
-                            _,
-                        )) => {
-                            *l = ext;
-                        }
-                        _ => {
-                            unreachable!()
-                        }
+                match &mut indexing_code[0] {
+                    IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, _, l, _)) => {
+                        *l = ext;
+                    }
+                    _ => {
+                        unreachable!()
                     }
                 }
             }
@@ -1070,10 +1058,10 @@ fn uncap_choice_seq_with_trust(prelude: &mut [IndexedChoiceInstruction]) {
 
 #[inline]
 fn uncap_choice_seq_with_try(prelude: &mut [IndexedChoiceInstruction]) {
-    if let Some(instr) = prelude.first_mut() {
-        if let IndexedChoiceInstruction::Try(i) = instr {
-            *instr = IndexedChoiceInstruction::Retry(*i);
-        }
+    if let Some(instr) = prelude.first_mut()
+        && let IndexedChoiceInstruction::Try(i) = instr
+    {
+        *instr = IndexedChoiceInstruction::Retry(*i);
     }
 }
 

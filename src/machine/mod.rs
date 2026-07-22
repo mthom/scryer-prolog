@@ -244,25 +244,25 @@ impl Machine {
         module_name: Atom,
         key: PredicateKey,
     ) -> std::process::ExitCode {
-        if let Some(module) = self.indices.modules.get(&module_name) {
-            if let Some(code_idx) = module.code_dir.get(&key) {
-                let index_ptr = self
-                    .machine_st
-                    .arena
-                    .code_index_tbl
-                    .get_entry(code_idx.into());
-                let p = index_ptr.local().unwrap();
+        if let Some(module) = self.indices.modules.get(&module_name)
+            && let Some(code_idx) = module.code_dir.get(&key)
+        {
+            let index_ptr = self
+                .machine_st
+                .arena
+                .code_index_tbl
+                .get_entry(code_idx.into());
+            let p = index_ptr.local().unwrap();
 
-                // Leave a halting choice point to backtrack to in case the predicate fails or throws.
-                if self.allocate_stub_choice_point().is_err() {
-                    return ExitCode::FAILURE;
-                }
-
-                self.machine_st.cp = BREAK_FROM_DISPATCH_LOOP_LOC;
-                self.machine_st.p = p;
-
-                return self.dispatch_loop();
+            // Leave a halting choice point to backtrack to in case the predicate fails or throws.
+            if self.allocate_stub_choice_point().is_err() {
+                return ExitCode::FAILURE;
             }
+
+            self.machine_st.cp = BREAK_FROM_DISPATCH_LOOP_LOC;
+            self.machine_st.p = p;
+
+            return self.dispatch_loop();
         }
 
         unreachable!();
@@ -324,15 +324,15 @@ impl Machine {
 
         self.load_file(path_buf.to_str().unwrap(), stream);
 
-        if let Some(module) = self.indices.modules.get(&atom!("$atts")) {
-            if let Some(code_idx) = module.code_dir.get(&(atom!("driver"), 2)) {
-                let index_ptr = self
-                    .machine_st
-                    .arena
-                    .code_index_tbl
-                    .get_entry(code_idx.into());
-                self.machine_st.attr_var_init.verify_attrs_loc = index_ptr.local().unwrap();
-            }
+        if let Some(module) = self.indices.modules.get(&atom!("$atts"))
+            && let Some(code_idx) = module.code_dir.get(&(atom!("driver"), 2))
+        {
+            let index_ptr = self
+                .machine_st
+                .arena
+                .code_index_tbl
+                .get_entry(code_idx.into());
+            self.machine_st.attr_var_init.verify_attrs_loc = index_ptr.local().unwrap();
         }
     }
 
@@ -1162,22 +1162,22 @@ impl Machine {
             (r_c_w_h, r_c_wo_h)
         });
 
-        if let Some(&(_, b_cutoff, prev_block)) = self.machine_st.cont_pts.last() {
-            if self.machine_st.b < b_cutoff {
-                let (idx, arity) = if self.machine_st.effective_block() > prev_block {
-                    (r_c_w_h, 0)
-                } else {
-                    self.machine_st.registers[1] = fixnum_as_cell!(
-                        /* FIXME this is not safe */
-                        unsafe { Fixnum::build_with_unchecked(b_cutoff as i64) }
-                    );
+        if let Some(&(_, b_cutoff, prev_block)) = self.machine_st.cont_pts.last()
+            && self.machine_st.b < b_cutoff
+        {
+            let (idx, arity) = if self.machine_st.effective_block() > prev_block {
+                (r_c_w_h, 0)
+            } else {
+                self.machine_st.registers[1] = fixnum_as_cell!(
+                    /* FIXME this is not safe */
+                    unsafe { Fixnum::build_with_unchecked(b_cutoff as i64) }
+                );
 
-                    (r_c_wo_h, 1)
-                };
+                (r_c_wo_h, 1)
+            };
 
-                self.machine_st.call_at_index(arity, idx);
-                return true;
-            }
+            self.machine_st.call_at_index(arity, idx);
+            return true;
         }
 
         false
