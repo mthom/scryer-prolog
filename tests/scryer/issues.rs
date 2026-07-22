@@ -76,6 +76,10 @@ fn issue2725_dcg_without_module() {
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+#[cfg_attr(
+    not(unix),
+    ignore = "uses shell/2 and it's not portable outside of POSIX"
+)]
 fn issue_delete_directory() {
     load_module_test("tests-pl/issue_delete_directory.pl", "directory_deleted");
 }
@@ -83,6 +87,10 @@ fn issue_delete_directory() {
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+#[cfg_attr(
+    not(unix),
+    ignore = "uses shell/2 and it's not portable outside of POSIX"
+)]
 fn issue_delete_file() {
     load_module_test("tests-pl/issue_delete_file.pl", "file_deleted");
 }
@@ -97,6 +105,10 @@ fn issue_directory_exists() {
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+#[cfg_attr(
+    not(unix),
+    ignore = "uses shell/2 and it's not portable outside of POSIX"
+)]
 fn issue_directory_files() {
     load_module_test("tests-pl/issue_directory_files.pl", "1");
 }
@@ -104,6 +116,10 @@ fn issue_directory_files() {
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+#[cfg_attr(
+    not(unix),
+    ignore = "uses shell/2 and it's not portable outside of POSIX"
+)]
 fn issue_file_copy() {
     load_module_test("tests-pl/issue_file_copy.pl", "file_copied");
 }
@@ -111,6 +127,10 @@ fn issue_file_copy() {
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+#[cfg_attr(
+    not(unix),
+    ignore = "uses shell/2 and it's not portable outside of POSIX"
+)]
 fn issue_file_exists() {
     load_module_test("tests-pl/issue_file_exists.pl", "");
 }
@@ -118,6 +138,10 @@ fn issue_file_exists() {
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+#[cfg_attr(
+    not(unix),
+    ignore = "uses shell/2 and it's not portable outside of POSIX"
+)]
 fn issue_file_size() {
     load_module_test("tests-pl/issue_file_size.pl", "");
 }
@@ -125,6 +149,10 @@ fn issue_file_size() {
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+#[cfg_attr(
+    not(unix),
+    ignore = "uses shell/2 and it's not portable outside of POSIX"
+)]
 fn issue_file_time() {
     load_module_test("tests-pl/issue_file_time.pl", "");
 }
@@ -132,6 +160,10 @@ fn issue_file_time() {
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+#[cfg_attr(
+    not(unix),
+    ignore = "uses shell/2 and it's not portable outside of POSIX"
+)]
 fn issue_make_directory() {
     load_module_test("tests-pl/issue_make_directory.pl", "directory_made");
 }
@@ -139,6 +171,10 @@ fn issue_make_directory() {
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+#[cfg_attr(
+    not(unix),
+    ignore = "uses shell/2 and it's not portable outside of POSIX"
+)]
 fn issue_make_directory_path() {
     load_module_test(
         "tests-pl/issue_make_directory_path.pl",
@@ -149,6 +185,10 @@ fn issue_make_directory_path() {
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+#[cfg_attr(
+    not(unix),
+    ignore = "uses shell/2 and it's not portable outside of POSIX"
+)]
 fn issue_path_canonical() {
     load_module_test("tests-pl/issue_path_canonical.pl", "path_canonicalized");
 }
@@ -156,6 +196,10 @@ fn issue_path_canonical() {
 #[serial]
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
+#[cfg_attr(
+    not(unix),
+    ignore = "uses shell/2 and it's not portable outside of POSIX"
+)]
 fn issue_rename_file() {
     load_module_test("tests-pl/issue_rename_file.pl", "file_renamed");
 }
