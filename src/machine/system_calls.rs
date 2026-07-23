@@ -3934,14 +3934,8 @@ impl Machine {
         }
     }
 
-    #[inline(always)]
-    pub(crate) fn lookup_db_ref(&mut self) {
-        let module_name = self.deref_register(1);
-        let name = cell_as_atom!(self.deref_register(2));
-        let arity =
-            unsafe { self.deref_register(3).to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
-
-        let module_name = read_heap_cell!(module_name,
+    fn parse_module_name(module_name: HeapCellValue) -> Atom {
+        return read_heap_cell!(module_name,
             (HeapCellValueTag::Atom, (module_name, _arity)) => {
                 module_name
             }
@@ -3952,16 +3946,37 @@ impl Machine {
                 unreachable!()
             }
         );
+    }
 
+    fn user_predicate_exists(&self, name: Atom, arity: usize, module_name: Atom) -> bool {
         if self.indices.builtin_property((name, arity)) {
-            self.machine_st.fail = true;
-            return;
+            return false;
         }
 
-        self.machine_st.fail = self
+        let index_cell_opt = self
             .indices
-            .get_predicate_code_index(name, arity, module_name)
-            .is_none();
+            .get_predicate_code_index(name, arity, module_name);
+
+        if let Some(code_idx) = index_cell_opt {
+            let index_ptr = self
+                .machine_st
+                .arena
+                .code_index_tbl
+                .get_entry(code_idx.into());
+
+            return !index_ptr.is_undefined();
+        };
+        return false;
+    }
+
+    #[inline(always)]
+    pub(crate) fn lookup_db_ref(&mut self) {
+        let module_name = Self::parse_module_name(self.deref_register(1));
+        let name = cell_as_atom!(self.deref_register(2));
+        let arity =
+            unsafe { self.deref_register(3).to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
+
+        self.machine_st.fail = !self.user_predicate_exists(name, arity, module_name);
     }
 
     #[inline(always)]
@@ -3969,17 +3984,7 @@ impl Machine {
         let name_match: fn(Atom, Atom) -> bool;
         let arity_match: fn(usize, usize) -> bool;
 
-        let module_name = read_heap_cell!(self.deref_register(1),
-            (HeapCellValueTag::Atom, (module_name, _arity)) => {
-                module_name
-            }
-            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
-                atom!("user")
-            }
-            _ => {
-                unreachable!()
-            }
-        );
+        let module_name = Self::parse_module_name(self.deref_register(1));
 
         let atom = self.deref_register(2);
 
@@ -4037,7 +4042,7 @@ impl Machine {
         };
 
         for (name, arity) in code_dir.keys().cloned() {
-            if self.indices.builtin_property((name, arity)) {
+            if !self.user_predicate_exists(name, arity, module_name) {
                 continue;
             }
 
