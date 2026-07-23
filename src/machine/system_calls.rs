@@ -4725,36 +4725,6 @@ impl Machine {
         Ok(())
     }
 
-    #[inline(always)]
-    fn interrupt_occured(&mut self) -> bool {
-        let interrupted = machine::INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
-
-        match machine::INTERRUPT.compare_exchange(
-            interrupted,
-            false,
-            std::sync::atomic::Ordering::Relaxed,
-            std::sync::atomic::Ordering::Relaxed,
-        ) {
-            Ok(interruption) => {
-                if interruption {
-                    self.machine_st.throw_interrupt_exception();
-                    self.machine_st.backtrack();
-                    // We have extracted control over the Tokio runtime to the calling context for enabling library use case
-                    // (see https://github.com/mthom/scryer-prolog/pull/1880)
-                    // So we only have access to a runtime handle in here and can't shut it down.
-                    // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880
-                    // was not merged, I'm only deactivating it for now.
-                    //let old_runtime = std::mem::replace(&mut self.runtime, tokio::runtime::Runtime::new().unwrap());
-                    //old_runtime.shutdown_background();
-                    return true;
-                }
-            }
-            Err(_) => unreachable!(),
-        }
-
-        false
-    }
-
     #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_accept(&mut self) -> CallResult {
@@ -4854,7 +4824,7 @@ impl Machine {
                         break
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        if self.interrupt_occured() {
+                        if self.machine_st.check_for_interrupt() {
                             break;
                         }
                     }
@@ -7217,7 +7187,7 @@ impl Machine {
                              }
                             Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                                 std::thread::sleep(std::time::Duration::from_millis(200));
-                                if self.interrupt_occured() {
+                                if self.machine_st.check_for_interrupt() {
                                     break;
                                 }
                             }

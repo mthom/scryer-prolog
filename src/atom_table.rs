@@ -128,7 +128,7 @@ impl AtomCell {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Atom {
     pub index: u64,
 }
@@ -147,12 +147,6 @@ impl<'a> From<&'a Atom> for Atom {
     }
 }
 
-impl indexmap::Equivalent<Atom> for str {
-    fn equivalent(&self, key: &Atom) -> bool {
-        &*key.as_str() == self
-    }
-}
-
 impl PartialEq<str> for Atom {
     fn eq(&self, other: &str) -> bool {
         self.as_str().deref() == other
@@ -162,6 +156,37 @@ impl PartialEq<str> for Atom {
 impl PartialEq<&str> for Atom {
     fn eq(&self, &other: &&str) -> bool {
         self.as_str().deref() == other
+    }
+}
+
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct AtomHashByStr(Atom);
+
+impl Deref for AtomHashByStr {
+    type Target = Atom;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<Atom> for AtomHashByStr {
+    fn from(value: Atom) -> Self {
+        Self(value)
+    }
+}
+
+impl indexmap::Equivalent<AtomHashByStr> for str {
+    fn equivalent(&self, key: &AtomHashByStr) -> bool {
+        &*key.0.as_str() == self
+    }
+}
+
+impl Hash for AtomHashByStr {
+    #[inline]
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.as_str().hash(hasher)
     }
 }
 
@@ -210,13 +235,6 @@ pub struct AtomData {
 impl AtomHeader {
     fn build_with(len: u64) -> Self {
         AtomHeader::new().with_len(len).with_m(false)
-    }
-}
-
-impl Hash for Atom {
-    #[inline]
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        self.as_str().hash(hasher)
     }
 }
 
@@ -408,7 +426,7 @@ impl Ord for Atom {
 #[derive(Debug)]
 pub struct InnerAtomTable {
     block: RawBlock<AtomTable>,
-    pub table: Arcu<IndexSet<Atom>, GlobalEpochCounterPool>,
+    pub table: Arcu<IndexSet<AtomHashByStr>, GlobalEpochCounterPool>,
 }
 
 #[derive(Debug)]
@@ -426,7 +444,7 @@ impl InnerAtomTable {
         STATIC_ATOMS_MAP
             .get(string)
             .cloned()
-            .or_else(|| self.table.read().get(string).cloned())
+            .or_else(|| self.table.read().get(string).map(|ahbs| &**ahbs).cloned())
     }
 }
 
@@ -464,7 +482,7 @@ impl AtomTable {
         global_atom_table().read().unwrap().upgrade().unwrap()
     }
 
-    pub fn active_table(&self) -> RcuRef<IndexSet<Atom>, IndexSet<Atom>> {
+    pub fn active_table(&self) -> RcuRef<IndexSet<AtomHashByStr>, IndexSet<AtomHashByStr>> {
         self.inner.read().table.read()
     }
 
@@ -532,7 +550,7 @@ impl AtomTable {
                     .get_name();
 
                 let mut table = table_epoch.clone();
-                table.insert(atom);
+                table.insert(atom.into());
                 block_epoch.table.replace(table);
 
                 // explicit drop to ensure we don't accidentally drop it early

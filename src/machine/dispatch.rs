@@ -1,3 +1,5 @@
+use std::sync::atomic;
+
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::functor_macro::*;
@@ -289,39 +291,31 @@ impl MachineState {
         )
     }
 
-    fn check_for_interrupt(&mut self) {
-        let interrupted = INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
+    #[inline(always)]
+    pub(crate) fn check_for_interrupt(&mut self) -> bool {
+        if INTERRUPT.swap(false, atomic::Ordering::Relaxed) {
+            self.throw_interrupt_exception();
+            self.backtrack();
 
-        match INTERRUPT.compare_exchange(
-            interrupted,
-            false,
-            std::sync::atomic::Ordering::Relaxed,
-            std::sync::atomic::Ordering::Relaxed,
-        ) {
-            Ok(interruption) => {
-                if interruption {
-                    self.throw_interrupt_exception();
-                    self.backtrack();
+            // We have extracted control over the Tokio runtime to the calling context for enabling library use case
+            // (see https://github.com/mthom/scryer-prolog/pull/1880)
+            // So we only have access to a runtime handle in here and can't shut it down.
+            // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880
+            // was not merged, I'm only deactivating it for now.
 
-                    // We have extracted control over the Tokio runtime to the calling context for enabling library use case
-                    // (see https://github.com/mthom/scryer-prolog/pull/1880)
-                    // So we only have access to a runtime handle in here and can't shut it down.
-                    // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880
-                    // was not merged, I'm only deactivating it for now.
+            //#[cfg(not(target_arch = "wasm32"))]
+            //let runtime = tokio::runtime::Runtime::new().unwrap();
+            //#[cfg(target_arch = "wasm32")]
+            //let runtime = tokio::runtime::Builder::new_current_thread()
+            //    .enable_all()
+            //    .build()
+            //    .unwrap();
 
-                    //#[cfg(not(target_arch = "wasm32"))]
-                    //let runtime = tokio::runtime::Runtime::new().unwrap();
-                    //#[cfg(target_arch = "wasm32")]
-                    //let runtime = tokio::runtime::Builder::new_current_thread()
-                    //    .enable_all()
-                    //    .build()
-                    //    .unwrap();
-
-                    //let old_runtime = tokio::runtime::Handle::current();
-                    //old_runtime.shutdown_background();
-                }
-            }
-            Err(_) => unreachable!(),
+            //let old_runtime = tokio::runtime::Handle::current();
+            //old_runtime.shutdown_background();
+            true
+        } else {
+            false
         }
     }
 
