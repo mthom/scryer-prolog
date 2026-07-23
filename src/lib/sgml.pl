@@ -33,6 +33,14 @@ represented as a list of elements where each is of the form:
 
     - `Children` is a list of elements as specified here.
 
+  * `doctype(Name)`
+
+  * `comment(Comment)`
+
+  * `processing_instruction(Target, Data)`
+
+  * `fragment(Children)`
+
 Currently, Options are ignored. In the future, more options may be
 provided to control parsing.
 

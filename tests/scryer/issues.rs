@@ -22,6 +22,15 @@ fn issue2588_load_html() {
     );
 }
 
+#[test]
+#[cfg_attr(miri, ignore = "unsupported operation when isolation is enabled")]
+fn issue3400_load_html() {
+    load_module_test(
+        "tests-pl/issue3400.pl",
+        "[element(html,[],[element(head,[],[element(template,[],[fragment([[H,e,l,l,o,!]])])]),element(body,[],[])])]",
+    );
+}
+
 // issue #2914
 #[test]
 #[cfg_attr(miri, ignore = "unsupported operation when isolation is enabled")]
