@@ -865,6 +865,16 @@ impl MachineState {
             match self.read(stream, &indices.op_dir) {
                 Ok(term_write_result) => return self.read_term_body(term_write_result),
                 Err(err) => {
+                    // A Ctrl-C at the read prompt surfaces as an error here (and,
+                    // under rustyline's raw mode, would otherwise be mis-read as
+                    // end_of_file). If the interrupt flag is set, raise the
+                    // interrupt exception instead.
+                    if crate::machine::INTERRUPT.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                        let interrupt_err = self.interrupt_error();
+                        let src = functor_stub(atom!("repl"), 0);
+                        return Err(self.error_form(interrupt_err, src));
+                    }
+
                     match &err {
                         CompilationError::ParserError(e) if e.is_unexpected_eof() => {
                             match eof_handler(self, stream)? {
