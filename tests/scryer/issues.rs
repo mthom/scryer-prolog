@@ -214,3 +214,9 @@ async fn sigint_interrupts_nonterminating_goals() {
 fn discussion3359() {
     load_module_test("tests-pl/discussion3359.pl", "");
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue3370_current_predicate_call() {
+    load_module_test("tests-pl/issue3370_current_predicate_call.pl", "");
+}
