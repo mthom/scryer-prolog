@@ -434,6 +434,14 @@ impl F64Table {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn entry_count(&self) -> usize {
+        match self {
+            F64Table::Serial(serial_tbl) => serial_tbl.indirection_tbl.len(),
+            F64Table::Concurrent(concurrent_tbl) => concurrent_tbl.indirection_tbl.lock().len(),
+        }
+    }
+
     #[must_use = "the returned concurrent table must be absorbed into the owned F64Table"]
     pub fn single_to_concurrent(&mut self) -> Arc<ConcurrentF64Table> {
         match self {

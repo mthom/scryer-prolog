@@ -258,10 +258,30 @@ impl Machine {
                     return ExitCode::FAILURE;
                 }
 
+                let stub_b = self.machine_st.b;
                 self.machine_st.cp = BREAK_FROM_DISPATCH_LOOP_LOC;
                 self.machine_st.p = p;
 
-                return self.dispatch_loop();
+                let exit_code = self.dispatch_loop();
+
+                if self.machine_st.b == stub_b {
+                    // The synthetic choice point is only a dispatch-loop sentinel
+                    // for this deterministic call; do not retain its stack frame.
+                    let stub_frame = self.machine_st.stack.index_or_frame(stub_b);
+                    let b = stub_frame.prelude.b;
+                    let b0 = stub_frame.prelude.b0;
+                    let tr = stub_frame.prelude.tr;
+                    let h = stub_frame.prelude.h;
+
+                    self.machine_st.b = b;
+                    self.machine_st.b0 = b0;
+                    self.machine_st.tr = tr;
+                    self.machine_st.trail.truncate(tr);
+                    self.machine_st.hb = h;
+                    self.machine_st.stack.truncate(stub_b);
+                }
+
+                return exit_code;
             }
         }
 

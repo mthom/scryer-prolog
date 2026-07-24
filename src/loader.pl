@@ -153,7 +153,7 @@ file_load(Stream, Path, Evacuable) :-
     catch(loader:file_load_init(Stream, Evacuable),
           E,
           loader:file_load_cleanup(Evacuable, E)),
-    '$pop_load_context'.
+    unload_evacuable(Evacuable).
 
 
 load(Stream) :-
@@ -161,7 +161,7 @@ load(Stream) :-
     catch(loader:file_load_init(Stream, Evacuable),
           E,
           loader:file_load_cleanup(Evacuable, E)),
-    '$pop_load_context',
+    unload_evacuable(Evacuable),
     false.        %% Clear the heap.
 load(_).
 
