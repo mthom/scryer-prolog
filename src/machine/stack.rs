@@ -215,6 +215,11 @@ impl Stack {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn top(&self) -> usize {
+        self.buf.used_bytes()
+    }
+
     pub(crate) fn allocate_or_frame(&mut self, num_cells: usize) -> Result<usize, AllocError> {
         let frame_size = OrFrame::size_of(num_cells);
 
