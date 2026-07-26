@@ -1574,6 +1574,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         &mut self,
         key: PredicateKey,
         mut predicates: PredicateQueue,
+        predicate_info: PredicateInfo,
         settings: CodeGenSettings,
     ) -> Result<CodeIndex, SessionError> {
         let code_idx = self.get_or_insert_code_index(key, predicates.compilation_target);
@@ -1597,6 +1598,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let mut cg = CodeGenerator::new(
             &mut LS::machine_st(&mut self.payload).arena.f64_tbl,
             indexing_specs,
+            predicate_info,
             settings,
         );
         let mut code = cg.compile_predicate(clauses)?;
@@ -1798,23 +1800,26 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         non_counted_bt: bool,
         append_or_prepend: AppendOrPrepend,
     ) -> Result<CodeIndex, SessionError> {
-        let settings = match self
+        let (predicate_info, settings) = match self
             .wam_prelude
             .indices
             .get_predicate_skeleton_mut(&compilation_target, &key)
         {
-            Some(skeleton) if !skeleton.clause_indices.is_empty() => CodeGenSettings {
-                global_clock_tick: if skeleton.core.is_dynamic {
-                    Some(LS::machine_st(&mut self.payload).global_clock)
-                } else {
-                    None
+            Some(skeleton) if !skeleton.clause_indices.is_empty() => (
+                skeleton.core.predicate_info(),
+                CodeGenSettings {
+                    global_clock_tick: if skeleton.core.is_dynamic {
+                        Some(LS::machine_st(&mut self.payload).global_clock)
+                    } else {
+                        None
+                    },
+                    is_extensible: true,
+                    non_counted_bt,
                 },
-                is_extensible: true,
-                non_counted_bt,
-            },
+            ),
             skeleton_opt => {
                 let settings = CodeGenSettings {
-                    global_clock_tick: if let Some(skeleton) = skeleton_opt {
+                    global_clock_tick: if let Some(skeleton) = &skeleton_opt {
                         if skeleton.core.is_dynamic {
                             Some(LS::machine_st(&mut self.payload).global_clock)
                         } else {
@@ -1830,7 +1835,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 let mut predicate_queue = predicate_queue![clause];
                 predicate_queue.compilation_target = compilation_target;
 
-                return self.compile(key, predicate_queue, settings);
+                let predicate_info = skeleton_opt.map(|skeleton| skeleton.core.predicate_info())
+                    .unwrap_or_default();
+
+                return self.compile(key, predicate_queue, predicate_info, settings);
             }
         };
 
@@ -1840,7 +1848,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let StandaloneCompileResult {
             clause_code,
             mut standalone_skeleton,
-        } = self.compile_standalone_clause(key, compilation_target, clause, settings)?;
+        } = self.compile_standalone_clause(
+            key, compilation_target, clause, predicate_info, settings,
+        )?;
 
         let code_len = self.wam_prelude.code.len();
         standalone_skeleton.clause_indices[0].clause_start += code_len;
@@ -2148,7 +2158,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             };
 
             let predicates = self.payload.predicates.take();
-            let offset = self.compile(key, predicates, settings)?;
+            let offset = self.compile(key, predicates, predicate_info, settings)?;
 
             if let Some(filename) = self.listing_src_file_name()
                 && let Some(module) = self.wam_prelude.indices.modules.get_mut(&filename)
@@ -2171,8 +2181,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         }
 
         if predicate_info.is_dynamic {
-            LS::machine_st(&mut self.payload).global_clock += 1;
-
             let clause_clauses_len = self.payload.clause_clauses.len();
             let clauses_vec: Vec<_> = self
                 .payload
@@ -2188,6 +2196,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 clauses_vec,
                 AppendOrPrepend::Append,
             )?;
+
+            LS::machine_st(&mut self.payload).global_clock += 1;
         }
 
         Ok(())
@@ -2198,6 +2208,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         key: PredicateKey,
         compilation_target: CompilationTarget,
         clause: PredicateClause,
+        predicate_info: PredicateInfo,
         settings: CodeGenSettings,
     ) -> Result<StandaloneCompileResult, SessionError> {
         let (name, arity) = key;
@@ -2207,7 +2218,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             name, arity, compilation_target,
         );
 
-        let mut cg = CodeGenerator::new(f64_tbl, indexing_specs, settings);
+        let mut cg = CodeGenerator::new(f64_tbl, indexing_specs, predicate_info, settings);
         let clause_code = cg.compile_predicate(vec![clause])?;
 
         Ok(StandaloneCompileResult {

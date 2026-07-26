@@ -257,6 +257,7 @@ pub(crate) struct CodeGenerator<'a> {
     f64_tbl: &'a F64Table,
     indexing_specs: IndexingSpecs,
     marker: DebrayAllocator,
+    predicate_info: PredicateInfo,
     settings: CodeGenSettings,
     pub(crate) skeleton: PredicateSkeleton,
 }
@@ -343,12 +344,14 @@ impl<'a> CodeGenerator<'a> {
     pub(crate) fn new(
         f64_tbl: &'a F64Table,
         indexing_specs: IndexingSpecs,
+        predicate_info: PredicateInfo,
         settings: CodeGenSettings,
     ) -> Self {
         CodeGenerator {
             f64_tbl,
             indexing_specs,
             marker: DebrayAllocator::new(),
+            predicate_info,
             settings,
             skeleton: PredicateSkeleton::new(),
         }
@@ -1181,10 +1184,10 @@ impl<'a> CodeGenerator<'a> {
             }
         });
 
+        let index_loc = code.len();
+
         for (i, clause) in clauses.iter_mut().enumerate() {
             self.marker.reset();
-
-            let index_loc = code.len();
             let clause_code = match clause {
                 PredicateClause::Fact(fact, var_data) => {
                     let var_data = std::mem::take(var_data);
@@ -1263,8 +1266,8 @@ impl<'a> CodeGenerator<'a> {
         let index_code_is_empty = if let Some(optimal_index) = optimal_index
             && !code_offsets.no_indices()
         {
-            let is_extensible = self.skeleton.core.is_dynamic ||
-                ((self.skeleton.core.is_multifile || self.skeleton.core.is_discontiguous) &&
+            let is_extensible = self.predicate_info.is_dynamic ||
+                ((self.predicate_info.is_multifile || self.predicate_info.is_discontiguous) &&
                  is_last_subseq);
 
             let (var_offset, index_code) = code_offsets.compute_indices(
@@ -1355,8 +1358,7 @@ impl<'a> CodeGenerator<'a> {
             if self.settings.is_extensible {
                 let segment_is_indexed = matches!(code_segment[0], Instruction::IndexingCode { .. });
 
-                for clause_index_info in
-                    self.skeleton.clause_indices.make_contiguous()[skel_lower_bound..].iter_mut()
+                for clause_index_info in self.skeleton.clause_indices.iter_mut().skip(skel_lower_bound)
                 {
                     clause_index_info.clause_start += clause_start_offset +
                         2 * (segment_is_indexed as usize);

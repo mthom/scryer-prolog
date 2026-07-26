@@ -1391,7 +1391,7 @@ impl Machine {
                     break;
                 }
 
-                let Some(inst) = self.code.get_mut(self.machine_st.p) else {
+                let Some(inst) = self.code.get(self.machine_st.p) else {
                     // a separate function marked #[cold] to make the compiler/branch-predictor prefer the happy path
                     handle_code_index_oob(self.code.len(), self.machine_st.p);
                 };
@@ -1431,146 +1431,146 @@ impl Machine {
                         let (_, arity) = self.code[self.machine_st.p].to_name_and_arity();
                         self.run_verify_attr_interrupt(arity);
                     }
-                    &mut Instruction::Add(ref a1, ref a2, t) => {
+                    &Instruction::Add(ref a1, ref a2, t) => {
                         self.machine_st.add_instr(a1, a2, t)
                     }
-                    &mut Instruction::Sub(ref a1, ref a2, t) => {
+                    &Instruction::Sub(ref a1, ref a2, t) => {
                         self.machine_st.sub_instr(a1, a2, t)
                     }
-                    &mut Instruction::Mul(ref a1, ref a2, t) => {
+                    &Instruction::Mul(ref a1, ref a2, t) => {
                         self.machine_st.mul_instr(a1, a2, t)
                     }
-                    &mut Instruction::Max(ref a1, ref a2, t) => {
+                    &Instruction::Max(ref a1, ref a2, t) => {
                         self.machine_st.max_instr(a1, a2, t)
                     }
-                    &mut Instruction::Min(ref a1, ref a2, t) => {
+                    &Instruction::Min(ref a1, ref a2, t) => {
                         self.machine_st.min_instr(a1, a2, t)
                     }
-                    &mut Instruction::IntPow(ref a1, ref a2, t) => {
+                    &Instruction::IntPow(ref a1, ref a2, t) => {
                         self.machine_st.int_pow_instr(a1, a2, t)
                     }
-                    &mut Instruction::Gcd(ref a1, ref a2, t) => {
+                    &Instruction::Gcd(ref a1, ref a2, t) => {
                         self.machine_st.gcd_instr(a1, a2, t)
                     }
-                    &mut Instruction::Pow(ref a1, ref a2, t) => {
+                    &Instruction::Pow(ref a1, ref a2, t) => {
                         self.machine_st.pow_instr(a1, a2, t)
                     }
-                    &mut Instruction::RDiv(ref a1, ref a2, t) => {
+                    &Instruction::RDiv(ref a1, ref a2, t) => {
                         self.machine_st.rdiv_instr(a1, a2, t)
                     }
-                    &mut Instruction::IntFloorDiv(ref a1, ref a2, t) => {
+                    &Instruction::IntFloorDiv(ref a1, ref a2, t) => {
                         self.machine_st.int_floor_div_instr(a1, a2, t)
                     }
-                    &mut Instruction::IDiv(ref a1, ref a2, t) => {
+                    &Instruction::IDiv(ref a1, ref a2, t) => {
                         self.machine_st.idiv_instr(a1, a2, t)
                     }
-                    &mut Instruction::Abs(ref a1, t) => self.machine_st.abs_instr(a1, t),
-                    &mut Instruction::Sign(ref a1, t) => self.machine_st.sign_instr(a1, t),
-                    &mut Instruction::Neg(ref a1, t) => self.machine_st.neg_instr(a1, t),
-                    &mut Instruction::BitwiseComplement(ref a1, t) => {
+                    &Instruction::Abs(ref a1, t) => self.machine_st.abs_instr(a1, t),
+                    &Instruction::Sign(ref a1, t) => self.machine_st.sign_instr(a1, t),
+                    &Instruction::Neg(ref a1, t) => self.machine_st.neg_instr(a1, t),
+                    &Instruction::BitwiseComplement(ref a1, t) => {
                         self.machine_st.bitwise_complement_instr(a1, t)
                     }
-                    &mut Instruction::Div(ref a1, ref a2, t) => {
+                    &Instruction::Div(ref a1, ref a2, t) => {
                         self.machine_st.div_instr(a1, a2, t)
                     }
-                    &mut Instruction::Shr(ref a1, ref a2, t) => {
+                    &Instruction::Shr(ref a1, ref a2, t) => {
                         self.machine_st.shr_instr(a1, a2, t)
                     }
-                    &mut Instruction::Shl(ref a1, ref a2, t) => {
+                    &Instruction::Shl(ref a1, ref a2, t) => {
                         self.machine_st.shl_instr(a1, a2, t)
                     }
-                    &mut Instruction::Xor(ref a1, ref a2, t) => {
+                    &Instruction::Xor(ref a1, ref a2, t) => {
                         self.machine_st.xor_instr(a1, a2, t)
                     }
-                    &mut Instruction::And(ref a1, ref a2, t) => {
+                    &Instruction::And(ref a1, ref a2, t) => {
                         self.machine_st.and_instr(a1, a2, t)
                     }
-                    &mut Instruction::Or(ref a1, ref a2, t) => self.machine_st.or_instr(a1, a2, t),
-                    &mut Instruction::Mod(ref a1, ref a2, t) => {
+                    &Instruction::Or(ref a1, ref a2, t) => self.machine_st.or_instr(a1, a2, t),
+                    &Instruction::Mod(ref a1, ref a2, t) => {
                         self.machine_st.mod_instr(a1, a2, t)
                     }
-                    &mut Instruction::Rem(ref a1, ref a2, t) => {
+                    &Instruction::Rem(ref a1, ref a2, t) => {
                         self.machine_st.rem_instr(a1, a2, t)
                     }
-                    &mut Instruction::Cos(ref a1, t) => self.machine_st.cos_instr(a1, t),
-                    &mut Instruction::Sin(ref a1, t) => self.machine_st.sin_instr(a1, t),
-                    &mut Instruction::Tan(ref a1, t) => self.machine_st.tan_instr(a1, t),
-                    &mut Instruction::Sqrt(ref a1, t) => self.machine_st.sqrt_instr(a1, t),
-                    &mut Instruction::Log(ref a1, t) => self.machine_st.log_instr(a1, t),
-                    &mut Instruction::Exp(ref a1, t) => self.machine_st.exp_instr(a1, t),
-                    &mut Instruction::ACos(ref a1, t) => self.machine_st.acos_instr(a1, t),
-                    &mut Instruction::ASin(ref a1, t) => self.machine_st.asin_instr(a1, t),
-                    &mut Instruction::ATan(ref a1, t) => self.machine_st.atan_instr(a1, t),
-                    &mut Instruction::ATan2(ref a1, ref a2, t) => {
+                    &Instruction::Cos(ref a1, t) => self.machine_st.cos_instr(a1, t),
+                    &Instruction::Sin(ref a1, t) => self.machine_st.sin_instr(a1, t),
+                    &Instruction::Tan(ref a1, t) => self.machine_st.tan_instr(a1, t),
+                    &Instruction::Sqrt(ref a1, t) => self.machine_st.sqrt_instr(a1, t),
+                    &Instruction::Log(ref a1, t) => self.machine_st.log_instr(a1, t),
+                    &Instruction::Exp(ref a1, t) => self.machine_st.exp_instr(a1, t),
+                    &Instruction::ACos(ref a1, t) => self.machine_st.acos_instr(a1, t),
+                    &Instruction::ASin(ref a1, t) => self.machine_st.asin_instr(a1, t),
+                    &Instruction::ATan(ref a1, t) => self.machine_st.atan_instr(a1, t),
+                    &Instruction::ATan2(ref a1, ref a2, t) => {
                         self.machine_st.atan2_instr(a1, a2, t)
                     }
-                    &mut Instruction::Float(ref a1, t) => self.machine_st.float_instr(a1, t),
-                    &mut Instruction::Truncate(ref a1, t) => self.machine_st.truncate_instr(a1, t),
-                    &mut Instruction::Round(ref a1, t) => self.machine_st.round_instr(a1, t),
-                    &mut Instruction::Ceiling(ref a1, t) => self.machine_st.ceiling_instr(a1, t),
-                    &mut Instruction::Floor(ref a1, t) => self.machine_st.floor_instr(a1, t),
-                    &mut Instruction::FloatFractionalPart(ref a1, t) => {
+                    &Instruction::Float(ref a1, t) => self.machine_st.float_instr(a1, t),
+                    &Instruction::Truncate(ref a1, t) => self.machine_st.truncate_instr(a1, t),
+                    &Instruction::Round(ref a1, t) => self.machine_st.round_instr(a1, t),
+                    &Instruction::Ceiling(ref a1, t) => self.machine_st.ceiling_instr(a1, t),
+                    &Instruction::Floor(ref a1, t) => self.machine_st.floor_instr(a1, t),
+                    &Instruction::FloatFractionalPart(ref a1, t) => {
                         self.machine_st.float_fractional_part_instr(a1, t)
                     }
-                    &mut Instruction::FloatIntegerPart(ref a1, t) => {
+                    &Instruction::FloatIntegerPart(ref a1, t) => {
                         self.machine_st.float_integer_part_instr(a1, t)
                     }
-                    &mut Instruction::Plus(ref a1, t) => self.machine_st.plus_instr(a1, t),
-                    &mut Instruction::GetLevel(r) => self.machine_st.get_level_instr(r),
-                    &mut Instruction::GetPrevLevel(r) => self.machine_st.get_prev_level_instr(r),
-                    &mut Instruction::GetCutPoint(r) => self.machine_st.get_cut_point_instr(r),
+                    &Instruction::Plus(ref a1, t) => self.machine_st.plus_instr(a1, t),
+                    &Instruction::GetLevel(r) => self.machine_st.get_level_instr(r),
+                    &Instruction::GetPrevLevel(r) => self.machine_st.get_prev_level_instr(r),
+                    &Instruction::GetCutPoint(r) => self.machine_st.get_cut_point_instr(r),
                     Instruction::Deallocate => self.machine_st.deallocate(),
-                    &mut Instruction::GetConstant(_, c, reg) => {
+                    &Instruction::GetConstant(_, c, reg) => {
                         self.machine_st.get_constant_instr(c, reg)
                     }
-                    &mut Instruction::GetList(_, reg) => self.machine_st.get_list_instr(reg),
-                    &mut Instruction::GetPartialString(_, ref string, reg) => {
+                    &Instruction::GetList(_, reg) => self.machine_st.get_list_instr(reg),
+                    &Instruction::GetPartialString(_, ref string, reg) => {
                         self.machine_st.get_partial_string_instr(string, reg)
                     }
-                    &mut Instruction::GetStructure(_lvl, name, arity, reg) => {
+                    &Instruction::GetStructure(_lvl, name, arity, reg) => {
                         self.machine_st.get_structure_instr(name, arity, reg)
                     }
-                    &mut Instruction::GetVariable(norm, arg) => {
+                    &Instruction::GetVariable(norm, arg) => {
                         self.machine_st.get_variable_instr(norm, arg)
                     }
-                    &mut Instruction::GetValue(norm, arg) => {
+                    &Instruction::GetValue(norm, arg) => {
                         self.machine_st.get_value_instr(norm, arg)
                     }
-                    &mut Instruction::UnifyConstant(v) => self.machine_st.unify_constant_instr(v),
-                    &mut Instruction::UnifyLocalValue(reg) => {
+                    &Instruction::UnifyConstant(v) => self.machine_st.unify_constant_instr(v),
+                    &Instruction::UnifyLocalValue(reg) => {
                         self.machine_st.unify_local_value_instr(reg)
                     }
-                    &mut Instruction::UnifyVariable(reg) => {
+                    &Instruction::UnifyVariable(reg) => {
                         self.machine_st.unify_variable_instr(reg)
                     }
-                    &mut Instruction::UnifyValue(reg) => self.machine_st.unify_value_instr(reg),
-                    &mut Instruction::UnifyVoid(n) => self.machine_st.unify_void_instr(n),
-                    &mut Instruction::PutConstant(_, cell, reg) => {
+                    &Instruction::UnifyValue(reg) => self.machine_st.unify_value_instr(reg),
+                    &Instruction::UnifyVoid(n) => self.machine_st.unify_void_instr(n),
+                    &Instruction::PutConstant(_, cell, reg) => {
                         self.machine_st.put_constant_instr(cell, reg)
                     }
-                    &mut Instruction::PutList(_, reg) => self.machine_st.put_list_instr(reg),
-                    &mut Instruction::PutPartialString(_, ref string, reg) => {
+                    &Instruction::PutList(_, reg) => self.machine_st.put_list_instr(reg),
+                    &Instruction::PutPartialString(_, ref string, reg) => {
                         self.machine_st.put_partial_string_instr(string, reg)
                     }
-                    &mut Instruction::PutStructure(name, arity, reg) => {
+                    &Instruction::PutStructure(name, arity, reg) => {
                         self.machine_st.put_structure_instr(name, arity, reg)
                     }
-                    &mut Instruction::PutUnsafeValue(perm_slot, arg) => {
+                    &Instruction::PutUnsafeValue(perm_slot, arg) => {
                         self.machine_st.put_unsafe_value_instr(perm_slot, arg)
                     }
-                    &mut Instruction::PutValue(norm, arg) => {
+                    &Instruction::PutValue(norm, arg) => {
                         self.machine_st.put_value_instr(norm, arg)
                     }
-                    &mut Instruction::PutVariable(norm, arg) => {
+                    &Instruction::PutVariable(norm, arg) => {
                         self.machine_st.put_variable_instr(norm, arg)
                     }
-                    &mut Instruction::SetConstant(c) => self.machine_st.set_constant_instr(c),
-                    &mut Instruction::SetLocalValue(reg) => {
+                    &Instruction::SetConstant(c) => self.machine_st.set_constant_instr(c),
+                    &Instruction::SetLocalValue(reg) => {
                         self.machine_st.set_local_value_instr(reg)
                     }
-                    &mut Instruction::SetVariable(reg) => self.machine_st.set_variable_instr(reg),
-                    &mut Instruction::SetValue(reg) => self.machine_st.set_value_instr(reg),
-                    &mut Instruction::SetVoid(n) => self.machine_st.set_void_instr(n),
+                    &Instruction::SetVariable(reg) => self.machine_st.set_variable_instr(reg),
+                    &Instruction::SetValue(reg) => self.machine_st.set_value_instr(reg),
+                    &Instruction::SetVoid(n) => self.machine_st.set_void_instr(n),
                     Instruction::DynamicElse(..) => {
                         if let FirstOrNext::First = self.machine_st.dynamic_mode {
                             self.machine_st.cc = self.machine_st.global_clock;
@@ -1742,20 +1742,20 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &mut Instruction::TryMeElse(offset) => {
+                    &Instruction::TryMeElse(offset) => {
                         backtrack_on_resource_error!(
                             self.machine_st,
                             self.try_me_else(offset),
                             continue
                         );
                     }
-                    &mut Instruction::DefaultRetryMeElse(offset) => {
+                    &Instruction::DefaultRetryMeElse(offset) => {
                         self.retry_me_else(offset);
                     }
                     Instruction::DefaultTrustMe(_) => {
                         self.trust_me();
                     }
-                    &mut Instruction::RetryMeElse(offset) => {
+                    &Instruction::RetryMeElse(offset) => {
                         self.retry_me_else(offset);
                         increment_call_count!(self.machine_st);
                     }
@@ -1767,7 +1767,7 @@ impl Machine {
                         self.machine_st.neck_cut();
                         self.machine_st.p += 1;
                     }
-                    &mut Instruction::Cut(r) => {
+                    &Instruction::Cut(r) => {
                         let value = self.machine_st[r];
                         self.machine_st.cut_body(value);
 
@@ -1782,7 +1782,7 @@ impl Machine {
 
                         self.machine_st.p += 1;
                     }
-                    &mut Instruction::CutPrev(r) => {
+                    &Instruction::CutPrev(r) => {
                         let value = self.machine_st[r];
                         self.machine_st.cut_prev_body(value);
 
@@ -1797,7 +1797,7 @@ impl Machine {
 
                         self.machine_st.p += 1;
                     }
-                    &mut Instruction::Allocate(num_cells) => {
+                    &Instruction::Allocate(num_cells) => {
                         backtrack_on_resource_error!(
                             self.machine_st,
                             self.machine_st.allocate(num_cells),
@@ -2041,19 +2041,19 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &mut Instruction::DefaultCallIs(r, at) => {
+                    &Instruction::DefaultCallIs(r, at) => {
                         try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &mut Instruction::DefaultExecuteIs(r, at) => {
+                    &Instruction::DefaultExecuteIs(r, at) => {
                         try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &mut Instruction::DefaultCallGetNumber(ref at) => {
+                    &Instruction::DefaultCallGetNumber(ref at) => {
                         try_or_throw!(self.machine_st, self.machine_st.get_number(at), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &mut Instruction::DefaultExecuteGetNumber(ref at) => {
+                    &Instruction::DefaultExecuteGetNumber(ref at) => {
                         try_or_throw!(self.machine_st, self.machine_st.get_number(at), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
@@ -2367,7 +2367,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &mut Instruction::CallIs(r, at) => {
+                    &Instruction::CallIs(r, at) => {
                         try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
 
                         if self.machine_st.fail {
@@ -2377,7 +2377,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &mut Instruction::ExecuteIs(r, at) => {
+                    &Instruction::ExecuteIs(r, at) => {
                         try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
 
                         if self.machine_st.fail {
@@ -2387,7 +2387,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &mut Instruction::CallGetNumber(ref at) => {
+                    &Instruction::CallGetNumber(ref at) => {
                         try_or_throw!(self.machine_st, self.machine_st.get_number(at), continue);
 
                         if self.machine_st.fail {
@@ -2397,7 +2397,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &mut Instruction::ExecuteGetNumber(ref at) => {
+                    &Instruction::ExecuteGetNumber(ref at) => {
                         try_or_throw!(self.machine_st, self.machine_st.get_number(at), continue);
 
                         if self.machine_st.fail {
@@ -2407,7 +2407,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &mut Instruction::CallN(arity) => {
+                    &Instruction::CallN(arity) => {
                         let pred = self.machine_st.registers[1];
 
                         for i in 2..arity + 1 {
@@ -2424,7 +2424,7 @@ impl Machine {
                             increment_call_count!(self.machine_st);
                         }
                     }
-                    &mut Instruction::ExecuteN(arity) => {
+                    &Instruction::ExecuteN(arity) => {
                         let pred = self.machine_st.registers[1];
 
                         for i in 2..arity + 1 {
@@ -2445,7 +2445,7 @@ impl Machine {
                             increment_call_count!(self.machine_st);
                         }
                     }
-                    &mut Instruction::DefaultCallN(arity) => {
+                    &Instruction::DefaultCallN(arity) => {
                         let pred = self.machine_st.registers[1];
 
                         for i in 2..arity + 1 {
@@ -2460,7 +2460,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &mut Instruction::DefaultExecuteN(arity) => {
+                    &Instruction::DefaultExecuteN(arity) => {
                         let pred = self.machine_st.registers[1];
 
                         for i in 2..arity + 1 {
@@ -2996,7 +2996,7 @@ impl Machine {
                         }
                     }
                     //
-                    &mut Instruction::CallIsAtom(r) => {
+                    &Instruction::CallIsAtom(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3024,7 +3024,7 @@ impl Machine {
                             }
                         );
                     }
-                    &mut Instruction::ExecuteIsAtom(r) => {
+                    &Instruction::ExecuteIsAtom(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3052,7 +3052,7 @@ impl Machine {
                             }
                         );
                     }
-                    &mut Instruction::CallIsAtomic(r) => {
+                    &Instruction::CallIsAtomic(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3084,7 +3084,7 @@ impl Machine {
                             }
                         );
                     }
-                    &mut Instruction::ExecuteIsAtomic(r) => {
+                    &Instruction::ExecuteIsAtomic(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3116,7 +3116,7 @@ impl Machine {
                             }
                         );
                     }
-                    &mut Instruction::CallIsCompound(r) => {
+                    &Instruction::CallIsCompound(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3149,7 +3149,7 @@ impl Machine {
                             }
                         );
                     }
-                    &mut Instruction::ExecuteIsCompound(r) => {
+                    &Instruction::ExecuteIsCompound(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3182,7 +3182,7 @@ impl Machine {
                             }
                         );
                     }
-                    &mut Instruction::CallIsInteger(r) => {
+                    &Instruction::CallIsInteger(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3203,7 +3203,7 @@ impl Machine {
                             }
                         }
                     }
-                    &mut Instruction::ExecuteIsInteger(r) => {
+                    &Instruction::ExecuteIsInteger(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3224,7 +3224,7 @@ impl Machine {
                             }
                         }
                     }
-                    &mut Instruction::CallIsNumber(r) => {
+                    &Instruction::CallIsNumber(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3238,7 +3238,7 @@ impl Machine {
                             }
                         }
                     }
-                    &mut Instruction::ExecuteIsNumber(r) => {
+                    &Instruction::ExecuteIsNumber(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3252,7 +3252,7 @@ impl Machine {
                             }
                         }
                     }
-                    &mut Instruction::CallIsRational(r) => {
+                    &Instruction::CallIsRational(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3276,7 +3276,7 @@ impl Machine {
                             }
                         );
                     }
-                    &mut Instruction::ExecuteIsRational(r) => {
+                    &Instruction::ExecuteIsRational(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3300,7 +3300,7 @@ impl Machine {
                             }
                         );
                     }
-                    &mut Instruction::CallIsFloat(r) => {
+                    &Instruction::CallIsFloat(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3314,7 +3314,7 @@ impl Machine {
                             }
                         }
                     }
-                    &mut Instruction::ExecuteIsFloat(r) => {
+                    &Instruction::ExecuteIsFloat(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3328,7 +3328,7 @@ impl Machine {
                             }
                         }
                     }
-                    &mut Instruction::CallIsNonVar(r) => {
+                    &Instruction::CallIsNonVar(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3344,7 +3344,7 @@ impl Machine {
                             }
                         }
                     }
-                    &mut Instruction::ExecuteIsNonVar(r) => {
+                    &Instruction::ExecuteIsNonVar(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3360,7 +3360,7 @@ impl Machine {
                             }
                         }
                     }
-                    &mut Instruction::CallIsVar(r) => {
+                    &Instruction::CallIsVar(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3376,7 +3376,7 @@ impl Machine {
                             }
                         }
                     }
-                    &mut Instruction::ExecuteIsVar(r) => {
+                    &Instruction::ExecuteIsVar(r) => {
                         let d = self
                             .machine_st
                             .store(self.machine_st.deref(self.machine_st[r]));
@@ -3392,7 +3392,7 @@ impl Machine {
                             }
                         }
                     }
-                    &mut Instruction::CallNamed(arity, name, idx) => {
+                    &Instruction::CallNamed(arity, name, idx) => {
                         let idx = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
 
                         try_or_throw!(self.machine_st, self.try_call(name, arity, idx), continue);
@@ -3403,7 +3403,7 @@ impl Machine {
                             increment_call_count!(self.machine_st);
                         }
                     }
-                    &mut Instruction::ExecuteNamed(arity, name, idx) => {
+                    &Instruction::ExecuteNamed(arity, name, idx) => {
                         let idx = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
 
                         try_or_throw!(
@@ -3418,7 +3418,7 @@ impl Machine {
                             increment_call_count!(self.machine_st);
                         }
                     }
-                    &mut Instruction::DefaultCallNamed(arity, name, idx) => {
+                    &Instruction::DefaultCallNamed(arity, name, idx) => {
                         let idx = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
 
                         try_or_throw!(self.machine_st, self.try_call(name, arity, idx), continue);
@@ -3427,7 +3427,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &mut Instruction::DefaultExecuteNamed(arity, name, idx) => {
+                    &Instruction::DefaultExecuteNamed(arity, name, idx) => {
                         let idx = self.machine_st.arena.code_index_tbl.get_entry(idx.into());
 
                         try_or_throw!(
@@ -3440,16 +3440,16 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &mut Instruction::JmpByCall(offset) => {
+                    &Instruction::JmpByCall(offset) => {
                         self.machine_st.p += offset;
                     }
-                    &mut Instruction::RevJmpBy(offset) => {
+                    &Instruction::RevJmpBy(offset) => {
                         self.machine_st.p -= offset;
                     }
                     Instruction::Proceed => {
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &mut Instruction::IndexingCode { var_offset, is_extensible, .. } => {
+                    &Instruction::IndexingCode { var_offset, is_extensible, .. } => {
                         if self.machine_st.oip == 0 && self.machine_st.iip == 0 {
                             if let Some(view) = IndexedClauseView::try_from_code(
                                 &mut self.code[self.machine_st.p..],
@@ -3935,7 +3935,7 @@ impl Machine {
                         self.file_time();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &mut Instruction::CallDynamicModuleResolution(arity) => {
+                    &Instruction::CallDynamicModuleResolution(arity) => {
                         let (module_name, key) = try_or_throw!(
                             self.machine_st,
                             self.dynamic_module_resolution(arity - 2),
@@ -3952,7 +3952,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &mut Instruction::ExecuteDynamicModuleResolution(arity) => {
+                    &Instruction::ExecuteDynamicModuleResolution(arity) => {
                         let (module_name, key) = try_or_throw!(
                             self.machine_st,
                             self.dynamic_module_resolution(arity - 2),
@@ -4164,12 +4164,12 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.install_inference_counter(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &mut Instruction::CallInferenceCount => {
+                    &Instruction::CallInferenceCount => {
                         let global_count = self.machine_st.cwil.global_count;
                         self.inference_count(self.machine_st.registers[1], global_count);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &mut Instruction::ExecuteInferenceCount => {
+                    &Instruction::ExecuteInferenceCount => {
                         let global_count = self.machine_st.cwil.global_count;
                         self.inference_count(self.machine_st.registers[1], global_count);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
@@ -4390,12 +4390,12 @@ impl Machine {
                         self.restore_cut_policy();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &mut Instruction::CallSetCutPoint(r) => {
+                    &Instruction::CallSetCutPoint(r) => {
                         if !self.set_cut_point(r) {
                             step_or_fail!(self.machine_st, self.machine_st.p += 1);
                         }
                     }
-                    &mut Instruction::ExecuteSetCutPoint(r) => {
+                    &Instruction::ExecuteSetCutPoint(r) => {
                         let cp = self.machine_st.cp;
 
                         if !self.set_cut_point(r) {
@@ -4585,17 +4585,17 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.http_listen(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &mut Instruction::CallHttpListenStop => {
+                    &Instruction::CallHttpListenStop => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_listen_stop(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &mut Instruction::ExecuteHttpListenStop => {
+                    &Instruction::ExecuteHttpListenStop => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_listen_stop(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &mut Instruction::CallHttpAccept => {
+                    &Instruction::CallHttpAccept => {
                         #[cfg(feature = "http")]
                         try_or_throw!(self.machine_st, self.http_accept(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
@@ -4763,11 +4763,11 @@ impl Machine {
                         self.pop_from_ball_stack();
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &mut Instruction::CallSetCutPointByDefault(r) => {
+                    &Instruction::CallSetCutPointByDefault(r) => {
                         self.set_cut_point_by_default(r);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &mut Instruction::ExecuteSetCutPointByDefault(r) => {
+                    &Instruction::ExecuteSetCutPointByDefault(r) => {
                         self.set_cut_point_by_default(r);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
@@ -4803,11 +4803,11 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.machine_st.skip_max_list(), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallSleep => {
+                    Instruction::CallSleep => {
                         try_or_throw!(self.machine_st, self.sleep(), continue);
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ExecuteSleep => {
+                    Instruction::ExecuteSleep => {
                         try_or_throw!(self.machine_st, self.sleep(), continue);
                         self.machine_st.p = self.machine_st.cp;
                     }
@@ -5689,11 +5689,11 @@ impl Machine {
                         self.strip_module();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &mut Instruction::CallPrepareCallClause(arity) => {
+                    &Instruction::CallPrepareCallClause(arity) => {
                         try_or_throw!(self.machine_st, self.prepare_call_clause(arity), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &mut Instruction::ExecutePrepareCallClause(arity) => {
+                    &Instruction::ExecutePrepareCallClause(arity) => {
                         try_or_throw!(self.machine_st, self.prepare_call_clause(arity), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
@@ -5721,7 +5721,7 @@ impl Machine {
                         self.machine_st.fail = !self.is_expanded_or_inlined();
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &mut Instruction::CallFastCallN(arity) => {
+                    &Instruction::CallFastCallN(arity) => {
                         let call_at_index =
                             |wam: &mut Machine, name: Atom, arity, ptr| {
                                 wam.try_call(name, arity, ptr)
@@ -5737,7 +5737,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &mut Instruction::ExecuteFastCallN(arity) => {
+                    &Instruction::ExecuteFastCallN(arity) => {
                         let call_at_index =
                             |wam: &mut Machine, name: Atom, arity, ptr| {
                                 wam.try_execute(name, arity, ptr)

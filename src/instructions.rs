@@ -127,14 +127,18 @@ impl IndexedChoiceInstructionTable {
                 functor!(atom!("dindex_on_term"), [functor(rt_stub)])
             }
             &IndexedChoiceInstructionTable::DeadIndices { arg_num, ref indices } => {
-                variadic_functor(
+                let offsets_list = variadic_functor(
+                    atom!("offsets"),
+                    1,
+                    indices.iter().cloned().map(|o| functor!(atom!("external"), [fixnum(o)])),
+                );
+
+                functor!(
                     atom!("dead_indices"),
-                    2,
-                    std::iter::once(functor!(atom!("arg_num"), [fixnum(arg_num)]))
-                        .chain(indices
-                               .iter()
-                               .cloned()
-                               .map(|o| functor!(atom!("external"), [fixnum(o)]))),
+                    [
+                        fixnum(arg_num),
+                        functor(offsets_list)
+                    ]
                 )
             }
         }

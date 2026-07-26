@@ -9,6 +9,7 @@ use crate::types::HeapCellValue;
 use fxhash::{FxBuildHasher, FxHasher};
 use hashbrown::hash_table::*;
 use indexmap::IndexMap;
+use indexmap::IndexSet;
 
 use std::collections::VecDeque;
 
@@ -279,24 +280,6 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
         }
     }
 
-    fn map_offsets_to_index_keys(
-        optimal_index: usize,
-    ) -> impl for<'b> FnOnce(
-        &'b [I::ThirdLevelIndex],
-        &'b ClauseArgData,
-    ) -> Box<dyn Iterator<Item = (usize, OptArgIndexKey)> + 'b> {
-        move |code, clause_offsets_to_arg_keys| {
-            let iter = code
-                .iter()
-                .map(|instr| instr.offset())
-                .filter_map(|offset| clause_offsets_to_arg_keys.get(&offset))
-                .flat_map(move |v| v.iter().copied().enumerate().skip(optimal_index + 1));
-            // optimal_index is 0-indexed so must add 1 to skip it as well
-
-            Box::new(iter)
-        }
-    }
-
     pub(crate) fn map_clause_offset_to_arg_key(
         &mut self,
         arg_index: usize,
@@ -310,6 +293,32 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
 
         entry[arg_index] = key;
     }
+    
+    fn map_offsets_to_index_keys(
+        optimal_index: usize,
+    ) -> impl for<'b> FnOnce(
+        &'b [I::ThirdLevelIndex],
+        &'b ClauseArgData,
+    ) -> Box<dyn Iterator<Item = (usize, OptArgIndexKey, usize)> + 'b> {
+        move |code, clause_offsets_to_arg_keys| {
+            let iter = code
+                .iter()
+                .filter_map(|instr| {
+                    let offset = instr.offset();
+                    clause_offsets_to_arg_keys.get(&offset).map(|keys| (keys, offset))
+                })
+                .flat_map(move |(v, offset)| {
+                    v.iter().copied()
+                     .map(move |key| (key, offset))
+                     .enumerate()
+                     .skip(optimal_index + 1)
+                     .map(|(idx, (key, offset))| (idx, key, offset))
+                });
+            // optimal_index is 0-indexed so must add 1 to skip it as well
+
+            Box::new(iter)
+        }
+    }
 
     fn on_demand_second_level_index(
         code: &mut SecondLevelTable<I>,
@@ -320,45 +329,46 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
         is_extensible: bool,
     ) {
         let map_offsets_to_index_keys = Self::map_offsets_to_index_keys(optimal_index);
-        let mut arg_var_keys = vec![0; arity];
+        let mut arg_var_keys = vec![IndexSet::with_hasher(FxBuildHasher::new()); arity];
 
-        for (arg_index, arg_key) in
+        for (arg_index, arg_key, offset) in
             map_offsets_to_index_keys(code.offsets.make_contiguous(), clause_offsets_to_arg_keys)
         {
             if matches!(specs.get(arg_index), IndexingSpec::NoIndexing) {
                 continue;
             }
 
-            match arg_key {
-                OptArgIndexKey::None => {
-                    arg_var_keys[arg_index] += 1;
-                }
-                _ => {
-                }
-            };
+            if let OptArgIndexKey::None = arg_key && is_extensible {
+                arg_var_keys[arg_index].insert(offset);
+            }
         }
 
-        for arg_index in optimal_index + 1..arity {
+        for (arg_index, dead_indices) in (optimal_index + 1 ..= arity)
+            .zip(arg_var_keys.drain(optimal_index + 1..))
+        {
             if matches!(specs.get(arg_index), IndexingSpec::NoIndexing) {
                 continue;
             }
 
-            if !is_extensible && arg_var_keys[arg_index] > 0 {
+            if !is_extensible && !dead_indices.is_empty() {
                 // if there are any variables among the columns, don't
                 // generate an OnDemandTerm or child instructions.
                 continue;
             }
 
-            if arg_var_keys[arg_index] == 0 {
-                code.tables
-                    .push_back(IndexedChoiceInstructionTable::OnDemandTerm {
-                        arg_num: arg_index + 1,
-                    });
-            } else if is_extensible {
-                // TODO DeadIndices!
+            if dead_indices.is_empty() {
+                code.tables.push_back(IndexedChoiceInstructionTable::OnDemandTerm {
+                    arg_num: arg_index + 1,
+                });
+            } else {
+                debug_assert!(is_extensible);
+                code.tables.push_back(IndexedChoiceInstructionTable::DeadIndices {
+                    arg_num: arg_index + 1,
+                    indices: dead_indices,
+                });
             }
         }
-    }
+    } 
 
     fn index_list(
         &mut self,

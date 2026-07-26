@@ -1540,6 +1540,7 @@ impl Machine {
                     (atom!(""), num_vars),
                     compilation_target,
                     clause,
+                    PredicateInfo::default(),
                     settings,
                 )
             };
