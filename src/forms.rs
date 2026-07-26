@@ -1086,7 +1086,7 @@ impl HeapCellValue {
                     hasher.write_i8(-1);
                 }
 
-                hasher.write_u64(n.abs() as u64);
+                hasher.write_u64(n.unsigned_abs());
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 hasher.write_u64(name.index);

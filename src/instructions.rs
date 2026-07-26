@@ -97,16 +97,16 @@ pub enum IndexedChoiceInstructionTable {
 impl IndexedChoiceInstructionTable {
     #[inline]
     pub(crate) fn arg_num(&self) -> usize {
-        match self {
-            &IndexedChoiceInstructionTable::SwitchOnTerm { arg_num, .. } => arg_num,
-            &IndexedChoiceInstructionTable::OnDemandTerm { arg_num } => arg_num,
-            &IndexedChoiceInstructionTable::DeadIndices { arg_num, .. } => arg_num,
+        match *self {
+            IndexedChoiceInstructionTable::SwitchOnTerm { arg_num, .. } => arg_num,
+            IndexedChoiceInstructionTable::OnDemandTerm { arg_num } => arg_num,
+            IndexedChoiceInstructionTable::DeadIndices { arg_num, .. } => arg_num,
         }
     }
 
     pub(crate) fn to_functor(&self) -> MachineStub {
-        match self {
-            &IndexedChoiceInstructionTable::SwitchOnTerm {
+        match *self {
+            IndexedChoiceInstructionTable::SwitchOnTerm {
                 arg_num,
                 ref constants,
                 ref lists,
@@ -122,11 +122,11 @@ impl IndexedChoiceInstructionTable {
                     ]
                 )
             }
-            &IndexedChoiceInstructionTable::OnDemandTerm { arg_num, .. } => {
+            IndexedChoiceInstructionTable::OnDemandTerm { arg_num, .. } => {
                 let rt_stub = reg_type_into_functor(temp_v!(arg_num));
                 functor!(atom!("dindex_on_term"), [functor(rt_stub)])
             }
-            &IndexedChoiceInstructionTable::DeadIndices { arg_num, ref indices } => {
+            IndexedChoiceInstructionTable::DeadIndices { arg_num, ref indices } => {
                 let offsets_list = variadic_functor(
                     atom!("offsets"),
                     1,
@@ -178,20 +178,26 @@ impl StaticIndexedChoiceInstructionOffset {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Appended {
     A(usize),
     Z(usize),
 }
 
-impl PartialOrd<Appended> for Appended {
+impl PartialOrd for Appended {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(match (self, other) {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Appended {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
             (Appended::A(x), Appended::A(y)) => y.cmp(x),
             (Appended::A(_x), Appended::Z(_y)) => std::cmp::Ordering::Less,
             (Appended::Z(_x), Appended::A(_y)) => std::cmp::Ordering::Greater,
             (Appended::Z(x), Appended::Z(y)) => x.cmp(y),
-        })
+        }
     }
 }
 

@@ -1284,19 +1284,19 @@ impl Machine {
         };
 
         loop {
-            match indexed_choice_instrs.offsets.get(ii as usize).map(Appended::offset) {
-                Some(offset) => match &self.code[p + offset - 1] {
-                    &Instruction::DynamicInternalElse(birth, death, next_or_fail) => {
-                        if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death
-                        {
-                            return Some((offset, oi, ii, next_or_fail.is_next()));
-                        } else {
-                            ii += 1;
-                        }
+            {
+                let offset = indexed_choice_instrs.offsets.get(ii as usize).map(Appended::offset)?;
+                match &self.code[p + offset - 1] {
+                &Instruction::DynamicInternalElse(birth, death, next_or_fail) => {
+                    if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death
+                    {
+                        return Some((offset, oi, ii, next_or_fail.is_next()));
+                    } else {
+                        ii += 1;
                     }
-                    _ => unreachable!(),
-                },
-                None => return None,
+                }
+                _ => unreachable!(),
+            }
             }
         }
     }
@@ -2049,11 +2049,11 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::DefaultCallGetNumber(ref at) => {
+                    Instruction::DefaultCallGetNumber(at) => {
                         try_or_throw!(self.machine_st, self.machine_st.get_number(at), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::DefaultExecuteGetNumber(ref at) => {
+                    Instruction::DefaultExecuteGetNumber(at) => {
                         try_or_throw!(self.machine_st, self.machine_st.get_number(at), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
@@ -2387,7 +2387,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallGetNumber(ref at) => {
+                    Instruction::CallGetNumber(at) => {
                         try_or_throw!(self.machine_st, self.machine_st.get_number(at), continue);
 
                         if self.machine_st.fail {
@@ -2397,7 +2397,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteGetNumber(ref at) => {
+                    Instruction::ExecuteGetNumber(at) => {
                         try_or_throw!(self.machine_st, self.machine_st.get_number(at), continue);
 
                         if self.machine_st.fail {
@@ -3535,26 +3535,26 @@ impl Machine {
                         if let Instruction::IndexingCode { code: indexing_code, .. } = &self.code[self.machine_st.p] {
                             match &indexing_code[self.machine_st.oip as usize] {
                                 IndexingLine::StaticIndexedChoice(indexed_choice) => {
-                                    match &indexed_choice.offsets[self.machine_st.iip as usize] {
-                                        &StaticIndexedChoiceInstructionOffset::Try(offset) => {
+                                    match indexed_choice.offsets[self.machine_st.iip as usize] {
+                                        StaticIndexedChoiceInstructionOffset::Try(offset) => {
                                             backtrack_on_resource_error!(
                                                 self.machine_st,
                                                 self.indexed_try(offset),
                                                 continue
                                             );
                                         }
-                                        &StaticIndexedChoiceInstructionOffset::Retry(l) => {
+                                        StaticIndexedChoiceInstructionOffset::Retry(l) => {
                                             self.retry(l);
                                             increment_call_count!(self.machine_st);
                                         }
-                                        &StaticIndexedChoiceInstructionOffset::DefaultRetry(l) => {
+                                        StaticIndexedChoiceInstructionOffset::DefaultRetry(l) => {
                                             self.retry(l);
                                         }
-                                        &StaticIndexedChoiceInstructionOffset::Trust(l) => {
+                                        StaticIndexedChoiceInstructionOffset::Trust(l) => {
                                             self.trust(l);
                                             increment_call_count!(self.machine_st);
                                         }
-                                        &StaticIndexedChoiceInstructionOffset::DefaultTrust(l) => {
+                                        StaticIndexedChoiceInstructionOffset::DefaultTrust(l) => {
                                             self.trust(l);
                                         }
                                     }

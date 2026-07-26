@@ -438,16 +438,14 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 }
             }
 
-            for target_pos_opt in clause_target_poses.iter().cloned().rev() {
-                if let Some(target_pos) = target_pos_opt {
-                    delete_from_skeleton(
-                        self.payload.compilation_target,
-                        key,
-                        skeleton,
-                        target_pos,
-                        &mut self.payload.retraction_info,
-                    );
-                }
+            for target_pos in clause_target_poses.iter().cloned().rev().flatten() {
+                delete_from_skeleton(
+                    self.payload.compilation_target,
+                    key,
+                    skeleton,
+                    target_pos,
+                    &mut self.payload.retraction_info,
+                );
             }
 
             if let Some(index_ptr) = index_ptr_opt {
@@ -973,10 +971,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 self.wam_prelude.indices.indexing_specs.insert(key, indexing_specs);
             }
             CompilationTarget::Module(module_name) => {
-                self.wam_prelude.indices.modules.get_mut(module_name)
-                    .map(move |module| {
-                        module.indexing_specs.insert(key, indexing_specs);
-                    });
+                if let Some(module) = self.wam_prelude.indices.modules.get_mut(module_name) { module.indexing_specs.insert(key, indexing_specs); }
             }
         }
     }

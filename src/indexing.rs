@@ -110,11 +110,10 @@ impl Indexer for StaticIndexedChoiceInstruction {
     ) -> VecDeque<Self::ThirdLevelIndex> {
         let mut offsets = VecDeque::from_iter(iter);
 
-        if offsets.len() > 1 {
-            if let Some(instr) = offsets.back_mut() {
+        if offsets.len() > 1
+            && let Some(instr) = offsets.back_mut() {
                 cap_choice_seq_with_trust(instr);
             }
-        }
 
         offsets
     }

@@ -337,12 +337,12 @@ fn setup_indexing(mut terms: Vec<Term>) -> Result<(Atom, Vec<IndexingSpec>), Com
 
     match terms.pop().unwrap() {
         Term::Clause(_, name, mut terms) => {
-            return Ok((name, get_indexing_specs(&mut terms)?));
+            Ok((name, get_indexing_specs(&mut terms)?))
         }
         Term::Literal(_, Literal::Atom(name)) => {
-            return Ok((name, vec![]));
+            Ok((name, vec![]))
         }
-        _ => return Err(CompilationError::InvalidIndexingDecl),
+        _ => Err(CompilationError::InvalidIndexingDecl),
     }
 }
 

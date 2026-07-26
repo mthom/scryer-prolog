@@ -856,7 +856,7 @@ impl<'a> CodeGenerator<'a> {
                 let v = HeapCellValue::from(c);
 
                 self.marker
-                    .mark_non_var::<QueryInstruction>(Level::Shallow, term_loc, &cell, code);
+                    .mark_non_var::<QueryInstruction>(Level::Shallow, term_loc, cell, code);
 
                 code.push_back(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
                 compile_expr!(self, &terms[1], term_loc, code)

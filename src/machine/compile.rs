@@ -715,7 +715,7 @@ fn prepend_compiled_clause<'a, LS: LoadState<'a>>(
     let mut prepend_queue = VecDeque::new();
 
     let target_arg_num = first_inst_arg_num(&clause_code, skeleton.clause_indices[0].index_loc);
-    let head_arg_num = first_inst_arg_num(&code, skeleton.clause_indices[1].index_loc);
+    let head_arg_num = first_inst_arg_num(code, skeleton.clause_indices[1].index_loc);
 
     let global_clock_tick = LS::machine_st(payload).global_clock;
 
@@ -1255,7 +1255,9 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
         }
     }
 
-    let index_ptr_opt = match skeleton.clause_indices[lower_bound].index_loc {
+    
+
+    match skeleton.clause_indices[lower_bound].index_loc {
         Some(target_indexing_loc)
             if mergeable_indexed_subsequences(code, lower_bound, target_pos, skeleton) =>
         {
@@ -1443,8 +1445,7 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
 
                                 if let Instruction::TryMeElse(0) =
                                     &mut code[preceding_choice_instr_loc]
-                                {
-                                    if let Instruction::IndexingCode { var_offset, .. } = &mut code[index_loc] {
+                                    && let Instruction::IndexingCode { var_offset, .. } = &mut code[index_loc] {
                                         set_switch_var_offset(
                                             var_offset,
                                             index_loc,
@@ -1452,7 +1453,6 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                                             &mut payload.retraction_info,
                                         );
                                     }
-                                }
                             }
                         }
 
@@ -1482,9 +1482,7 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                 )
             }
         }
-    };
-
-    index_ptr_opt
+    }
 }
 
 #[inline]
@@ -1495,13 +1493,13 @@ fn mergeable_indexed_subsequences(
     skeleton: &PredicateSkeleton,
 ) -> bool {
     let lower_bound_arg_num =
-        first_inst_arg_num(&code, skeleton.clause_indices[lower_bound].index_loc);
+        first_inst_arg_num(code, skeleton.clause_indices[lower_bound].index_loc);
 
     if target_pos + 1 < skeleton.clause_indices.len() {
         let succ_arg_num =
-            first_inst_arg_num(&code, skeleton.clause_indices[target_pos + 1].index_loc);
+            first_inst_arg_num(code, skeleton.clause_indices[target_pos + 1].index_loc);
         let target_arg_num =
-            first_inst_arg_num(&code, skeleton.clause_indices[target_pos].index_loc);
+            first_inst_arg_num(code, skeleton.clause_indices[target_pos].index_loc);
 
         return target_arg_num != succ_arg_num && lower_bound_arg_num == succ_arg_num;
     }
@@ -1596,7 +1594,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         );
 
         let mut cg = CodeGenerator::new(
-            &mut LS::machine_st(&mut self.payload).arena.f64_tbl,
+            &LS::machine_st(&mut self.payload).arena.f64_tbl,
             indexing_specs,
             predicate_info,
             settings,

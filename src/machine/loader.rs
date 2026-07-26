@@ -748,7 +748,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         remove_clause_index(
                             clause_view,
                             clause_loc - index_loc + 1,
-                            &mut LS::machine_st(&mut self.payload).arena.f64_tbl,
+                            &LS::machine_st(&mut self.payload).arena.f64_tbl,
                         );
                     }
                 }
@@ -2135,8 +2135,7 @@ impl Machine {
                     &(atom!("$clause"), 6),
                 )
                 .and_then(|skeleton| skeleton.clause_indices[0].index_loc)
-            {
-                if let Some(view) = IndexedClauseView::try_from_code(
+                && let Some(view) = IndexedClauseView::try_from_code(
                     &mut loader.wam_prelude.code[index_loc ..],
                 ) {                    
                     let head_key = if key.1 > 0 {
@@ -2150,8 +2149,7 @@ impl Machine {
                         &LiveLoadAndMachineState::machine_st(&mut loader.payload).arena.f64_tbl,
                         head_key,
                     );
-                }
-            };
+                };
 
             let offset = loader.get_or_insert_code_index(key, compilation_target);
 

@@ -146,11 +146,11 @@ pub(crate) fn first_inst_arg_num(code: &[Instruction], index_loc_opt: Option<usi
     index_loc_opt
         .and_then(|index_loc| code.get(index_loc))
         .and_then(|instr| if let Instruction::IndexingCode { code, .. } = &instr {
-            code.get(0)
+            code.first()
         } else {
             None
         })
-        .and_then(|line| line.tables().get(0).map(IndexedChoiceInstructionTable::arg_num))
+        .and_then(|line| line.tables().front().map(IndexedChoiceInstructionTable::arg_num))
         .unwrap_or(0)
 }
 
@@ -461,7 +461,7 @@ impl<'code> IndexingLineIter<'code> {
                                     // OptArgIndexKey::None.
                                     let key_type = keys(self.arg_num);
 
-                                    return match key_type {
+                                    match key_type {
                                         OptArgIndexKey::Structure(name, arity) => {
                                             Some(IndexingLinePlace::SwitchOnStructurePtr(
                                                 cursor,
@@ -489,7 +489,7 @@ impl<'code> IndexingLineIter<'code> {
                                         OptArgIndexKey::None => {
                                             Some(IndexingLinePlace::SwitchOnNonePtr(cursor))
                                         }
-                                    };
+                                    }
 
                                     // let the client use the cursor to control the
                                     // next step of iteration, to permit, e.g. shallow
