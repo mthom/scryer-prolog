@@ -260,7 +260,6 @@ pub(crate) struct CodeOffsets<'a, I: Indexer> {
     clause_offsets_to_arg_keys: ClauseArgData,
     arity: usize,
     non_counted_bt: bool,
-    var_count: usize,
 }
 
 impl<'a, I: Indexer> CodeOffsets<'a, I> {
@@ -275,7 +274,6 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
             clause_offsets_to_arg_keys: ClauseArgData::with_hasher(FxBuildHasher::default()),
             arity,
             non_counted_bt,
-            var_count: 0,
         }
     }
 
@@ -452,7 +450,6 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
                 self.index_constant(literal, to_offset_instr)
             }
             OptArgIndexKey::None => {
-                self.var_count += 1;
             }
         };
     }
