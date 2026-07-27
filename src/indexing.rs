@@ -335,7 +335,7 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
                 continue;
             }
 
-            if let OptArgIndexKey::None = arg_key && is_extensible {
+            if let OptArgIndexKey::None = arg_key {
                 arg_var_keys[arg_index].insert(offset);
             }
         }
