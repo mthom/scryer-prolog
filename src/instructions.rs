@@ -111,7 +111,7 @@ impl IndexedChoiceInstructionTable {
                 ref constants,
                 ref lists,
                 ref structures,
-            }  => {
+            } => {
                 functor!(
                     atom!("switch_on_term"),
                     [
@@ -126,19 +126,22 @@ impl IndexedChoiceInstructionTable {
                 let rt_stub = reg_type_into_functor(temp_v!(arg_num));
                 functor!(atom!("dindex_on_term"), [functor(rt_stub)])
             }
-            IndexedChoiceInstructionTable::DeadIndices { arg_num, ref indices } => {
+            IndexedChoiceInstructionTable::DeadIndices {
+                arg_num,
+                ref indices,
+            } => {
                 let offsets_list = variadic_functor(
                     atom!("offsets"),
                     1,
-                    indices.iter().cloned().map(|o| functor!(atom!("external"), [fixnum(o)])),
+                    indices
+                        .iter()
+                        .cloned()
+                        .map(|o| functor!(atom!("external"), [fixnum(o)])),
                 );
 
                 functor!(
                     atom!("dead_indices"),
-                    [
-                        fixnum(arg_num),
-                        functor(offsets_list)
-                    ]
+                    [fixnum(arg_num), functor(offsets_list)]
                 )
             }
         }
@@ -323,7 +326,7 @@ impl ExternalIndexingCodePtr {
 #[derive(Debug, Clone)]
 pub enum TermIndexingCodePtr<KeyType> {
     DynamicExternal(Appended), // an External index of a dynamic predicate, potentially invalidated by retraction.
-    External(usize),        // the index points past the indexing instruction prelude.
+    External(usize),           // the index points past the indexing instruction prelude.
     Fail,
     Internal(usize),
     SwitchOnType(Box<HashTable<(KeyType, IndexingCodePtr)>>),
@@ -339,15 +342,13 @@ impl TermIndexingCodePtr<HeapCellValue> {
             }
             &TermIndexingCodePtr::Internal(o) => functor!(atom!("internal"), [fixnum(o)]),
             TermIndexingCodePtr::Fail => functor!(atom!("fail")),
-            TermIndexingCodePtr::SwitchOnType(constants) => {
-                variadic_functor(
-                    atom!("switch_on_constants"),
-                    1,
-                    constants
-                        .iter()
-                        .map(|(c, ptr)| functor!(atom!(":"), [cell((*c)), indexing_code_ptr((*ptr))])),
-                )
-            }
+            TermIndexingCodePtr::SwitchOnType(constants) => variadic_functor(
+                atom!("switch_on_constants"),
+                1,
+                constants
+                    .iter()
+                    .map(|(c, ptr)| functor!(atom!(":"), [cell((*c)), indexing_code_ptr((*ptr))])),
+            ),
         }
     }
 }
@@ -356,7 +357,9 @@ impl<IndexKey> From<IndexingCodePtr> for TermIndexingCodePtr<IndexKey> {
     fn from(value: IndexingCodePtr) -> Self {
         match value {
             IndexingCodePtr::External(o) => TermIndexingCodePtr::External(o),
-            IndexingCodePtr::DynamicExternal(appended) => TermIndexingCodePtr::DynamicExternal(appended),
+            IndexingCodePtr::DynamicExternal(appended) => {
+                TermIndexingCodePtr::DynamicExternal(appended)
+            }
             IndexingCodePtr::Internal(o) => TermIndexingCodePtr::Internal(o),
         }
     }
@@ -372,21 +375,19 @@ impl TermIndexingCodePtr<(Atom, usize)> {
                 functor!(atom!("external"), [fixnum(o)])
             }
             TermIndexingCodePtr::Fail => functor!(atom!("fail")),
-            TermIndexingCodePtr::SwitchOnType(structures) => {
-                variadic_functor(
-                    atom!("switch_on_structure"),
-                    1,
-                    structures.iter().map(|((name, arity), ptr)| {
-                        functor!(
-                            atom!(":"),
-                            [
-                                functor((atom!("/")), [atom_as_cell(name), fixnum((*arity))]),
-                                indexing_code_ptr((*ptr))
-                            ]
-                        )
-                    }),
-                )
-            }
+            TermIndexingCodePtr::SwitchOnType(structures) => variadic_functor(
+                atom!("switch_on_structure"),
+                1,
+                structures.iter().map(|((name, arity), ptr)| {
+                    functor!(
+                        atom!(":"),
+                        [
+                            functor((atom!("/")), [atom_as_cell(name), fixnum((*arity))]),
+                            indexing_code_ptr((*ptr))
+                        ]
+                    )
+                }),
+            ),
         }
     }
 }
@@ -423,19 +424,15 @@ impl IndexingLine {
     #[inline]
     pub fn tables_mut(&mut self) -> &mut VecDeque<IndexedChoiceInstructionTable> {
         match self {
-            IndexingLine::StaticIndexedChoice(SecondLevelTable { tables, .. }) |
-            IndexingLine::DynamicIndexedChoice(SecondLevelTable { tables, .. }) => {
-                tables
-            }
+            IndexingLine::StaticIndexedChoice(SecondLevelTable { tables, .. })
+            | IndexingLine::DynamicIndexedChoice(SecondLevelTable { tables, .. }) => tables,
         }
     }
 
     pub fn tables(&self) -> &VecDeque<IndexedChoiceInstructionTable> {
         match self {
-            IndexingLine::StaticIndexedChoice(SecondLevelTable { tables, .. }) |
-            IndexingLine::DynamicIndexedChoice(SecondLevelTable { tables, .. }) => {
-                tables
-            }
+            IndexingLine::StaticIndexedChoice(SecondLevelTable { tables, .. })
+            | IndexingLine::DynamicIndexedChoice(SecondLevelTable { tables, .. }) => tables,
         }
     }
 }

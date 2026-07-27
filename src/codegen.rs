@@ -16,9 +16,6 @@ use crate::variable_records::*;
 use crate::machine::disjuncts::*;
 use crate::machine::machine_errors::*;
 
-use bitvec::BitArr;
-use bitvec::bitarr;
-use bitvec::order::Lsb0;
 use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
 
@@ -1105,55 +1102,56 @@ impl<'a> CodeGenerator<'a> {
 
     fn split_predicate(clauses: &[PredicateClause]) -> Vec<ClauseSpan> {
         let mut subseqs = Vec::new();
-        let mut idx = 0;
+        let mut left = 0;
+        let mut optimal_index = 0;
 
-        type ArgMask = BitArr!(for MAX_ARITY, in u64);
-
-        fn nonvar_positions(clause: &PredicateClause) -> ArgMask {
-            let mut mask = bitarr![u64, Lsb0; 0; MAX_ARITY];
-            for (idx, arg) in clause.args().iter().enumerate() {
+        'outer: for (right, clause) in clauses.iter().enumerate() {
+            for (instantiated_arg_index, arg) in clause.args().iter().enumerate() {
                 if !matches!(arg, Term::Var(..) | Term::AnonVar) {
-                    mask.set(idx, true);
+                    if optimal_index != instantiated_arg_index {
+                        if left >= right {
+                            optimal_index = instantiated_arg_index;
+                            continue 'outer;
+                        }
+
+                        subseqs.push(ClauseSpan {
+                            left,
+                            right,
+                            instantiated_arg_index: NonZero::new(optimal_index + 1),
+                        });
+
+                        optimal_index = instantiated_arg_index;
+                        left = right;
+                    }
+
+                    continue 'outer;
                 }
             }
-            mask
-        }
 
-        // choose the earliest argument index "chosen" at which the
-        // widest span of clauses beginning from clauses[idx ..] is
-        // instantiated and push it
-        while idx < clauses.len() {
-            let start = idx;
-            let mut candidates = nonvar_positions(&clauses[idx]);
-
-            if candidates.not_any() {
-                // fully unbound clause: standalone span, no index
-                subseqs.push(ClauseSpan { left: idx, right: idx + 1, instantiated_arg_index: None });
-                idx += 1;
-                continue;
+            if left < right {
+                subseqs.push(ClauseSpan {
+                    left,
+                    right,
+                    instantiated_arg_index: NonZero::new(optimal_index + 1),
+                });
             }
 
-            idx += 1;
-
-            while idx < clauses.len() {
-                let next = nonvar_positions(&clauses[idx]);
-                let intersected = candidates & next;
-
-                if intersected.not_any() {
-                    break;
-                }
-
-                candidates = intersected;
-                idx += 1;
-            }
-
-            // get the index of the rightmost 1, this is the instantiated_arg_index
-            let chosen = candidates.first_one().and_then(|idx| NonZero::new(idx + 1));
+            optimal_index = 0;
 
             subseqs.push(ClauseSpan {
-                left: start,
-                right: idx,
-                instantiated_arg_index: chosen,
+                left: right,
+                right: right + 1,
+                instantiated_arg_index: NonZero::new(optimal_index + 1),
+            });
+
+            left = right + 1;
+        }
+
+        if left < clauses.len() {
+            subseqs.push(ClauseSpan {
+                left,
+                right: clauses.len(),
+                instantiated_arg_index: NonZero::new(optimal_index + 1),
             });
         }
 
@@ -1237,7 +1235,11 @@ impl<'a> CodeGenerator<'a> {
                             code_offsets.index_key(
                                 index_key,
                                 |is_initial_index, non_counted_bt| {
-                                    I::compute_index(is_initial_index, clause_offset, non_counted_bt)
+                                    I::compute_index(
+                                        is_initial_index,
+                                        clause_offset,
+                                        non_counted_bt,
+                                    )
                                 },
                             );
                         }
@@ -1266,9 +1268,9 @@ impl<'a> CodeGenerator<'a> {
         let index_code_is_empty = if let Some(optimal_index) = optimal_index
             && !code_offsets.no_indices()
         {
-            let is_extensible = self.predicate_info.is_dynamic ||
-                ((self.predicate_info.is_multifile || self.predicate_info.is_discontiguous) &&
-                 is_last_subseq);
+            let is_extensible = self.predicate_info.is_dynamic
+                || ((self.predicate_info.is_multifile || self.predicate_info.is_discontiguous)
+                    && is_last_subseq);
 
             let (var_offset, index_code) = code_offsets.compute_indices(
                 is_extensible,
@@ -1356,12 +1358,17 @@ impl<'a> CodeGenerator<'a> {
             }
 
             if self.settings.is_extensible {
-                let segment_is_indexed = matches!(code_segment[0], Instruction::IndexingCode { .. });
+                let segment_is_indexed =
+                    matches!(code_segment[0], Instruction::IndexingCode { .. });
 
-                for clause_index_info in self.skeleton.clause_indices.iter_mut().skip(skel_lower_bound)
+                for clause_index_info in self
+                    .skeleton
+                    .clause_indices
+                    .iter_mut()
+                    .skip(skel_lower_bound)
                 {
-                    clause_index_info.clause_start += clause_start_offset +
-                        2 * (segment_is_indexed as usize);
+                    clause_index_info.clause_start +=
+                        clause_start_offset + 2 * (segment_is_indexed as usize);
                     clause_index_info.add_to_index_loc(clause_start_offset + 1);
                 }
             }

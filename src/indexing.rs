@@ -16,9 +16,7 @@ use std::collections::VecDeque;
 pub(crate) type ClauseArgData = IndexMap<usize, Vec<OptArgIndexKey>, FxBuildHasher>;
 
 #[inline]
-pub(crate) fn cap_choice_seq_with_trust(
-    instr: &mut StaticIndexedChoiceInstructionOffset,
-) {
+pub(crate) fn cap_choice_seq_with_trust(instr: &mut StaticIndexedChoiceInstructionOffset) {
     match instr {
         StaticIndexedChoiceInstructionOffset::Retry(i) => {
             *instr = StaticIndexedChoiceInstructionOffset::Trust(*i);
@@ -111,9 +109,10 @@ impl Indexer for StaticIndexedChoiceInstruction {
         let mut offsets = VecDeque::from_iter(iter);
 
         if offsets.len() > 1
-            && let Some(instr) = offsets.back_mut() {
-                cap_choice_seq_with_trust(instr);
-            }
+            && let Some(instr) = offsets.back_mut()
+        {
+            cap_choice_seq_with_trust(instr);
+        }
 
         offsets
     }
@@ -217,10 +216,7 @@ impl Indexer for DynamicIndexedChoiceInstruction {
             } else {
                 index_locs.insert_unique(
                     hash,
-                    (
-                        key,
-                        IndexingCodePtr::DynamicExternal(code.offsets[0])
-                    ),
+                    (key, IndexingCodePtr::DynamicExternal(code.offsets[0])),
                     |(key, _)| hash_fn(key),
                 );
             }
@@ -263,11 +259,7 @@ pub(crate) struct CodeOffsets<'a, I: Indexer> {
 }
 
 impl<'a, I: Indexer> CodeOffsets<'a, I> {
-    pub(crate) fn new(
-        f64_tbl: &'a F64Table,
-        non_counted_bt: bool,
-        arity: usize,
-    ) -> Self {
+    pub(crate) fn new(f64_tbl: &'a F64Table, non_counted_bt: bool, arity: usize) -> Self {
         CodeOffsets {
             indices: CodeIndices::new(),
             f64_tbl,
@@ -290,7 +282,7 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
 
         entry[arg_index] = key;
     }
-    
+
     fn map_offsets_to_index_keys(
         optimal_index: usize,
     ) -> impl for<'b> FnOnce(
@@ -302,14 +294,17 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
                 .iter()
                 .filter_map(|instr| {
                     let offset = instr.offset();
-                    clause_offsets_to_arg_keys.get(&offset).map(|keys| (keys, offset))
+                    clause_offsets_to_arg_keys
+                        .get(&offset)
+                        .map(|keys| (keys, offset))
                 })
                 .flat_map(move |(v, offset)| {
-                    v.iter().copied()
-                     .map(move |key| (key, offset))
-                     .enumerate()
-                     .skip(optimal_index + 1)
-                     .map(|(idx, (key, offset))| (idx, key, offset))
+                    v.iter()
+                        .copied()
+                        .map(move |key| (key, offset))
+                        .enumerate()
+                        .skip(optimal_index + 1)
+                        .map(|(idx, (key, offset))| (idx, key, offset))
                 });
             // optimal_index is 0-indexed so must add 1 to skip it as well
 
@@ -340,8 +335,8 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
             }
         }
 
-        for (arg_index, dead_indices) in (optimal_index + 1 ..= arity)
-            .zip(arg_var_keys.drain(optimal_index + 1..))
+        for (arg_index, dead_indices) in
+            (optimal_index + 1..=arity).zip(arg_var_keys.drain(optimal_index + 1..))
         {
             if matches!(specs.get(arg_index), IndexingSpec::NoIndexing) {
                 continue;
@@ -354,23 +349,22 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
             }
 
             if dead_indices.is_empty() {
-                code.tables.push_back(IndexedChoiceInstructionTable::OnDemandTerm {
-                    arg_num: arg_index + 1,
-                });
+                code.tables
+                    .push_back(IndexedChoiceInstructionTable::OnDemandTerm {
+                        arg_num: arg_index + 1,
+                    });
             } else {
                 debug_assert!(is_extensible);
-                code.tables.push_back(IndexedChoiceInstructionTable::DeadIndices {
-                    arg_num: arg_index + 1,
-                    indices: dead_indices,
-                });
+                code.tables
+                    .push_back(IndexedChoiceInstructionTable::DeadIndices {
+                        arg_num: arg_index + 1,
+                        indices: dead_indices,
+                    });
             }
         }
-    } 
+    }
 
-    fn index_list(
-        &mut self,
-        to_offset_instr: impl FnOnce(bool, bool) -> I::ThirdLevelIndex,
-    ) {
+    fn index_list(&mut self, to_offset_instr: impl FnOnce(bool, bool) -> I::ThirdLevelIndex) {
         let is_initial_index = self.indices.lists.offsets.is_empty();
         let offset_instr = to_offset_instr(is_initial_index, self.non_counted_bt);
         self.indices.lists.offsets.push_back(offset_instr);
@@ -443,14 +437,9 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
             OptArgIndexKey::Structure(name, arity) => {
                 self.index_structure(name, arity, to_offset_instr)
             }
-            OptArgIndexKey::List => {
-                self.index_list(to_offset_instr)
-            }
-            OptArgIndexKey::Literal(literal) => {
-                self.index_constant(literal, to_offset_instr)
-            }
-            OptArgIndexKey::None => {
-            }
+            OptArgIndexKey::List => self.index_list(to_offset_instr),
+            OptArgIndexKey::Literal(literal) => self.index_constant(literal, to_offset_instr),
+            OptArgIndexKey::None => {}
         };
     }
 
@@ -472,16 +461,14 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
         let mut leading = SecondLevelTable::<I>::new();
         let mut prelude = VecDeque::new();
 
-        leading.offsets = I::populate_root_offsets(
-            self.clause_offsets_to_arg_keys
-                .iter()
-                .enumerate()
-                .map(|(n, (&index, _keys))| {
+        leading.offsets =
+            I::populate_root_offsets(self.clause_offsets_to_arg_keys.iter().enumerate().map(
+                |(n, (&index, _keys))| {
                     let is_initial_index = n == 0;
                     // subtract 1 to compensate for compute_index action of + 1
                     I::compute_index(is_initial_index, index - 1, self.non_counted_bt)
-                }),
-        );
+                },
+            ));
 
         for table in [&mut leading, &mut self.indices.lists] {
             Self::on_demand_second_level_index(

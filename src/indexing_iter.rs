@@ -7,7 +7,7 @@ use indexmap::IndexSet;
 
 use crate::atom_table::{Atom, AtomCell};
 use crate::forms::{AppendOrPrepend, IndexingSpec, Level, OptArgIndexKey};
-use crate::indexing::{cap_choice_seq_with_trust};
+use crate::indexing::cap_choice_seq_with_trust;
 use crate::instructions::*;
 use crate::machine::machine_indices::IndexingSpecs;
 use crate::offset_table::F64Table;
@@ -23,17 +23,19 @@ pub(crate) enum InstructionArg {
 }
 
 pub(crate) fn extract_index_arg(instr: &Instruction) -> InstructionArg {
-    if matches!(instr,
-                Instruction::TryMeElse(..) |
-                Instruction::Allocate(..) |
-                Instruction::GetLevel(..) |
-                Instruction::GetPrevLevel(..) |
-                Instruction::GetCutPoint(..) |
-                Instruction::DynamicElse(..) |
-                Instruction::DynamicInternalElse(..) |
-                Instruction::IndexingCode { .. } |
-                Instruction::RevJmpBy(..) |
-                Instruction::NeckCut) {
+    if matches!(
+        instr,
+        Instruction::TryMeElse(..)
+            | Instruction::Allocate(..)
+            | Instruction::GetLevel(..)
+            | Instruction::GetPrevLevel(..)
+            | Instruction::GetCutPoint(..)
+            | Instruction::DynamicElse(..)
+            | Instruction::DynamicInternalElse(..)
+            | Instruction::IndexingCode { .. }
+            | Instruction::RevJmpBy(..)
+            | Instruction::NeckCut
+    ) {
         return InstructionArg::Prologue;
     }
 
@@ -51,12 +53,12 @@ pub(crate) fn extract_index_arg(instr: &Instruction) -> InstructionArg {
             InstructionArg::ArgedHead(arg, OptArgIndexKey::List)
         }
         Instruction::GetVariable(..)
-            | Instruction::GetValue(..)
-            | Instruction::UnifyVariable(..)
-            | Instruction::UnifyValue(..)
-            | Instruction::UnifyLocalValue(..)
-            | Instruction::UnifyVoid(..)
-            | Instruction::UnifyConstant(..) => InstructionArg::ArglessHead,
+        | Instruction::GetValue(..)
+        | Instruction::UnifyVariable(..)
+        | Instruction::UnifyValue(..)
+        | Instruction::UnifyLocalValue(..)
+        | Instruction::UnifyVoid(..)
+        | Instruction::UnifyConstant(..) => InstructionArg::ArglessHead,
         _ => InstructionArg::NonHead,
     }
 }
@@ -112,9 +114,7 @@ pub(crate) fn on_demand_sub_table(
             continue;
         }
 
-        table.push(IndexedChoiceInstructionTable::OnDemandTerm {
-            arg_num,
-        });
+        table.push(IndexedChoiceInstructionTable::OnDemandTerm { arg_num });
     }
 
     table
@@ -145,12 +145,18 @@ pub(crate) fn collect_opt_arg_index_keys(code: &[Instruction]) -> Vec<OptArgInde
 pub(crate) fn first_inst_arg_num(code: &[Instruction], index_loc_opt: Option<usize>) -> usize {
     index_loc_opt
         .and_then(|index_loc| code.get(index_loc))
-        .and_then(|instr| if let Instruction::IndexingCode { code, .. } = &instr {
-            code.first()
-        } else {
-            None
+        .and_then(|instr| {
+            if let Instruction::IndexingCode { code, .. } = &instr {
+                code.first()
+            } else {
+                None
+            }
         })
-        .and_then(|line| line.tables().front().map(IndexedChoiceInstructionTable::arg_num))
+        .and_then(|line| {
+            line.tables()
+                .front()
+                .map(IndexedChoiceInstructionTable::arg_num)
+        })
         .unwrap_or(0)
 }
 
@@ -187,8 +193,12 @@ impl<'code> IndexingLineOffset<'code> {
     #[inline]
     fn to_place(self, cursor: TableLocation) -> IndexingLinePlace<'code> {
         match self {
-            IndexingLineOffset::Static(offsets) => IndexingLinePlace::StaticOffsets(cursor, offsets),
-            IndexingLineOffset::Dynamic(offsets) => IndexingLinePlace::DynamicOffsets(cursor, offsets),
+            IndexingLineOffset::Static(offsets) => {
+                IndexingLinePlace::StaticOffsets(cursor, offsets)
+            }
+            IndexingLineOffset::Dynamic(offsets) => {
+                IndexingLinePlace::DynamicOffsets(cursor, offsets)
+            }
         }
     }
 
@@ -212,9 +222,7 @@ impl<'code> IndexingLineOffset<'code> {
                     uncap_choice_seq_with_try(instr, false);
                 }
 
-                offsets.push_front(
-                    StaticIndexedChoiceInstructionOffset::Try(clause_offset),
-                );
+                offsets.push_front(StaticIndexedChoiceInstructionOffset::Try(clause_offset));
             }
             IndexingLineOffset::Dynamic(offsets) if append_or_prepend.is_append() => {
                 offsets.push_back(Appended::Z(clause_offset));
@@ -237,22 +245,24 @@ impl<'code> IndexingLineOffset<'code> {
                 }
             }
             IndexingLineOffset::Dynamic(offsets) => {
-                if let Ok(idx) = offsets
-                    .make_contiguous()
-                    .binary_search_by(|appended| match appended {
-                        // suppose clause_offset is among the Z's..
-                        Appended::A(_) => std::cmp::Ordering::Greater,
-                        Appended::Z(x) => clause_offset.cmp(x),
-                    })
+                if let Ok(idx) =
+                    offsets
+                        .make_contiguous()
+                        .binary_search_by(|appended| match appended {
+                            // suppose clause_offset is among the Z's..
+                            Appended::A(_) => std::cmp::Ordering::Greater,
+                            Appended::Z(x) => clause_offset.cmp(x),
+                        })
                 {
                     offsets.remove(idx);
-                } else if let Ok(idx) = offsets
-                    .make_contiguous()
-                    .binary_search_by(|appended| match appended {
-                        // didn't find it? suppose it is among the A's
-                        Appended::Z(_) => std::cmp::Ordering::Less,
-                        Appended::A(x) => x.cmp(&clause_offset)
-                    })
+                } else if let Ok(idx) =
+                    offsets
+                        .make_contiguous()
+                        .binary_search_by(|appended| match appended {
+                            // didn't find it? suppose it is among the A's
+                            Appended::Z(_) => std::cmp::Ordering::Less,
+                            Appended::A(x) => x.cmp(&clause_offset),
+                        })
                 {
                     offsets.remove(idx);
                 }
@@ -264,24 +274,34 @@ impl<'code> IndexingLineOffset<'code> {
 impl<'a> IndexedClauseView<'a> {
     pub(crate) fn try_from_code(code: &'a mut [Instruction]) -> Option<Self> {
         match code.split_at_mut_checked(1) {
-            Some(([Instruction::IndexingCode { arity, code, specs, .. }], rest)) => {
-                Some(Self { index: code,
-                            arity: *arity,
-                            specs: specs.clone(),
-                            rest, })
-            }
+            Some((
+                [
+                    Instruction::IndexingCode {
+                        arity, code, specs, ..
+                    },
+                ],
+                rest,
+            )) => Some(Self {
+                index: code,
+                arity: *arity,
+                specs: specs.clone(),
+                rest,
+            }),
             _ => None,
         }
     }
 
     #[inline]
     pub(crate) fn stagger_rest_by(&mut self, offset: usize) {
-        self.rest = &self.rest[offset ..];
+        self.rest = &self.rest[offset..];
     }
 }
 
 pub(crate) enum FlattenedIndexLine<'a> {
-    Table(&'a mut VecDeque<IndexedChoiceInstructionTable>, IndexingLineOffset<'a>),
+    Table(
+        &'a mut VecDeque<IndexedChoiceInstructionTable>,
+        IndexingLineOffset<'a>,
+    ),
 }
 
 pub(crate) fn flatten_indexing_line_at<'a>(
@@ -312,9 +332,7 @@ pub(crate) struct IndexingLineIter<'code> {
 }
 
 pub(crate) enum IndexingLinePlace<'a> {
-    SwitchOnNonePtr(
-        TableLocation,
-    ),
+    SwitchOnNonePtr(TableLocation),
     SwitchOnConstantPtr(
         TableLocation,
         usize, // indexing_code_len
@@ -339,7 +357,10 @@ pub(crate) enum IndexingLinePlace<'a> {
         &'a mut IndexSet<usize, FxBuildHasher>,
     ),
     OnDemandInstr(TableLocation, usize), // cursor, indexing_code_len
-    StaticOffsets(TableLocation, &'a mut VecDeque<StaticIndexedChoiceInstructionOffset>),
+    StaticOffsets(
+        TableLocation,
+        &'a mut VecDeque<StaticIndexedChoiceInstructionOffset>,
+    ),
     DynamicOffsets(TableLocation, &'a mut VecDeque<Appended>),
 }
 
@@ -421,9 +442,7 @@ impl<'code> IndexingLineIter<'code> {
                         val.1 = IndexingCodePtr::Internal(indexing_code_len);
                         MapPromotion::MatchingDynamicExternal(other_clause_offset)
                     }
-                    IndexingCodePtr::Internal(internal_loc) => {
-                        MapPromotion::Internal(internal_loc)
-                    }
+                    IndexingCodePtr::Internal(internal_loc) => MapPromotion::Internal(internal_loc),
                 }
             }
         }
@@ -497,14 +516,17 @@ impl<'code> IndexingLineIter<'code> {
                                 }
                                 &mut IndexedChoiceInstructionTable::OnDemandTerm { arg_num } => {
                                     self.arg_num = arg_num;
-                                    Some(IndexingLinePlace::OnDemandInstr(cursor, indexing_code_len))
+                                    Some(IndexingLinePlace::OnDemandInstr(
+                                        cursor,
+                                        indexing_code_len,
+                                    ))
                                 }
                                 IndexedChoiceInstructionTable::DeadIndices { arg_num, indices } => {
                                     self.arg_num = *arg_num;
                                     Some(IndexingLinePlace::DeadIndices(cursor, *arg_num, indices))
                                 }
                             }
-                        },
+                        }
                         None => Some(offsets.to_place(cursor)),
                     }
                 }
@@ -526,17 +548,15 @@ impl<'code> IndexingLineIter<'code> {
 
         match indices.entry(hash, |(key, _)| eq_fn(key), |(key, _)| hash_fn(key)) {
             hashbrown::hash_table::Entry::Vacant(_entry) => MapDemotion::None,
-            hashbrown::hash_table::Entry::Occupied(entry) => {
-                match entry.get().1 {
-                    IndexingCodePtr::External(_) | IndexingCodePtr::DynamicExternal(_) => {
-                        entry.remove();
-                        MapDemotion::External
-                    }
-                    IndexingCodePtr::Internal(internal_table_loc) => {
-                        MapDemotion::Internal(internal_table_loc)
-                    }
+            hashbrown::hash_table::Entry::Occupied(entry) => match entry.get().1 {
+                IndexingCodePtr::External(_) | IndexingCodePtr::DynamicExternal(_) => {
+                    entry.remove();
+                    MapDemotion::External
                 }
-            }
+                IndexingCodePtr::Internal(internal_table_loc) => {
+                    MapDemotion::Internal(internal_table_loc)
+                }
+            },
         }
     }
 
@@ -548,11 +568,10 @@ impl<'code> IndexingLineIter<'code> {
         clause_offset: usize,
     ) {
         match map_promotion {
-            MapPromotion::None => {},
+            MapPromotion::None => {}
             MapPromotion::DynamicUnnamedExternal | MapPromotion::UnnamedExternal => {
-                let arg_num = self.view.index[cursor.table_loc]
-                    .tables_mut()[cursor.table_offset]
-                    .arg_num();
+                let arg_num =
+                    self.view.index[cursor.table_loc].tables_mut()[cursor.table_offset].arg_num();
 
                 // let the table be regenerated on-demand if the
                 // external key at arg_num isn't known.
@@ -562,43 +581,47 @@ impl<'code> IndexingLineIter<'code> {
             MapPromotion::MatchingDynamicExternal(other_clause_offset) => {
                 // promote_in_map changed the map pointer to
                 // Internal(indexing_code_len).
-                self.view.index.push(
-                    fresh_on_demand_subtable::<DynamicIndexedChoiceInstruction>(
+                self.view
+                    .index
+                    .push(fresh_on_demand_subtable::<DynamicIndexedChoiceInstruction>(
                         self.arg_num + 1,
                         self.view.specs.clone(),
                         if append_or_prepend.is_append() {
                             [other_clause_offset, Appended::Z(clause_offset)]
                         } else {
                             [Appended::A(clause_offset), other_clause_offset]
-                        }.iter().cloned(),
+                        }
+                        .iter()
+                        .cloned(),
                         self.view.arity,
-                    ),
-                );
+                    ));
             }
             MapPromotion::MatchingExternal(other_clause_offset) => {
                 // promote_in_map changed the map pointer to Internal(indexing_code_len).
-                self.view.index.push(
-                    fresh_on_demand_subtable::<StaticIndexedChoiceInstruction>(
+                self.view
+                    .index
+                    .push(fresh_on_demand_subtable::<StaticIndexedChoiceInstruction>(
                         self.arg_num + 1,
                         self.view.specs.clone(),
                         if append_or_prepend.is_append() {
-                            [StaticIndexedChoiceInstructionOffset::Try(other_clause_offset),
-                             StaticIndexedChoiceInstructionOffset::Trust(clause_offset)]
+                            [
+                                StaticIndexedChoiceInstructionOffset::Try(other_clause_offset),
+                                StaticIndexedChoiceInstructionOffset::Trust(clause_offset),
+                            ]
                         } else {
-                            [StaticIndexedChoiceInstructionOffset::Try(clause_offset),
-                             StaticIndexedChoiceInstructionOffset::Trust(other_clause_offset)]
-                        }.iter().cloned(),
+                            [
+                                StaticIndexedChoiceInstructionOffset::Try(clause_offset),
+                                StaticIndexedChoiceInstructionOffset::Trust(other_clause_offset),
+                            ]
+                        }
+                        .iter()
+                        .cloned(),
                         self.view.arity,
-                    ),
-                );
+                    ));
             }
             MapPromotion::Internal(internal_table_loc) => {
                 *self.view.index[internal_table_loc].tables_mut() = VecDeque::from(
-                    on_demand_sub_table(
-                        self.arg_num + 1,
-                        self.view.specs.clone(),
-                        self.view.arity,
-                    ),
+                    on_demand_sub_table(self.arg_num + 1, self.view.specs.clone(), self.view.arity),
                 );
 
                 self.view.index[internal_table_loc]
@@ -608,15 +631,15 @@ impl<'code> IndexingLineIter<'code> {
         }
     }
 
-    fn remove_from_internal_map(
-        &mut self,
-        internal_table_loc: usize,
-        clause_offset: usize,
-    ) {
-        *self.view.index[internal_table_loc].tables_mut() = VecDeque::from(
-            on_demand_sub_table(self.arg_num + 1, self.view.specs.clone(), self.view.arity),
-        );
-        self.view.index[internal_table_loc].offsets().remove(clause_offset);
+    fn remove_from_internal_map(&mut self, internal_table_loc: usize, clause_offset: usize) {
+        *self.view.index[internal_table_loc].tables_mut() = VecDeque::from(on_demand_sub_table(
+            self.arg_num + 1,
+            self.view.specs.clone(),
+            self.view.arity,
+        ));
+        self.view.index[internal_table_loc]
+            .offsets()
+            .remove(clause_offset);
     }
 }
 
@@ -625,7 +648,9 @@ impl IndexingLine {
     fn offsets<'a>(&'a mut self) -> IndexingLineOffset<'a> {
         match self {
             IndexingLine::StaticIndexedChoice(tbl) => IndexingLineOffset::Static(&mut tbl.offsets),
-            IndexingLine::DynamicIndexedChoice(tbl) => IndexingLineOffset::Dynamic(&mut tbl.offsets),
+            IndexingLine::DynamicIndexedChoice(tbl) => {
+                IndexingLineOffset::Dynamic(&mut tbl.offsets)
+            }
         }
     }
 }
@@ -636,7 +661,7 @@ fn fresh_on_demand_subtable<I: SecondLevelIndexType>(
     iter: impl Iterator<Item = I::ThirdLevelIndex>,
     arity: usize,
 ) -> IndexingLine {
-    let tables  = VecDeque::from(on_demand_sub_table(arg_num, specs, arity));
+    let tables = VecDeque::from(on_demand_sub_table(arg_num, specs, arity));
     let offsets = VecDeque::from_iter(iter);
 
     I::to_indexing_line(SecondLevelTable { tables, offsets })
@@ -653,16 +678,16 @@ fn downcast_term_indexing_code_ptr_mut<'a, IndexKey>(
     term_ptr: &'a mut TermIndexingCodePtr<IndexKey>,
 ) -> TermIndexingCodePtrMutDowncast<'a, IndexKey> {
     match term_ptr {
-        &mut TermIndexingCodePtr::External(e) => TermIndexingCodePtrMutDowncast::Ptr(
-            IndexingCodePtr::External(e),
-        ),
-        &mut TermIndexingCodePtr::DynamicExternal(appended) => TermIndexingCodePtrMutDowncast::Ptr(
-            IndexingCodePtr::DynamicExternal(appended),
-        ),
+        &mut TermIndexingCodePtr::External(e) => {
+            TermIndexingCodePtrMutDowncast::Ptr(IndexingCodePtr::External(e))
+        }
+        &mut TermIndexingCodePtr::DynamicExternal(appended) => {
+            TermIndexingCodePtrMutDowncast::Ptr(IndexingCodePtr::DynamicExternal(appended))
+        }
         TermIndexingCodePtr::Fail => TermIndexingCodePtrMutDowncast::Fail,
-        &mut TermIndexingCodePtr::Internal(i) => TermIndexingCodePtrMutDowncast::Ptr(
-            IndexingCodePtr::Internal(i),
-        ),
+        &mut TermIndexingCodePtr::Internal(i) => {
+            TermIndexingCodePtrMutDowncast::Ptr(IndexingCodePtr::Internal(i))
+        }
         TermIndexingCodePtr::SwitchOnType(tbl) => TermIndexingCodePtrMutDowncast::Table(tbl),
     }
 }
@@ -678,16 +703,16 @@ pub(crate) fn downcast_term_indexing_code_ptr<'a, IndexKey>(
     term_ptr: &'a TermIndexingCodePtr<IndexKey>,
 ) -> TermIndexingCodePtrDowncast<'a, IndexKey> {
     match term_ptr {
-        &TermIndexingCodePtr::External(e) => TermIndexingCodePtrDowncast::Ptr(
-            IndexingCodePtr::External(e),
-        ),
-        &TermIndexingCodePtr::DynamicExternal(appended) => TermIndexingCodePtrDowncast::Ptr(
-            IndexingCodePtr::DynamicExternal(appended),
-        ),
+        &TermIndexingCodePtr::External(e) => {
+            TermIndexingCodePtrDowncast::Ptr(IndexingCodePtr::External(e))
+        }
+        &TermIndexingCodePtr::DynamicExternal(appended) => {
+            TermIndexingCodePtrDowncast::Ptr(IndexingCodePtr::DynamicExternal(appended))
+        }
         TermIndexingCodePtr::Fail => TermIndexingCodePtrDowncast::Fail,
-        &TermIndexingCodePtr::Internal(i) => TermIndexingCodePtrDowncast::Ptr(
-            IndexingCodePtr::Internal(i),
-        ),
+        &TermIndexingCodePtr::Internal(i) => {
+            TermIndexingCodePtrDowncast::Ptr(IndexingCodePtr::Internal(i))
+        }
         TermIndexingCodePtr::SwitchOnType(tbl) => TermIndexingCodePtrDowncast::Table(tbl),
     }
 }
@@ -697,7 +722,10 @@ impl IndexingCodePtr {
     fn promote(&mut self, indexing_code_len: usize) -> MapPromotion {
         let old = *self;
 
-        if matches!(self, IndexingCodePtr::External(_) | IndexingCodePtr::DynamicExternal(_)) {
+        if matches!(
+            self,
+            IndexingCodePtr::External(_) | IndexingCodePtr::DynamicExternal(_)
+        ) {
             // the *External assumptions rest on the iterator being
             // parked at the first element of clause_view.index
             // (Internal is always a relative offset).
@@ -731,18 +759,16 @@ impl<IndexKey> TermIndexingCodePtr<IndexKey> {
                 *self = TermIndexingCodePtr::from(indexing_code_ptr);
                 MapPromotion::None
             }
-            TermIndexingCodePtrMutDowncast::Table(tbl) => {
-                IndexingLineIter::promote_in_map(
-                    key,
-                    hash_fn,
-                    eq_fn,
-                    clause_offset,
-                    is_dynamic,
-                    tbl,
-                    indexing_code_len,
-                    append_or_prepend,
-                )
-            }
+            TermIndexingCodePtrMutDowncast::Table(tbl) => IndexingLineIter::promote_in_map(
+                key,
+                hash_fn,
+                eq_fn,
+                clause_offset,
+                is_dynamic,
+                tbl,
+                indexing_code_len,
+                append_or_prepend,
+            ),
         }
     }
 }
@@ -756,17 +782,19 @@ pub(crate) fn add_clause_index<'code>(
 ) -> IndexedClauseView<'code> {
     let keys = collect_opt_arg_index_keys(clause_view.rest);
     let mut iter = IndexingLineIter::new(clause_view);
-    let key_fn = |arg_num| keys.get(arg_num - 1).copied().unwrap_or(OptArgIndexKey::None);
+    let key_fn = |arg_num| {
+        keys.get(arg_num - 1)
+            .copied()
+            .unwrap_or(OptArgIndexKey::None)
+    };
 
     let promote_to_external = || {
         if is_dynamic {
-            IndexingCodePtr::DynamicExternal(
-                if append_or_prepend.is_append() {
-                    Appended::Z(clause_offset)
-                } else {
-                    Appended::A(clause_offset)
-                },
-            )
+            IndexingCodePtr::DynamicExternal(if append_or_prepend.is_append() {
+                Appended::Z(clause_offset)
+            } else {
+                Appended::A(clause_offset)
+            })
         } else {
             IndexingCodePtr::External(clause_offset)
         }
@@ -805,10 +833,21 @@ pub(crate) fn add_clause_index<'code>(
                     indexing_code_len,
                 );
 
-                iter.implement_map_promotion(map_promotion, cursor, append_or_prepend, clause_offset);
+                iter.implement_map_promotion(
+                    map_promotion,
+                    cursor,
+                    append_or_prepend,
+                    clause_offset,
+                );
                 cursor
             }
-            IndexingLinePlace::SwitchOnStructurePtr(cursor, indexing_code_len, name, arity, term_ptr) => {
+            IndexingLinePlace::SwitchOnStructurePtr(
+                cursor,
+                indexing_code_len,
+                name,
+                arity,
+                term_ptr,
+            ) => {
                 let map_promotion = term_ptr.promote(
                     (name, arity),
                     |(name, arity)| {
@@ -823,7 +862,12 @@ pub(crate) fn add_clause_index<'code>(
                     indexing_code_len,
                 );
 
-                iter.implement_map_promotion(map_promotion, cursor, append_or_prepend, clause_offset);
+                iter.implement_map_promotion(
+                    map_promotion,
+                    cursor,
+                    append_or_prepend,
+                    clause_offset,
+                );
                 cursor
             }
             IndexingLinePlace::SwitchOnListPtr(cursor, indexing_code_len, indexing_code_ptr) => {
@@ -836,12 +880,15 @@ pub(crate) fn add_clause_index<'code>(
                     }
                 };
 
-                iter.implement_map_promotion(map_promotion, cursor, append_or_prepend, clause_offset);
+                iter.implement_map_promotion(
+                    map_promotion,
+                    cursor,
+                    append_or_prepend,
+                    clause_offset,
+                );
                 cursor
             }
-            IndexingLinePlace::OnDemandInstr(cursor, _) => {
-                cursor
-            }
+            IndexingLinePlace::OnDemandInstr(cursor, _) => cursor,
             IndexingLinePlace::StaticOffsets(_cursor, offsets) => {
                 IndexingLineOffset::Static(offsets).add(append_or_prepend, clause_offset);
                 continue;
@@ -865,7 +912,11 @@ pub(crate) fn remove_clause_index<'code>(
 ) -> IndexedClauseView<'code> {
     let keys = collect_opt_arg_index_keys(clause_view.rest);
     let mut iter = IndexingLineIter::new(clause_view);
-    let key_fn = |arg_num| keys.get(arg_num - 1).copied().unwrap_or(OptArgIndexKey::None);
+    let key_fn = |arg_num| {
+        keys.get(arg_num - 1)
+            .copied()
+            .unwrap_or(OptArgIndexKey::None)
+    };
 
     while let Some(place) = iter.next(key_fn) {
         let cursor = match place {
@@ -969,7 +1020,13 @@ pub(crate) fn abolish_clause(
     head_key: OptArgIndexKey,
 ) {
     let mut iter = IndexingLineIter::new(clause_view);
-    let key_fn = |arg_num| if arg_num == 1 { head_key } else { OptArgIndexKey::None };
+    let key_fn = |arg_num| {
+        if arg_num == 1 {
+            head_key
+        } else {
+            OptArgIndexKey::None
+        }
+    };
 
     while let Some(place) = iter.next(key_fn) {
         let cursor = match place {
@@ -984,7 +1041,7 @@ pub(crate) fn abolish_clause(
                             |(key, _)| cell.syntactic_eq(f64_tbl, *key),
                             |(cell, _)| cell.syntactic_hash(f64_tbl, FxHasher::default()),
                         ) {
-                            hashbrown::hash_table::Entry::Vacant(_entry) => {},
+                            hashbrown::hash_table::Entry::Vacant(_entry) => {}
                             hashbrown::hash_table::Entry::Occupied(entry) => {
                                 entry.remove();
                             }
@@ -1009,7 +1066,7 @@ pub(crate) fn abolish_clause(
                                 cell.syntactic_hash(f64_tbl, FxHasher::default())
                             },
                         ) {
-                            hashbrown::hash_table::Entry::Vacant(_entry) => {},
+                            hashbrown::hash_table::Entry::Vacant(_entry) => {}
                             hashbrown::hash_table::Entry::Occupied(entry) => {
                                 entry.remove();
                             }
@@ -1021,7 +1078,7 @@ pub(crate) fn abolish_clause(
                 cursor
             }
             IndexingLinePlace::SwitchOnListPtr(cursor, ..) => cursor, // this cannot happen ..
-            IndexingLinePlace::DeadIndices(cursor, ..) => cursor, // .. nor this
+            IndexingLinePlace::DeadIndices(cursor, ..) => cursor,     // .. nor this
             IndexingLinePlace::OnDemandInstr(cursor, _) => cursor,
             IndexingLinePlace::DynamicOffsets(_cursor, _offsets) => {
                 // do nothing! since clause/2 execution can't reach

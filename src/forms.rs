@@ -496,8 +496,8 @@ pub enum MetaSpec {
 #[derive(Clone, Copy, Debug, Default)]
 pub enum IndexingSpec {
     #[default]
-    InstOnly,     // +
-    NoIndexing,   // -
+    InstOnly, // +
+    NoIndexing, // -
 }
 
 impl IndexingSpec {
@@ -936,22 +936,16 @@ pub(crate) enum OptArgIndexKey {
 impl From<&'_ Term> for OptArgIndexKey {
     fn from(term: &'_ Term) -> OptArgIndexKey {
         match term {
-            &Term::Clause(_, atom!("."), ref terms) if terms.len() == 2 => {
-                OptArgIndexKey::List
-            }
+            &Term::Clause(_, atom!("."), ref terms) if terms.len() == 2 => OptArgIndexKey::List,
             &Term::Cons(..) | &Term::PartialString(..) | &Term::CompleteString(..) => {
                 OptArgIndexKey::List
             }
-            &Term::Clause(_, name, ref terms) => {
-                OptArgIndexKey::Structure(name, terms.len())
-            }
+            &Term::Clause(_, name, ref terms) => OptArgIndexKey::Structure(name, terms.len()),
             &Term::Literal(_, constant) => {
                 let literal = HeapCellValue::from(constant);
                 OptArgIndexKey::Literal(literal)
             }
-            &Term::Var(..) | &Term::AnonVar => {
-                OptArgIndexKey::None
-            }
+            &Term::Var(..) | &Term::AnonVar => OptArgIndexKey::None,
         }
     }
 }
@@ -1038,7 +1032,7 @@ impl LocalPredicateSkeleton {
 #[derive(Clone, Debug)]
 pub(crate) struct PredicateSkeleton {
     pub(crate) core: LocalPredicateSkeleton,
-    pub(crate) clause_indices: VecDeque<ClauseIndex>, // sorted in clause order, descending/ascending around prepend_append_margin    
+    pub(crate) clause_indices: VecDeque<ClauseIndex>, // sorted in clause order, descending/ascending around prepend_append_margin
 }
 
 impl PredicateSkeleton {
@@ -1060,8 +1054,7 @@ impl PredicateSkeleton {
 
         match search_result {
             Ok(loc) => Some(loc),
-            Err(_) => self.core.clause_indices.make_contiguous()
-                [self.core.prepend_append_margin..]
+            Err(_) => self.core.clause_indices.make_contiguous()[self.core.prepend_append_margin..]
                 .binary_search_by(|loc| loc.cmp(&clause_index_loc))
                 .map(|loc| loc + self.core.prepend_append_margin)
                 .ok(),

@@ -1513,7 +1513,9 @@ impl Machine {
                 .collect();
 
             let helper_clause_loc = self.code.len();
-            let body_term = self.machine_st.read_term_from_heap(self.machine_st.registers[1]);
+            let body_term = self
+                .machine_st
+                .read_term_from_heap(self.machine_st.registers[1]);
 
             let compile = || {
                 let mut loader: Loader<'_, InlineLoadState<'_>> =
@@ -1529,9 +1531,9 @@ impl Machine {
                 let num_vars = vars.len();
 
                 // build the helper term
-                let head_term  = Term::Clause(Cell::default(), atom!(""), vars.to_vec());
+                let head_term = Term::Clause(Cell::default(), atom!(""), vars.to_vec());
                 let rule_terms = vec![head_term, body_term];
-                let rule_body  = Term::Clause(Cell::default(), atom!(":-"), rule_terms);
+                let rule_body = Term::Clause(Cell::default(), atom!(":-"), rule_terms);
 
                 let clause = preprocessor.try_term_to_tl(&mut loader, rule_body)?;
                 let compilation_target = loader.payload.compilation_target;

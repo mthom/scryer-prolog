@@ -233,7 +233,8 @@ pub(crate) type CodeDir = IndexMap<PredicateKey, CodeIndex, FxBuildHasher>;
 
 pub(crate) type GoalExpansionIndices = IndexSet<PredicateKey, FxBuildHasher>;
 
-pub(crate) type IndexingSpecDir = IndexMap<PredicateKey, std::rc::Rc<Vec<IndexingSpec>>, FxBuildHasher>;
+pub(crate) type IndexingSpecDir =
+    IndexMap<PredicateKey, std::rc::Rc<Vec<IndexingSpec>>, FxBuildHasher>;
 
 #[derive(Debug)]
 pub struct IndexStore {
@@ -255,7 +256,8 @@ pub struct IndexingSpecs(Option<std::rc::Rc<Vec<IndexingSpec>>>);
 
 impl IndexingSpecs {
     pub fn get(&self, idx: usize) -> IndexingSpec {
-        self.0.as_ref()
+        self.0
+            .as_ref()
             .and_then(|array| array.get(idx).copied())
             .unwrap_or_default()
     }
@@ -449,20 +451,20 @@ impl IndexStore {
         compilation_target: CompilationTarget,
     ) -> IndexingSpecs {
         IndexingSpecs(match compilation_target {
-            CompilationTarget::User => {
-                self.indexing_specs
-                    .get(&(name, arity))
-                    .map(std::rc::Rc::clone)
-            }
+            CompilationTarget::User => self
+                .indexing_specs
+                .get(&(name, arity))
+                .map(std::rc::Rc::clone),
             CompilationTarget::Module(module_name) => match self.modules.get(&module_name) {
                 Some(module) => module
                     .indexing_specs
                     .get(&(name, arity))
                     .or_else(|| self.indexing_specs.get(&(name, arity)))
                     .map(std::rc::Rc::clone),
-                None => self.indexing_specs
+                None => self
+                    .indexing_specs
                     .get(&(name, arity))
-                    .map(std::rc::Rc::clone)
+                    .map(std::rc::Rc::clone),
             },
         })
     }
@@ -477,10 +479,12 @@ impl IndexStore {
             _ => self
                 .modules
                 .get(&module_name)
-                .and_then(|module| module
-                    .extensible_predicates
-                    .get(&key)
-                    .map(|skeleton| skeleton.core.is_dynamic))
+                .and_then(|module| {
+                    module
+                        .extensible_predicates
+                        .get(&key)
+                        .map(|skeleton| skeleton.core.is_dynamic)
+                })
                 .unwrap_or(false),
         }
     }

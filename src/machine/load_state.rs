@@ -361,9 +361,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     clause_indices
                         .iter()
                         .cloned()
-                        .map(|clause_loc| {
-                            skeleton.target_pos_of_clause_clause_loc(clause_loc)
-                        })
+                        .map(|clause_loc| skeleton.target_pos_of_clause_clause_loc(clause_loc))
                         .collect(),
                     skeleton.core.is_dynamic,
                 )
@@ -402,8 +400,12 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 match target_pos_opt {
                     Some(target_pos) => {
                         let clause_index = skeleton.clause_indices[target_pos];
-                        retract_dynamic_clause(clause_index.clause_start, code,
-                                               clause_index.index_loc, global_clock);
+                        retract_dynamic_clause(
+                            clause_index.clause_start,
+                            code,
+                            clause_index.index_loc,
+                            global_clock,
+                        );
                     }
                     None => {
                         // Here because the clause was been removed
@@ -424,7 +426,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             for target_pos_opt in clause_target_poses.iter().cloned() {
                 match target_pos_opt {
                     Some(target_pos) => {
-                        let result = retract_clause::<LS>(code, key, skeleton, &mut self.payload, target_pos);
+                        let result = retract_clause::<LS>(
+                            code,
+                            key,
+                            skeleton,
+                            &mut self.payload,
+                            target_pos,
+                        );
 
                         if result.is_some() {
                             index_ptr_opt = result;
@@ -450,9 +458,16 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
             if let Some(index_ptr) = index_ptr_opt {
                 let compilation_target = self.payload.compilation_target;
-                let code_idx_offset = self.get_or_insert_code_index(key, self.payload.compilation_target);
+                let code_idx_offset =
+                    self.get_or_insert_code_index(key, self.payload.compilation_target);
 
-                set_code_index::<LS>(&mut self.payload, &compilation_target, key, code_idx_offset, index_ptr);
+                set_code_index::<LS>(
+                    &mut self.payload,
+                    &compilation_target,
+                    key,
+                    code_idx_offset,
+                    index_ptr,
+                );
             }
         }
 
@@ -968,10 +983,15 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         match &compilation_target {
             CompilationTarget::User => {
-                self.wam_prelude.indices.indexing_specs.insert(key, indexing_specs);
+                self.wam_prelude
+                    .indices
+                    .indexing_specs
+                    .insert(key, indexing_specs);
             }
             CompilationTarget::Module(module_name) => {
-                if let Some(module) = self.wam_prelude.indices.modules.get_mut(module_name) { module.indexing_specs.insert(key, indexing_specs); }
+                if let Some(module) = self.wam_prelude.indices.modules.get_mut(module_name) {
+                    module.indexing_specs.insert(key, indexing_specs);
+                }
             }
         }
     }

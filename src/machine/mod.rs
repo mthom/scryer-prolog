@@ -521,7 +521,7 @@ impl Machine {
         loop {
             match &self.code[offset] {
                 &Instruction::IndexingCode { is_extensible, .. } => {
-                    if let Some(view) = IndexedClauseView::try_from_code(&mut self.code[offset ..]) {
+                    if let Some(view) = IndexedClauseView::try_from_code(&mut self.code[offset..]) {
                         match self.machine_st.switch_on_term(view, is_extensible) {
                             SwitchOnTermResult::Fail => return false,
                             _ => offset += 1,
@@ -666,17 +666,19 @@ impl Machine {
                 Instruction::IndexingCode { code, .. } => {
                     match &code[self.machine_st.oip as usize] {
                         IndexingLine::StaticIndexedChoice(indexed_choice) => {
-                            match &indexed_choice.offsets[(self.machine_st.iip + inner_offset) as usize] {
-                                &StaticIndexedChoiceInstructionOffset::Retry(o) |
-                                &StaticIndexedChoiceInstructionOffset::DefaultRetry(o) => {
+                            match &indexed_choice.offsets
+                                [(self.machine_st.iip + inner_offset) as usize]
+                            {
+                                &StaticIndexedChoiceInstructionOffset::Retry(o)
+                                | &StaticIndexedChoiceInstructionOffset::DefaultRetry(o) => {
                                     if self.next_clause_applicable(self.machine_st.p + o) {
                                         return Some(inner_offset);
                                     }
 
                                     inner_offset += 1;
                                 }
-                                &StaticIndexedChoiceInstructionOffset::Trust(o) |
-                                &StaticIndexedChoiceInstructionOffset::DefaultTrust(o) => {
+                                &StaticIndexedChoiceInstructionOffset::Trust(o)
+                                | &StaticIndexedChoiceInstructionOffset::DefaultTrust(o) => {
                                     return if self.next_clause_applicable(self.machine_st.p + o) {
                                         Some(inner_offset)
                                     } else {

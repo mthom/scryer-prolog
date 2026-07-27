@@ -25,12 +25,15 @@ fn is_non_counted_bt(instrs: &[Instruction]) -> bool {
 
 trait PropagatingIndexer: Indexer {
     // preserve the offset but recompute surrounding try/retry/trust as needed
-    fn recompute_index(index: Self::ThirdLevelIndex) -> impl FnOnce(bool, bool) -> Self::ThirdLevelIndex;
+    fn recompute_index(
+        index: Self::ThirdLevelIndex,
+    ) -> impl FnOnce(bool, bool) -> Self::ThirdLevelIndex;
 }
 
 impl PropagatingIndexer for StaticIndexedChoiceInstruction {
-    fn recompute_index(index: StaticIndexedChoiceInstructionOffset) -> impl FnOnce(bool, bool) -> Self::ThirdLevelIndex
-    {
+    fn recompute_index(
+        index: StaticIndexedChoiceInstructionOffset,
+    ) -> impl FnOnce(bool, bool) -> Self::ThirdLevelIndex {
         let offset = index.offset() - 1;
         move |is_initial_index, non_counted_bt| {
             Self::compute_index(is_initial_index, offset, non_counted_bt)
@@ -65,26 +68,28 @@ fn indices_of_arg<'a, I: PropagatingIndexer>(
 
     // since subsequent OnDemand instructions should be generated for
     // remaining arg_num's < arity.
-    let mut code_offsets = CodeOffsets::<I>::new(
-        f64_tbl, is_non_counted_bt, arity,
-    );
+    let mut code_offsets = CodeOffsets::<I>::new(f64_tbl, is_non_counted_bt, arity);
 
     for offset_instr in offset_iter {
         let clause_offset = offset_instr.offset() - 1;
         let key_indices = clause_arg_data
             .entry(clause_offset)
-            .or_insert_with(|| {
-                collect_opt_arg_index_keys(&rest[clause_offset ..])
-            });
-        let index_key = key_indices.get(arg_num - 1).copied().unwrap_or(OptArgIndexKey::None);
+            .or_insert_with(|| collect_opt_arg_index_keys(&rest[clause_offset..]));
+        let index_key = key_indices
+            .get(arg_num - 1)
+            .copied()
+            .unwrap_or(OptArgIndexKey::None);
 
         if matches!(index_key, OptArgIndexKey::None) {
             var_offsets.push(clause_offset + 1);
         } else if var_offsets.is_empty() {
             code_offsets.index_key(index_key, I::recompute_index(offset_instr));
 
-            for arg_index in arg_num + 1 ..= arity {
-                let index_key = key_indices.get(arg_index - 1).copied().unwrap_or(OptArgIndexKey::None);
+            for arg_index in arg_num + 1..=arity {
+                let index_key = key_indices
+                    .get(arg_index - 1)
+                    .copied()
+                    .unwrap_or(OptArgIndexKey::None);
                 code_offsets.map_clause_offset_to_arg_key(arg_index - 1, index_key, clause_offset);
             }
         }
@@ -141,18 +146,14 @@ fn switch_on_indexing_code_ptr(
     indexing_code_ptr: IndexingCodePtr,
 ) -> SwitchOnTermPtrResult {
     match indexing_code_ptr {
-        IndexingCodePtr::DynamicExternal(o) => SwitchOnTermPtrResult::End(
-            SwitchOnTermResult::DynamicExternal(o),
-        ),
-        IndexingCodePtr::External(o) => SwitchOnTermPtrResult::End(
-            SwitchOnTermResult::External(o),
-        ),
-        IndexingCodePtr::Internal(o) => SwitchOnTermPtrResult::Continue(
-            TableLocation {
-                table_loc: cursor.table_loc + o,
-                table_offset: 0,
-            }
-        ),
+        IndexingCodePtr::DynamicExternal(o) => {
+            SwitchOnTermPtrResult::End(SwitchOnTermResult::DynamicExternal(o))
+        }
+        IndexingCodePtr::External(o) => SwitchOnTermPtrResult::End(SwitchOnTermResult::External(o)),
+        IndexingCodePtr::Internal(o) => SwitchOnTermPtrResult::Continue(TableLocation {
+            table_loc: cursor.table_loc + o,
+            table_offset: 0,
+        }),
     }
 }
 
@@ -167,14 +168,12 @@ fn switch_on_term_ptr<IndexKey>(
         TermIndexingCodePtrDowncast::Ptr(indexing_code_ptr) => {
             switch_on_indexing_code_ptr(cursor, indexing_code_ptr)
         }
-        TermIndexingCodePtrDowncast::Fail => SwitchOnTermPtrResult::End(
-            SwitchOnTermResult::Fail,
-        ),
+        TermIndexingCodePtrDowncast::Fail => SwitchOnTermPtrResult::End(SwitchOnTermResult::Fail),
         TermIndexingCodePtrDowncast::Table(tbl) => {
-            let indexing_code_ptr = match tbl.find(
-                hash_fn(&key),
-                |(other_key, _indexing_code_ptr)| eq_fn(&key, other_key),
-            ) {
+            let indexing_code_ptr = match tbl
+                .find(hash_fn(&key), |(other_key, _indexing_code_ptr)| {
+                    eq_fn(&key, other_key)
+                }) {
                 Some(&(_, indexing_code_ptr)) => indexing_code_ptr,
                 None => {
                     return SwitchOnTermPtrResult::End(SwitchOnTermResult::Fail);
@@ -188,14 +187,10 @@ fn switch_on_term_ptr<IndexKey>(
                 IndexingCodePtr::DynamicExternal(o) => {
                     SwitchOnTermPtrResult::End(SwitchOnTermResult::DynamicExternal(o))
                 }
-                IndexingCodePtr::Internal(o) => {
-                    SwitchOnTermPtrResult::Continue(
-                        TableLocation {
-                            table_loc: cursor.table_loc + o,
-                            table_offset: 0,
-                        }
-                    )
-                }
+                IndexingCodePtr::Internal(o) => SwitchOnTermPtrResult::Continue(TableLocation {
+                    table_loc: cursor.table_loc + o,
+                    table_offset: 0,
+                }),
             }
         }
     }
@@ -247,9 +242,7 @@ impl MachineState {
                 IndexingLinePlace::SwitchOnNonePtr(cursor) => {
                     iter.stack.push(cursor.skip_by(1));
                 }
-                IndexingLinePlace::SwitchOnConstantPtr(
-                    cursor, _, cell, term_ptr,
-                ) => {
+                IndexingLinePlace::SwitchOnConstantPtr(cursor, _, cell, term_ptr) => {
                     match switch_on_term_ptr(
                         cell,
                         |&cell| cell.syntactic_hash(&self.arena.f64_tbl, FxHasher::default()),
@@ -261,9 +254,7 @@ impl MachineState {
                         SwitchOnTermPtrResult::End(result) => return result,
                     }
                 }
-                IndexingLinePlace::SwitchOnStructurePtr(
-                    cursor, _, name, arity, term_ptr,
-                ) => {
+                IndexingLinePlace::SwitchOnStructurePtr(cursor, _, name, arity, term_ptr) => {
                     match switch_on_term_ptr(
                         (name, arity),
                         |&(name, arity)| {
@@ -328,10 +319,12 @@ impl MachineState {
 
                             match result {
                                 OnDemandResult::DeadIndices(items) => {
-                                    let mut indices = IndexSet::with_hasher(FxBuildHasher::default());
+                                    let mut indices =
+                                        IndexSet::with_hasher(FxBuildHasher::default());
                                     indices.extend(items);
 
-                                    iter.view.index[cursor.table_loc].tables_mut()[cursor.table_offset] =
+                                    iter.view.index[cursor.table_loc].tables_mut()
+                                        [cursor.table_offset] =
                                         IndexedChoiceInstructionTable::DeadIndices {
                                             arg_num: iter.arg_num,
                                             indices,
@@ -350,7 +343,9 @@ impl MachineState {
                                 }
                             }
                         }
-                        IndexingLine::DynamicIndexedChoice(SecondLevelTable { offsets, .. }) => {
+                        IndexingLine::DynamicIndexedChoice(SecondLevelTable {
+                            offsets, ..
+                        }) => {
                             let result = indices_of_arg::<DynamicIndexedChoiceInstruction>(
                                 &self.arena.f64_tbl,
                                 iter.arg_num,
@@ -362,10 +357,12 @@ impl MachineState {
 
                             match result {
                                 OnDemandResult::DeadIndices(items) => {
-                                    let mut indices = IndexSet::with_hasher(FxBuildHasher::default());
+                                    let mut indices =
+                                        IndexSet::with_hasher(FxBuildHasher::default());
                                     indices.extend(items);
 
-                                    iter.view.index[cursor.table_loc].tables_mut()[cursor.table_offset] =
+                                    iter.view.index[cursor.table_loc].tables_mut()
+                                        [cursor.table_offset] =
                                         IndexedChoiceInstructionTable::DeadIndices {
                                             arg_num: iter.arg_num,
                                             indices,
@@ -406,7 +403,7 @@ impl MachineState {
                             }
 
                             incr_internal_term_ptr(&mut structures, internal_offset);
-                            incr_internal_term_ptr(&mut constants,  internal_offset);
+                            incr_internal_term_ptr(&mut constants, internal_offset);
 
                             iter.view.index[cursor.table_loc].tables_mut()[cursor.table_offset] =
                                 IndexedChoiceInstructionTable::SwitchOnTerm {
@@ -416,9 +413,11 @@ impl MachineState {
                                     structures,
                                 };
 
-                            iter.view.index.extend(indices.drain(1 ..));
+                            iter.view.index.extend(indices.drain(1..));
                         }
-                        _ => unreachable!("CodeOffsets::compute_indices must have generated something"),
+                        _ => unreachable!(
+                            "CodeOffsets::compute_indices must have generated something"
+                        ),
                     }
 
                     // return to the newly generated SwitchOnTerm

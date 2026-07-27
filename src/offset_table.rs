@@ -6,7 +6,7 @@ use arcu::Rcu;
 use arcu::atomic::Arcu;
 use arcu::epoch_counters::GlobalEpochCounterPool;
 use arcu::rcu_ref::RcuRef;
-use parking_lot::{RwLock};
+use parking_lot::RwLock;
 
 use crate::machine::heap::AllocError;
 use crate::machine::machine_indices::IndexPtr;
@@ -222,7 +222,6 @@ impl OffsetTable<OrderedFloat<f64>> for OffsetTableImpl<OrderedFloat<f64>> {
         self.0.with_entry_mut(offset.into(), f)
     }
 }
-
 
 impl<T: RawBlockTraits> SerialOffsetTable<T> {
     #[inline]

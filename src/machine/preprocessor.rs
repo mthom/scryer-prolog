@@ -310,9 +310,7 @@ fn setup_meta_predicate<'a, LS: LoadState<'a>>(
 }
 
 fn setup_indexing(mut terms: Vec<Term>) -> Result<(Atom, Vec<IndexingSpec>), CompilationError> {
-    fn get_indexing_specs(
-        terms: &mut [Term],
-    ) -> Result<Vec<IndexingSpec>, CompilationError> {
+    fn get_indexing_specs(terms: &mut [Term]) -> Result<Vec<IndexingSpec>, CompilationError> {
         let mut indexing_specs = vec![];
 
         for indexing in terms.iter_mut() {
@@ -336,12 +334,8 @@ fn setup_indexing(mut terms: Vec<Term>) -> Result<(Atom, Vec<IndexingSpec>), Com
     }
 
     match terms.pop().unwrap() {
-        Term::Clause(_, name, mut terms) => {
-            Ok((name, get_indexing_specs(&mut terms)?))
-        }
-        Term::Literal(_, Literal::Atom(name)) => {
-            Ok((name, vec![]))
-        }
+        Term::Clause(_, name, mut terms) => Ok((name, get_indexing_specs(&mut terms)?)),
+        Term::Literal(_, Literal::Atom(name)) => Ok((name, vec![])),
         _ => Err(CompilationError::InvalidIndexingDecl),
     }
 }

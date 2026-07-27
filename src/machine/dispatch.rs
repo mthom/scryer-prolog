@@ -1274,10 +1274,11 @@ impl Machine {
         let p = self.machine_st.p;
 
         let indexed_choice_instrs = match &self.code[p] {
-            Instruction::IndexingCode { code: indexing_code, .. } => match &indexing_code[oi as usize] {
-                IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
-                    indexed_choice_instrs
-                }
+            Instruction::IndexingCode {
+                code: indexing_code,
+                ..
+            } => match &indexing_code[oi as usize] {
+                IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => indexed_choice_instrs,
                 _ => unreachable!(),
             },
             _ => unreachable!(),
@@ -1285,18 +1286,21 @@ impl Machine {
 
         loop {
             {
-                let offset = indexed_choice_instrs.offsets.get(ii as usize).map(Appended::offset)?;
+                let offset = indexed_choice_instrs
+                    .offsets
+                    .get(ii as usize)
+                    .map(Appended::offset)?;
                 match &self.code[p + offset - 1] {
-                &Instruction::DynamicInternalElse(birth, death, next_or_fail) => {
-                    if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death
-                    {
-                        return Some((offset, oi, ii, next_or_fail.is_next()));
-                    } else {
-                        ii += 1;
+                    &Instruction::DynamicInternalElse(birth, death, next_or_fail) => {
+                        if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death
+                        {
+                            return Some((offset, oi, ii, next_or_fail.is_next()));
+                        } else {
+                            ii += 1;
+                        }
                     }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
-            }
             }
         }
     }
@@ -1431,67 +1435,35 @@ impl Machine {
                         let (_, arity) = self.code[self.machine_st.p].to_name_and_arity();
                         self.run_verify_attr_interrupt(arity);
                     }
-                    &Instruction::Add(ref a1, ref a2, t) => {
-                        self.machine_st.add_instr(a1, a2, t)
-                    }
-                    &Instruction::Sub(ref a1, ref a2, t) => {
-                        self.machine_st.sub_instr(a1, a2, t)
-                    }
-                    &Instruction::Mul(ref a1, ref a2, t) => {
-                        self.machine_st.mul_instr(a1, a2, t)
-                    }
-                    &Instruction::Max(ref a1, ref a2, t) => {
-                        self.machine_st.max_instr(a1, a2, t)
-                    }
-                    &Instruction::Min(ref a1, ref a2, t) => {
-                        self.machine_st.min_instr(a1, a2, t)
-                    }
+                    &Instruction::Add(ref a1, ref a2, t) => self.machine_st.add_instr(a1, a2, t),
+                    &Instruction::Sub(ref a1, ref a2, t) => self.machine_st.sub_instr(a1, a2, t),
+                    &Instruction::Mul(ref a1, ref a2, t) => self.machine_st.mul_instr(a1, a2, t),
+                    &Instruction::Max(ref a1, ref a2, t) => self.machine_st.max_instr(a1, a2, t),
+                    &Instruction::Min(ref a1, ref a2, t) => self.machine_st.min_instr(a1, a2, t),
                     &Instruction::IntPow(ref a1, ref a2, t) => {
                         self.machine_st.int_pow_instr(a1, a2, t)
                     }
-                    &Instruction::Gcd(ref a1, ref a2, t) => {
-                        self.machine_st.gcd_instr(a1, a2, t)
-                    }
-                    &Instruction::Pow(ref a1, ref a2, t) => {
-                        self.machine_st.pow_instr(a1, a2, t)
-                    }
-                    &Instruction::RDiv(ref a1, ref a2, t) => {
-                        self.machine_st.rdiv_instr(a1, a2, t)
-                    }
+                    &Instruction::Gcd(ref a1, ref a2, t) => self.machine_st.gcd_instr(a1, a2, t),
+                    &Instruction::Pow(ref a1, ref a2, t) => self.machine_st.pow_instr(a1, a2, t),
+                    &Instruction::RDiv(ref a1, ref a2, t) => self.machine_st.rdiv_instr(a1, a2, t),
                     &Instruction::IntFloorDiv(ref a1, ref a2, t) => {
                         self.machine_st.int_floor_div_instr(a1, a2, t)
                     }
-                    &Instruction::IDiv(ref a1, ref a2, t) => {
-                        self.machine_st.idiv_instr(a1, a2, t)
-                    }
+                    &Instruction::IDiv(ref a1, ref a2, t) => self.machine_st.idiv_instr(a1, a2, t),
                     &Instruction::Abs(ref a1, t) => self.machine_st.abs_instr(a1, t),
                     &Instruction::Sign(ref a1, t) => self.machine_st.sign_instr(a1, t),
                     &Instruction::Neg(ref a1, t) => self.machine_st.neg_instr(a1, t),
                     &Instruction::BitwiseComplement(ref a1, t) => {
                         self.machine_st.bitwise_complement_instr(a1, t)
                     }
-                    &Instruction::Div(ref a1, ref a2, t) => {
-                        self.machine_st.div_instr(a1, a2, t)
-                    }
-                    &Instruction::Shr(ref a1, ref a2, t) => {
-                        self.machine_st.shr_instr(a1, a2, t)
-                    }
-                    &Instruction::Shl(ref a1, ref a2, t) => {
-                        self.machine_st.shl_instr(a1, a2, t)
-                    }
-                    &Instruction::Xor(ref a1, ref a2, t) => {
-                        self.machine_st.xor_instr(a1, a2, t)
-                    }
-                    &Instruction::And(ref a1, ref a2, t) => {
-                        self.machine_st.and_instr(a1, a2, t)
-                    }
+                    &Instruction::Div(ref a1, ref a2, t) => self.machine_st.div_instr(a1, a2, t),
+                    &Instruction::Shr(ref a1, ref a2, t) => self.machine_st.shr_instr(a1, a2, t),
+                    &Instruction::Shl(ref a1, ref a2, t) => self.machine_st.shl_instr(a1, a2, t),
+                    &Instruction::Xor(ref a1, ref a2, t) => self.machine_st.xor_instr(a1, a2, t),
+                    &Instruction::And(ref a1, ref a2, t) => self.machine_st.and_instr(a1, a2, t),
                     &Instruction::Or(ref a1, ref a2, t) => self.machine_st.or_instr(a1, a2, t),
-                    &Instruction::Mod(ref a1, ref a2, t) => {
-                        self.machine_st.mod_instr(a1, a2, t)
-                    }
-                    &Instruction::Rem(ref a1, ref a2, t) => {
-                        self.machine_st.rem_instr(a1, a2, t)
-                    }
+                    &Instruction::Mod(ref a1, ref a2, t) => self.machine_st.mod_instr(a1, a2, t),
+                    &Instruction::Rem(ref a1, ref a2, t) => self.machine_st.rem_instr(a1, a2, t),
                     &Instruction::Cos(ref a1, t) => self.machine_st.cos_instr(a1, t),
                     &Instruction::Sin(ref a1, t) => self.machine_st.sin_instr(a1, t),
                     &Instruction::Tan(ref a1, t) => self.machine_st.tan_instr(a1, t),
@@ -1533,16 +1505,12 @@ impl Machine {
                     &Instruction::GetVariable(norm, arg) => {
                         self.machine_st.get_variable_instr(norm, arg)
                     }
-                    &Instruction::GetValue(norm, arg) => {
-                        self.machine_st.get_value_instr(norm, arg)
-                    }
+                    &Instruction::GetValue(norm, arg) => self.machine_st.get_value_instr(norm, arg),
                     &Instruction::UnifyConstant(v) => self.machine_st.unify_constant_instr(v),
                     &Instruction::UnifyLocalValue(reg) => {
                         self.machine_st.unify_local_value_instr(reg)
                     }
-                    &Instruction::UnifyVariable(reg) => {
-                        self.machine_st.unify_variable_instr(reg)
-                    }
+                    &Instruction::UnifyVariable(reg) => self.machine_st.unify_variable_instr(reg),
                     &Instruction::UnifyValue(reg) => self.machine_st.unify_value_instr(reg),
                     &Instruction::UnifyVoid(n) => self.machine_st.unify_void_instr(n),
                     &Instruction::PutConstant(_, cell, reg) => {
@@ -1558,16 +1526,12 @@ impl Machine {
                     &Instruction::PutUnsafeValue(perm_slot, arg) => {
                         self.machine_st.put_unsafe_value_instr(perm_slot, arg)
                     }
-                    &Instruction::PutValue(norm, arg) => {
-                        self.machine_st.put_value_instr(norm, arg)
-                    }
+                    &Instruction::PutValue(norm, arg) => self.machine_st.put_value_instr(norm, arg),
                     &Instruction::PutVariable(norm, arg) => {
                         self.machine_st.put_variable_instr(norm, arg)
                     }
                     &Instruction::SetConstant(c) => self.machine_st.set_constant_instr(c),
-                    &Instruction::SetLocalValue(reg) => {
-                        self.machine_st.set_local_value_instr(reg)
-                    }
+                    &Instruction::SetLocalValue(reg) => self.machine_st.set_local_value_instr(reg),
                     &Instruction::SetVariable(reg) => self.machine_st.set_variable_instr(reg),
                     &Instruction::SetValue(reg) => self.machine_st.set_value_instr(reg),
                     &Instruction::SetVoid(n) => self.machine_st.set_void_instr(n),
@@ -3449,19 +3413,28 @@ impl Machine {
                     Instruction::Proceed => {
                         self.machine_st.p = self.machine_st.cp;
                     }
-                    &Instruction::IndexingCode { var_offset, is_extensible, .. } => {
+                    &Instruction::IndexingCode {
+                        var_offset,
+                        is_extensible,
+                        ..
+                    } => {
                         if self.machine_st.oip == 0 && self.machine_st.iip == 0 {
                             if let Some(view) = IndexedClauseView::try_from_code(
                                 &mut self.code[self.machine_st.p..],
                             ) {
                                 #[inline(always)]
-                                fn dynamic_external_of_clause_is_valid(machine: &mut Machine, p: usize) -> bool {
+                                fn dynamic_external_of_clause_is_valid(
+                                    machine: &mut Machine,
+                                    p: usize,
+                                ) -> bool {
                                     if let Instruction::DynamicInternalElse(..) = machine.code[p] {
                                         machine.machine_st.dynamic_mode = FirstOrNext::First;
                                         return true;
                                     }
 
-                                    if let Instruction::DynamicInternalElse(birth, death, _) = machine.code[p - 1] {
+                                    if let Instruction::DynamicInternalElse(birth, death, _) =
+                                        machine.code[p - 1]
+                                    {
                                         return birth < machine.machine_st.cc
                                             && Death::Finite(machine.machine_st.cc) <= death;
                                     }
@@ -3532,7 +3505,11 @@ impl Machine {
                             }
                         }
 
-                        if let Instruction::IndexingCode { code: indexing_code, .. } = &self.code[self.machine_st.p] {
+                        if let Instruction::IndexingCode {
+                            code: indexing_code,
+                            ..
+                        } = &self.code[self.machine_st.p]
+                        {
                             match &indexing_code[self.machine_st.oip as usize] {
                                 IndexingLine::StaticIndexedChoice(indexed_choice) => {
                                     match indexed_choice.offsets[self.machine_st.iip as usize] {
@@ -3562,9 +3539,10 @@ impl Machine {
                                 IndexingLine::DynamicIndexedChoice(_) => {
                                     let p = self.machine_st.p;
 
-                                    match self
-                                        .find_living_dynamic(self.machine_st.oip, self.machine_st.iip)
-                                    {
+                                    match self.find_living_dynamic(
+                                        self.machine_st.oip,
+                                        self.machine_st.iip,
+                                    ) {
                                         Some((offset, oi, ii, is_next_clause)) => {
                                             self.machine_st.p = p;
                                             self.machine_st.oip = oi;
@@ -3585,13 +3563,13 @@ impl Machine {
                                                         Some((_, _, ii, _)) => {
                                                             self.machine_st.registers
                                                                 [self.machine_st.num_of_args + 1] = fixnum_as_cell!(
-                                                                    /* FIXME this is not safe */
-                                                                    unsafe {
-                                                                        Fixnum::build_with_unchecked(
-                                                                            self.machine_st.cc as i64,
-                                                                        )
-                                                                    }
-                                                                );
+                                                                /* FIXME this is not safe */
+                                                                unsafe {
+                                                                    Fixnum::build_with_unchecked(
+                                                                        self.machine_st.cc as i64,
+                                                                    )
+                                                                }
+                                                            );
 
                                                             self.machine_st.num_of_args += 1;
                                                             // indexed_try is about to increment the
@@ -3623,7 +3601,7 @@ impl Machine {
                                                     self.machine_st.cc = unsafe {
                                                         self.machine_st.stack
                                                             [stack_loc!(OrFrame, b, n - 1)]
-                                                            .to_fixnum_or_cut_point_unchecked()
+                                                        .to_fixnum_or_cut_point_unchecked()
                                                     }
                                                     .get_num()
                                                         as usize;
@@ -3645,11 +3623,15 @@ impl Machine {
                                                                     .prelude
                                                                     .biip = ii;
 
-                                                                increment_call_count!(self.machine_st);
+                                                                increment_call_count!(
+                                                                    self.machine_st
+                                                                );
                                                             }
                                                             _ => {
                                                                 self.trust(offset);
-                                                                increment_call_count!(self.machine_st);
+                                                                increment_call_count!(
+                                                                    self.machine_st
+                                                                );
                                                             }
                                                         }
                                                     } else {
@@ -5722,10 +5704,9 @@ impl Machine {
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallFastCallN(arity) => {
-                        let call_at_index =
-                            |wam: &mut Machine, name: Atom, arity, ptr| {
-                                wam.try_call(name, arity, ptr)
-                            };
+                        let call_at_index = |wam: &mut Machine, name: Atom, arity, ptr| {
+                            wam.try_call(name, arity, ptr)
+                        };
 
                         try_or_throw!(
                             self.machine_st,
@@ -5738,10 +5719,9 @@ impl Machine {
                         }
                     }
                     &Instruction::ExecuteFastCallN(arity) => {
-                        let call_at_index =
-                            |wam: &mut Machine, name: Atom, arity, ptr| {
-                                wam.try_execute(name, arity, ptr)
-                            };
+                        let call_at_index = |wam: &mut Machine, name: Atom, arity, ptr| {
+                            wam.try_execute(name, arity, ptr)
+                        };
 
                         try_or_throw!(
                             self.machine_st,

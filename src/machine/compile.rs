@@ -177,7 +177,7 @@ fn find_inner_choice_instr(code: &[Instruction], mut index: usize, index_loc: us
                 NextOrFail::Fail(_) => {
                     index = index_loc;
                 }
-            }
+            },
             &Instruction::DynamicInternalElse(_, _, next_or_fail) => match next_or_fail {
                 NextOrFail::Next(i) => {
                     if i == 0 {
@@ -189,7 +189,7 @@ fn find_inner_choice_instr(code: &[Instruction], mut index: usize, index_loc: us
                 NextOrFail::Fail(_) => {
                     return index;
                 }
-            }
+            },
             Instruction::TrustMe(_) => {
                 return index;
             }
@@ -204,8 +204,8 @@ fn find_inner_choice_instr(code: &[Instruction], mut index: usize, index_loc: us
                     _ => {
                         index += v;
                     }
-                }
-            }
+                },
+            },
             Instruction::RevJmpBy(offset) => {
                 index -= offset;
             }
@@ -257,7 +257,7 @@ fn merge_indexed_subsequences(
         skeleton.clause_indices[upper_lower_bound].clause_start,
         skeleton.clause_indices[upper_lower_bound]
             .index_loc
-            .unwrap()
+            .unwrap(),
     );
 
     if let Instruction::TryMeElse(o) = &mut code[inner_try_me_else_loc] {
@@ -418,15 +418,13 @@ fn set_switch_var_offset_to_choice_instr(
         ExternalIndexingCodePtr::Static(v) | ExternalIndexingCodePtr::Dynamic(v) => {
             match &rest[*v - 1] {
                 Instruction::TryMeElse(_)
-                    | Instruction::DynamicElse(..)
-                    | Instruction::DynamicInternalElse(..) => {}
+                | Instruction::DynamicElse(..)
+                | Instruction::DynamicInternalElse(..) => {}
                 _ => {
-                    retraction_info.push_record(
-                        RetractionRecord::ReplacedSwitchOnTermVarIndex(
-                            index_loc,
-                            mem::replace(v, offset),
-                        ),
-                    );
+                    retraction_info.push_record(RetractionRecord::ReplacedSwitchOnTermVarIndex(
+                        index_loc,
+                        mem::replace(v, offset),
+                    ));
                 }
             }
         }
@@ -443,9 +441,9 @@ fn set_switch_var_offset(
     match var_offset {
         ExternalIndexingCodePtr::Static(v) | ExternalIndexingCodePtr::Dynamic(v) => {
             let old_v = mem::replace(v, offset);
-            retraction_info.push_record(
-                RetractionRecord::ReplacedSwitchOnTermVarIndex(index_loc, old_v),
-            );
+            retraction_info.push_record(RetractionRecord::ReplacedSwitchOnTermVarIndex(
+                index_loc, old_v,
+            ));
         }
     }
 }
@@ -834,8 +832,10 @@ fn prepend_compiled_clause<'a, LS: LoadState<'a>>(
                 // N_2 | RevJmpBy (RetryMeElse(M_1) or TryMeElse(0) at index_loc + 1)
                 // N_3 | RevJmpBy (TryMeElse(N_1) at index_loc - 1 or TrustMe if N_1 == 0)
 
-                if let Some(mut clause_view) = IndexedClauseView::try_from_code(&mut code[index_loc..]) {
-                    clause_view.rest = &prepend_queue.make_contiguous()[3 ..];
+                if let Some(mut clause_view) =
+                    IndexedClauseView::try_from_code(&mut code[index_loc..])
+                {
+                    clause_view.rest = &prepend_queue.make_contiguous()[3..];
 
                     add_clause_index(
                         clause_view,
@@ -875,9 +875,10 @@ fn prepend_compiled_clause<'a, LS: LoadState<'a>>(
                 skeleton.clause_indices[0].add_to_index_loc(clause_loc);
                 skeleton.clause_indices[0].clause_start = clause_loc + 2;
 
-                let old_clause_start = match skeleton.clause_indices[1].index_loc.map(|index_loc| {
-                    (index_loc, &mut code[index_loc])
-                }) {
+                let old_clause_start = match skeleton.clause_indices[1]
+                    .index_loc
+                    .map(|index_loc| (index_loc, &mut code[index_loc]))
+                {
                     Some((index_loc, &mut Instruction::IndexingCode { var_offset, .. })) => {
                         find_dynamic_outer_choice_instr(var_offset, index_loc)
                             .map(NonZero::get)
@@ -923,14 +924,14 @@ fn prepend_compiled_clause<'a, LS: LoadState<'a>>(
             }
         }
     } else {
-        match skeleton.clause_indices[1].index_loc.map(|index_loc| {
-                (index_loc, &mut code[index_loc])
-        })  {
+        match skeleton.clause_indices[1]
+            .index_loc
+            .map(|index_loc| (index_loc, &mut code[index_loc]))
+        {
             Some((index_loc, &mut Instruction::IndexingCode { var_offset, .. })) => {
                 prepend_queue.extend(clause_code.drain(1..));
 
-                let old_clause_start =
-                    find_dynamic_outer_choice_instr(var_offset, index_loc)
+                let old_clause_start = find_dynamic_outer_choice_instr(var_offset, index_loc)
                     .map(NonZero::get)
                     .unwrap_or(skeleton.clause_indices[1].clause_start - 2);
 
@@ -976,8 +977,8 @@ fn prepend_compiled_clause<'a, LS: LoadState<'a>>(
 
                 let index_loc = skeleton.clause_indices[0].index_loc;
 
-                skeleton.clause_indices[0].index_loc = index_loc
-                    .map(|index_loc| index_loc + clause_loc);
+                skeleton.clause_indices[0].index_loc =
+                    index_loc.map(|index_loc| index_loc + clause_loc);
 
                 skeleton.clause_indices[0].clause_start = clause_loc;
 
@@ -1029,13 +1030,11 @@ fn append_compiled_clause<'a, LS: LoadState<'a>>(
             code.push(settings.internal_trust_me());
             code.extend(clause_code.drain(3..)); // skip the indexing code
 
-            debug_assert_eq!(
-                skeleton.clause_indices[target_pos].index_loc,
-                Some(1)
-            );
+            debug_assert_eq!(skeleton.clause_indices[target_pos].index_loc, Some(1));
             skeleton.clause_indices[target_pos].index_loc = Some(index_loc);
 
-            if let Some(mut clause_view) = IndexedClauseView::try_from_code(&mut code[index_loc..]) {
+            if let Some(mut clause_view) = IndexedClauseView::try_from_code(&mut code[index_loc..])
+            {
                 clause_view.stagger_rest_by(clause_loc - index_loc);
 
                 add_clause_index(
@@ -1047,11 +1046,11 @@ fn append_compiled_clause<'a, LS: LoadState<'a>>(
                 );
 
                 payload
-                .retraction_info
-                .push_record(RetractionRecord::AddedIndex(
-                    index_loc,
-                    skeleton.clause_indices[target_pos].clause_start,
-                ));
+                    .retraction_info
+                    .push_record(RetractionRecord::AddedIndex(
+                        index_loc,
+                        skeleton.clause_indices[target_pos].clause_start,
+                    ));
             }
 
             let target_pos_clause_start = find_inner_choice_instr(
@@ -1063,7 +1062,7 @@ fn append_compiled_clause<'a, LS: LoadState<'a>>(
             let target_pos_clause_start = find_outer_choice_instr(code, target_pos_clause_start);
 
             if lower_bound + 1 == target_pos {
-                let (index_code, rest) = code[index_loc ..].split_at_mut(1);
+                let (index_code, rest) = code[index_loc..].split_at_mut(1);
 
                 if let Instruction::IndexingCode { var_offset, .. } = &mut index_code[0] {
                     set_switch_var_offset_to_choice_instr(
@@ -1092,11 +1091,10 @@ fn append_compiled_clause<'a, LS: LoadState<'a>>(
             skeleton.clause_indices[target_pos].add_to_index_loc(clause_loc);
             code.extend(clause_code.drain(1..));
 
-            if let Some((index_loc, Instruction::IndexingCode { var_offset, .. })) = skeleton.clause_indices[target_pos]
+            if let Some((index_loc, Instruction::IndexingCode { var_offset, .. })) = skeleton
+                .clause_indices[target_pos]
                 .index_loc
-                .map(|index_loc| {
-                    (index_loc, &mut code[index_loc])
-                })
+                .map(|index_loc| (index_loc, &mut code[index_loc]))
             {
                 // point to the inner-threaded TryMeElse(0) if target_pos is
                 // indexed, and make switch_on_term point one line after it in
@@ -1104,12 +1102,7 @@ fn append_compiled_clause<'a, LS: LoadState<'a>>(
                 skeleton.clause_indices[target_pos].clause_start += 2;
 
                 if !skeleton.core.is_dynamic {
-                    set_switch_var_offset(
-                        var_offset,
-                        index_loc,
-                        2,
-                        &mut payload.retraction_info,
-                    );
+                    set_switch_var_offset(var_offset, index_loc, 2, &mut payload.retraction_info);
                 }
             }
 
@@ -1183,20 +1176,13 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                 inner_clause_start,
             );
 
-            match derelictize_try_me_else(
-                code,
-                inner_clause_start,
-                &mut payload.retraction_info,
-            ) {
+            match derelictize_try_me_else(code, inner_clause_start, &mut payload.retraction_info) {
                 Some(offset) => {
                     let instr_loc =
                         find_inner_choice_instr(code, inner_clause_start + offset, index_loc);
 
-                    let clause_loc = blunt_leading_choice_instr(
-                        code,
-                        instr_loc,
-                        &mut payload.retraction_info,
-                    );
+                    let clause_loc =
+                        blunt_leading_choice_instr(code, instr_loc, &mut payload.retraction_info);
 
                     if let Instruction::IndexingCode { var_offset, .. } = &mut code[index_loc] {
                         set_switch_var_offset(
@@ -1255,8 +1241,6 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
         }
     }
 
-    
-
     match skeleton.clause_indices[lower_bound].index_loc {
         Some(target_indexing_loc)
             if mergeable_indexed_subsequences(code, lower_bound, target_pos, skeleton) =>
@@ -1282,7 +1266,8 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                         specs,
                         arity,
                         ..
-                    } = target_indexing_line {
+                    } = target_indexing_line
+                    {
                         payload.retraction_info.push_record(
                             RetractionRecord::ReplacedIndexingLine(
                                 target_indexing_loc,
@@ -1311,7 +1296,9 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                         skeleton.core.is_dynamic,
                     );
 
-                    if let Instruction::IndexingCode { var_offset, .. } = &mut code[later_indexing_loc] {
+                    if let Instruction::IndexingCode { var_offset, .. } =
+                        &mut code[later_indexing_loc]
+                    {
                         set_switch_var_offset(
                             var_offset,
                             later_indexing_loc,
@@ -1333,8 +1320,7 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                         code,
                         payload,
                         target_indexing_loc,
-                        target_pos + 1 - lower_bound
-                            ..skeleton.clause_indices.len() - lower_bound,
+                        target_pos + 1 - lower_bound..skeleton.clause_indices.len() - lower_bound,
                         &mut skeleton.clause_indices.make_contiguous()[lower_bound..],
                         skeleton.core.is_dynamic,
                     );
@@ -1364,9 +1350,7 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                     skeleton.clause_indices[target_pos].clause_start,
                 );
 
-                match skeleton.clause_indices[target_pos]
-                    .index_loc
-                {
+                match skeleton.clause_indices[target_pos].index_loc {
                     Some(index_loc) => {
                         let clause_start = find_inner_choice_instr(
                             code,
@@ -1381,12 +1365,11 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                         match &mut code[clause_start] {
                             Instruction::TryMeElse(0) => {
                                 preceding_choice_instr_loc =
-                                    if skeleton.clause_indices[lower_bound].index_loc.is_some()
-                                {
-                                    lower_bound_clause_start - 2
-                                } else {
-                                    lower_bound_clause_start
-                                };
+                                    if skeleton.clause_indices[lower_bound].index_loc.is_some() {
+                                        lower_bound_clause_start - 2
+                                    } else {
+                                        lower_bound_clause_start
+                                    };
 
                                 remove_non_leading_clause(
                                     code,
@@ -1408,7 +1391,9 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                                     &mut payload.retraction_info,
                                 );
 
-                                if let Instruction::IndexingCode { var_offset, .. } = &mut code[index_loc] {
+                                if let Instruction::IndexingCode { var_offset, .. } =
+                                    &mut code[index_loc]
+                                {
                                     set_switch_var_offset(
                                         var_offset,
                                         index_loc,
@@ -1445,14 +1430,16 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
 
                                 if let Instruction::TryMeElse(0) =
                                     &mut code[preceding_choice_instr_loc]
-                                    && let Instruction::IndexingCode { var_offset, .. } = &mut code[index_loc] {
-                                        set_switch_var_offset(
-                                            var_offset,
-                                            index_loc,
-                                            preceding_choice_instr_loc + 1 - index_loc,
-                                            &mut payload.retraction_info,
-                                        );
-                                    }
+                                    && let Instruction::IndexingCode { var_offset, .. } =
+                                        &mut code[index_loc]
+                                {
+                                    set_switch_var_offset(
+                                        var_offset,
+                                        index_loc,
+                                        preceding_choice_instr_loc + 1 - index_loc,
+                                        &mut payload.retraction_info,
+                                    );
+                                }
                             }
                         }
 
@@ -1590,7 +1577,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         }
 
         let indexing_specs = self.wam_prelude.indices.get_indexing_specs(
-            key.0, key.1, predicates.compilation_target,
+            key.0,
+            key.1,
+            predicates.compilation_target,
         );
 
         let mut cg = CodeGenerator::new(
@@ -1624,7 +1613,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     let skeleton_clause_len = skeleton.clause_indices.len();
 
                     skeleton.clause_indices.extend(cg.skeleton.clause_indices);
-                    skeleton.core.clause_indices.extend(clause_index_locs.iter().cloned());
+                    skeleton
+                        .core
+                        .clause_indices
+                        .extend(clause_index_locs.iter().cloned());
 
                     self.payload.retraction_info.push_record(
                         RetractionRecord::SkeletonClauseTruncateBack(
@@ -1635,7 +1627,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     );
                 }
                 None => {
-                    cg.skeleton.core.clause_indices.extend(clause_index_locs.iter().cloned());
+                    cg.skeleton
+                        .core
+                        .clause_indices
+                        .extend(clause_index_locs.iter().cloned());
 
                     let mut skeleton = cg.skeleton;
                     skeleton.core.is_dynamic = settings.is_dynamic();
@@ -1707,7 +1702,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     ),
                 );
 
-                skeleton.clause_indices.extend(clause_index_locs.iter().cloned());
+                skeleton
+                    .clause_indices
+                    .extend(clause_index_locs.iter().cloned());
             }
             None => {
                 let mut skeleton = LocalPredicateSkeleton::new();
@@ -1833,7 +1830,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 let mut predicate_queue = predicate_queue![clause];
                 predicate_queue.compilation_target = compilation_target;
 
-                let predicate_info = skeleton_opt.map(|skeleton| skeleton.core.predicate_info())
+                let predicate_info = skeleton_opt
+                    .map(|skeleton| skeleton.core.predicate_info())
                     .unwrap_or_default();
 
                 return self.compile(key, predicate_queue, predicate_info, settings);
@@ -1847,7 +1845,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             clause_code,
             mut standalone_skeleton,
         } = self.compile_standalone_clause(
-            key, compilation_target, clause, predicate_info, settings,
+            key,
+            compilation_target,
+            clause,
+            predicate_info,
+            settings,
         )?;
 
         let code_len = self.wam_prelude.code.len();
@@ -1864,7 +1866,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         match append_or_prepend {
             AppendOrPrepend::Append => {
-                skeleton.clause_indices.extend(standalone_skeleton.clause_indices);
+                skeleton
+                    .clause_indices
+                    .extend(standalone_skeleton.clause_indices);
                 skeleton.core.clause_indices.push_back(code_len);
 
                 self.payload
@@ -1955,13 +1959,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let clause_clause_index_loc = self
             .wam_prelude
             .indices
-            .get_predicate_skeleton_mut(
-                &clause_clause_compilation_target,
-                &(atom!("$clause"), 6),
-            )
-            .and_then(|skeleton| skeleton.clause_indices.front().and_then(|clause_index| {
-                clause_index.index_loc
-            }))
+            .get_predicate_skeleton_mut(&clause_clause_compilation_target, &(atom!("$clause"), 6))
+            .and_then(|skeleton| {
+                skeleton
+                    .clause_indices
+                    .front()
+                    .and_then(|clause_index| clause_index.index_loc)
+            })
             .unwrap_or(self.wam_prelude.code.len() + 1);
 
         // we suppose the adjoining clauses of the predicate indicated
@@ -1978,9 +1982,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 let tail_num = skeleton.core.clause_indices.len() - clause_clauses.len();
                 &skeleton.clause_indices.make_contiguous()[tail_num..]
             }
-            Some(skeleton) => {
-                &skeleton.clause_indices.make_contiguous()[0..clause_clauses.len()]
-            }
+            Some(skeleton) => &skeleton.clause_indices.make_contiguous()[0..clause_clauses.len()],
             None => {
                 unreachable!()
             }
@@ -1997,26 +1999,39 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
             let clause_loc = Term::Literal(
                 Cell::default(),
-                fixnum!(Literal, clause_index.clause_start, &mut LS::machine_st(&mut self.payload).arena),
+                fixnum!(
+                    Literal,
+                    clause_index.clause_start,
+                    &mut LS::machine_st(&mut self.payload).arena
+                ),
             );
             let index_loc = if let Some(index_loc) = clause_index.index_loc {
                 Term::Literal(
                     Cell::default(),
-                    fixnum!(Literal, index_loc, &mut LS::machine_st(&mut self.payload).arena),
+                    fixnum!(
+                        Literal,
+                        index_loc,
+                        &mut LS::machine_st(&mut self.payload).arena
+                    ),
                 )
             } else {
-                Term::Literal(
-                    Cell::default(),
-                    Literal::Atom(atom!("[]")),
-                )                
+                Term::Literal(Cell::default(), Literal::Atom(atom!("[]")))
             };
             let clause_clause_loc = Term::Literal(
                 Cell::default(),
-                fixnum!(Literal, clause_clause_loc, &mut LS::machine_st(&mut self.payload).arena),
+                fixnum!(
+                    Literal,
+                    clause_clause_loc,
+                    &mut LS::machine_st(&mut self.payload).arena
+                ),
             );
             let clause_clause_index_loc = Term::Literal(
                 Cell::default(),
-                fixnum!(Literal, clause_clause_index_loc, &mut LS::machine_st(&mut self.payload).arena),
+                fixnum!(
+                    Literal,
+                    clause_clause_index_loc,
+                    &mut LS::machine_st(&mut self.payload).arena
+                ),
             );
 
             self.incremental_compile_clause(
@@ -2024,13 +2039,20 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 Term::Clause(
                     Cell::default(),
                     atom!("$clause"),
-                    vec![head, body, clause_loc, index_loc, clause_clause_loc, clause_clause_index_loc],
+                    vec![
+                        head,
+                        body,
+                        clause_loc,
+                        index_loc,
+                        clause_clause_loc,
+                        clause_clause_index_loc,
+                    ],
                 ),
                 clause_clause_compilation_target,
                 false, // non_counted_bt is false.
                 append_or_prepend,
             )?;
-        };
+        }
 
         Ok(())
     }
@@ -2212,9 +2234,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let (name, arity) = key;
 
         let f64_tbl = &LS::machine_st(&mut self.payload).arena.f64_tbl;
-        let indexing_specs = self.wam_prelude.indices.get_indexing_specs(
-            name, arity, compilation_target,
-        );
+        let indexing_specs =
+            self.wam_prelude
+                .indices
+                .get_indexing_specs(name, arity, compilation_target);
 
         let mut cg = CodeGenerator::new(f64_tbl, indexing_specs, predicate_info, settings);
         let clause_code = cg.compile_predicate(vec![clause])?;

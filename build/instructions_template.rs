@@ -912,8 +912,7 @@ where
 }
 
 pub fn generate_instructions_rs() -> TokenStream {
-    let input =
-        InstructionTemplate::to_derive_input();
+    let input = InstructionTemplate::to_derive_input();
     let mut instr_data = InstructionData::new();
 
     instr_data.generate_instruction_enum_loop(input);
@@ -1666,7 +1665,7 @@ pub fn generate_instructions_rs() -> TokenStream {
 
             let (is_named, enum_arity) = match variant.fields {
                 Fields::Named(fields) => (true, fields.named.len()),
-                Fields::Unnamed(fields) => (false,  fields.unnamed.len()),
+                Fields::Unnamed(fields) => (false, fields.unnamed.len()),
                 Fields::Unit => (false, 0),
             };
 

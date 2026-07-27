@@ -82,7 +82,13 @@ pub(crate) enum RetractionRecord {
     SkeletonClauseTruncateBack(CompilationTarget, PredicateKey, usize),
     SkeletonClauseStartReplaced(CompilationTarget, PredicateKey, usize, usize),
     RemovedSkeletonClause(CompilationTarget, PredicateKey, usize, ClauseIndex, usize),
-    ReplacedIndexingLine(usize, ExternalIndexingCodePtr, IndexingSpecs, usize, Vec<IndexingLine>),
+    ReplacedIndexingLine(
+        usize,
+        ExternalIndexingCodePtr,
+        IndexingSpecs,
+        usize,
+        Vec<IndexingLine>,
+    ),
     RemovedLocalSkeletonClauseLocations(
         CompilationTarget,
         CompilationTarget,
@@ -772,7 +778,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     };
                 }
                 RetractionRecord::ReplacedSwitchOnTermVarIndex(index_loc, old_v) => {
-                    if let Instruction::IndexingCode { var_offset, .. } = &mut self.wam_prelude.code[index_loc] {
+                    if let Instruction::IndexingCode { var_offset, .. } =
+                        &mut self.wam_prelude.code[index_loc]
+                    {
                         var_offset.set_offset(old_v);
                     }
                 }
@@ -930,9 +938,19 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             .insert(target_pos, clause_index_info);
                     }
                 }
-                RetractionRecord::ReplacedIndexingLine(index_loc, var_offset, specs, arity, code) => {
+                RetractionRecord::ReplacedIndexingLine(
+                    index_loc,
+                    var_offset,
+                    specs,
+                    arity,
+                    code,
+                ) => {
                     self.wam_prelude.code[index_loc] = Instruction::IndexingCode {
-                        var_offset, arity, specs, code, is_extensible: true,
+                        var_offset,
+                        arity,
+                        specs,
+                        code,
+                        is_extensible: true,
                     };
                 }
                 RetractionRecord::RemovedLocalSkeletonClauseLocations(
@@ -1026,7 +1044,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         Ok(())
     }
 
-    pub(super) fn declare_clause_clause_dynamic(&mut self, module_name: Atom) -> Result<(), SessionError> {
+    pub(super) fn declare_clause_clause_dynamic(
+        &mut self,
+        module_name: Atom,
+    ) -> Result<(), SessionError> {
         let clause_clause_is_dynamic_predicate = self
             .wam_prelude
             .indices
@@ -1577,7 +1598,7 @@ impl Machine {
             |loader, compilation_target, clause_name, arity| {
                 loader.add_multifile_predicate(compilation_target, clause_name, arity)
             },
-        )        
+        )
     }
 
     fn add_extensible_predicate_declaration(
@@ -2135,21 +2156,23 @@ impl Machine {
                     &(atom!("$clause"), 6),
                 )
                 .and_then(|skeleton| skeleton.clause_indices[0].index_loc)
-                && let Some(view) = IndexedClauseView::try_from_code(
-                    &mut loader.wam_prelude.code[index_loc ..],
-                ) {                    
-                    let head_key = if key.1 > 0 {
-                        OptArgIndexKey::Structure(key.0, key.1)
-                    } else {
-                        OptArgIndexKey::Literal(atom_as_cell!(key.0))
-                    };
-                    
-                    abolish_clause(
-                        view,
-                        &LiveLoadAndMachineState::machine_st(&mut loader.payload).arena.f64_tbl,
-                        head_key,
-                    );
+                && let Some(view) =
+                    IndexedClauseView::try_from_code(&mut loader.wam_prelude.code[index_loc..])
+            {
+                let head_key = if key.1 > 0 {
+                    OptArgIndexKey::Structure(key.0, key.1)
+                } else {
+                    OptArgIndexKey::Literal(atom_as_cell!(key.0))
                 };
+
+                abolish_clause(
+                    view,
+                    &LiveLoadAndMachineState::machine_st(&mut loader.payload)
+                        .arena
+                        .f64_tbl,
+                    head_key,
+                );
+            };
 
             let offset = loader.get_or_insert_code_index(key, compilation_target);
 
@@ -2189,9 +2212,7 @@ impl Machine {
 
         let index_loc = self.deref_register(2);
 
-        let index_loc = match Number::try_from(
-            (index_loc, &self.machine_st.arena.f64_tbl),
-        ) {
+        let index_loc = match Number::try_from((index_loc, &self.machine_st.arena.f64_tbl)) {
             Ok(Number::Integer(n)) => (&*n).try_into().ok(),
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
             _ => None,
@@ -2199,31 +2220,34 @@ impl Machine {
 
         let clause_clause_loc = self.deref_register(3);
 
-        let clause_clause_loc = match Number::try_from(
-            (clause_clause_loc, &self.machine_st.arena.f64_tbl),
-        ) {
-            Ok(Number::Integer(n)) => {
-                let value: usize = (&*n).try_into().unwrap();
-                value
-            }
-            Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
-            _ => unreachable!(),
-        };
+        let clause_clause_loc =
+            match Number::try_from((clause_clause_loc, &self.machine_st.arena.f64_tbl)) {
+                Ok(Number::Integer(n)) => {
+                    let value: usize = (&*n).try_into().unwrap();
+                    value
+                }
+                Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
+                _ => unreachable!(),
+            };
 
         let clause_clause_index_loc = self.deref_register(4);
 
-        let clause_clause_index_loc_opt = match Number::try_from(
-            (clause_clause_index_loc, &self.machine_st.arena.f64_tbl),
-        ) {
-            Ok(Number::Integer(n)) => (&*n).try_into().ok(),
-            Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
-            _ => None,
-        };
+        let clause_clause_index_loc_opt =
+            match Number::try_from((clause_clause_index_loc, &self.machine_st.arena.f64_tbl)) {
+                Ok(Number::Integer(n)) => (&*n).try_into().ok(),
+                Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
+                _ => None,
+            };
 
         let global_clock = self.machine_st.global_clock;
-        
+
         retract_dynamic_clause(clause_loc, &mut self.code, index_loc, global_clock);
-        retract_dynamic_clause(clause_clause_loc, &mut self.code, clause_clause_index_loc_opt, global_clock);
+        retract_dynamic_clause(
+            clause_clause_loc,
+            &mut self.code,
+            clause_clause_index_loc_opt,
+            global_clock,
+        );
 
         // the global clock is incremented after each retraction.
         self.machine_st.global_clock += 1;
@@ -2380,7 +2404,10 @@ impl Machine {
             .get_indexing_specs(name, arity, compilation_target);
 
         let (num_atoms, atoms) = if let Some(specs) = indexing_specs.as_slice() {
-            (specs.len(), specs.iter().map(|spec| atom_as_cell!(spec.as_atom())))
+            (
+                specs.len(),
+                specs.iter().map(|spec| atom_as_cell!(spec.as_atom())),
+            )
         } else {
             self.machine_st.fail = true;
             return;
