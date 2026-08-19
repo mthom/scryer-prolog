@@ -103,10 +103,22 @@ sleep(T) :-
 %  The only supported `Keyword` is `runtime`. The first element of
 %  `List` is the CPU time in milliseconds, the second element is
 %  currently not supported.
+%
+%  Any other atom raises domain_error(statistics_key, Keyword), matching
+%  the behaviour of SICStus, GNU Prolog and SWI, rather than failing
+%  silently.
 
-statistics(runtime, [T,unsupported]) :-
-        '$cpu_now'(T0),
-        T is T0*1000.
+statistics(Keyword, List) :-
+        (   var(Keyword) ->
+            instantiation_error(statistics/2)
+        ;   Keyword == runtime ->
+            '$cpu_now'(T0),
+            T is T0*1000,
+            List = [T,unsupported]
+        ;   atom(Keyword) ->
+            domain_error(statistics_key, Keyword, statistics/2)
+        ;   type_error(atom, Keyword, statistics/2)
+        ).
 
 :- meta_predicate(time(0)).
 
