@@ -106,15 +106,6 @@ strings.
 
 ## Installing Scryer Prolog
 
-### Binaries
-
-Precompiled binaries for several platforms are available for download
-at:
-
-**https://github.com/mthom/scryer-prolog/releases/latest**
-
-### Native Compilation
-
 First, install the latest stable version of
 [Rust](https://www.rust-lang.org/tools/install) using your
 preferred method. Scryer tends to use features from newer Rust
