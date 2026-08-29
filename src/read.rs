@@ -25,7 +25,7 @@ use fxhash::FxBuildHasher;
 #[cfg(feature = "repl")]
 use rustyline::error::ReadlineError;
 #[cfg(feature = "repl")]
-use rustyline::history::DefaultHistory;
+use rustyline::{history::DefaultHistory, EditMode};
 #[cfg(feature = "repl")]
 use rustyline::{Config, Editor};
 
@@ -141,7 +141,19 @@ impl ReadlineStream {
     pub fn new(pending_input: &str, add_history: bool) -> Self {
         #[cfg(feature = "repl")]
         {
-            let config = Config::builder().check_cursor_position(true).build();
+            let edit_mode = match std::env::var("SCRYER_EDIT_MODE") {
+                Ok(mode) => match mode.to_lowercase().as_str() {
+                    "vi" | "vim" => EditMode::Vi,
+                    "emacs" => EditMode::Emacs,
+                    _ => EditMode::Emacs,
+                },
+                Err(_) => EditMode::Emacs,
+            };
+
+            let config = Config::builder()
+                .check_cursor_position(true)
+                .edit_mode(edit_mode)
+                .build();
 
             let helper = Helper::new();
 
