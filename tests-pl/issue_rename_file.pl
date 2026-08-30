@@ -22,7 +22,8 @@ act(Source, Destination) :-
 
 main :-
     call_cleanup(
-       (setenv("SOURCE", "rename_file_test"),
+       (setenv("SHELL", "/bin/sh"),
+        setenv("SOURCE", "rename_file_test"),
         setenv("DESTINATION", "rename_file_test_renamed"),
         shell("touch rename_file_test", 0),
         check),
