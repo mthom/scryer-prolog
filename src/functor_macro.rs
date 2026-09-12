@@ -2,7 +2,7 @@
 //! heap.
 
 use crate::atom_table::*;
-use crate::instructions::IndexingCodePtr;
+use crate::instructions::{HasOffset, IndexingCodePtr};
 use crate::machine::heap::Heap;
 use crate::parser::ast::Fixnum;
 use crate::types::*;
@@ -62,6 +62,47 @@ macro_rules! build_functor {
      $res_len:expr,
      [$($subfunctor:expr),*]) => ({
         let (inner_functor, cell_size) = indexing_code_ptr($e);
+        let referent = if cell_size == 1 {
+            heap_loc_as_cell!(1u64 + count!($($dt)*) + $res_len)
+        } else {
+            str_loc_as_cell!(1u64 + count!($($dt)*) + $res_len)
+        };
+
+        build_functor!([$($dt($($value),*)),*],
+                       [$($res, )* FunctorElement::Cell(referent)],
+                       1 + cell_size + $res_len,
+                       [$($subfunctor, )* FunctorElement::InnerFunctor(cell_size, inner_functor)])
+     });
+    ([term_indexing_code_ptr($e:expr) $(, $dt:ident($($value:tt),*))*],
+     [$($res:expr),*],
+     $res_len:expr,
+     [$($subfunctor:expr),*]) => ({
+        let inner_functor = $e.to_functor();
+        let cell_size = cell_index!(Heap::compute_functor_byte_size(&inner_functor)) as u64;
+
+        let referent = if cell_size == 1 {
+            heap_loc_as_cell!(1u64 + count!($($dt)*) + $res_len)
+        } else {
+            str_loc_as_cell!(1u64 + count!($($dt)*) + $res_len)
+        };
+
+        build_functor!([$($dt($($value),*)),*],
+                       [$($res, )* FunctorElement::Cell(referent)],
+                       1 + cell_size + $res_len,
+                       [$($subfunctor, )* FunctorElement::InnerFunctor(cell_size, inner_functor)])
+     });
+    ([indexing_code_ptr_opt($e:expr) $(, $dt:ident($($value:tt),*))*],
+     [$($res:expr),*],
+     $res_len:expr,
+     [$($subfunctor:expr),*]) => ({
+        let (inner_functor, cell_size) = if let Some(item) = $e.clone() {
+            indexing_code_ptr(item)
+        } else {
+            let functor = functor!(atom!("fail"));
+            let cell_size = functor.len() as u64;
+
+            (functor, cell_size)
+        };
         let referent = if cell_size == 1 {
             heap_loc_as_cell!(1u64 + count!($($dt)*) + $res_len)
         } else {
@@ -182,11 +223,11 @@ macro_rules! build_functor {
 pub(crate) fn indexing_code_ptr(code_ptr: IndexingCodePtr) -> (Vec<FunctorElement>, u64) {
     match code_ptr {
         IndexingCodePtr::DynamicExternal(o) => {
+            let o = o.offset();
             (functor!(atom!("dynamic_external"), [fixnum(o)]), 2)
         }
         IndexingCodePtr::External(o) => (functor!(atom!("external"), [fixnum(o)]), 2),
         IndexingCodePtr::Internal(o) => (functor!(atom!("internal"), [fixnum(o)]), 2),
-        IndexingCodePtr::Fail => (vec![FunctorElement::Cell(atom_as_cell!(atom!("fail")))], 1),
     }
 }
 

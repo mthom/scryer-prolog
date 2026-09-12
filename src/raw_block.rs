@@ -340,16 +340,6 @@ impl<T: RawBlockTraits, C: RawBlockConcurrency> RawBlock<T, C> {
 
     /// Returns a pointer at a given `offset` within the block of memory.
     ///
-    /// Panics if that range of bytes wasn't allocated yet with [`RawBlock::alloc()`].
-    pub fn get(&self, offset: usize) -> *const u8 {
-        assert!(offset < self.used_bytes());
-
-        // SAFETY: Asserted.
-        unsafe { self.get_unchecked(offset) }
-    }
-
-    /// Returns a pointer at a given `offset` within the block of memory.
-    ///
     /// ## Safety
     ///
     /// Assumes that `offset < self.capacity()`.

@@ -215,6 +215,7 @@ impl Stack {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn top(&self) -> usize {
         self.buf.used_bytes()
     }
@@ -279,20 +280,6 @@ impl Stack {
         let ptr = self.get_raw(b);
 
         unsafe { &mut *ptr.cast_mut().cast::<OrFrame>() }
-    }
-
-    /// # Safety
-    ///
-    /// The stack must contain a valid OrFrame at [`self.top()`](Self::top),
-    /// which can only be achieved by allocating it in the first place and later truncating the stack.
-    ///
-    /// No allocation must have been done since the last call to [`truncate()`](Self::truncate).
-    #[inline(always)]
-    pub(crate) unsafe fn index_dangling_or_frame(&self) -> &OrFrame {
-        unsafe {
-            let ptr = self.buf.get_unchecked(self.top());
-            &*ptr.cast::<OrFrame>()
-        }
     }
 
     #[inline(always)]

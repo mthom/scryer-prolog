@@ -233,6 +233,9 @@ pub(crate) type CodeDir = IndexMap<PredicateKey, CodeIndex, FxBuildHasher>;
 
 pub(crate) type GoalExpansionIndices = IndexSet<PredicateKey, FxBuildHasher>;
 
+pub(crate) type IndexingSpecDir =
+    IndexMap<PredicateKey, std::rc::Rc<Vec<IndexingSpec>>, FxBuildHasher>;
+
 #[derive(Debug)]
 pub struct IndexStore {
     pub(super) code_dir: CodeDir,
@@ -241,10 +244,28 @@ pub struct IndexStore {
     pub(super) global_variables: GlobalVarDir,
     pub(super) goal_expansion_indices: GoalExpansionIndices,
     pub(super) meta_predicates: MetaPredicateDir,
+    pub(super) indexing_specs: IndexingSpecDir,
     pub(super) modules: ModuleDir,
     pub(super) op_dir: OpDir,
     streams: StreamDir,
     stream_aliases: StreamAliasDir,
+}
+
+#[derive(Clone, Debug)]
+pub struct IndexingSpecs(Option<std::rc::Rc<Vec<IndexingSpec>>>);
+
+impl IndexingSpecs {
+    pub fn get(&self, idx: usize) -> IndexingSpec {
+        self.0
+            .as_ref()
+            .and_then(|array| array.get(idx).copied())
+            .unwrap_or_default()
+    }
+
+    #[inline]
+    pub fn as_slice(&self) -> Option<&[IndexingSpec]> {
+        self.0.as_ref().map(|specs| specs.as_slice())
+    }
 }
 
 impl IndexStore {
@@ -423,6 +444,31 @@ impl IndexStore {
         }
     }
 
+    pub(crate) fn get_indexing_specs(
+        &self,
+        name: Atom,
+        arity: usize,
+        compilation_target: CompilationTarget,
+    ) -> IndexingSpecs {
+        IndexingSpecs(match compilation_target {
+            CompilationTarget::User => self
+                .indexing_specs
+                .get(&(name, arity))
+                .map(std::rc::Rc::clone),
+            CompilationTarget::Module(module_name) => match self.modules.get(&module_name) {
+                Some(module) => module
+                    .indexing_specs
+                    .get(&(name, arity))
+                    .or_else(|| self.indexing_specs.get(&(name, arity)))
+                    .map(std::rc::Rc::clone),
+                None => self
+                    .indexing_specs
+                    .get(&(name, arity))
+                    .map(std::rc::Rc::clone),
+            },
+        })
+    }
+
     pub(crate) fn is_dynamic_predicate(&self, module_name: Atom, key: PredicateKey) -> bool {
         match module_name {
             atom!("user") => self
@@ -430,14 +476,16 @@ impl IndexStore {
                 .get(&key)
                 .map(|skeleton| skeleton.core.is_dynamic)
                 .unwrap_or(false),
-            _ => match self.modules.get(&module_name) {
-                Some(module) => module
-                    .extensible_predicates
-                    .get(&key)
-                    .map(|skeleton| skeleton.core.is_dynamic)
-                    .unwrap_or(false),
-                None => false,
-            },
+            _ => self
+                .modules
+                .get(&module_name)
+                .and_then(|module| {
+                    module
+                        .extensible_predicates
+                        .get(&key)
+                        .map(|skeleton| skeleton.core.is_dynamic)
+                })
+                .unwrap_or(false),
         }
     }
 

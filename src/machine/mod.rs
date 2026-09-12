@@ -13,6 +13,7 @@ pub mod disjuncts;
 pub mod dispatch;
 pub mod gc;
 pub mod heap;
+pub mod indexing_scan;
 pub mod lib_machine;
 pub mod load_state;
 pub mod machine_errors;
@@ -34,12 +35,14 @@ use crate::atom_table::*;
 #[cfg(feature = "ffi")]
 use crate::ffi::ForeignFunctionTable;
 use crate::forms::*;
+use crate::indexing_iter::IndexedClauseView;
 use crate::instructions::*;
 use crate::machine::args::*;
 use crate::machine::compile::*;
 use crate::machine::copier::*;
 use crate::machine::heap::AllocError;
 use crate::machine::heap::*;
+use crate::machine::indexing_scan::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
@@ -51,7 +54,6 @@ use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
 
-use indexmap::IndexMap;
 use ordered_float::OrderedFloat;
 
 use rand::rngs::StdRng;
@@ -518,44 +520,12 @@ impl Machine {
     fn next_clause_applicable(&mut self, mut offset: usize) -> bool {
         loop {
             match &self.code[offset] {
-                Instruction::IndexingCode(indexing_lines) => {
-                    let mut oip = 0;
-                    let mut cell = empty_list_as_cell!();
-
-                    loop {
-                        let indexing_code_ptr = match &indexing_lines[oip] {
-                            &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                                arg,
-                                v,
-                                c,
-                                l,
-                                s,
-                            )) => {
-                                cell = self.deref_register(arg);
-                                self.machine_st
-                                    .select_switch_on_term_index(cell, v, c, l, s)
-                            }
-                            IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(hm)) => {
-                                // let lit = self.machine_st.constant_to_literal(cell);
-                                hm.get(&cell).cloned().unwrap_or(IndexingCodePtr::Fail)
-                            }
-                            IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(hm)) => {
-                                self.machine_st.select_switch_on_structure_index(cell, hm)
-                            }
-                            _ => {
-                                offset += 1;
-                                break;
-                            }
+                &Instruction::IndexingCode { is_extensible, .. } => {
+                    if let Some(view) = IndexedClauseView::try_from_code(&mut self.code[offset..]) {
+                        match self.machine_st.switch_on_term(view, is_extensible) {
+                            SwitchOnTermResult::Fail => return false,
+                            _ => offset += 1,
                         };
-
-                        match indexing_code_ptr {
-                            IndexingCodePtr::External(_) | IndexingCodePtr::DynamicExternal(_) => {
-                                offset += 1;
-                                break;
-                            }
-                            IndexingCodePtr::Internal(i) => oip += i,
-                            IndexingCodePtr::Fail => return false,
-                        }
                     }
                 }
                 &Instruction::GetConstant(Level::Shallow, lit, RegType::Temp(t)) => {
@@ -693,20 +663,22 @@ impl Machine {
 
         loop {
             match &self.code[self.machine_st.p] {
-                Instruction::IndexingCode(indexing_lines) => {
-                    match &indexing_lines[self.machine_st.oip as usize] {
-                        IndexingLine::IndexedChoice(indexed_choice) => {
-                            match &indexed_choice[(self.machine_st.iip + inner_offset) as usize] {
-                                &IndexedChoiceInstruction::Retry(o)
-                                | &IndexedChoiceInstruction::DefaultRetry(o) => {
+                Instruction::IndexingCode { code, .. } => {
+                    match &code[self.machine_st.oip as usize] {
+                        IndexingLine::StaticIndexedChoice(indexed_choice) => {
+                            match &indexed_choice.offsets
+                                [(self.machine_st.iip + inner_offset) as usize]
+                            {
+                                &StaticIndexedChoiceInstructionOffset::Retry(o)
+                                | &StaticIndexedChoiceInstructionOffset::DefaultRetry(o) => {
                                     if self.next_clause_applicable(self.machine_st.p + o) {
                                         return Some(inner_offset);
                                     }
 
                                     inner_offset += 1;
                                 }
-                                &IndexedChoiceInstruction::Trust(o)
-                                | &IndexedChoiceInstruction::DefaultTrust(o) => {
+                                &StaticIndexedChoiceInstructionOffset::Trust(o)
+                                | &StaticIndexedChoiceInstructionOffset::DefaultTrust(o) => {
                                     return if self.next_clause_applicable(self.machine_st.p + o) {
                                         Some(inner_offset)
                                     } else {
@@ -718,9 +690,9 @@ impl Machine {
                         }
                         IndexingLine::DynamicIndexedChoice(indexed_choice) => {
                             let idx = (self.machine_st.iip + inner_offset) as usize;
-                            let o = indexed_choice[idx];
+                            let o = indexed_choice.offsets[idx].offset();
 
-                            if idx + 1 == indexed_choice.len() {
+                            if idx + 1 == indexed_choice.offsets.len() {
                                 return if self.next_clause_applicable(self.machine_st.p + o) {
                                     Some(inner_offset)
                                 } else {
@@ -734,12 +706,13 @@ impl Machine {
                                 inner_offset += 1;
                             }
                         }
-                        _ => unreachable!(),
                     }
                 }
-                _ => unreachable!(),
+                _ => break,
             }
         }
+
+        None
     }
 
     #[inline(always)]
@@ -827,30 +800,26 @@ impl Machine {
 
         self.unwind_trail(old_tr, curr_tr);
 
-        if let Some(offset) = self.next_applicable_clause(offset) {
-            let or_frame = self.machine_st.stack.index_or_frame_mut(b);
+        let or_frame = self.machine_st.stack.index_or_frame_mut(b);
 
-            self.machine_st.num_of_args = n;
-            self.machine_st.e = or_frame.prelude.e;
-            self.machine_st.cp = or_frame.prelude.cp;
+        self.machine_st.num_of_args = n;
+        self.machine_st.e = or_frame.prelude.e;
+        self.machine_st.cp = or_frame.prelude.cp;
 
-            or_frame.prelude.bp = self.machine_st.p + offset;
+        or_frame.prelude.bp = self.machine_st.p + offset;
 
-            let target_h = or_frame.prelude.h;
-            let attr_var_queue_len = or_frame.prelude.attr_var_queue_len;
+        let target_h = or_frame.prelude.h;
+        let attr_var_queue_len = or_frame.prelude.attr_var_queue_len;
 
-            self.machine_st.tr = or_frame.prelude.tr;
-            self.reset_attr_var_state(attr_var_queue_len);
+        self.machine_st.tr = or_frame.prelude.tr;
+        self.reset_attr_var_state(attr_var_queue_len);
 
-            self.machine_st.hb = target_h;
+        self.machine_st.hb = target_h;
 
-            self.machine_st.trail.truncate(self.machine_st.tr);
-            self.machine_st.heap.truncate(target_h);
+        self.machine_st.trail.truncate(self.machine_st.tr);
+        self.machine_st.heap.truncate(target_h);
 
-            self.machine_st.p += 1;
-        } else {
-            self.trust_me_epilogue();
-        }
+        self.machine_st.p += 1;
     }
 
     #[inline(always)]
@@ -868,47 +837,26 @@ impl Machine {
 
         self.unwind_trail(old_tr, curr_tr);
 
-        if let Some(iip_offset) = self.next_inner_applicable_clause() {
-            let or_frame = self.machine_st.stack.index_or_frame_mut(b);
+        let or_frame = self.machine_st.stack.index_or_frame_mut(b);
 
-            self.machine_st.num_of_args = n;
-            self.machine_st.e = or_frame.prelude.e;
-            self.machine_st.cp = or_frame.prelude.cp;
+        self.machine_st.num_of_args = n;
+        self.machine_st.e = or_frame.prelude.e;
+        self.machine_st.cp = or_frame.prelude.cp;
 
-            or_frame.prelude.biip += iip_offset;
+        or_frame.prelude.biip += 1;
 
-            let target_h = or_frame.prelude.h;
-            let attr_var_queue_len = or_frame.prelude.attr_var_queue_len;
+        let target_h = or_frame.prelude.h;
+        let attr_var_queue_len = or_frame.prelude.attr_var_queue_len;
 
-            self.machine_st.tr = or_frame.prelude.tr;
-            self.machine_st.trail.truncate(self.machine_st.tr);
+        self.machine_st.tr = or_frame.prelude.tr;
+        self.machine_st.trail.truncate(self.machine_st.tr);
 
-            self.reset_attr_var_state(attr_var_queue_len);
+        self.reset_attr_var_state(attr_var_queue_len);
 
-            self.machine_st.hb = target_h;
-            self.machine_st.p += offset;
+        self.machine_st.hb = target_h;
+        self.machine_st.p += offset;
 
-            self.machine_st.heap.truncate(target_h);
-
-            // these registers don't need to be reset here and MUST
-            // NOT be (nor in indexed_try! trust_epilogue is an
-            // exception, see next paragraph)! oip could be reset
-            // without any adverse effects but iip is needed by
-            // get_clause_p to find the last executed clause/2 clause.
-
-            // trust_epilogue must reset these for the sake of
-            // subsequent predicates beginning with
-            // switch_to_term. get_clause_p copes by checking
-            // self.machine_st.b > self.machine.e: if true, it is safe
-            // to use self.machine_st.iip; if false, use the choice
-            // point left at the top of the stack by '$clause'
-            // (specifically its biip value).
-
-            // self.machine_st.oip = 0;
-            // self.machine_st.iip = 0;
-        } else {
-            self.trust_epilogue(offset);
-        }
+        self.machine_st.heap.truncate(target_h);
     }
 
     #[inline(always)]
@@ -917,22 +865,17 @@ impl Machine {
         let or_frame = self.machine_st.stack.index_or_frame(b);
         let n = or_frame.prelude.num_cells;
 
-        let old_tr = or_frame.prelude.tr;
-        let curr_tr = self.machine_st.tr;
-
         for i in 0..n {
             self.machine_st.registers[i + 1] = or_frame[i];
         }
 
-        self.unwind_trail(old_tr, curr_tr);
-        self.trust_epilogue(offset);
-    }
+        let old_tr = or_frame.prelude.tr;
+        let curr_tr = self.machine_st.tr;
 
-    #[inline(always)]
-    fn trust_epilogue(&mut self, offset: usize) {
+        self.unwind_trail(old_tr, curr_tr);
+
         let b = self.machine_st.b;
         let or_frame = self.machine_st.stack.index_or_frame(b);
-        let n = or_frame.prelude.num_cells;
 
         self.machine_st.num_of_args = n;
         self.machine_st.e = or_frame.prelude.e;
@@ -970,17 +913,6 @@ impl Machine {
         let old_tr = or_frame.prelude.tr;
         let curr_tr = self.machine_st.tr;
 
-        self.unwind_trail(old_tr, curr_tr);
-
-        self.trust_me_epilogue();
-    }
-
-    #[inline(always)]
-    fn trust_me_epilogue(&mut self) {
-        let b = self.machine_st.b;
-        let or_frame = self.machine_st.stack.index_or_frame(b);
-        let n = or_frame.prelude.num_cells;
-
         self.machine_st.num_of_args = n;
         self.machine_st.e = or_frame.prelude.e;
         self.machine_st.cp = or_frame.prelude.cp;
@@ -991,6 +923,7 @@ impl Machine {
         self.machine_st.b = or_frame.prelude.b;
 
         self.reset_attr_var_state(or_frame.prelude.attr_var_queue_len);
+        self.unwind_trail(old_tr, curr_tr);
 
         self.machine_st.hb = target_h;
         self.machine_st.p += 1;

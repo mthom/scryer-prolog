@@ -4,6 +4,7 @@ use num_order::NumOrd;
 
 use crate::arena::*;
 use crate::atom_table::*;
+use crate::codegen::CodeGenSettings;
 #[cfg(feature = "ffi")]
 use crate::ffi::*;
 use crate::forms::*;
@@ -15,16 +16,22 @@ use crate::http::{HttpListener, HttpRequest, HttpRequestData, HttpResponse};
 use crate::instructions::*;
 use crate::machine;
 use crate::machine::code_walker::*;
+use crate::machine::compile::StandaloneCompileResult;
 use crate::machine::copier::*;
 use crate::machine::heap::AllocError;
 use crate::machine::heap::*;
+use crate::machine::loader::InlineLoadState;
+use crate::machine::loader::Loader;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
+use crate::machine::preprocessor::Preprocessor;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
+use crate::machine::term_stream::InlineTermStream;
 use crate::machine::{Machine, get_structure_index};
+use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
@@ -1201,136 +1208,6 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn get_clause_p(&self, module_name: Atom) -> (usize, usize) {
-        use crate::machine::loader::CompilationTarget;
-
-        let key_cell = self.machine_st.registers[1];
-        let key = self.machine_st.name_and_arity_from_heap(key_cell).unwrap();
-
-        let compilation_target = if module_name == atom!("user") {
-            CompilationTarget::User
-        } else {
-            CompilationTarget::Module(module_name)
-        };
-
-        let skeleton = self
-            .indices
-            .get_predicate_skeleton(&compilation_target, &key)
-            .unwrap();
-
-        let module_name = match compilation_target {
-            CompilationTarget::User => atom!("builtins"),
-            CompilationTarget::Module(target) => target,
-        };
-
-        let mut bp = self
-            .indices
-            .get_predicate_code_index(atom!("$clause"), 2, module_name)
-            .and_then(|idx| {
-                self.machine_st
-                    .arena
-                    .code_index_tbl
-                    .get_entry(idx.into())
-                    .local()
-            })
-            .unwrap();
-
-        macro_rules! extract_ptr {
-            ($ptr: expr) => {
-                match $ptr {
-                    IndexingCodePtr::External(p) => {
-                        return (
-                            skeleton.core.clause_clause_locs.back().cloned().unwrap(),
-                            bp + p,
-                        )
-                    }
-                    IndexingCodePtr::Internal(boip) => boip,
-                    _ => unreachable!(),
-                }
-            };
-        }
-
-        loop {
-            match &self.code[bp] {
-                Instruction::IndexingCode(indexing_code) => {
-                    let indexing_code_ptr = match &indexing_code[0] {
-                        &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                            _,
-                            _,
-                            c,
-                            _,
-                            s,
-                        )) => {
-                            if key.1 > 0 {
-                                s
-                            } else {
-                                c
-                            }
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    };
-
-                    let boip = extract_ptr!(indexing_code_ptr);
-
-                    let boip = match &indexing_code[boip] {
-                        IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(hm)) => {
-                            boip + extract_ptr!(hm.get(&key).cloned().unwrap())
-                        }
-                        IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(hm)) => {
-                            boip + extract_ptr!(hm.get(&atom_as_cell!(key.0)).cloned().unwrap())
-                        }
-                        _ => boip,
-                    };
-
-                    match &indexing_code[boip] {
-                        IndexingLine::IndexedChoice(indexed_choice) => {
-                            let p = if self.machine_st.b > self.machine_st.e {
-                                // this means the last
-                                // self.machine_st.iip value has yet
-                                // to be overwritten by the Trust
-                                // instruction. In this case, return
-                                // it.
-                                self.machine_st.iip as usize
-                            } else {
-                                // otherwise, read the '$clause'
-                                // choicepoint from the top of the
-                                // stack. this is very volatile in
-                                // that it depends on '$clause'
-                                // immediately preceding
-                                // '$get_clause_p', which cannot be
-                                // the last clause of the retract
-                                // helper to delay deallocation of its
-                                // environment frame.
-                                unsafe {
-                                    self.machine_st.stack.index_dangling_or_frame().prelude.biip
-                                        as usize
-                                }
-                            };
-
-                            return (
-                                skeleton.core.clause_clause_locs[p],
-                                bp + indexed_choice[p].offset(),
-                            );
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-                &Instruction::RevJmpBy(offset) => {
-                    bp -= offset;
-                }
-                _ => {
-                    return (
-                        skeleton.core.clause_clause_locs.back().cloned().unwrap(),
-                        bp,
-                    );
-                }
-            }
-        }
-    }
-
-    #[inline(always)]
     pub(crate) fn deref_register(&self, i: usize) -> HeapCellValue {
         self.machine_st
             .store(self.machine_st.deref(self.machine_st.registers[i]))
@@ -1636,14 +1513,49 @@ impl Machine {
                 .collect();
 
             let helper_clause_loc = self.code.len();
+            let body_term = self
+                .machine_st
+                .read_term_from_heap(self.machine_st.registers[1]);
 
-            match self.compile_standalone_clause(temp_v!(1), &vars) {
+            let compile = || {
+                let mut loader: Loader<'_, InlineLoadState<'_>> =
+                    Loader::new(self, InlineTermStream {});
+
+                let settings = CodeGenSettings {
+                    global_clock_tick: None,
+                    is_extensible: false,
+                    non_counted_bt: true,
+                };
+
+                let mut preprocessor = Preprocessor::new(settings);
+                let num_vars = vars.len();
+
+                // build the helper term
+                let head_term = Term::Clause(Cell::default(), atom!(""), vars.to_vec());
+                let rule_terms = vec![head_term, body_term];
+                let rule_body = Term::Clause(Cell::default(), atom!(":-"), rule_terms);
+
+                let clause = preprocessor.try_term_to_tl(&mut loader, rule_body)?;
+                let compilation_target = loader.payload.compilation_target;
+
+                loader.compile_standalone_clause(
+                    (atom!(""), num_vars),
+                    compilation_target,
+                    clause,
+                    PredicateInfo::default(),
+                    settings,
+                )
+            };
+
+            match compile() {
                 Err(e) => {
                     let err = self.machine_st.session_error(e);
                     let stub = functor_stub(atom!("call"), result.key.1);
                     return Err(self.machine_st.error_form(err, stub));
                 }
-                Ok(()) => {
+                Ok(StandaloneCompileResult { clause_code, .. }) => {
+                    self.code.extend(clause_code);
+
                     let h = self.machine_st.heap.cell_len();
                     let mut writer = resource_error_call_result!(
                         self.machine_st,
