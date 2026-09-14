@@ -11,6 +11,7 @@ use std::ptr;
 
 const ALIGN: usize = Heap::heap_cell_alignment();
 
+/// A heap or stack allocation failed.
 #[derive(Debug, Clone)]
 pub struct AllocError;
 
