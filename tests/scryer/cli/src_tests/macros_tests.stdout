@@ -1,0 +1,12 @@
+example(formated_string(A)) :-
+   A="This is my term foo(1)".
+example(bignum_example(A,B,C)) :-
+   (  bignum_lt(A,B),
+      !,
+      bignum_gt(A,0)
+   ;  bignum_lt(B+1,C)
+   ),
+   compute(A,B).
+example(numeric_enum_example) :-
+   foo(100,101),
+   bar([110,111|A]).
