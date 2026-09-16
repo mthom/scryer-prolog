@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use fxhash::{FxBuildHasher, FxHasher};
 use indexmap::IndexSet;
 
@@ -110,12 +112,12 @@ fn incr_internal_ptr(ptr: &mut IndexingCodePtr, internal_offset: usize) {
 }
 
 #[inline]
-fn incr_internal_term_ptr<IndexKey>(
+fn incr_internal_term_ptr<IndexKey: Clone + Debug>(
     ptr: &mut TermIndexingCodePtr<IndexKey>,
     internal_offset: usize,
 ) {
     match ptr {
-        TermIndexingCodePtr::Internal(i) => {
+        TermIndexingCodePtr::Internal(_k, i) => {
             *i += internal_offset;
         }
         TermIndexingCodePtr::SwitchOnType(tbl) => {
@@ -129,7 +131,6 @@ fn incr_internal_term_ptr<IndexKey>(
 
 pub(crate) enum SwitchOnTermResult {
     Fail,
-    DynamicExternal(Appended),
     DynamicInternal(usize),
     External(usize),
     Internal(usize),
@@ -146,9 +147,6 @@ fn switch_on_indexing_code_ptr(
     indexing_code_ptr: IndexingCodePtr,
 ) -> SwitchOnTermPtrResult {
     match indexing_code_ptr {
-        IndexingCodePtr::DynamicExternal(o) => {
-            SwitchOnTermPtrResult::End(SwitchOnTermResult::DynamicExternal(o))
-        }
         IndexingCodePtr::External(o) => SwitchOnTermPtrResult::End(SwitchOnTermResult::External(o)),
         IndexingCodePtr::Internal(o) => SwitchOnTermPtrResult::Continue(TableLocation {
             table_loc: cursor.table_loc + o,
@@ -157,7 +155,7 @@ fn switch_on_indexing_code_ptr(
     }
 }
 
-fn switch_on_term_ptr<IndexKey>(
+fn switch_on_term_ptr<IndexKey: Copy + Debug>(
     key: IndexKey,
     hash_fn: impl Fn(&IndexKey) -> u64,
     eq_fn: impl Fn(&IndexKey, &IndexKey) -> bool,
@@ -165,7 +163,7 @@ fn switch_on_term_ptr<IndexKey>(
     term_ptr: &TermIndexingCodePtr<IndexKey>,
 ) -> SwitchOnTermPtrResult {
     match downcast_term_indexing_code_ptr(term_ptr) {
-        TermIndexingCodePtrDowncast::Ptr(indexing_code_ptr) => {
+        TermIndexingCodePtrDowncast::Ptr(_k, indexing_code_ptr) => {
             switch_on_indexing_code_ptr(cursor, indexing_code_ptr)
         }
         TermIndexingCodePtrDowncast::Fail => SwitchOnTermPtrResult::End(SwitchOnTermResult::Fail),
@@ -183,9 +181,6 @@ fn switch_on_term_ptr<IndexKey>(
             match indexing_code_ptr {
                 IndexingCodePtr::External(o) => {
                     SwitchOnTermPtrResult::End(SwitchOnTermResult::External(o))
-                }
-                IndexingCodePtr::DynamicExternal(o) => {
-                    SwitchOnTermPtrResult::End(SwitchOnTermResult::DynamicExternal(o))
                 }
                 IndexingCodePtr::Internal(o) => SwitchOnTermPtrResult::Continue(TableLocation {
                     table_loc: cursor.table_loc + o,

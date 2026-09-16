@@ -2,7 +2,7 @@
 //! heap.
 
 use crate::atom_table::*;
-use crate::instructions::{HasOffset, IndexingCodePtr};
+use crate::instructions::IndexingCodePtr;
 use crate::machine::heap::Heap;
 use crate::parser::ast::Fixnum;
 use crate::types::*;
@@ -222,10 +222,6 @@ macro_rules! build_functor {
 
 pub(crate) fn indexing_code_ptr(code_ptr: IndexingCodePtr) -> (Vec<FunctorElement>, u64) {
     match code_ptr {
-        IndexingCodePtr::DynamicExternal(o) => {
-            let o = o.offset();
-            (functor!(atom!("dynamic_external"), [fixnum(o)]), 2)
-        }
         IndexingCodePtr::External(o) => (functor!(atom!("external"), [fixnum(o)]), 2),
         IndexingCodePtr::Internal(o) => (functor!(atom!("internal"), [fixnum(o)]), 2),
     }
@@ -271,9 +267,9 @@ pub(crate) fn variadic_functor(
 #[allow(unused_parens)]
 mod tests {
     use super::*;
-    use FunctorElement::*;
     use indexmap::indexmap;
     use std::string::String;
+    use FunctorElement::*;
 
     #[test]
     fn basic_terms() {

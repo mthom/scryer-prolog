@@ -12,6 +12,7 @@ use indexmap::IndexMap;
 use indexmap::IndexSet;
 
 use std::collections::VecDeque;
+use std::fmt::Debug;
 
 pub(crate) type ClauseArgData = IndexMap<usize, Vec<OptArgIndexKey>, FxBuildHasher>;
 
@@ -62,7 +63,7 @@ pub(crate) trait Indexer: SecondLevelIndexType {
         prelude: &mut VecDeque<IndexingLine>,
     ) -> HashTable<(IndexKey, IndexingCodePtr)>;
 
-    fn switch_on<IndexKey>(
+    fn switch_on<IndexKey: Clone + Debug>(
         indices: &mut HashTable<(IndexKey, SecondLevelTable<Self>)>,
         hash_fn: impl Fn(&IndexKey) -> u64,
         prelude: &mut VecDeque<IndexingLine>,
@@ -75,7 +76,7 @@ pub(crate) trait Indexer: SecondLevelIndexType {
             indices
                 .into_iter()
                 .next()
-                .map(|(_, v)| TermIndexingCodePtr::from(v))
+                .map(TermIndexingCodePtr::from)
                 .unwrap_or(TermIndexingCodePtr::Fail)
         }
     }
@@ -205,21 +206,13 @@ impl Indexer for DynamicIndexedChoiceInstruction {
         for (key, code) in indices.drain() {
             let hash = hash_fn(&key);
 
-            if code.offsets.len() > 1 {
-                index_locs.insert_unique(
-                    hash,
-                    (key, IndexingCodePtr::Internal(prelude.len() + 1)),
-                    |(key, _)| hash_fn(key),
-                );
+            index_locs.insert_unique(
+                hash,
+                (key, IndexingCodePtr::Internal(prelude.len() + 1)),
+                |(key, _)| hash_fn(key),
+            );
 
-                prelude.push_back(IndexingLine::DynamicIndexedChoice(code));
-            } else {
-                index_locs.insert_unique(
-                    hash,
-                    (key, IndexingCodePtr::DynamicExternal(code.offsets[0])),
-                    |(key, _)| hash_fn(key),
-                );
-            }
+            prelude.push_back(IndexingLine::DynamicIndexedChoice(code));
         }
 
         index_locs
@@ -229,18 +222,11 @@ impl Indexer for DynamicIndexedChoiceInstruction {
         lists: &mut SecondLevelTable<Self>,
         prelude: &mut VecDeque<IndexingLine>,
     ) -> Option<IndexingCodePtr> {
-        if lists.offsets.len() > 1 {
-            let lists = std::mem::replace(lists, SecondLevelTable::new());
-            let internal_offset = prelude.len() + 1; // compensate for leading at front
+        let lists = std::mem::replace(lists, SecondLevelTable::new());
+        let internal_offset = prelude.len() + 1; // compensate for leading at front
 
-            prelude.push_back(IndexingLine::DynamicIndexedChoice(lists));
-            Some(IndexingCodePtr::Internal(internal_offset))
-        } else {
-            lists
-                .offsets
-                .front()
-                .map(|i| IndexingCodePtr::DynamicExternal(*i))
-        }
+        prelude.push_back(IndexingLine::DynamicIndexedChoice(lists));
+        Some(IndexingCodePtr::Internal(internal_offset))
     }
 
     #[inline]

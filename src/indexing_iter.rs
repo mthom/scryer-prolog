@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::hash::Hash;
+use std::fmt::Debug;
 
 use fxhash::{FxBuildHasher, FxHasher};
 use hashbrown::hash_table::*;
@@ -366,10 +366,8 @@ pub(crate) enum IndexingLinePlace<'a> {
 
 enum MapPromotion {
     None,
-    UnnamedExternal,
-    DynamicUnnamedExternal,
-    MatchingExternal(usize),
-    MatchingDynamicExternal(Appended),
+    ExternalToInternal(usize),
+    DynamicFailToInternal, // go from Fail to Internal in a dynamic predicate.
     Internal(usize),
 }
 
@@ -377,8 +375,7 @@ impl From<IndexingCodePtr> for MapPromotion {
     #[inline]
     fn from(value: IndexingCodePtr) -> Self {
         match value {
-            IndexingCodePtr::External(_) => MapPromotion::UnnamedExternal,
-            IndexingCodePtr::DynamicExternal(_) => MapPromotion::DynamicUnnamedExternal,
+            IndexingCodePtr::External(o) => MapPromotion::ExternalToInternal(o),
             IndexingCodePtr::Internal(i) => MapPromotion::Internal(i),
         }
     }
@@ -386,7 +383,7 @@ impl From<IndexingCodePtr> for MapPromotion {
 
 enum MapDemotion {
     None,
-    External,
+    ExternalToFail,
     Internal(usize),
 }
 
@@ -399,52 +396,6 @@ impl<'code> IndexingLineIter<'code> {
             }],
             view,
             arg_num: 1,
-        }
-    }
-
-    // return Some if a new table (i.e. an Internal pointer) was created
-    // which must contain the argument of the former External/DynamicExternal pointer.
-    #[must_use]
-    fn promote_in_map<IndexKey>(
-        key: IndexKey,
-        hash_fn: impl Fn(&IndexKey) -> u64,
-        eq_fn: impl Fn(&IndexKey) -> bool,
-        new_clause_offset: usize,
-        is_dynamic: bool,
-        indices: &mut HashTable<(IndexKey, IndexingCodePtr)>,
-        indexing_code_len: usize,
-        append_or_prepend: AppendOrPrepend,
-    ) -> MapPromotion {
-        let hash = hash_fn(&key);
-
-        match indices.entry(hash, |(key, _)| eq_fn(key), |(key, _)| hash_fn(key)) {
-            hashbrown::hash_table::Entry::Vacant(entry) => {
-                let ptr = if is_dynamic {
-                    IndexingCodePtr::DynamicExternal(if append_or_prepend.is_append() {
-                        Appended::Z(new_clause_offset)
-                    } else {
-                        Appended::A(new_clause_offset)
-                    })
-                } else {
-                    IndexingCodePtr::External(new_clause_offset)
-                };
-                entry.insert((key, ptr));
-                MapPromotion::None
-            }
-            hashbrown::hash_table::Entry::Occupied(mut entry) => {
-                let val = entry.get_mut();
-                match val.1 {
-                    IndexingCodePtr::External(other_clause_offset) => {
-                        val.1 = IndexingCodePtr::Internal(indexing_code_len);
-                        MapPromotion::MatchingExternal(other_clause_offset)
-                    }
-                    IndexingCodePtr::DynamicExternal(other_clause_offset) => {
-                        val.1 = IndexingCodePtr::Internal(indexing_code_len);
-                        MapPromotion::MatchingDynamicExternal(other_clause_offset)
-                    }
-                    IndexingCodePtr::Internal(internal_loc) => MapPromotion::Internal(internal_loc),
-                }
-            }
         }
     }
 
@@ -469,7 +420,6 @@ impl<'code> IndexingLineIter<'code> {
                                     structures,
                                     lists,
                                 } => {
-                                    // self.stack.push(cursor.skip_by(*var_offset));
                                     self.arg_num = *arg_num;
 
                                     // self.keys.get(..) might fail because a
@@ -537,8 +487,51 @@ impl<'code> IndexingLineIter<'code> {
         }
     }
 
+    // return Some if a new table (i.e. an Internal pointer) was created
+    // which must contain the argument of the former External pointer.
     #[must_use]
-    fn demote_second_level_map_key<IndexKey: Eq + Hash>(
+    fn promote_in_map<IndexKey: Clone + Debug>(
+        key: IndexKey,
+        hash_fn: impl Fn(&IndexKey) -> u64,
+        eq_fn: impl Fn(&IndexKey, &IndexKey) -> bool,
+        new_clause_offset: usize,
+        is_dynamic: bool,
+        indices: &mut HashTable<(IndexKey, IndexingCodePtr)>,
+        indexing_code_len: usize,
+    ) -> MapPromotion {
+        let hash = hash_fn(&key);
+
+        match indices.entry(
+            hash,
+            |(other_key, _)| eq_fn(&key, other_key),
+            |(key, _)| hash_fn(key),
+        ) {
+            hashbrown::hash_table::Entry::Vacant(entry) => {
+                if is_dynamic {
+                    let ptr = IndexingCodePtr::Internal(indexing_code_len);
+                    entry.insert((key, ptr));
+                    MapPromotion::DynamicFailToInternal
+                } else {
+                    let ptr = IndexingCodePtr::External(new_clause_offset);
+                    entry.insert((key, ptr));
+                    MapPromotion::None
+                }
+            }
+            hashbrown::hash_table::Entry::Occupied(mut entry) => {
+                let val = entry.get_mut();
+                match val.1 {
+                    IndexingCodePtr::External(other_clause_offset) => {
+                        val.1 = IndexingCodePtr::Internal(indexing_code_len);
+                        MapPromotion::ExternalToInternal(other_clause_offset)
+                    }
+                    IndexingCodePtr::Internal(internal_loc) => MapPromotion::Internal(internal_loc),
+                }
+            }
+        }
+    }
+
+    #[must_use]
+    fn demote_at_key<IndexKey>(
         key: IndexKey,
         mut eq_fn: impl FnMut(&IndexKey) -> bool,
         hash_fn: impl Fn(&IndexKey) -> u64,
@@ -549,9 +542,9 @@ impl<'code> IndexingLineIter<'code> {
         match indices.entry(hash, |(key, _)| eq_fn(key), |(key, _)| hash_fn(key)) {
             hashbrown::hash_table::Entry::Vacant(_entry) => MapDemotion::None,
             hashbrown::hash_table::Entry::Occupied(entry) => match entry.get().1 {
-                IndexingCodePtr::External(_) | IndexingCodePtr::DynamicExternal(_) => {
+                IndexingCodePtr::External(_) => {
                     entry.remove();
-                    MapDemotion::External
+                    MapDemotion::ExternalToFail
                 }
                 IndexingCodePtr::Internal(internal_table_loc) => {
                     MapDemotion::Internal(internal_table_loc)
@@ -563,22 +556,12 @@ impl<'code> IndexingLineIter<'code> {
     fn implement_map_promotion(
         &mut self,
         map_promotion: MapPromotion,
-        cursor: TableLocation,
         append_or_prepend: AppendOrPrepend,
         clause_offset: usize,
     ) {
         match map_promotion {
             MapPromotion::None => {}
-            MapPromotion::DynamicUnnamedExternal | MapPromotion::UnnamedExternal => {
-                let arg_num =
-                    self.view.index[cursor.table_loc].tables_mut()[cursor.table_offset].arg_num();
-
-                // let the table be regenerated on-demand if the
-                // external key at arg_num isn't known.
-                self.view.index[cursor.table_loc].tables_mut()[cursor.table_offset] =
-                    IndexedChoiceInstructionTable::OnDemandTerm { arg_num };
-            }
-            MapPromotion::MatchingDynamicExternal(other_clause_offset) => {
+            MapPromotion::DynamicFailToInternal => {
                 // promote_in_map changed the map pointer to
                 // Internal(indexing_code_len).
                 self.view
@@ -586,17 +569,15 @@ impl<'code> IndexingLineIter<'code> {
                     .push(fresh_on_demand_subtable::<DynamicIndexedChoiceInstruction>(
                         self.arg_num + 1,
                         self.view.specs.clone(),
-                        if append_or_prepend.is_append() {
-                            [other_clause_offset, Appended::Z(clause_offset)]
+                        std::iter::once(if append_or_prepend.is_append() {
+                            Appended::Z(clause_offset)
                         } else {
-                            [Appended::A(clause_offset), other_clause_offset]
-                        }
-                        .iter()
-                        .cloned(),
+                            Appended::A(clause_offset)
+                        }),
                         self.view.arity,
                     ));
             }
-            MapPromotion::MatchingExternal(other_clause_offset) => {
+            MapPromotion::ExternalToInternal(other_clause_offset) => {
                 // promote_in_map changed the map pointer to Internal(indexing_code_len).
                 self.view
                     .index
@@ -667,51 +648,45 @@ fn fresh_on_demand_subtable<I: SecondLevelIndexType>(
     I::to_indexing_line(SecondLevelTable { tables, offsets })
 }
 
-enum TermIndexingCodePtrMutDowncast<'a, IndexKey> {
-    Ptr(IndexingCodePtr),
+enum TermIndexingCodePtrMutDowncast<'a, IndexKey: Clone + Debug> {
+    Ptr(IndexKey, IndexingCodePtr),
     Fail,
     Table(&'a mut HashTable<(IndexKey, IndexingCodePtr)>),
 }
 
 #[inline]
-fn downcast_term_indexing_code_ptr_mut<'a, IndexKey>(
+fn downcast_term_indexing_code_ptr_mut<'a, IndexKey: Copy + Debug>(
     term_ptr: &'a mut TermIndexingCodePtr<IndexKey>,
 ) -> TermIndexingCodePtrMutDowncast<'a, IndexKey> {
     match term_ptr {
-        &mut TermIndexingCodePtr::External(e) => {
-            TermIndexingCodePtrMutDowncast::Ptr(IndexingCodePtr::External(e))
-        }
-        &mut TermIndexingCodePtr::DynamicExternal(appended) => {
-            TermIndexingCodePtrMutDowncast::Ptr(IndexingCodePtr::DynamicExternal(appended))
+        &mut TermIndexingCodePtr::External(k, e) => {
+            TermIndexingCodePtrMutDowncast::Ptr(k, IndexingCodePtr::External(e))
         }
         TermIndexingCodePtr::Fail => TermIndexingCodePtrMutDowncast::Fail,
-        &mut TermIndexingCodePtr::Internal(i) => {
-            TermIndexingCodePtrMutDowncast::Ptr(IndexingCodePtr::Internal(i))
+        &mut TermIndexingCodePtr::Internal(k, i) => {
+            TermIndexingCodePtrMutDowncast::Ptr(k, IndexingCodePtr::Internal(i))
         }
         TermIndexingCodePtr::SwitchOnType(tbl) => TermIndexingCodePtrMutDowncast::Table(tbl),
     }
 }
 
-pub(crate) enum TermIndexingCodePtrDowncast<'a, IndexKey> {
-    Ptr(IndexingCodePtr),
+pub(crate) enum TermIndexingCodePtrDowncast<'a, IndexKey: Clone + Debug> {
+    Ptr(IndexKey, IndexingCodePtr),
     Fail,
     Table(&'a HashTable<(IndexKey, IndexingCodePtr)>),
 }
 
 #[inline]
-pub(crate) fn downcast_term_indexing_code_ptr<'a, IndexKey>(
+pub(crate) fn downcast_term_indexing_code_ptr<'a, IndexKey: Copy + Debug>(
     term_ptr: &'a TermIndexingCodePtr<IndexKey>,
 ) -> TermIndexingCodePtrDowncast<'a, IndexKey> {
     match term_ptr {
-        &TermIndexingCodePtr::External(e) => {
-            TermIndexingCodePtrDowncast::Ptr(IndexingCodePtr::External(e))
-        }
-        &TermIndexingCodePtr::DynamicExternal(appended) => {
-            TermIndexingCodePtrDowncast::Ptr(IndexingCodePtr::DynamicExternal(appended))
+        &TermIndexingCodePtr::External(k, e) => {
+            TermIndexingCodePtrDowncast::Ptr(k, IndexingCodePtr::External(e))
         }
         TermIndexingCodePtr::Fail => TermIndexingCodePtrDowncast::Fail,
-        &TermIndexingCodePtr::Internal(i) => {
-            TermIndexingCodePtrDowncast::Ptr(IndexingCodePtr::Internal(i))
+        &TermIndexingCodePtr::Internal(k, i) => {
+            TermIndexingCodePtrDowncast::Ptr(k, IndexingCodePtr::Internal(i))
         }
         TermIndexingCodePtr::SwitchOnType(tbl) => TermIndexingCodePtrDowncast::Table(tbl),
     }
@@ -719,13 +694,10 @@ pub(crate) fn downcast_term_indexing_code_ptr<'a, IndexKey>(
 
 impl IndexingCodePtr {
     #[inline]
-    fn promote(&mut self, indexing_code_len: usize) -> MapPromotion {
+    fn external_to_internal(&mut self, indexing_code_len: usize) -> MapPromotion {
         let old = *self;
 
-        if matches!(
-            self,
-            IndexingCodePtr::External(_) | IndexingCodePtr::DynamicExternal(_)
-        ) {
+        if matches!(self, IndexingCodePtr::External(_)) {
             // the *External assumptions rest on the iterator being
             // parked at the first element of clause_view.index
             // (Internal is always a relative offset).
@@ -736,27 +708,57 @@ impl IndexingCodePtr {
     }
 }
 
-impl<IndexKey> TermIndexingCodePtr<IndexKey> {
-    fn promote(
+impl<IndexKey: Copy + Debug> TermIndexingCodePtr<IndexKey> {
+    fn promote_at_key(
         &mut self,
         key: IndexKey,
         hash_fn: impl Fn(&IndexKey) -> u64,
-        eq_fn: impl Fn(&IndexKey) -> bool,
-        promote_to_external: impl Fn() -> IndexingCodePtr,
+        eq_fn: impl Fn(&IndexKey, &IndexKey) -> bool,
         clause_offset: usize,
         is_dynamic: bool,
-        append_or_prepend: AppendOrPrepend,
         indexing_code_len: usize,
     ) -> MapPromotion {
         match downcast_term_indexing_code_ptr_mut(self) {
-            TermIndexingCodePtrMutDowncast::Ptr(mut indexing_code_ptr) => {
-                let result = indexing_code_ptr.promote(indexing_code_len);
-                *self = TermIndexingCodePtr::from(indexing_code_ptr);
-                result
+            TermIndexingCodePtrMutDowncast::Ptr(other_key, mut indexing_code_ptr) => {
+                if eq_fn(&key, &other_key) {
+                    let result = indexing_code_ptr.external_to_internal(indexing_code_len);
+                    *self = TermIndexingCodePtr::from((key, indexing_code_ptr));
+                    result
+                } else {
+                    let mut indices = HashTable::new();
+                    let other_hash = hash_fn(&other_key);
+
+                    indices.insert_unique(other_hash, (other_key, indexing_code_ptr), |(k, _)| {
+                        hash_fn(k)
+                    });
+
+                    let new_hash = hash_fn(&key);
+                    let (result, ptr) = if is_dynamic {
+                        (
+                            MapPromotion::DynamicFailToInternal,
+                            IndexingCodePtr::Internal(indexing_code_len),
+                        )
+                    } else {
+                        (MapPromotion::None, IndexingCodePtr::External(clause_offset))
+                    };
+
+                    indices.insert_unique(new_hash, (key, ptr), |(k, _)| hash_fn(k));
+                    *self = TermIndexingCodePtr::SwitchOnType(Box::new(indices));
+
+                    result
+                }
+            }
+            TermIndexingCodePtrMutDowncast::Fail if is_dynamic => {
+                // newly introduced keys in dynamic tables are
+                // immediately internalized to subtables to avoid on
+                // demand regeneration at runtime, i.e. they never
+                // contain IndexingCodePtr::External variants.
+                *self = TermIndexingCodePtr::Internal(key, indexing_code_len);
+                MapPromotion::DynamicFailToInternal
             }
             TermIndexingCodePtrMutDowncast::Fail => {
-                let indexing_code_ptr = promote_to_external();
-                *self = TermIndexingCodePtr::from(indexing_code_ptr);
+                let indexing_code_ptr = IndexingCodePtr::External(clause_offset);
+                *self = TermIndexingCodePtr::from((key, indexing_code_ptr));
                 MapPromotion::None
             }
             TermIndexingCodePtrMutDowncast::Table(tbl) => IndexingLineIter::promote_in_map(
@@ -767,7 +769,6 @@ impl<IndexKey> TermIndexingCodePtr<IndexKey> {
                 is_dynamic,
                 tbl,
                 indexing_code_len,
-                append_or_prepend,
             ),
         }
     }
@@ -786,18 +787,6 @@ pub(crate) fn add_clause_index<'code>(
         keys.get(arg_num - 1)
             .copied()
             .unwrap_or(OptArgIndexKey::None)
-    };
-
-    let promote_to_external = || {
-        if is_dynamic {
-            IndexingCodePtr::DynamicExternal(if append_or_prepend.is_append() {
-                Appended::Z(clause_offset)
-            } else {
-                Appended::A(clause_offset)
-            })
-        } else {
-            IndexingCodePtr::External(clause_offset)
-        }
     };
 
     while let Some(place) = iter.next(key_fn) {
@@ -822,23 +811,16 @@ pub(crate) fn add_clause_index<'code>(
                 cursor
             }
             IndexingLinePlace::SwitchOnConstantPtr(cursor, indexing_code_len, cell, term_ptr) => {
-                let map_promotion = term_ptr.promote(
+                let map_promotion = term_ptr.promote_at_key(
                     cell,
                     |cell| cell.syntactic_hash(f64_tbl, FxHasher::default()),
-                    |other_cell| cell.syntactic_eq(f64_tbl, *other_cell),
-                    promote_to_external,
+                    |cell, other_cell| cell.syntactic_eq(f64_tbl, *other_cell),
                     clause_offset,
                     is_dynamic,
-                    append_or_prepend,
                     indexing_code_len,
                 );
 
-                iter.implement_map_promotion(
-                    map_promotion,
-                    cursor,
-                    append_or_prepend,
-                    clause_offset,
-                );
+                iter.implement_map_promotion(map_promotion, append_or_prepend, clause_offset);
                 cursor
             }
             IndexingLinePlace::SwitchOnStructurePtr(
@@ -848,44 +830,38 @@ pub(crate) fn add_clause_index<'code>(
                 arity,
                 term_ptr,
             ) => {
-                let map_promotion = term_ptr.promote(
+                let map_promotion = term_ptr.promote_at_key(
                     (name, arity),
                     |(name, arity)| {
                         let cell = atom_as_cell!(name, *arity);
                         cell.syntactic_hash(f64_tbl, FxHasher::default())
                     },
-                    |other_key| &(name, arity) == other_key,
-                    promote_to_external,
+                    |key, other_key| key == other_key,
                     clause_offset,
                     is_dynamic,
-                    append_or_prepend,
                     indexing_code_len,
                 );
 
-                iter.implement_map_promotion(
-                    map_promotion,
-                    cursor,
-                    append_or_prepend,
-                    clause_offset,
-                );
+                iter.implement_map_promotion(map_promotion, append_or_prepend, clause_offset);
                 cursor
             }
             IndexingLinePlace::SwitchOnListPtr(cursor, indexing_code_len, indexing_code_ptr) => {
                 let map_promotion = match indexing_code_ptr {
-                    Some(indexing_code_ptr) => indexing_code_ptr.promote(indexing_code_len),
+                    Some(indexing_code_ptr) => {
+                        indexing_code_ptr.external_to_internal(indexing_code_len)
+                    }
+                    None if is_dynamic => {
+                        *indexing_code_ptr = Some(IndexingCodePtr::Internal(indexing_code_len));
+                        MapPromotion::DynamicFailToInternal
+                    }
                     None => {
-                        let succ_ptr = promote_to_external();
+                        let succ_ptr = IndexingCodePtr::External(clause_offset);
                         *indexing_code_ptr = Some(succ_ptr);
                         MapPromotion::from(succ_ptr)
                     }
                 };
 
-                iter.implement_map_promotion(
-                    map_promotion,
-                    cursor,
-                    append_or_prepend,
-                    clause_offset,
-                );
+                iter.implement_map_promotion(map_promotion, append_or_prepend, clause_offset);
                 cursor
             }
             IndexingLinePlace::OnDemandInstr(cursor, _) => cursor,
@@ -924,18 +900,18 @@ pub(crate) fn remove_clause_index<'code>(
             IndexingLinePlace::SwitchOnConstantPtr(cursor, _, cell, term_ptr) => {
                 match term_ptr {
                     TermIndexingCodePtr::Fail => {}
-                    TermIndexingCodePtr::External(_) | TermIndexingCodePtr::DynamicExternal(_) => {
+                    TermIndexingCodePtr::External(..) => {
                         *term_ptr = TermIndexingCodePtr::Fail;
                     }
-                    &mut TermIndexingCodePtr::Internal(internal_table_loc) => {
+                    &mut TermIndexingCodePtr::Internal(_k, internal_table_loc) => {
                         iter.remove_from_internal_map(internal_table_loc, clause_offset);
                     }
-                    TermIndexingCodePtr::SwitchOnType(tbl) => {
-                        let map_demotion = IndexingLineIter::demote_second_level_map_key(
+                    TermIndexingCodePtr::SwitchOnType(indices) => {
+                        let map_demotion = IndexingLineIter::demote_at_key(
                             cell,
                             |other_cell| cell.syntactic_eq(f64_tbl, *other_cell),
                             |cell| cell.syntactic_hash(f64_tbl, FxHasher::default()),
-                            tbl,
+                            indices,
                         );
 
                         if let MapDemotion::Internal(internal_table_loc) = map_demotion {
@@ -949,14 +925,14 @@ pub(crate) fn remove_clause_index<'code>(
             IndexingLinePlace::SwitchOnStructurePtr(cursor, _, name, arity, term_ptr) => {
                 match term_ptr {
                     TermIndexingCodePtr::Fail => {}
-                    TermIndexingCodePtr::External(_) | TermIndexingCodePtr::DynamicExternal(_) => {
+                    TermIndexingCodePtr::External(..) => {
                         *term_ptr = TermIndexingCodePtr::Fail;
                     }
-                    &mut TermIndexingCodePtr::Internal(internal_table_loc) => {
+                    &mut TermIndexingCodePtr::Internal(_k, internal_table_loc) => {
                         iter.remove_from_internal_map(internal_table_loc, clause_offset);
                     }
                     TermIndexingCodePtr::SwitchOnType(tbl) => {
-                        let map_demotion = IndexingLineIter::demote_second_level_map_key(
+                        let map_demotion = IndexingLineIter::demote_at_key(
                             (name, arity),
                             |other_key| other_key == &(name, arity),
                             |(name, arity)| {
@@ -976,7 +952,7 @@ pub(crate) fn remove_clause_index<'code>(
             }
             IndexingLinePlace::SwitchOnListPtr(cursor, _, indexing_code_ptr) => {
                 match *indexing_code_ptr {
-                    Some(IndexingCodePtr::External(_) | IndexingCodePtr::DynamicExternal(_)) => {
+                    Some(IndexingCodePtr::External(_)) => {
                         *indexing_code_ptr = None;
                     }
                     Some(IndexingCodePtr::Internal(internal_table_loc)) => {
@@ -1033,10 +1009,10 @@ pub(crate) fn abolish_clause(
             IndexingLinePlace::SwitchOnNonePtr(cursor) => cursor,
             IndexingLinePlace::SwitchOnConstantPtr(cursor, _, cell, term_ptr) => {
                 match term_ptr {
-                    TermIndexingCodePtr::SwitchOnType(tbl) => {
+                    TermIndexingCodePtr::SwitchOnType(indices) => {
                         let hash = cell.syntactic_hash(f64_tbl, FxHasher::default());
 
-                        match tbl.entry(
+                        match indices.entry(
                             hash,
                             |(key, _)| cell.syntactic_eq(f64_tbl, *key),
                             |(cell, _)| cell.syntactic_hash(f64_tbl, FxHasher::default()),

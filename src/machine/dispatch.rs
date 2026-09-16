@@ -1285,22 +1285,19 @@ impl Machine {
         };
 
         loop {
-            {
-                let offset = indexed_choice_instrs
-                    .offsets
-                    .get(ii as usize)
-                    .map(Appended::offset)?;
-                match &self.code[p + offset - 1] {
-                    &Instruction::DynamicInternalElse(birth, death, next_or_fail) => {
-                        if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death
-                        {
-                            return Some((offset, oi, ii, next_or_fail.is_next()));
-                        } else {
-                            ii += 1;
-                        }
+            let offset = indexed_choice_instrs
+                .offsets
+                .get(ii as usize)
+                .map(Appended::offset)?;
+            match &self.code[p + offset - 1] {
+                &Instruction::DynamicInternalElse(birth, death, next_or_fail) => {
+                    if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death {
+                        return Some((offset, oi, ii, next_or_fail.is_next()));
+                    } else {
+                        ii += 1;
                     }
-                    _ => unreachable!(),
                 }
+                _ => unreachable!(),
             }
         }
     }
@@ -3446,22 +3443,6 @@ impl Machine {
                                     SwitchOnTermResult::Fail => {
                                         self.machine_st.fail = true;
                                         self.machine_st.backtrack();
-
-                                        continue;
-                                    }
-                                    SwitchOnTermResult::DynamicExternal(o) => {
-                                        // either points directly to a
-                                        // DynamicInternalElse, or just ahead of
-                                        // one. Or neither!
-                                        let p = self.machine_st.p;
-                                        let o = o.offset();
-
-                                        if !dynamic_external_of_clause_is_valid(self, p + o) {
-                                            self.machine_st.fail = true;
-                                            self.machine_st.backtrack();
-                                        } else {
-                                            self.machine_st.p += o;
-                                        }
 
                                         continue;
                                     }

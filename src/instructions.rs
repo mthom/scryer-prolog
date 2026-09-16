@@ -324,23 +324,22 @@ impl ExternalIndexingCodePtr {
 }
 
 #[derive(Debug, Clone)]
-pub enum TermIndexingCodePtr<KeyType> {
-    DynamicExternal(Appended), // an External index of a dynamic predicate, potentially invalidated by retraction.
-    External(usize),           // the index points past the indexing instruction prelude.
+pub enum TermIndexingCodePtr<KeyType: Debug + Clone> {
+    External(KeyType, usize), // the index points past the indexing instruction prelude.
     Fail,
-    Internal(usize),
+    Internal(KeyType, usize),
     SwitchOnType(Box<HashTable<(KeyType, IndexingCodePtr)>>),
 }
 
 impl TermIndexingCodePtr<HeapCellValue> {
     fn to_functor(&self) -> MachineStub {
         match self {
-            &TermIndexingCodePtr::External(o) => functor!(atom!("external"), [fixnum(o)]),
-            TermIndexingCodePtr::DynamicExternal(appended) => {
-                let o = appended.offset();
-                functor!(atom!("external"), [fixnum(o)])
+            &TermIndexingCodePtr::External(key, o) => {
+                functor!(atom!("external"), [cell(key), fixnum(o)])
             }
-            &TermIndexingCodePtr::Internal(o) => functor!(atom!("internal"), [fixnum(o)]),
+            &TermIndexingCodePtr::Internal(key, o) => {
+                functor!(atom!("internal"), [cell(key), fixnum(o)])
+            }
             TermIndexingCodePtr::Fail => functor!(atom!("fail")),
             TermIndexingCodePtr::SwitchOnType(constants) => variadic_functor(
                 atom!("switch_on_constants"),
@@ -353,14 +352,11 @@ impl TermIndexingCodePtr<HeapCellValue> {
     }
 }
 
-impl<IndexKey> From<IndexingCodePtr> for TermIndexingCodePtr<IndexKey> {
-    fn from(value: IndexingCodePtr) -> Self {
+impl<IndexKey: Debug + Clone> From<(IndexKey, IndexingCodePtr)> for TermIndexingCodePtr<IndexKey> {
+    fn from((key, value): (IndexKey, IndexingCodePtr)) -> Self {
         match value {
-            IndexingCodePtr::External(o) => TermIndexingCodePtr::External(o),
-            IndexingCodePtr::DynamicExternal(appended) => {
-                TermIndexingCodePtr::DynamicExternal(appended)
-            }
-            IndexingCodePtr::Internal(o) => TermIndexingCodePtr::Internal(o),
+            IndexingCodePtr::External(o) => TermIndexingCodePtr::External(key, o),
+            IndexingCodePtr::Internal(o) => TermIndexingCodePtr::Internal(key, o),
         }
     }
 }
@@ -368,11 +364,13 @@ impl<IndexKey> From<IndexingCodePtr> for TermIndexingCodePtr<IndexKey> {
 impl TermIndexingCodePtr<(Atom, usize)> {
     fn to_functor(&self) -> MachineStub {
         match self {
-            &TermIndexingCodePtr::External(o) => functor!(atom!("external"), [fixnum(o)]),
-            &TermIndexingCodePtr::Internal(o) => functor!(atom!("internal"), [fixnum(o)]),
-            TermIndexingCodePtr::DynamicExternal(appended) => {
-                let o = appended.offset();
-                functor!(atom!("external"), [fixnum(o)])
+            &TermIndexingCodePtr::External((name, arity), o) => {
+                let pi_functor = functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)]);
+                functor!(atom!("external"), [functor(pi_functor), fixnum(o)])
+            }
+            &TermIndexingCodePtr::Internal((name, arity), o) => {
+                let pi_functor = functor!(atom!("/"), [atom_as_cell(name), fixnum(arity)]);
+                functor!(atom!("internal"), [functor(pi_functor), fixnum(o)])
             }
             TermIndexingCodePtr::Fail => functor!(atom!("fail")),
             TermIndexingCodePtr::SwitchOnType(structures) => variadic_functor(
@@ -394,19 +392,14 @@ impl TermIndexingCodePtr<(Atom, usize)> {
 
 #[derive(Debug, Clone, Copy)]
 pub enum IndexingCodePtr {
-    External(usize),           // the index points past the indexing instruction prelude.
-    DynamicExternal(Appended), // an External index of a dynamic predicate, potentially invalidated by retraction.
-    Internal(usize),           // index pointing into the IndexingCode vector.
+    External(usize), // the index points past the indexing instruction prelude (an optimization for static predicates only!)
+    Internal(usize), // index pointing into the IndexingCode vector.
 }
 
 impl IndexingCodePtr {
     #[allow(dead_code)]
     pub fn to_functor(self) -> MachineStub {
         match self {
-            IndexingCodePtr::DynamicExternal(o) => {
-                let o = o.offset();
-                functor!(atom!("dynamic_external"), [fixnum(o)])
-            }
             IndexingCodePtr::External(o) => functor!(atom!("external"), [fixnum(o)]),
             IndexingCodePtr::Internal(o) => functor!(atom!("internal"), [fixnum(o)]),
         }
