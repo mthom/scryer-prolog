@@ -2174,6 +2174,11 @@ impl Machine {
                 );
             };
 
+            loader
+                .wam_prelude
+                .indices
+                .remove_predicate_skeleton(&compilation_target, &key);
+
             let offset = loader.get_or_insert_code_index(key, compilation_target);
 
             loader
