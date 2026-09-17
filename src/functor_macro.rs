@@ -2,13 +2,13 @@
 //! heap.
 
 use crate::atom_table::*;
-use crate::instructions::IndexingCodePtr;
+use crate::instructions::{IndexingCodePtr, IndexingCodePtrTag};
 use crate::machine::heap::Heap;
 use crate::parser::ast::Fixnum;
 use crate::types::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum FunctorElement {
+pub enum FunctorElement {
     AbsoluteCell(HeapCellValue),
     Cell(HeapCellValue),
     InnerFunctor(u64, Vec<FunctorElement>),
@@ -221,9 +221,11 @@ macro_rules! build_functor {
 }
 
 pub(crate) fn indexing_code_ptr(code_ptr: IndexingCodePtr) -> (Vec<FunctorElement>, u64) {
-    match code_ptr {
-        IndexingCodePtr::External(o) => (functor!(atom!("external"), [fixnum(o)]), 2),
-        IndexingCodePtr::Internal(o) => (functor!(atom!("internal"), [fixnum(o)]), 2),
+    let o = code_ptr.offset();
+
+    match code_ptr.tag() {
+        IndexingCodePtrTag::External => (functor!(atom!("external"), [fixnum(o)]), 2),
+        IndexingCodePtrTag::Internal => (functor!(atom!("internal"), [fixnum(o)]), 2),
     }
 }
 
@@ -267,9 +269,9 @@ pub(crate) fn variadic_functor(
 #[allow(unused_parens)]
 mod tests {
     use super::*;
+    use FunctorElement::*;
     use indexmap::indexmap;
     use std::string::String;
-    use FunctorElement::*;
 
     #[test]
     fn basic_terms() {
@@ -602,7 +604,7 @@ mod tests {
 
     #[test]
     fn functors_with_indexing_code_ptr() {
-        let code_ptr = IndexingCodePtr::Internal(0);
+        let code_ptr = IndexingCodePtr::internal(0);
         let functor = functor!(
             atom!("first"),
             [
@@ -728,8 +730,8 @@ mod tests {
         assert_eq!(heap[20], empty_list_as_cell!());
 
         let constants = indexmap![
-            atom_as_cell!(atom!("a")) => IndexingCodePtr::External(2),
-            atom_as_cell!(atom!("d")) => IndexingCodePtr::External(7),
+            atom_as_cell!(atom!("a")) => IndexingCodePtr::external(2),
+            atom_as_cell!(atom!("d")) => IndexingCodePtr::external(7),
         ];
 
         let functor = variadic_functor(

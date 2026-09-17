@@ -136,7 +136,7 @@ impl Indexer for StaticIndexedChoiceInstruction {
             if code.offsets.len() > 1 {
                 index_locs.insert_unique(
                     hash,
-                    (key, IndexingCodePtr::Internal(prelude.len() + 1)),
+                    (key, IndexingCodePtr::internal(prelude.len() + 1)),
                     |(key, _)| hash_fn(key),
                 );
 
@@ -147,7 +147,7 @@ impl Indexer for StaticIndexedChoiceInstruction {
             } else {
                 index_locs.insert_unique(
                     hash,
-                    (key, IndexingCodePtr::External(code.offsets[0].offset())),
+                    (key, IndexingCodePtr::external(code.offsets[0].offset())),
                     |(key, _)| hash_fn(key),
                 );
             }
@@ -169,12 +169,12 @@ impl Indexer for StaticIndexedChoiceInstruction {
             }
 
             prelude.push_back(IndexingLine::StaticIndexedChoice(lists));
-            Some(IndexingCodePtr::Internal(internal_offset))
+            Some(IndexingCodePtr::internal(internal_offset))
         } else {
             lists
                 .offsets
                 .front()
-                .map(|i| IndexingCodePtr::External(i.offset()))
+                .map(|i| IndexingCodePtr::external(i.offset()))
         }
     }
 
@@ -208,7 +208,7 @@ impl Indexer for DynamicIndexedChoiceInstruction {
 
             index_locs.insert_unique(
                 hash,
-                (key, IndexingCodePtr::Internal(prelude.len() + 1)),
+                (key, IndexingCodePtr::internal(prelude.len() + 1)),
                 |(key, _)| hash_fn(key),
             );
 
@@ -226,7 +226,7 @@ impl Indexer for DynamicIndexedChoiceInstruction {
         let internal_offset = prelude.len() + 1; // compensate for leading at front
 
         prelude.push_back(IndexingLine::DynamicIndexedChoice(lists));
-        Some(IndexingCodePtr::Internal(internal_offset))
+        Some(IndexingCodePtr::internal(internal_offset))
     }
 
     #[inline]

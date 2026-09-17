@@ -106,8 +106,8 @@ fn indices_of_arg<'a, I: PropagatingIndexer>(
 
 #[inline]
 fn incr_internal_ptr(ptr: &mut IndexingCodePtr, internal_offset: usize) {
-    if let IndexingCodePtr::Internal(i) = ptr {
-        *i += internal_offset;
+    if let IndexingCodePtrTag::Internal = ptr.tag() {
+        ptr.set_offset(ptr.offset() + internal_offset as u64);
     }
 }
 
@@ -146,9 +146,11 @@ fn switch_on_indexing_code_ptr(
     cursor: TableLocation,
     indexing_code_ptr: IndexingCodePtr,
 ) -> SwitchOnTermPtrResult {
-    match indexing_code_ptr {
-        IndexingCodePtr::External(o) => SwitchOnTermPtrResult::End(SwitchOnTermResult::External(o)),
-        IndexingCodePtr::Internal(o) => SwitchOnTermPtrResult::Continue(TableLocation {
+    let o = indexing_code_ptr.offset() as usize;
+
+    match indexing_code_ptr.tag() {
+        IndexingCodePtrTag::External => SwitchOnTermPtrResult::End(SwitchOnTermResult::External(o)),
+        IndexingCodePtrTag::Internal => SwitchOnTermPtrResult::Continue(TableLocation {
             table_loc: cursor.table_loc + o,
             table_offset: 0,
         }),
@@ -178,11 +180,13 @@ fn switch_on_term_ptr<IndexKey: Copy + Debug>(
                 }
             };
 
-            match indexing_code_ptr {
-                IndexingCodePtr::External(o) => {
+            let o = indexing_code_ptr.offset() as usize;
+
+            match indexing_code_ptr.tag() {
+                IndexingCodePtrTag::External => {
                     SwitchOnTermPtrResult::End(SwitchOnTermResult::External(o))
                 }
-                IndexingCodePtr::Internal(o) => SwitchOnTermPtrResult::Continue(TableLocation {
+                IndexingCodePtrTag::Internal => SwitchOnTermPtrResult::Continue(TableLocation {
                     table_loc: cursor.table_loc + o,
                     table_offset: 0,
                 }),

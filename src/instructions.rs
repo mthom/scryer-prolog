@@ -12,6 +12,8 @@ use crate::types::*;
 use fxhash::FxBuildHasher;
 use hashbrown::hash_table::*;
 use indexmap::IndexSet;
+use modular_bitfield::specifiers::B63;
+use modular_bitfield::{Specifier, bitfield};
 
 use std::collections::VecDeque;
 use std::fmt::Debug;
@@ -354,9 +356,11 @@ impl TermIndexingCodePtr<HeapCellValue> {
 
 impl<IndexKey: Debug + Clone> From<(IndexKey, IndexingCodePtr)> for TermIndexingCodePtr<IndexKey> {
     fn from((key, value): (IndexKey, IndexingCodePtr)) -> Self {
-        match value {
-            IndexingCodePtr::External(o) => TermIndexingCodePtr::External(key, o),
-            IndexingCodePtr::Internal(o) => TermIndexingCodePtr::Internal(key, o),
+        let o = value.offset() as usize;
+
+        match value.tag() {
+            IndexingCodePtrTag::External => TermIndexingCodePtr::External(key, o),
+            IndexingCodePtrTag::Internal => TermIndexingCodePtr::Internal(key, o),
         }
     }
 }
@@ -390,18 +394,40 @@ impl TermIndexingCodePtr<(Atom, usize)> {
     }
 }
 
+#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
+#[bits = 1]
+pub enum IndexingCodePtrTag {
+    External,
+    Internal,
+}
+
+#[repr(u64)]
+#[bitfield]
 #[derive(Debug, Clone, Copy)]
-pub enum IndexingCodePtr {
-    External(usize), // the index points past the indexing instruction prelude (an optimization for static predicates only!)
-    Internal(usize), // index pointing into the IndexingCode vector.
+pub struct IndexingCodePtr {
+    pub tag: IndexingCodePtrTag,
+    pub offset: B63,
 }
 
 impl IndexingCodePtr {
-    #[allow(dead_code)]
+    pub fn external(o: usize) -> Self {
+        IndexingCodePtr::new()
+            .with_tag(IndexingCodePtrTag::External)
+            .with_offset(o as u64)
+    }
+
+    pub fn internal(o: usize) -> Self {
+        IndexingCodePtr::new()
+            .with_tag(IndexingCodePtrTag::Internal)
+            .with_offset(o as u64)
+    }
+
     pub fn to_functor(self) -> MachineStub {
-        match self {
-            IndexingCodePtr::External(o) => functor!(atom!("external"), [fixnum(o)]),
-            IndexingCodePtr::Internal(o) => functor!(atom!("internal"), [fixnum(o)]),
+        let o = self.offset();
+
+        match self.tag() {
+            IndexingCodePtrTag::External => functor!(atom!("external"), [fixnum(o)]),
+            IndexingCodePtrTag::Internal => functor!(atom!("internal"), [fixnum(o)]),
         }
     }
 }
