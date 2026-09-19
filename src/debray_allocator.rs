@@ -139,6 +139,7 @@ pub(crate) struct DebrayAllocator {
     perm_lb: usize,
     arity: usize, // 0 if not at head.
     shallow_temp_mappings: IndexMap<usize, usize, FxBuildHasher>,
+    shallow_var_mappings: IndexMap<usize, usize, FxBuildHasher>,
     in_use: BitSet<usize>, // deep and non-var allocations
     temp_free_list: Vec<usize>,
     perm_free_list: VecDeque<(usize, usize)>, // chunk_num, var_num
@@ -365,6 +366,7 @@ impl DebrayAllocator {
 
                 self.shallow_temp_mappings.swap_remove(&k);
                 self.shallow_temp_mappings.insert(r.reg_num(), var_num);
+                self.shallow_var_mappings.insert(r.reg_num(), var_num);
 
                 self.var_data.records[var_num]
                     .allocation
@@ -425,6 +427,12 @@ impl DebrayAllocator {
     }
 
     fn in_place(&self, var_num: usize, term_loc: GenContext, r: RegType, k: usize) -> bool {
+        if !(r.is_perm() && self.in_tail_position)
+            && self.shallow_var_mappings.get(&k) == Some(&var_num)
+        {
+            return true;
+        }
+
         match term_loc {
             GenContext::Head if !r.is_perm() => r.reg_num() == k,
             _ => match &self.var_data.records[var_num].allocation {
@@ -644,6 +652,7 @@ impl Allocator for DebrayAllocator {
             temp_lb: 1,
             perm_lb: 1,
             shallow_temp_mappings: IndexMap::with_hasher(FxBuildHasher::default()),
+            shallow_var_mappings: IndexMap::with_hasher(FxBuildHasher::default()),
             in_use: BitSet::default(),
             temp_free_list: vec![],
             perm_free_list: VecDeque::new(),
@@ -669,6 +678,7 @@ impl Allocator for DebrayAllocator {
                 }
 
                 self.arg_c += 1;
+                self.shallow_var_mappings.swap_remove(&k);
 
                 code.push_back(Target::argument_to_variable(r, k));
             }
@@ -695,6 +705,7 @@ impl Allocator for DebrayAllocator {
                 }
 
                 self.arg_c += 1;
+                self.shallow_var_mappings.swap_remove(&k);
                 RegType::Temp(k)
             }
             _ if r.reg_num() == 0 => RegType::Temp(self.alloc_reg_to_non_var()),
@@ -776,6 +787,8 @@ impl Allocator for DebrayAllocator {
                     }
                 }
 
+                self.shallow_var_mappings.insert(k, var_num);
+
                 self.arg_c += 1;
             }
             Level::Deep if is_new_var => {
@@ -798,6 +811,7 @@ impl Allocator for DebrayAllocator {
 
         if !r.is_perm() {
             self.shallow_temp_mappings.insert(o, var_num);
+            self.shallow_var_mappings.insert(o, var_num);
         } else if r.is_perm() && is_new_var {
             self.branch_stack.add_branch_occurrence(var_num);
         }
@@ -840,6 +854,7 @@ impl Allocator for DebrayAllocator {
     fn reset(&mut self) {
         self.perm_lb = 1;
         self.shallow_temp_mappings.clear();
+        self.shallow_var_mappings.clear();
         self.in_use.clear();
         self.temp_free_list.clear();
     }
@@ -847,6 +862,7 @@ impl Allocator for DebrayAllocator {
     fn reset_contents(&mut self) {
         self.in_use.clear();
         self.shallow_temp_mappings.clear();
+        self.shallow_var_mappings.clear();
         self.temp_free_list.clear();
     }
 
@@ -866,6 +882,7 @@ impl Allocator for DebrayAllocator {
                 if !r.is_perm() && r.reg_num() == 0 {
                     self.in_use.insert(idx + 1);
                     self.shallow_temp_mappings.insert(idx + 1, var_num);
+                    self.shallow_var_mappings.insert(idx + 1, var_num);
                     self.var_data.records[var_num]
                         .allocation
                         .set_register(idx + 1);

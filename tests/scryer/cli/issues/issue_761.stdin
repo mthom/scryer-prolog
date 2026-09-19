@@ -1,0 +1,6 @@
+use_module(library(diag)).
+use_module(library(format)).
+use_module(library(lists)).
+wam_instructions(p/1, Is),
+maplist(portray_clause, Is).
+halt.
