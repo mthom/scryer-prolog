@@ -203,6 +203,15 @@ impl ReadlineStream {
             match self.rl.readline(get_prompt()) {
                 Ok(text) => Ok(text),
                 Err(ReadlineError::Eof) => Err(Error::from(ErrorKind::UnexpectedEof)),
+                Err(ReadlineError::Interrupted) => {
+                    // While rustyline holds the terminal in raw mode, Ctrl-C is
+                    // delivered as ReadlineError::Interrupted rather than as a
+                    // SIGINT, so the ctrlc handler never sets INTERRUPT. Set it
+                    // here so read_term raises the interrupt exception instead of
+                    // mis-reading the error as end_of_file.
+                    crate::machine::INTERRUPT.store(true, std::sync::atomic::Ordering::Relaxed);
+                    Err(Error::from(ErrorKind::Interrupted))
+                }
                 Err(e) => Err(Error::new(ErrorKind::InvalidInput, e)),
             }
         };
