@@ -6,6 +6,7 @@ use crate::machine::disjuncts::VarData;
 use crate::machine::loader::PredicateQueue;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
+use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
 use crate::parser::parser::CompositeOpDesc;
@@ -15,6 +16,7 @@ use dashu::base::Signed;
 use fxhash::FxBuildHasher;
 
 use indexmap::{IndexMap, IndexSet};
+use num_order::NumOrd;
 use ordered_float::OrderedFloat;
 
 use std::cell::Cell;
@@ -23,7 +25,8 @@ use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::ops::{AddAssign, Deref, DerefMut};
+use std::num::NonZero;
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -438,17 +441,17 @@ pub enum PredicateClause {
 }
 
 impl PredicateClause {
-    pub(crate) fn args(&self) -> Option<&[Term]> {
+    pub(crate) fn args(&self) -> &[Term] {
         match self {
             PredicateClause::Fact(term, ..) => match &term.head {
-                Term::Clause(_, _, args) => Some(args),
-                _ => None,
+                Term::Clause(_, _, args) => args,
+                _ => &[],
             },
             PredicateClause::Rule(rule, ..) => {
                 if rule.head.1.is_empty() {
-                    None
+                    &[]
                 } else {
-                    Some(&rule.head.1)
+                    &rule.head.1
                 }
             }
         }
@@ -459,7 +462,7 @@ impl PredicateClause {
 pub struct ClauseSpan {
     pub left: usize,
     pub right: usize,
-    pub instantiated_arg_index: usize,
+    pub instantiated_arg_index: Option<NonZero<usize>>,
 }
 
 #[derive(Debug, Clone)]
@@ -490,9 +493,26 @@ pub enum MetaSpec {
     RequiresExpansionWithArgument(usize),
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub enum IndexingSpec {
+    #[default]
+    InstOnly, // +
+    NoIndexing, // -
+}
+
+impl IndexingSpec {
+    pub fn as_atom(self) -> Atom {
+        match self {
+            IndexingSpec::InstOnly => atom!("+"),
+            IndexingSpec::NoIndexing => atom!("-"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Declaration {
     Dynamic(Atom, usize),
+    Indexing(Atom, Vec<IndexingSpec>),
     MetaPredicate(Atom, Atom, Vec<MetaSpec>), // module name, name, meta-specs
     Module(ModuleDecl),
     NonCountedBacktracking(Atom, usize), // name, arity
@@ -673,6 +693,7 @@ pub struct Module {
     pub(crate) extensible_predicates: ExtensiblePredicates,
     pub(crate) local_extensible_predicates: LocalExtensiblePredicates,
     pub(crate) listing_src: ListingSource,
+    pub(super) indexing_specs: IndexingSpecDir,
 }
 
 // Module's and related types are defined in forms.
@@ -688,6 +709,7 @@ impl Module {
                 FxBuildHasher::default(),
             ),
             listing_src,
+            indexing_specs: IndexingSpecDir::with_hasher(FxBuildHasher::default()),
         }
     }
 
@@ -702,6 +724,7 @@ impl Module {
                 FxBuildHasher::default(),
             ),
             listing_src: ListingSource::DynamicallyGenerated,
+            indexing_specs: IndexingSpecDir::with_hasher(FxBuildHasher::default()),
         }
     }
 }
@@ -904,86 +927,25 @@ impl Number {
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum OptArgIndexKey {
-    Literal(usize, usize, Literal, Option<Literal>), // index, IndexingCode location, opt arg, alternatives
-    List(usize, usize),                              // index, IndexingCode location
     None,
-    Structure(usize, usize, Atom, usize), // index, IndexingCode location, name, arity
+    Literal(HeapCellValue), // opt arg, alternative
+    List,
+    Structure(Atom, usize), // name, arity
 }
 
-impl OptArgIndexKey {
-    #[inline]
-    pub(crate) fn take(&mut self) -> OptArgIndexKey {
-        std::mem::replace(self, OptArgIndexKey::None)
-    }
-
-    #[inline]
-    pub(crate) fn arg_num(&self) -> usize {
-        match &self {
-            OptArgIndexKey::Literal(arg_num, ..)
-            | OptArgIndexKey::Structure(arg_num, ..)
-            | OptArgIndexKey::List(arg_num, _) => {
-                // these are always at least 1.
-                *arg_num
+impl From<&'_ Term> for OptArgIndexKey {
+    fn from(term: &'_ Term) -> OptArgIndexKey {
+        match term {
+            &Term::Clause(_, atom!("."), ref terms) if terms.len() == 2 => OptArgIndexKey::List,
+            &Term::Cons(..) | &Term::PartialString(..) | &Term::CompleteString(..) => {
+                OptArgIndexKey::List
             }
-            OptArgIndexKey::None => 0,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn is_some(&self) -> bool {
-        self.switch_on_term_loc().is_some()
-    }
-
-    #[inline]
-    pub(crate) fn switch_on_term_loc(&self) -> Option<usize> {
-        match &self {
-            OptArgIndexKey::Literal(_, loc, ..)
-            | OptArgIndexKey::Structure(_, loc, ..)
-            | OptArgIndexKey::List(_, loc) => Some(*loc),
-            OptArgIndexKey::None => None,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn set_switch_on_term_loc(&mut self, value: usize) {
-        match self {
-            OptArgIndexKey::Literal(_, loc, ..)
-            | OptArgIndexKey::Structure(_, loc, ..)
-            | OptArgIndexKey::List(_, loc) => {
-                *loc = value;
+            &Term::Clause(_, name, ref terms) => OptArgIndexKey::Structure(name, terms.len()),
+            &Term::Literal(_, constant) => {
+                let literal = HeapCellValue::from(constant);
+                OptArgIndexKey::Literal(literal)
             }
-            OptArgIndexKey::None => {}
-        }
-    }
-}
-
-impl AddAssign<usize> for OptArgIndexKey {
-    #[inline]
-    fn add_assign(&mut self, n: usize) {
-        match self {
-            OptArgIndexKey::Literal(_, o, ..)
-            | OptArgIndexKey::List(_, o)
-            | OptArgIndexKey::Structure(_, o, ..) => {
-                *o += n;
-            }
-            OptArgIndexKey::None => {}
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct ClauseIndexInfo {
-    pub(crate) clause_start: usize,
-    pub(crate) opt_arg_index_key: OptArgIndexKey,
-}
-
-impl ClauseIndexInfo {
-    #[inline]
-    pub(crate) fn new(clause_start: usize) -> Self {
-        Self {
-            clause_start,
-            opt_arg_index_key: OptArgIndexKey::None,
-            // index_locs: vec![],
+            &Term::Var(..) | &Term::AnonVar => OptArgIndexKey::None,
         }
     }
 }
@@ -1013,14 +975,28 @@ impl PredicateInfo {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ClauseIndex {
+    pub(crate) clause_start: usize, // start of the clause *after* the IndexingLine if one exists & at the choice point if it doesn't.
+    pub(crate) index_loc: Option<usize>, // location of IndexingLine. if None, doesn't exist!
+}
+
+impl ClauseIndex {
+    #[inline]
+    pub(crate) fn add_to_index_loc(&mut self, clause_loc: usize) {
+        if let &mut Some(index_loc) = &mut self.index_loc {
+            self.index_loc = Some(index_loc + clause_loc);
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct LocalPredicateSkeleton {
     pub(crate) is_discontiguous: bool,
     pub(crate) is_dynamic: bool,
     pub(crate) is_multifile: bool,
-    pub(crate) clause_clause_locs: VecDeque<usize>,
-    pub(crate) clause_assert_margin: usize,
-    pub(crate) retracted_dynamic_clauses: Option<Vec<ClauseIndexInfo>>, // always None if non-dynamic.
+    pub(crate) prepend_append_margin: usize,
+    pub(crate) clause_indices: VecDeque<usize>,
 }
 
 impl LocalPredicateSkeleton {
@@ -1030,10 +1006,15 @@ impl LocalPredicateSkeleton {
             is_discontiguous: false,
             is_dynamic: false,
             is_multifile: false,
-            clause_clause_locs: VecDeque::new(),
-            clause_assert_margin: 0,
-            retracted_dynamic_clauses: Some(vec![]),
+            prepend_append_margin: 0,
+            clause_indices: VecDeque::new(),
         }
+    }
+
+    #[inline]
+    pub(crate) fn reset(&mut self) {
+        self.clause_indices.clear();
+        self.prepend_append_margin = 0;
     }
 
     #[inline]
@@ -1043,72 +1024,167 @@ impl LocalPredicateSkeleton {
             is_discontiguous: self.is_discontiguous,
             is_dynamic: self.is_dynamic,
             is_multifile: self.is_multifile,
-            has_clauses: !self.clause_clause_locs.is_empty(),
+            has_clauses: !self.clause_indices.is_empty(),
         }
-    }
-
-    #[inline]
-    pub(crate) fn reset(&mut self) {
-        self.clause_clause_locs.clear();
-        self.clause_assert_margin = 0;
-    }
-
-    #[inline]
-    pub(crate) fn add_retracted_dynamic_clause_info(&mut self, clause_info: ClauseIndexInfo) {
-        debug_assert!(self.is_dynamic);
-
-        if self.retracted_dynamic_clauses.is_none() {
-            self.retracted_dynamic_clauses = Some(vec![]);
-        }
-
-        self.retracted_dynamic_clauses
-            .as_mut()
-            .unwrap()
-            .push(clause_info);
     }
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct PredicateSkeleton {
     pub(crate) core: LocalPredicateSkeleton,
-    pub(crate) clauses: VecDeque<ClauseIndexInfo>,
+    pub(crate) clause_indices: VecDeque<ClauseIndex>, // sorted in clause order, descending/ascending around prepend_append_margin
 }
 
 impl PredicateSkeleton {
     #[inline]
     pub(crate) fn new() -> Self {
-        PredicateSkeleton {
+        Self {
             core: LocalPredicateSkeleton::new(),
-            clauses: VecDeque::new(),
-        }
-    }
-
-    #[inline]
-    pub(crate) fn predicate_info(&self) -> PredicateInfo {
-        PredicateInfo {
-            is_extensible: true,
-            is_discontiguous: self.core.is_discontiguous,
-            is_dynamic: self.core.is_dynamic,
-            is_multifile: self.core.is_multifile,
-            has_clauses: !self.clauses.is_empty(),
+            clause_indices: VecDeque::new(),
         }
     }
 
     pub(crate) fn target_pos_of_clause_clause_loc(
         &mut self,
-        clause_clause_loc: usize,
+        clause_index_loc: usize,
     ) -> Option<usize> {
-        let search_result = self.core.clause_clause_locs.make_contiguous()
-            [0..self.core.clause_assert_margin]
-            .binary_search_by(|loc| clause_clause_loc.cmp(loc));
+        let search_result = self.core.clause_indices.make_contiguous()
+            [0..self.core.prepend_append_margin]
+            .binary_search_by(|loc| clause_index_loc.cmp(loc));
 
         match search_result {
             Ok(loc) => Some(loc),
-            Err(_) => self.core.clause_clause_locs.make_contiguous()
-                [self.core.clause_assert_margin..]
-                .binary_search_by(|loc| loc.cmp(&clause_clause_loc))
-                .map(|loc| loc + self.core.clause_assert_margin)
+            Err(_) => self.core.clause_indices.make_contiguous()[self.core.prepend_append_margin..]
+                .binary_search_by(|loc| loc.cmp(&clause_index_loc))
+                .map(|loc| loc + self.core.prepend_append_margin)
                 .ok(),
         }
+    }
+}
+
+impl HeapCellValue {
+    // syntactic_hash and syntactic_eq are for hashing and comparing
+    // HeapCellValue's as syntactic values shallowly for
+    // indexing. particularly, different integer types with overlapping
+    // values.
+    pub fn syntactic_hash<H: Hasher>(self, f64_tbl: &F64Table, mut hasher: H) -> u64 {
+        read_heap_cell!(self,
+            (HeapCellValueTag::F64Offset, offset) => {
+                f64_tbl.get_entry(offset).hash(&mut hasher);
+            }
+            (HeapCellValueTag::Fixnum, n) => {
+                let n = n.get_num();
+
+                if n.is_negative() {
+                    hasher.write_i8(-1);
+                }
+
+                hasher.write_u64(n.unsigned_abs());
+            }
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                hasher.write_u64(name.index);
+                hasher.write_usize(arity);
+            }
+            (HeapCellValueTag::Lis) => {
+                hasher.write_u64(atom!(".").index);
+                hasher.write_usize(2);
+            }
+            (HeapCellValueTag::Cons, c) => {
+                let signed_int_hasher = |hasher: &mut H, sign, words: &[u64]| {
+                    if matches!(sign, dashu::base::Sign::Negative) {
+                        hasher.write_i8(-1);
+                    }
+
+                    for word in words.iter().copied() {
+                        hasher.write_u64(word);
+                    }
+                };
+
+                match_untyped_arena_ptr!(c,
+                   (ArenaHeaderTag::Integer, n) => {
+                       let (sign, words) = n.as_sign_words();
+                       signed_int_hasher(&mut hasher, sign, words);
+                   }
+                   (ArenaHeaderTag::Rational, r) => {
+                       let (sign, words) = r.numerator().as_sign_words();
+                       signed_int_hasher(&mut hasher, sign, words);
+
+                       // ensure a Rational hashes exactly the equivalent integer
+                       // if its denominator is 1
+                       if !r.denominator().num_eq(&1) {
+                           let words = r.denominator().as_words();
+                           signed_int_hasher(&mut hasher, dashu::base::Sign::Positive, words);
+                       }
+                   }
+                   _ => {
+                       // we shouldn't be hashing pointer-based types like
+                       // streams, load states, etc. This hash is meant only
+                       // to index syntactic values.
+                   }
+                )
+            }
+            _ => {}
+        );
+
+        hasher.finish()
+    }
+
+    pub fn syntactic_eq(self, f64_tbl: &F64Table, cell_2: HeapCellValue) -> bool {
+        read_heap_cell!(self,
+            (HeapCellValueTag::F64Offset, offset) => {
+                let val_1 = f64_tbl.get_entry(offset);
+
+                read_heap_cell!(cell_2,
+                    (HeapCellValueTag::F64Offset, offset) => {
+                        let val_2 = f64_tbl.get_entry(offset);
+                        val_1 == val_2
+                    }
+                    _ => {
+                        false
+                    }
+                )
+            }
+            (HeapCellValueTag::Fixnum, n) => {
+                let n = n.get_num();
+
+                match Number::try_from((cell_2, f64_tbl)) {
+                    Ok(Number::Integer(bigint)) => bigint.num_eq(&n),
+                    Ok(Number::Fixnum(fixnum)) => n.num_eq(&fixnum.get_num()),
+                    _ => false,
+                }
+            }
+            (HeapCellValueTag::Atom, (name_1, arity_1)) => {
+                read_heap_cell!(cell_2,
+                    (HeapCellValueTag::Atom, (name_2, arity_2)) => {
+                        name_1.index == name_2.index && arity_1 == arity_2
+                    }
+                    (HeapCellValueTag::Lis) => {
+                        name_1.index == atom!(".").index && arity_1 == 2
+                    }
+                    _ => {
+                        false
+                    }
+                )
+            }
+            (HeapCellValueTag::Lis) => {
+                read_heap_cell!(cell_2,
+                    (HeapCellValueTag::Atom, (name_2, arity_2)) => {
+                        atom!(".").index == name_2.index && 2 == arity_2
+                    }
+                    (HeapCellValueTag::Lis) => {
+                        true
+                    }
+                    _ => {
+                        false
+                    }
+                )
+            }
+            (HeapCellValueTag::Cons) => {
+                Number::try_from((self, f64_tbl)) == Number::try_from((cell_2, f64_tbl))
+            }
+            _ => {
+                false
+            }
+        )
     }
 }

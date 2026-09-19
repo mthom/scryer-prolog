@@ -28,6 +28,7 @@ pub(crate) mod heap_print;
 #[cfg(feature = "http")]
 mod http;
 mod indexing;
+mod indexing_iter;
 mod variable_records;
 
 #[macro_use]

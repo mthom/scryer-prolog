@@ -553,10 +553,10 @@ impl MachineState {
 
         self.cwil.global_count = self.cwil.global_count.strict_add(1);
 
-        if let Some(&(ref limit, block)) = self.cwil.limits.last() {
-            if self.cwil.local_count == *limit {
+        if let Some((limit, block)) = self.cwil.limits.last() {
+            if &self.cwil.local_count == limit {
                 self.cwil.inference_limit_exceeded = true;
-                self.block = block;
+                self.block = *block;
                 self.unwind_stack();
 
                 return false;

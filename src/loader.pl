@@ -676,6 +676,8 @@ consult_stream(Stream, PathFileName) :-
 
 :- non_counted_backtracking check_predicate_property/5.
 
+check_predicate_property(indexing, Module, Name, Arity, IndexingSpecTerm) :-
+    '$indexing_property'(Module, Name, Arity, IndexingSpecTerm).
 check_predicate_property(meta_predicate, Module, Name, Arity, MetaPredicateTerm) :-
     '$meta_predicate_property'(Module, Name, Arity, MetaPredicateTerm).
 check_predicate_property(built_in, _, Name, Arity, built_in) :-
@@ -686,7 +688,6 @@ check_predicate_property(multifile, Module, Name, Arity, multifile) :-
     '$multifile_property'(Module, Name, Arity).
 check_predicate_property(discontiguous, Module, Name, Arity, discontiguous) :-
     '$discontiguous_property'(Module, Name, Arity).
-
 
 :- non_counted_backtracking extract_predicate_property/2.
 

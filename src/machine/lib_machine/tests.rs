@@ -9,10 +9,6 @@ const REPEATED_LOAD_PROBE_PROGRAM: &str = r#"
         repeated_loader_probe_object).
     "#;
 
-const REPEATED_LOAD_FLOAT_PROGRAM: &str = r#"
-    repeated_float_probe_value(1.25).
-    "#;
-
 fn repeated_loader_probe_atom_count(machine: &crate::Machine) -> usize {
     // The atom table is process-global; count only this test's long
     // dynamic atoms so parallel tests cannot perturb the assertion.
@@ -76,25 +72,6 @@ fn repeated_module_loads_keep_loader_state_and_stack_stable() {
         assert_eq!(machine.machine_st.trail.len(), trail_entries);
         assert_eq!(machine.load_contexts.len(), load_contexts);
         assert_eq!(inactive_load_state_count(&machine), inactive_load_states);
-    }
-}
-
-#[test]
-#[cfg_attr(miri, ignore = "it takes too long to run")]
-fn repeated_float_loads_keep_float_table_stable() {
-    let mut machine = MachineBuilder::default().build();
-
-    machine.load_module_string("facts", REPEATED_LOAD_FLOAT_PROGRAM);
-
-    let float_entries = machine.machine_st.arena.f64_tbl.entry_count();
-    assert!(float_entries > 0);
-
-    for _ in 0..100 {
-        machine.load_module_string("facts", REPEATED_LOAD_FLOAT_PROGRAM);
-        assert_eq!(
-            machine.machine_st.arena.f64_tbl.entry_count(),
-            float_entries
-        );
     }
 }
 

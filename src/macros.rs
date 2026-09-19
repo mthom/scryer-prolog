@@ -394,6 +394,7 @@ macro_rules! index_store {
             op_dir: $op_dir,
             streams: StreamDir::new(),
             stream_aliases: StreamAliasDir::with_hasher(FxBuildHasher::default()),
+            indexing_specs: IndexingSpecDir::with_hasher(FxBuildHasher::default()),
         }
     };
 }
