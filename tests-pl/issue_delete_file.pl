@@ -21,7 +21,8 @@ act(TargetFile) :-
 
 main :-
     call_cleanup(
-       (setenv("TARGET_FILE", "delete_file_test"),
+       (setenv("SHELL", "/bin/sh"),
+        setenv("TARGET_FILE", "delete_file_test"),
         shell("touch delete_file_test", 0),
         check),
         shell("test -e delete_file_test && rm delete_file_test || true", 0)

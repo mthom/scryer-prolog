@@ -26,7 +26,8 @@ act(Source, Destination) :-
 
 main :-
     call_cleanup(
-       (setenv("SOURCE", "file_copy_test_source"),
+       (setenv("SHELL", "/bin/sh"),
+        setenv("SOURCE", "file_copy_test_source"),
         setenv("DESTINATION", "file_copy_test_destination"),
         shell("touch file_copy_test_source", 0),
         check),
