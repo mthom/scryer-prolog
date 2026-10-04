@@ -1303,7 +1303,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         };
 
         let compilation_target = {
-            let term_stream = BootstrappingTermStream::from_char_reader(
+            let term_stream = BootstrappingTermStream::from_reader(
                 stream,
                 LS::machine_st(&mut self.payload),
                 listing_src,
@@ -1374,7 +1374,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         };
 
         let compilation_target = {
-            let term_stream = BootstrappingTermStream::from_char_reader(
+            let term_stream = BootstrappingTermStream::from_reader(
                 stream,
                 LS::machine_st(&mut self.payload),
                 listing_src,

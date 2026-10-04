@@ -4,7 +4,7 @@ use dashu::integer::fast_div::ConstDivisor;
 use divrem::*;
 use num_order::NumOrd;
 
-use crate::arena::*;
+use crate::arena::alloc::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
 use crate::forms::*;
@@ -20,7 +20,6 @@ use ordered_float::{Float, OrderedFloat};
 
 use std::cmp;
 use std::convert::TryFrom;
-use std::f64;
 
 macro_rules! try_numeric_result {
     ($e: expr, $stub_gen: expr) => {
@@ -1020,7 +1019,7 @@ pub(crate) fn tan(n1: Number) -> Result<f64, MachineStubGen> {
 
 #[inline]
 pub(crate) fn log(n1: Number) -> Result<f64, MachineStubGen> {
-    unary_float_fn_template(n1, |f| f.log(f64::consts::E))
+    unary_float_fn_template(n1, |f| f.log(std::f64::consts::E))
 }
 
 #[inline]
@@ -1371,11 +1370,11 @@ impl MachineState {
                     } else if arity == 0 {
                         match name {
                             atom!("pi") => {
-                                interms.push(Number::Float(OrderedFloat(f64::consts::PI)));
+                                interms.push(Number::Float(OrderedFloat(std::f64::consts::PI)));
                                 continue;
                             }
                             atom!("e") => {
-                                interms.push(Number::Float(OrderedFloat(f64::consts::E)));
+                                interms.push(Number::Float(OrderedFloat(std::f64::consts::E)));
                                 continue;
                             }
                             atom!("epsilon") => {
@@ -1401,14 +1400,16 @@ impl MachineState {
                     let fl = self.arena.f64_tbl.get_entry(offset);
                     interms.push(Number::Float(fl));
                 }
-                (HeapCellValueTag::Cons, ptr) => {
-                    match_untyped_arena_ptr!(ptr,
-                         (ArenaHeaderTag::Integer, n) => {
-                             interms.push(Number::Integer(n));
-                         }
-                         (ArenaHeaderTag::Rational, r) => {
-                             interms.push(Number::Rational(r));
-                         }
+                (HeapCellValueTag::Cons, cons_ptr) => {
+                    match cons_ptr.get_tag() {
+                        ArenaHeaderTag::Integer => {
+                            let n = unsafe { cons_ptr.as_typed_ptr::<Integer>() };
+                            interms.push(Number::Integer(n));
+                        }
+                        ArenaHeaderTag::Rational => {
+                            let r = unsafe { cons_ptr.as_typed_ptr::<Rational>() };
+                            interms.push(Number::Rational(r));
+                        }
                          _ => {
                              std::mem::drop(iter);
 
@@ -1417,7 +1418,7 @@ impl MachineState {
 
                              return Err(self.error_form(type_error, stub));
                          }
-                    )
+                    }
                 }
                 (HeapCellValueTag::Var | HeapCellValueTag::AttrVar) => {
                     std::mem::drop(iter);

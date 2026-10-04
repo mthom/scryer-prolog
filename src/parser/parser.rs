@@ -2,11 +2,11 @@ use dashu::Integer;
 use dashu::Rational;
 use ordered_float::OrderedFloat;
 
-use crate::arena::*;
+use crate::arena::alloc::*;
+use crate::arena::opt_in_buf_reader::GraphemeRead;
 use crate::atom_table::*;
 use crate::offset_table::*;
 use crate::parser::ast::*;
-use crate::parser::char_reader::*;
 use crate::parser::lexer::*;
 
 use std::cell::Cell;
@@ -242,7 +242,7 @@ pub struct Parser<'a, R> {
     terms: Vec<Term>,
 }
 
-pub fn read_tokens<R: CharRead>(lexer: &mut Lexer<'_, R>) -> Result<Vec<Token>, ParserError> {
+pub fn read_tokens<R: GraphemeRead>(lexer: &mut Lexer<'_, R>) -> Result<Vec<Token>, ParserError> {
     let mut tokens = vec![];
 
     loop {
@@ -292,7 +292,7 @@ impl TokenType {
     }
 }
 
-impl<'a, R: CharRead> Parser<'a, R> {
+impl<'a, R: GraphemeRead> Parser<'a, R> {
     pub fn new(stream: R, machine_st: &'a mut MachineState) -> Self {
         Parser {
             lexer: Lexer::new(stream, machine_st),
@@ -435,8 +435,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
             }
             Token::String(s) => {
                 debug_assert!(self.lexer.machine_st.flags.double_quotes.is_chars());
-                self.terms
-                    .push(Term::CompleteString(Cell::default(), Rc::new(s)));
+                self.terms.push(Term::CompleteString(
+                    Cell::default(),
+                    Rc::new(s.to_string()),
+                ));
                 TokenType::Term
             }
             Token::Literal(c) => {
@@ -447,7 +449,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 if v.trim() == "_" {
                     self.terms.push(Term::AnonVar);
                 } else {
-                    self.terms.push(Term::Var(Cell::default(), VarPtr::from(v)));
+                    self.terms
+                        .push(Term::Var(Cell::default(), VarPtr::from(v.to_string())));
                 }
 
                 TokenType::Term
@@ -630,7 +633,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     pub fn reset(&mut self) {
-        self.stack.clear()
+        self.stack.clear();
     }
 
     fn expand_comma_compacted_terms(&mut self, index: usize) -> usize {

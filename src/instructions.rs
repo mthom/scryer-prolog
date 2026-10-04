@@ -1,4 +1,4 @@
-use crate::arena::*;
+use crate::arena::alloc::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
 use crate::forms::*;

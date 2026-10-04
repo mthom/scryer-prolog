@@ -48,9 +48,9 @@ struct PStrIterStep {
     next_hare: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum PStrIteratee {
-    Char { heap_loc: usize, value: char },
+    Char { value: char },
     PStrSlice { slice_loc: usize, slice_len: usize },
 }
 
@@ -98,7 +98,7 @@ impl<'a> HeapPStrIter<'a> {
 
         while let Some(iteratee) = self.next() {
             match iteratee {
-                PStrIteratee::Char { value: c, .. } => {
+                PStrIteratee::Char { value: c } => {
                     buf.push(c);
                 }
                 PStrIteratee::PStrSlice {
@@ -133,7 +133,7 @@ impl<'a> HeapPStrIter<'a> {
                     );
 
                     return value.as_char().map(|c| PStrIterStep {
-                        iteratee: PStrIteratee::Char { heap_loc: curr_hare, value: c },
+                        iteratee: PStrIteratee::Char { value: c },
                         next_hare: h+1,
                     }).ok_or(curr_hare)
                 }
@@ -148,7 +148,7 @@ impl<'a> HeapPStrIter<'a> {
                         );
 
                         value.as_char().map(|c| PStrIterStep {
-                            iteratee: PStrIteratee::Char { heap_loc: curr_hare, value: c },
+                            iteratee: PStrIteratee::Char { value: c },
                             next_hare: s+2,
                         }).ok_or(curr_hare)
                     } else {
@@ -227,7 +227,7 @@ impl<'a> HeapPStrIter<'a> {
     }
 }
 
-impl<'a> Iterator for HeapPStrIter<'a> {
+impl Iterator for HeapPStrIter<'_> {
     type Item = PStrIteratee;
 
     #[inline(always)]
@@ -247,7 +247,7 @@ mod test {
 
         let init_len = wam.machine_st.heap.cell_len();
 
-        let pstr_cell = wam.machine_st.heap.allocate_pstr("abc ").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_pstr(b"abc ").unwrap();
         wam.machine_st
             .heap
             .push_cell(empty_list_as_cell!())
@@ -275,7 +275,7 @@ mod test {
 
         wam.machine_st.heap[init_len + 1] = pstr_loc_as_cell!(heap_index!(init_len + 2));
 
-        wam.machine_st.heap.allocate_pstr("def").unwrap();
+        wam.machine_st.heap.allocate_pstr(b"def").unwrap();
         let h = wam.machine_st.heap.cell_len();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(h)).unwrap();
@@ -340,7 +340,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        let pstr_cell = wam.machine_st.heap.allocate_cstr("abc").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_cstr(b"abc").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -360,15 +360,15 @@ mod test {
 
         unify!(wam.machine_st, pstr_cell, heap_loc_as_cell!(2));
 
-        assert_eq!(wam.machine_st.heap[1 + start], char_as_cell!('a'));
-        assert_eq!(wam.machine_st.heap[3 + start], char_as_cell!('b'));
-        assert_eq!(wam.machine_st.heap[5 + start], char_as_cell!('c'));
+        assert_eq!(wam.machine_st.heap[1 + start], codepoint_as_cell!('a'));
+        assert_eq!(wam.machine_st.heap[3 + start], codepoint_as_cell!('b'));
+        assert_eq!(wam.machine_st.heap[5 + start], codepoint_as_cell!('c'));
 
         // test "abc" = [X,Y,Z|D].
 
         wam.machine_st.heap.clear();
 
-        let pstr_cell = wam.machine_st.heap.allocate_cstr("abc").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_cstr(b"abc").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -390,23 +390,23 @@ mod test {
 
         assert!(!wam.machine_st.fail);
 
-        assert_eq!(wam.machine_st.heap[3], char_as_cell!('a'),);
-        assert_eq!(wam.machine_st.heap[5], char_as_cell!('b'),);
-        assert_eq!(wam.machine_st.heap[7], char_as_cell!('c'),);
+        assert_eq!(wam.machine_st.heap[3], codepoint_as_cell!('a'),);
+        assert_eq!(wam.machine_st.heap[5], codepoint_as_cell!('b'),);
+        assert_eq!(wam.machine_st.heap[7], codepoint_as_cell!('c'),);
         assert_eq!(wam.machine_st.heap[8], empty_list_as_cell!(),);
 
         // test "d" = [d].
 
         wam.machine_st.heap.clear();
 
-        let pstr_cell = wam.machine_st.heap.allocate_cstr("d").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_cstr(b"d").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
 
         writer.write_with(|section| {
             section.push_cell(list_loc_as_cell!(1 + start));
-            section.push_cell(char_as_cell!('d'));
+            section.push_cell(codepoint_as_cell!('d'));
             section.push_cell(empty_list_as_cell!());
         });
 
@@ -418,7 +418,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        let pstr_cell = wam.machine_st.heap.allocate_cstr("abc").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_cstr(b"abc").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -428,7 +428,7 @@ mod test {
             section.push_cell(heap_loc_as_cell!(1 + start));
 
             section.push_cell(list_loc_as_cell!(3 + start));
-            section.push_cell(char_as_cell!('b'));
+            section.push_cell(codepoint_as_cell!('b'));
 
             section.push_cell(list_loc_as_cell!(5 + start));
             section.push_cell(heap_loc_as_cell!(5 + start));
@@ -440,21 +440,21 @@ mod test {
 
         assert!(!wam.machine_st.fail);
 
-        assert_eq!(wam.machine_st.heap[1 + start], char_as_cell!('a'));
-        assert_eq!(wam.machine_st.heap[3 + start], char_as_cell!('b'));
-        assert_eq!(wam.machine_st.heap[5 + start], char_as_cell!('c'));
+        assert_eq!(wam.machine_st.heap[1 + start], codepoint_as_cell!('a'));
+        assert_eq!(wam.machine_st.heap[3 + start], codepoint_as_cell!('b'));
+        assert_eq!(wam.machine_st.heap[5 + start], codepoint_as_cell!('c'));
 
         // test "abcdef" = [a,b,c|X].
 
         wam.machine_st.heap.clear();
 
-        let pstr_cell = wam.machine_st.heap.allocate_cstr("abcdef").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_cstr(b"abcdef").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
 
         writer.write_with(|section| {
-            section.push_pstr("abc");
+            section.push_pstr(b"abc");
             let h = section.cell_len(); // h == 3
             section.push_cell(heap_loc_as_cell!(h));
         });
@@ -486,7 +486,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.allocate_cstr("abc").unwrap();
+        wam.machine_st.heap.allocate_cstr(b"abc").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -513,7 +513,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.allocate_cstr("a ").unwrap();
+        wam.machine_st.heap.allocate_cstr(b"a ").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -521,7 +521,7 @@ mod test {
         writer.write_with(|section| {
             section.push_cell(heap_loc_as_cell!(start));
             section.push_cell(list_loc_as_cell!(2 + start));
-            section.push_cell(char_as_cell!(' '));
+            section.push_cell(codepoint_as_cell!(' '));
             section.push_cell(empty_list_as_cell!());
         });
 
@@ -537,13 +537,13 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.allocate_cstr(" a").unwrap();
+        wam.machine_st.heap.allocate_cstr(b" a").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
 
         writer.write_with(|section| {
-            section.push_cell(char_as_cell!(' '));
+            section.push_cell(codepoint_as_cell!(' '));
             section.push_cell(list_loc_as_cell!(2 + start));
             section.push_cell(heap_loc_as_cell!(2 + start));
             section.push_cell(empty_list_as_cell!());
@@ -555,14 +555,14 @@ mod test {
             pstr_loc_as_cell!(0)
         );
 
-        assert_eq!(wam.machine_st.heap[2 + start], char_as_cell!('a'));
+        assert_eq!(wam.machine_st.heap[2 + start], codepoint_as_cell!('a'));
         assert!(!wam.machine_st.fail);
 
         // #2293, test3.
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.allocate_cstr("a b").unwrap();
+        wam.machine_st.heap.allocate_cstr(b"a b").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -570,7 +570,7 @@ mod test {
         writer.write_with(|section| {
             section.push_cell(heap_loc_as_cell!(start));
             section.push_cell(list_loc_as_cell!(2 + start));
-            section.push_cell(char_as_cell!(' '));
+            section.push_cell(codepoint_as_cell!(' '));
             section.push_cell(list_loc_as_cell!(4 + start));
             section.push_cell(heap_loc_as_cell!(4 + start));
             section.push_cell(empty_list_as_cell!());
@@ -582,25 +582,25 @@ mod test {
             pstr_loc_as_cell!(0)
         );
 
-        assert_eq!(wam.machine_st.heap[start], char_as_cell!('a'));
-        assert_eq!(wam.machine_st.heap[4 + start], char_as_cell!('b'));
+        assert_eq!(wam.machine_st.heap[start], codepoint_as_cell!('a'));
+        assert_eq!(wam.machine_st.heap[4 + start], codepoint_as_cell!('b'));
         assert!(!wam.machine_st.fail);
 
         // #2293, test4.
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.allocate_cstr(" a ").unwrap();
+        wam.machine_st.heap.allocate_cstr(b" a ").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
 
         writer.write_with(|section| {
-            section.push_cell(char_as_cell!(' '));
+            section.push_cell(codepoint_as_cell!(' '));
             section.push_cell(list_loc_as_cell!(2 + start));
             section.push_cell(heap_loc_as_cell!(2 + start));
             section.push_cell(list_loc_as_cell!(4 + start));
-            section.push_cell(char_as_cell!(' '));
+            section.push_cell(codepoint_as_cell!(' '));
             section.push_cell(empty_list_as_cell!());
         });
 
@@ -610,24 +610,24 @@ mod test {
             pstr_loc_as_cell!(0)
         );
 
-        assert_eq!(wam.machine_st.heap[2 + start], char_as_cell!('a'));
+        assert_eq!(wam.machine_st.heap[2 + start], codepoint_as_cell!('a'));
         assert!(!wam.machine_st.fail);
 
         // #2293, test5.
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.allocate_cstr(" a bc").unwrap();
+        wam.machine_st.heap.allocate_cstr(b" a bc").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
 
         writer.write_with(|section| {
-            section.push_cell(char_as_cell!(' '));
+            section.push_cell(codepoint_as_cell!(' '));
             section.push_cell(list_loc_as_cell!(2 + start));
             section.push_cell(heap_loc_as_cell!(2 + start));
             section.push_cell(list_loc_as_cell!(4 + start));
-            section.push_cell(char_as_cell!(' '));
+            section.push_cell(codepoint_as_cell!(' '));
             section.push_cell(heap_loc_as_cell!(5 + start));
         });
 
@@ -637,7 +637,7 @@ mod test {
             pstr_loc_as_cell!(0)
         );
 
-        assert_eq!(wam.machine_st.heap[2 + start], char_as_cell!('a'));
+        assert_eq!(wam.machine_st.heap[2 + start], codepoint_as_cell!('a'));
         assert_eq!(
             wam.machine_st.heap[5 + start],
             pstr_loc_as_cell!(heap_index!(0) + 3)
@@ -648,7 +648,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.allocate_cstr("abc").unwrap();
+        wam.machine_st.heap.allocate_cstr(b"abc").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -656,7 +656,7 @@ mod test {
         writer.write_with(|section| {
             section.push_cell(heap_loc_as_cell!(start));
             section.push_cell(list_loc_as_cell!(2 + start));
-            section.push_cell(char_as_cell!('b'));
+            section.push_cell(codepoint_as_cell!('b'));
             section.push_cell(list_loc_as_cell!(4 + start));
             section.push_cell(heap_loc_as_cell!(4 + start));
             section.push_cell(empty_list_as_cell!());
@@ -668,28 +668,28 @@ mod test {
             pstr_loc_as_cell!(0)
         );
 
-        assert_eq!(wam.machine_st.heap[start], char_as_cell!('a'));
-        assert_eq!(wam.machine_st.heap[4 + start], char_as_cell!('c'));
+        assert_eq!(wam.machine_st.heap[start], codepoint_as_cell!('a'));
+        assert_eq!(wam.machine_st.heap[4 + start], codepoint_as_cell!('c'));
         assert!(!wam.machine_st.fail);
 
         // #2293, test7.
 
         wam.machine_st.heap.clear();
-        wam.machine_st.heap.allocate_cstr("abcde").unwrap();
+        wam.machine_st.heap.allocate_cstr(b"abcde").unwrap();
 
         let start = wam.machine_st.heap.cell_len();
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
 
         writer.write_with(|section| {
-            section.push_cell(char_as_cell!('a'));
+            section.push_cell(codepoint_as_cell!('a'));
             section.push_cell(list_loc_as_cell!(2 + start));
             section.push_cell(heap_loc_as_cell!(2 + start));
             section.push_cell(list_loc_as_cell!(4 + start));
-            section.push_cell(char_as_cell!('c'));
+            section.push_cell(codepoint_as_cell!('c'));
             section.push_cell(list_loc_as_cell!(6 + start));
             section.push_cell(heap_loc_as_cell!(6 + start));
             section.push_cell(list_loc_as_cell!(8 + start));
-            section.push_cell(char_as_cell!('e'));
+            section.push_cell(codepoint_as_cell!('e'));
             section.push_cell(empty_list_as_cell!());
         });
 
@@ -699,8 +699,8 @@ mod test {
             pstr_loc_as_cell!(0)
         );
 
-        assert_eq!(wam.machine_st.heap[2 + start], char_as_cell!('b'));
-        assert_eq!(wam.machine_st.heap[6 + start], char_as_cell!('d'));
+        assert_eq!(wam.machine_st.heap[2 + start], codepoint_as_cell!('b'));
+        assert_eq!(wam.machine_st.heap[6 + start], codepoint_as_cell!('d'));
         assert!(!wam.machine_st.fail);
     }
 }

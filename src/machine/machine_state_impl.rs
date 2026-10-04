@@ -1,7 +1,7 @@
 use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
 
-use crate::arena::*;
+use crate::arena::alloc::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::heap_iter::*;
@@ -271,11 +271,6 @@ impl MachineState {
         unifier.unify_atom(atom, value);
     }
 
-    pub fn unify_char(&mut self, c: char, value: HeapCellValue) {
-        let mut unifier = DefaultUnifier::from(self);
-        unifier.unify_char(c, value);
-    }
-
     pub fn unify_fixnum(&mut self, n1: Fixnum, value: HeapCellValue) {
         let mut unifier = DefaultUnifier::from(self);
         unifier.unify_fixnum(n1, value);
@@ -359,7 +354,7 @@ impl MachineState {
                 if self.s_offset == 0 {
                     // read the car of the list
                     let c = char_iter.next().unwrap();
-                    (char_as_cell!(c), c.len_utf8())
+                    (codepoint_as_cell!(c), c.len_utf8())
                 } else {
                     // read the (self.s_offset)^{th} cdr of the list
                     // self.s_offset is the number of bytes offset into the PStr
@@ -519,12 +514,13 @@ impl MachineState {
                     (HeapCellValueTag::PStrLoc, pstr_loc) => {
                         if n == 1 || n == 2 {
                             let a3 = self.registers[3];
-                            let mut char_iter = self.heap.char_iter(pstr_loc);
+                            let mut c_iter = self.heap.char_iter(pstr_loc);
 
-                            if let Some(c) = char_iter.next() {
+                            if let Some(c) = c_iter.next() {
                                 if n == 1 {
-                                    self.unify_char(c, a3);
-                                } else if char_iter.next().is_some() {
+                                    let c_atom = AtomCell::from_codepoint(c).get_name();
+                                    self.unify_atom(c_atom, a3);
+                                } else if c_iter.next().is_some() {
                                     unify_fn!(*self, pstr_loc_as_cell!(pstr_loc + c.len_utf8()), a3);
                                 } else {
                                     let tail_idx = Heap::pstr_tail_idx(pstr_loc + c.len_utf8());
@@ -868,13 +864,15 @@ impl MachineState {
 
         while let Some(iteratee) = heap_pstr_iter.next() {
             match iteratee {
-                PStrIteratee::Char { value: c, .. } => chars.push(char_as_cell!(c)),
+                PStrIteratee::Char { value: g } => {
+                    chars.push(codepoint_as_cell!(g));
+                }
                 PStrIteratee::PStrSlice {
                     slice_loc,
                     slice_len,
                 } => {
                     let pstr = heap_pstr_iter.heap.slice_to_str(slice_loc, slice_len);
-                    chars.extend(pstr.chars().map(|c| char_as_cell!(c)));
+                    chars.extend(pstr.chars().map(|c| codepoint_as_cell!(c)));
                 }
             }
         }

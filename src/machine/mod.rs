@@ -29,7 +29,8 @@ pub mod system_calls;
 pub mod term_stream;
 pub mod unify;
 
-use crate::arena::*;
+use crate::arena::alloc::*;
+use crate::arena::stream_layout::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
 #[cfg(feature = "ffi")]
@@ -48,7 +49,6 @@ use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::machine::stack::*;
-use crate::machine::streams::*;
 use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
@@ -500,12 +500,6 @@ impl Machine {
             .set_stream(atom!("user_output"), self.user_output);
         self.indices
             .set_stream(atom!("user_error"), self.user_error);
-
-        let mut null_options = StreamOptions::default();
-        null_options.set_alias_to_atom_opt(Some(atom!("null_stream")));
-
-        self.indices
-            .set_stream(atom!("null_stream"), Stream::Null(null_options));
     }
 
     #[inline(always)]

@@ -1,23 +1,27 @@
+use crate::arena::opt_in_buf_reader::GraphemeRead;
 use crate::atom_table::*;
 pub use crate::machine::machine_state::*;
 use crate::offset_table::*;
 use crate::parser::ast::*;
-use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
+use crate::parser::grapheme_classifiers::*;
 
 use ordered_float::OrderedFloat;
+
+use bstr::ByteSlice;
+use compact_str::*;
 
 use std::convert::TryFrom;
 use std::fmt;
 
-macro_rules! consume_chars_with {
+macro_rules! consume_graphemes_with {
     ($token:expr, $e:expr) => {
         loop {
             match $e {
-                Ok(Some(c)) => $token.push(c),
+                Ok(Some(c)) => $token.push_str(c.as_ref()),
                 Ok(None) => continue,
                 Err($crate::parser::ast::ParserError {
-                    kind: $crate::parser::ast::ParserErrorKind::UnexpectedChar(..),
+                    kind: $crate::parser::ast::ParserErrorKind::UnexpectedGrapheme(..),
                     ..
                 }) => break,
                 Err(e) => return Err(e),
@@ -35,8 +39,8 @@ struct LayoutInfo {
 #[derive(Debug)]
 pub enum Token {
     Literal(Literal),
-    Var(String),
-    String(String),
+    Var(CompactString),
+    String(CompactString),
     Open,              // '('
     OpenCT,            // '('
     Close,             // ')'
@@ -61,7 +65,7 @@ impl Token {
 enum NumberToken {
     Integer(GInteger),
     Float(F64Offset, OrderedFloat<f64>),
-    Partial(String),
+    Partial(CompactString),
 }
 
 impl NumberToken {
@@ -123,60 +127,62 @@ impl<R> Lexer<'_, R> {
         self.located_error(ParserErrorKind::IncompleteReduction)
     }
 
-    pub(crate) fn unexpected_char(&self, c: char) -> ParserError {
-        self.located_error(ParserErrorKind::UnexpectedChar(c))
+    pub(crate) fn unexpected_grapheme(&self, c: String) -> ParserError {
+        self.located_error(ParserErrorKind::UnexpectedGrapheme(c))
     }
 }
 
-impl<'a, R: CharRead> Lexer<'a, R> {
-    pub fn new(src: R, machine_st: &'a mut MachineState) -> Self {
+impl<'a, R: GraphemeRead> Lexer<'a, R> {
+    pub fn new(reader: R, machine_st: &'a mut MachineState) -> Self {
         Self {
-            reader: src,
+            reader,
             machine_st,
             location: Location::BOF,
         }
     }
 
-    pub fn lookahead_char(&mut self) -> Result<char, ParserError> {
-        match self.reader.peek_char() {
-            Some(Ok(c)) => Ok(c),
-            _ => Err(ParserError::unexpected_eof()),
+    pub fn bad_utf8(&self) -> ParserError {
+        self.located_error(ParserErrorKind::Utf8Error)
+    }
+
+    pub fn peek_grapheme(&mut self, at: usize) -> Result<&str, ParserError> {
+        match self.reader.peek_grapheme(at) {
+            Ok(Some(g)) => Ok(g),
+            Ok(None) => Err(ParserError::unexpected_eof()),
+            Err(e) => Err(ParserError::from(e)),
         }
     }
 
-    pub fn read_char(&mut self) -> Result<char, ParserError> {
-        match self.reader.read_char() {
-            Some(Ok(c)) => Ok(c),
-            _ => Err(ParserError::unexpected_eof()),
+    fn skip_graphemes_up_to(&mut self, mut at: usize) -> Result<(), ParserError> {
+        while at > 0 {
+            let g = self.skip_grapheme()?;
+            at = at.saturating_sub(g.len());
         }
+
+        Ok(())
     }
 
-    #[inline(always)]
-    fn return_char(&mut self, c: char) {
-        self.reader.put_back_char(c);
-    }
-
-    pub fn skip_char(&mut self, c: char) {
-        self.reader.consume(c.len_utf8());
-
-        if new_line_char!(c) {
-            self.location.line += 1;
-            self.location.column = 0;
-        } else {
-            self.location.column += 1;
+    pub fn skip_grapheme(&mut self) -> Result<CompactString, ParserError> {
+        // bstr's grapheme() routine, which GraphemeRead is built on,
+        // emits "\u{FFFD}" to flag bad UTF-8. Only Scryer's lexer is
+        // concerned with reporting these errors to the runtime, and
+        // only does so once it has "committed" to a grapheme by
+        // calling skip_grapheme. other consumers of Stream are
+        // responsible for checking for bad UTF-8 via this codepoint
+        // if desired.
+        match self.reader.read_grapheme()? {
+            Some(g) if g == "\u{FFFD}" => Err(self.bad_utf8()),
+            Some(g) => {
+                self.location.incr(g.as_str());
+                Ok(g)
+            }
+            _ => Err(ParserError::unexpected_eof()),
         }
     }
 
     fn single_line_comment(&mut self) -> Result<(), ParserError> {
         loop {
-            if self.reader.peek_char().is_none() {
-                break;
-            }
-
-            let c = self.lookahead_char()?;
-            self.skip_char(c);
-
-            if new_line_char!(c) {
+            if self.skip_grapheme()? == "\n" {
                 break;
             }
         }
@@ -185,14 +191,10 @@ impl<'a, R: CharRead> Lexer<'a, R> {
     }
 
     fn bracketed_comment(&mut self) -> Result<bool, ParserError> {
-        // we have already checked that the current lookahead_char is
-        // comment_1_char, just skip it
-        self.skip_char('/');
-
-        let c = self.lookahead_char()?;
-
-        if comment_2_char!(c) {
-            self.skip_char(c);
+        // peek past the "/" to confirm "*"
+        if self.peek_grapheme("/".len())? == "*" {
+            self.skip_grapheme()?;
+            self.skip_grapheme()?;
 
             // Keep reading until we find characters '*' and '/'
             // Deliberately skip checks for prolog_char to allow
@@ -200,102 +202,82 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             // "extended characters", without having to explicitly add
             // them to a character class.
 
-            let mut c = self.lookahead_char()?;
-
-            let mut comment_loop = || -> Result<(), ParserError> {
-                loop {
-                    while !comment_2_char!(c) {
-                        self.skip_char(c);
-                        c = self.lookahead_char()?;
-                    }
-
-                    self.skip_char(c);
-                    c = self.lookahead_char()?;
-
-                    if comment_1_char!(c) {
-                        break;
-                    }
+            loop {
+                while self.peek_grapheme(0)? != "*" {
+                    self.skip_grapheme()?;
                 }
 
-                Ok(())
-            };
+                // skip the "*"
+                self.skip_grapheme()?;
 
-            match comment_loop() {
-                Err(e) if e.is_unexpected_eof() => {
-                    return Err(self.incomplete_reduction());
+                // break if we have "/"
+                if self.peek_grapheme(0)? == "/" {
+                    self.skip_grapheme()?;
+                    break;
                 }
-                Err(e) => {
-                    return Err(e);
-                }
-                Ok(_) => {}
             }
 
-            if prolog_char!(c) {
-                self.skip_char(c);
-                Ok(true)
-            } else {
-                Err(self.located_error(ParserErrorKind::NonPrologChar))
-            }
+            Ok(true)
         } else {
-            self.return_char('/');
             Ok(false)
         }
     }
 
-    fn get_back_quoted_char(&mut self) -> Result<char, ParserError> {
-        let c = self.lookahead_char()?;
+    fn get_back_quoted_char(&mut self) -> Result<CompactString, ParserError> {
+        let g = self.peek_grapheme(0)?;
 
-        if back_quote_char!(c) {
-            self.skip_char(c);
-            let c2 = self.lookahead_char()?;
+        if is_back_quote_grapheme(g) {
+            let g = CompactString::new(g);
+            let g = self.peek_grapheme(g.len())?;
 
-            if !back_quote_char!(c2) {
-                self.return_char(c);
-                Err(self.unexpected_char(c))
+            if is_back_quote_grapheme(g) {
+                self.skip_grapheme()?;
+                self.skip_grapheme()?;
+
+                Ok(CompactString::new("`"))
             } else {
-                self.skip_char(c2);
-                Ok(c2)
+                Err(self.unexpected_grapheme(String::from("`")))
             }
-        } else if single_quote_char!(c) {
-            self.skip_char(c);
-            self.read_char()
+        } else if is_single_quote_grapheme(g) {
+            self.skip_grapheme()
         } else {
-            self.get_non_quote_char()
+            self.get_non_quote_grapheme(0)
         }
     }
 
-    fn get_back_quoted_item(&mut self) -> Result<Option<char>, ParserError> {
-        let c = self.lookahead_char()?;
+    fn get_back_quoted_item(&mut self) -> Result<Option<CompactString>, ParserError> {
+        let g = self.peek_grapheme(0)?;
 
-        if backslash_char!(c) {
-            self.skip_char(c);
-            let c2 = self.lookahead_char()?;
+        if is_backslash_grapheme(g) {
+            let g = CompactString::new(g);
+            let g = self.peek_grapheme(g.len())?;
 
-            if new_line_char!(c2) {
-                self.skip_char(c2);
+            if g == "\n" {
+                self.skip_grapheme()?;
+                self.skip_grapheme()?;
+
                 Ok(None)
             } else {
-                self.return_char(c);
-                Err(self.unexpected_char(c))
+                Err(self.unexpected_grapheme(String::from("\\")))
             }
         } else {
             self.get_back_quoted_char().map(Some)
         }
     }
 
-    fn get_back_quoted_string(&mut self) -> Result<String, ParserError> {
-        let c = self.lookahead_char()?;
+    fn get_back_quoted_string(&mut self) -> Result<CompactString, ParserError> {
+        let g = self.peek_grapheme(0)?;
 
-        if back_quote_char!(c) {
-            self.skip_char(c);
+        if is_back_quote_grapheme(g) {
+            self.skip_grapheme()?;
 
-            let mut token = String::with_capacity(16);
-            consume_chars_with!(token, self.get_back_quoted_item());
+            let mut token = CompactString::with_capacity(16);
+            consume_graphemes_with!(token, self.get_back_quoted_item());
 
-            let c = self.lookahead_char()?;
+            let g = self.peek_grapheme(0)?;
 
-            if back_quote_char!(c) {
-                self.skip_char(c);
+            if is_back_quote_grapheme(g) {
+                self.skip_grapheme()?;
                 Ok(token)
             } else {
                 Err({
@@ -304,119 +286,128 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 })
             }
         } else {
-            Err(self.unexpected_char(c))
+            let g = g.to_string();
+            Err(self.unexpected_grapheme(g))
         }
     }
 
-    fn get_single_quoted_item(&mut self) -> Result<Option<char>, ParserError> {
-        let c = self.lookahead_char()?;
+    fn get_single_quoted_item(&mut self) -> Result<Option<CompactString>, ParserError> {
+        let g = self.peek_grapheme(0)?;
 
-        if backslash_char!(c) {
-            self.skip_char(c);
-            let c2 = self.lookahead_char()?;
+        if is_backslash_grapheme(g) {
+            let g = CompactString::new(g);
+            let g = self.peek_grapheme(g.len())?;
 
-            if new_line_char!(c2) {
-                self.skip_char(c2);
+            if g == "\n" {
+                self.skip_grapheme()?;
+                self.skip_grapheme()?;
+
                 return Ok(None);
-            } else {
-                self.return_char(c);
             }
         }
 
-        self.get_single_quoted_char().map(Some)
+        self.get_single_quoted_grapheme(0).map(Some)
     }
 
-    fn get_single_quoted_char(&mut self) -> Result<char, ParserError> {
-        let c = self.lookahead_char()?;
+    fn get_single_quoted_grapheme(&mut self, at: usize) -> Result<CompactString, ParserError> {
+        let g = self.peek_grapheme(at)?;
 
-        if single_quote_char!(c) {
-            self.skip_char(c);
-            let c2 = self.lookahead_char()?;
+        if is_single_quote_grapheme(g) {
+            let g = CompactString::new(g);
+            let g = self.peek_grapheme(at + g.len())?;
 
-            if !single_quote_char!(c2) {
-                self.return_char(c);
-                Err(self.unexpected_char(c))
+            if is_single_quote_grapheme(g) {
+                self.skip_graphemes_up_to(at)?;
+                self.skip_grapheme()?;
+                self.skip_grapheme()?;
+
+                Ok(CompactString::new("'"))
             } else {
-                self.skip_char(c2);
-                Ok(c2)
+                Err(self.unexpected_grapheme(String::from("'")))
             }
-        } else if double_quote_char!(c) || back_quote_char!(c) {
-            self.skip_char(c);
-            Ok(c)
+        } else if g == "\"" || is_back_quote_grapheme(g) {
+            let g = CompactString::new(g);
+
+            self.skip_graphemes_up_to(at)?;
+            self.skip_grapheme()?;
+
+            Ok(g)
         } else {
-            self.get_non_quote_char()
+            self.get_non_quote_grapheme(at)
         }
     }
 
-    fn get_double_quoted_item(&mut self) -> Result<Option<char>, ParserError> {
-        let c = self.lookahead_char()?;
+    fn get_double_quoted_item(&mut self) -> Result<Option<CompactString>, ParserError> {
+        let g = CompactString::new(self.peek_grapheme(0)?);
 
-        if backslash_char!(c) {
-            self.skip_char(c);
+        if is_backslash_grapheme(g.as_str()) {
+            let g = self.peek_grapheme(g.len())?;
 
-            let c2 = self.lookahead_char()?;
+            if g == "\n" {
+                self.skip_grapheme()?;
+                self.skip_grapheme()?;
 
-            if new_line_char!(c2) {
-                self.skip_char(c2);
                 return Ok(None);
-            } else {
-                self.return_char(c);
             }
         }
 
-        self.get_double_quoted_char().map(Some)
+        self.get_double_quoted_grapheme().map(Some)
     }
 
-    fn get_double_quoted_char(&mut self) -> Result<char, ParserError> {
-        let c = self.lookahead_char()?;
+    fn get_double_quoted_grapheme(&mut self) -> Result<CompactString, ParserError> {
+        let g = CompactString::new(self.peek_grapheme(0)?);
 
-        if double_quote_char!(c) {
-            self.skip_char(c);
-            let c2 = self.lookahead_char()?;
+        if g == "\"" {
+            let g = self.peek_grapheme(g.len())?;
 
-            if !double_quote_char!(c2) {
-                self.return_char(c);
-                Err(self.unexpected_char(c))
+            if g != "\"" {
+                Err(self.unexpected_grapheme(String::from("\"")))
             } else {
-                self.skip_char(c2);
-                Ok(c2)
+                self.skip_grapheme()?;
+                self.skip_grapheme()?;
+
+                Ok(CompactString::new("\""))
             }
-        } else if single_quote_char!(c) || back_quote_char!(c) {
-            self.skip_char(c);
-            Ok(c)
+        } else if is_single_quote_grapheme(g.as_str()) || is_back_quote_grapheme(g.as_str()) {
+            let g = CompactString::new(g);
+            self.skip_grapheme()?;
+            Ok(g)
         } else {
-            self.get_non_quote_char()
+            self.get_non_quote_grapheme(0)
         }
     }
 
     fn get_control_escape_sequence(&mut self) -> Result<char, ParserError> {
-        let c = self.lookahead_char()?;
+        let g = self.peek_grapheme(0)?;
 
-        let escaped = match c {
-            'a' => '\u{07}', // UTF-8 alert
-            'b' => '\u{08}', // UTF-8 backspace
-            'v' => '\u{0b}', // UTF-8 vertical tab
-            'f' => '\u{0c}', // UTF-8 form feed
-            't' => '\t',
-            'n' => '\n',
-            'r' => '\r',
-            c => return Err(self.unexpected_char(c)),
+        let escaped = match g {
+            "a" => '\u{07}', // UTF-8 alert
+            "b" => '\u{08}', // UTF-8 backspace
+            "v" => '\u{0b}', // UTF-8 vertical tab
+            "f" => '\u{0c}', // UTF-8 form feed
+            "t" => '\t',
+            "n" => '\n',
+            "r" => '\r',
+            g => {
+                let g = String::from(g);
+                return Err(self.unexpected_grapheme(g));
+            }
         };
 
-        self.skip_char(c);
+        self.skip_grapheme()?;
         Ok(escaped)
     }
 
     fn get_octal_escape_sequence(&mut self) -> Result<char, ParserError> {
-        self.escape_sequence_to_char(|c| octal_digit_char!(c), 8)
+        self.escape_sequence_to_char(|g| is_octal_digit_grapheme(g), 8)
     }
 
-    fn get_hexadecimal_escape_sequence(&mut self, start: char) -> Result<char, ParserError> {
-        self.skip_char(start);
-        let c = self.lookahead_char()?;
+    fn get_hexadecimal_escape_sequence(&mut self) -> Result<char, ParserError> {
+        self.skip_grapheme()?;
+        let c = self.peek_grapheme(0)?;
 
-        if hexadecimal_digit_char!(c) {
-            self.escape_sequence_to_char(|c| hexadecimal_digit_char!(c), 16)
+        if is_hexadecimal_digit_grapheme(c) {
+            self.escape_sequence_to_char(|g| is_hexadecimal_digit_grapheme(g), 16)
         } else {
             Err(self.incomplete_reduction())
         }
@@ -424,25 +415,25 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
     fn escape_sequence_to_char(
         &mut self,
-        accept_char: impl Fn(char) -> bool,
+        accept_g: impl Fn(&str) -> bool,
         radix: u32,
     ) -> Result<char, ParserError> {
-        let mut c = self.lookahead_char()?;
+        let mut c = self.peek_grapheme(0)?;
         let mut token = String::with_capacity(16);
 
         loop {
-            token.push(c);
+            token.push_str(c);
 
-            self.skip_char(c);
-            c = self.lookahead_char()?;
+            self.skip_grapheme()?;
+            c = self.peek_grapheme(0)?;
 
-            if !accept_char(c) {
+            if !accept_g(c) {
                 break;
             }
         }
 
-        if backslash_char!(c) {
-            self.skip_char(c);
+        if is_backslash_grapheme(c) {
+            self.skip_grapheme()?;
             u32::from_str_radix(&token, radix).map_or_else(
                 |_| Err(self.parse_big_int_error()),
                 |n| char::try_from(n).map_err(|_| self.located_error(ParserErrorKind::Utf8Error)),
@@ -452,43 +443,52 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         }
     }
 
-    fn get_non_quote_char(&mut self) -> Result<char, ParserError> {
-        let c = self.lookahead_char()?;
+    fn get_non_quote_grapheme(&mut self, at: usize) -> Result<CompactString, ParserError> {
+        let g = self.peek_grapheme(at)?;
 
-        if graphic_char!(c) || alpha_numeric_char!(c) || solo_char!(c) || space_char!(c) {
-            self.skip_char(c);
-            Ok(c)
+        if is_graphic_grapheme(g) || g.is_alphanumeric_grapheme() || is_solo_grapheme(g) || g == " "
+        {
+            let g = CompactString::new(g);
+            self.skip_graphemes_up_to(at)?;
+            self.skip_grapheme()?;
+            Ok(g)
         } else {
-            if !backslash_char!(c) {
-                return Err(self.unexpected_char(c));
+            if !is_backslash_grapheme(g) {
+                let c = g.to_string();
+                return Err(self.unexpected_grapheme(c));
             }
 
-            self.skip_char(c);
-            let c = self.lookahead_char()?;
+            self.skip_graphemes_up_to(at)?;
+            self.skip_grapheme()?;
+            let g = self.peek_grapheme(0)?;
 
-            if meta_char!(c) {
-                self.skip_char(c);
-                Ok(c)
-            } else if octal_digit_char!(c) {
+            if is_meta_grapheme(g) {
+                let g = CompactString::new(g);
+                self.skip_grapheme()?;
+                return Ok(g);
+            }
+
+            if is_octal_digit_grapheme(g) {
                 self.get_octal_escape_sequence()
-            } else if symbolic_hexadecimal_char!(c) {
-                self.get_hexadecimal_escape_sequence(c)
+            } else if is_symbolic_hexadecimal_grapheme(g) {
+                self.get_hexadecimal_escape_sequence()
             } else {
                 self.get_control_escape_sequence()
             }
+            .map(|c| CompactString::from_iter(std::iter::once(c)))
         }
     }
 
-    fn char_code_list_token(&mut self, start: char) -> Result<String, ParserError> {
-        let mut token = String::with_capacity(16);
+    fn char_code_list_token(&mut self) -> Result<CompactString, ParserError> {
+        let mut token = CompactString::with_capacity(16);
 
-        self.skip_char(start);
-        consume_chars_with!(token, self.get_double_quoted_item());
+        self.skip_grapheme()?; // skip the "" that was peeked
+        consume_graphemes_with!(token, self.get_double_quoted_item());
 
-        let c = self.lookahead_char()?;
+        let g = self.peek_grapheme(0)?;
 
-        if double_quote_char!(c) {
-            self.skip_char(c);
+        if g == "\"" {
+            self.skip_grapheme()?;
             Ok(token)
         } else {
             Err({
@@ -498,19 +498,22 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         }
     }
 
-    fn hexadecimal_constant(&mut self, start: char) -> Result<NumberToken, ParserError> {
-        self.skip_char(start);
-        let mut c = self.lookahead_char()?;
+    fn hexadecimal_constant(&mut self) -> Result<NumberToken, ParserError> {
+        let g = self.peek_grapheme("x".len())?;
 
-        if hexadecimal_digit_char!(c) {
-            let mut token = String::with_capacity(16);
+        if is_hexadecimal_digit_grapheme(g) {
+            self.skip_grapheme()?; // skip the "x"
+
+            let mut g = self.peek_grapheme(0)?; // appease the borrow checker
+            let mut token = CompactString::with_capacity(16);
 
             loop {
-                if hexadecimal_digit_char!(c) {
-                    self.skip_char(c);
-                    token.push(c);
-                    c = match self.lookahead_char() {
-                        Ok(c) => c,
+                if is_hexadecimal_digit_grapheme(g) {
+                    token.push_str(g);
+                    self.skip_grapheme()?;
+
+                    g = match self.peek_grapheme(0) {
+                        Ok(g) => g,
                         Err(e) if e.is_unexpected_eof() => {
                             break;
                         }
@@ -524,23 +527,25 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             self.parse_integer_by_radix(&token, 16)
                 .map(NumberToken::Integer)
         } else {
-            self.return_char(start);
             Err(self.parse_big_int_error())
         }
     }
 
-    fn octal_constant(&mut self, start: char) -> Result<NumberToken, ParserError> {
-        self.skip_char(start);
-        let mut c = self.lookahead_char()?;
+    fn octal_constant(&mut self) -> Result<NumberToken, ParserError> {
+        let g = self.peek_grapheme("o".len())?;
 
-        if octal_digit_char!(c) {
-            let mut token = String::with_capacity(16);
+        if is_octal_digit_grapheme(g) {
+            self.skip_grapheme()?; // skip the "o"
+
+            let mut g = self.peek_grapheme(0)?; // appease the borrow checker
+            let mut token = CompactString::with_capacity(16);
 
             loop {
-                if octal_digit_char!(c) {
-                    self.skip_char(c);
-                    token.push(c);
-                    c = match self.lookahead_char() {
+                if is_octal_digit_grapheme(g) {
+                    token.push_str(g);
+                    self.skip_grapheme()?;
+
+                    g = match self.peek_grapheme(0) {
                         Ok(c) => c,
                         Err(e) if e.is_unexpected_eof() => {
                             break;
@@ -555,23 +560,23 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             self.parse_integer_by_radix(&token, 8)
                 .map(NumberToken::Integer)
         } else {
-            self.return_char(start);
             Err(self.parse_big_int_error())
         }
     }
 
-    fn binary_constant(&mut self, start: char) -> Result<NumberToken, ParserError> {
-        self.skip_char(start);
-        let mut c = self.lookahead_char()?;
+    fn binary_constant(&mut self) -> Result<NumberToken, ParserError> {
+        let g = self.peek_grapheme("b".len())?;
 
-        if binary_digit_char!(c) {
+        if is_binary_grapheme(g) {
+            self.skip_grapheme()?; // skip the "b"
+            let mut g = self.peek_grapheme(0)?; // appease the borrow checker
             let mut token = String::with_capacity(16);
 
             loop {
-                if binary_digit_char!(c) {
-                    self.skip_char(c);
-                    token.push(c);
-                    c = match self.lookahead_char() {
+                if is_binary_grapheme(g) {
+                    token.push_str(g);
+                    self.skip_grapheme()?;
+                    g = match self.peek_grapheme(0) {
                         Ok(c) => c,
                         Err(e) if e.is_unexpected_eof() => {
                             break;
@@ -586,82 +591,81 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             self.parse_integer_by_radix(&token, 2)
                 .map(NumberToken::Integer)
         } else {
-            self.return_char(start);
             Err(self.parse_big_int_error())
         }
     }
 
     fn variable_token(&mut self) -> Result<Token, ParserError> {
-        let mut s = String::with_capacity(16);
-        s.push(self.read_char()?);
+        let mut token = CompactString::with_capacity(16);
+        token.push_str(&self.skip_grapheme()?);
 
         loop {
-            let c = self.lookahead_char()?;
+            let g = self.peek_grapheme(0)?;
 
-            if alpha_numeric_char!(c) {
-                self.skip_char(c);
-                s.push(c);
+            if g.is_alphanumeric_grapheme() {
+                token.push_str(g);
+                self.skip_grapheme()?;
             } else {
                 break;
             }
         }
 
-        Ok(Token::Var(s))
+        Ok(Token::Var(token))
     }
 
-    fn name_token(&mut self, c: char) -> Result<Token, ParserError> {
-        let mut token = String::with_capacity(16);
+    fn name_token(&mut self, g: CompactString) -> Result<Token, ParserError> {
+        let mut token = CompactString::with_capacity(16);
 
-        if small_letter_char!(c) {
-            self.skip_char(c);
-            token.push(c);
+        if is_lowercase_grapheme(g.as_str()) {
+            token.push_str(&g);
+            self.skip_grapheme()?;
 
             loop {
-                let c = self.lookahead_char()?;
+                let g = self.peek_grapheme(0)?;
 
-                if alpha_numeric_char!(c) {
-                    self.skip_char(c);
-                    token.push(c);
+                if g.is_alphanumeric_grapheme() {
+                    token.push_str(&g);
+                    self.skip_grapheme()?;
                 } else {
                     break;
                 }
             }
-        } else if graphic_token_char!(c) {
-            self.skip_char(c);
-            token.push(c);
+        } else if is_graphic_token_grapheme(g.as_str()) {
+            token.push_str(&g);
+            self.skip_grapheme()?;
 
             loop {
-                let c = self.lookahead_char()?;
+                let g = self.peek_grapheme(0)?;
 
-                if graphic_token_char!(c) {
-                    self.skip_char(c);
-                    token.push(c);
+                if is_graphic_token_grapheme(g) {
+                    token.push_str(&g);
+                    self.skip_grapheme()?;
                 } else {
                     break;
                 }
             }
-        } else if cut_char!(c) || semicolon_char!(c) {
-            self.skip_char(c);
-            token.push(c);
-        } else if single_quote_char!(c) {
-            self.skip_char(c);
-            consume_chars_with!(token, self.get_single_quoted_item());
+        } else if g == "!" || g == ";" {
+            token.push_str(&g);
+            self.skip_grapheme()?;
+        } else if is_single_quote_grapheme(g.as_str()) {
+            self.skip_grapheme()?;
+            consume_graphemes_with!(token, self.get_single_quoted_item());
 
-            let c = self.lookahead_char()?;
+            let g = self.peek_grapheme(0)?;
 
-            if single_quote_char!(c) {
-                self.skip_char(c);
+            if is_single_quote_grapheme(g) {
+                self.skip_grapheme()?;
 
                 // use exactly_one once stable in our msrv https://github.com/rust-lang/rust/issues/149266
-                if let Some(c) = token.chars().next()
-                    && token.chars().nth(1).is_none()
+                if let Some(c) = token.as_bytes().chars().next()
+                    && token.as_bytes().chars().nth(1).is_none()
                 {
-                    return Ok(Token::Literal(Literal::Atom(
-                        AtomCell::new_char_inlined(c).get_name(),
-                    )));
+                    let atom = AtomCell::from_codepoint(c).get_name();
+                    return Ok(Token::Literal(Literal::Atom(atom)));
                 }
             } else {
-                return Err(self.located_error(ParserErrorKind::InvalidSingleQuotedCharacter(c)));
+                let g = g.to_string();
+                return Err(self.located_error(ParserErrorKind::InvalidSingleQuotedGrapheme(g)));
             }
         } else {
             match self.get_back_quoted_string() {
@@ -670,43 +674,38 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             }
         }
 
-        if token.as_str() == "[]" {
-            Ok(Token::Literal(Literal::Atom(atom!("[]"))))
-        } else {
-            Ok(Token::Literal(Literal::Atom(AtomTable::build_with(
-                &self.machine_st.atom_tbl,
-                &token,
-            ))))
-        }
+        Ok(Token::Literal(Literal::Atom(AtomTable::build_with(
+            &self.machine_st.atom_tbl,
+            &token,
+        ))))
     }
 
     fn vacate_with_float(
         &mut self,
-        mut token: String,
+        token: CompactString,
     ) -> Result<(F64Offset, OrderedFloat<f64>), ParserError> {
-        self.return_char(token.pop().unwrap());
-
         let n = self.parse_float_lossy(&token)?;
         let offset = float_alloc!(n, self.machine_st.arena);
 
         Ok((offset, OrderedFloat(n)))
     }
 
-    fn skip_underscore_in_number(&mut self) -> Result<char, ParserError> {
-        let mut c = self.lookahead_char()?;
-
-        if c == '_' {
-            self.skip_char(c);
+    fn skip_underscore_in_number(&mut self) -> Result<CompactString, ParserError> {
+        if let g = CompactString::new(self.peek_grapheme(0)?)
+            && !is_underscore_grapheme(g.as_str())
+        {
+            return Ok(g);
+        } else {
+            self.skip_grapheme()?;
             self.scan_for_layout()?;
-            c = self.lookahead_char()?;
 
-            if decimal_digit_char!(c) {
-                Ok(c)
+            let g = self.peek_grapheme(0)?;
+
+            if is_decimal_digit_grapheme(g) {
+                Ok(CompactString::new(g))
             } else {
                 Err(self.parse_big_int_error())
             }
-        } else {
-            Ok(c)
         }
     }
 
@@ -734,90 +733,97 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         self.parse_integer_by_radix(token, 10)
     }
 
-    fn number_token(&mut self, leading_c: char) -> Result<NumberToken, ParserError> {
-        let mut token = String::with_capacity(16);
+    fn number_token(&mut self, leading_g: CompactString) -> Result<NumberToken, ParserError> {
+        let mut token = CompactString::with_capacity(16);
 
-        self.skip_char(leading_c);
-        token.push(leading_c);
-        let mut c = try_nt!(token, self.skip_underscore_in_number());
+        self.skip_grapheme()?;
+        token.push_str(&leading_g);
 
-        while decimal_digit_char!(c) {
-            token.push(c);
-            self.skip_char(c);
-            c = try_nt!(token, self.skip_underscore_in_number());
+        let mut g = try_nt!(token, self.skip_underscore_in_number());
+
+        while is_decimal_digit_grapheme(g.as_str()) {
+            token.push_str(g.as_str());
+            self.skip_grapheme()?;
+            g = try_nt!(token, self.skip_underscore_in_number());
         }
 
-        if decimal_point_char!(c) {
-            self.skip_char(c);
+        if g == "." {
+            let after_dot_g_opt = self.reader.peek_grapheme(".".len())?;
 
-            if self.reader.peek_char().is_none() {
-                self.return_char('.');
+            if after_dot_g_opt.is_none() {
                 self.parse_integer(&token).map(NumberToken::Integer)
-            } else if decimal_digit_char!(self.lookahead_char()?) {
-                token.push('.');
-                token.push(self.read_char()?);
+            } else if let Some(g) = after_dot_g_opt
+                && is_decimal_digit_grapheme(g)
+            {
+                token.push_str(&self.skip_grapheme()?); // push "."
 
-                let mut c = try_nt!(token, self.lookahead_char());
+                let mut g = try_nt!(token, self.peek_grapheme(0));
 
-                while decimal_digit_char!(c) {
-                    token.push(c);
-                    self.skip_char(c);
-                    c = try_nt!(token, self.lookahead_char());
+                while is_decimal_digit_grapheme(g) {
+                    token.push_str(g);
+                    self.skip_grapheme()?;
+                    g = try_nt!(token, self.peek_grapheme(0));
                 }
 
-                if exponent_char!(c) {
-                    self.skip_char(c);
-                    token.push(c);
+                if is_exponent_grapheme(g) {
+                    let exp_g = CompactString::new(g);
 
-                    let c = match self.lookahead_char() {
+                    let next_g = match self.peek_grapheme(exp_g.len()) {
                         Err(_) => {
                             return self
                                 .vacate_with_float(token)
                                 .map(|(offset, fl)| NumberToken::Float(offset, fl));
                         }
-                        Ok(c) => c,
+                        Ok(g) => CompactString::new(g),
                     };
 
-                    if !sign_char!(c) && !decimal_digit_char!(c) {
+                    if !is_sign_grapheme(next_g.as_str())
+                        && !is_decimal_digit_grapheme(next_g.as_str())
+                    {
                         return self
                             .vacate_with_float(token)
                             .map(|(offset, fl)| NumberToken::Float(offset, fl));
                     }
 
-                    if sign_char!(c) {
-                        self.skip_char(c);
-                        token.push(c);
-
-                        let c = match self.lookahead_char() {
+                    if is_sign_grapheme(next_g.as_str()) {
+                        let digit_g = match self.peek_grapheme(exp_g.len() + next_g.len()) {
                             Err(_) => {
-                                self.return_char(token.pop().unwrap());
                                 return self
                                     .vacate_with_float(token)
                                     .map(|(offset, fl)| NumberToken::Float(offset, fl));
                             }
-                            Ok(c) => c,
+                            Ok(g) => CompactString::new(g),
                         };
 
-                        if !decimal_digit_char!(c) {
-                            self.return_char(token.pop().unwrap());
+                        if !is_decimal_digit_grapheme(digit_g.as_str()) {
                             return self
                                 .vacate_with_float(token)
                                 .map(|(offset, fl)| NumberToken::Float(offset, fl));
                         }
+
+                        token.push_str(&exp_g);
+                        token.push_str(&next_g);
+
+                        self.skip_grapheme()?; // skip exp_g
+                        self.skip_grapheme()?; // skip next_g
+                    } else {
+                        // next_g is a decimal digit
+                        token.push_str(&exp_g);
+                        self.skip_grapheme()?; // skip exp_g
                     }
 
-                    let mut c = self.lookahead_char()?;
+                    let g = self.peek_grapheme(0)?;
 
-                    if decimal_digit_char!(c) {
-                        self.skip_char(c);
-                        token.push(c);
+                    if is_decimal_digit_grapheme(g) {
+                        token.push_str(g);
+                        self.skip_grapheme()?;
 
                         loop {
-                            c = try_nt!(token, self.lookahead_char());
+                            let g = try_nt!(token, self.peek_grapheme(0));
 
-                            if decimal_digit_char!(c) {
-                                self.skip_char(c);
-                                token.push(c);
+                            if is_decimal_digit_grapheme(g) {
+                                token.push_str(g);
+                                self.skip_grapheme()?;
                             } else {
                                 break;
                             }
@@ -837,63 +843,62 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                     Ok(NumberToken::Float(offset, OrderedFloat(n)))
                 }
             } else {
-                self.return_char('.');
                 self.parse_integer(&token).map(NumberToken::Integer)
             }
         } else if token.starts_with('0') && token.len() == 1 {
-            if c == 'x' {
-                self.hexadecimal_constant(c).or_else(|e| {
+            if is_symbolic_hexadecimal_grapheme(g.as_str()) {
+                self.hexadecimal_constant().or_else(|e| {
                     if let ParserErrorKind::ParseBigInt = e.kind {
                         self.parse_integer(&token).map(NumberToken::Integer)
                     } else {
                         Err(e)
                     }
                 })
-            } else if c == 'o' {
-                self.octal_constant(c).or_else(|e| {
+            } else if g == "o" {
+                self.octal_constant().or_else(|e| {
                     if let ParserErrorKind::ParseBigInt = e.kind {
                         self.parse_integer(&token).map(NumberToken::Integer)
                     } else {
                         Err(e)
                     }
                 })
-            } else if c == 'b' {
-                self.binary_constant(c).or_else(|e| {
+            } else if g == "b" {
+                self.binary_constant().or_else(|e| {
                     if let ParserErrorKind::ParseBigInt = e.kind {
                         self.parse_integer(&token).map(NumberToken::Integer)
                     } else {
                         Err(e)
                     }
                 })
-            } else if single_quote_char!(c) {
-                self.skip_char(c);
-                let c = self.lookahead_char()?;
+            } else if is_single_quote_grapheme(g.as_str()) {
+                let g = CompactString::new(self.peek_grapheme("'".len())?);
 
-                if backslash_char!(c) {
-                    self.skip_char(c);
-                    let c = self.lookahead_char()?;
+                if is_backslash_grapheme(g.as_str()) {
+                    let c = self.peek_grapheme("'\\".len())?; // peek past '\'' *and* '\\'
 
-                    if new_line_char!(c) {
-                        self.skip_char(c);
-                        self.return_char('\'');
-
+                    if c == "\n" {
                         return Ok(NumberToken::Integer(GInteger::Fixnum(Fixnum::build_with(
                             0,
                         ))));
-                    } else {
-                        self.return_char('\\');
                     }
                 }
 
-                self.get_single_quoted_char()
+                self.get_single_quoted_grapheme("'".len())
+                    .and_then(|g| {
+                        grapheme_as_char(g.as_str()).ok_or_else(|| {
+                            self.located_error(ParserErrorKind::InvalidSingleQuotedGrapheme(
+                                g.to_string(),
+                            ))
+                        })
+                    })
                     .map(|c| NumberToken::Integer(GInteger::Fixnum(Fixnum::build_with(c))))
                     .or_else(|err| {
                         match &err.kind {
-                            ParserErrorKind::UnexpectedChar('\'', ..) => {}
+                            ParserErrorKind::UnexpectedGrapheme(c)
+                                if is_single_quote_grapheme(c.as_str()) => {}
                             _ => return Err(err),
                         }
 
-                        self.return_char(c);
                         self.parse_integer(&token).map(NumberToken::Integer)
                     })
             } else {
@@ -906,20 +911,20 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
     fn consume_layout(
         &mut self,
-        c: Option<char>,
+        c: Option<CompactString>,
         layout_info: &mut LayoutInfo,
     ) -> Result<(), ParserError> {
         #[allow(clippy::redundant_guards)]
         match c {
-            Some(c) if layout_char!(c) => {
-                self.skip_char(c);
+            Some(c) if is_layout_grapheme(c.as_str()) => {
+                self.skip_grapheme()?;
                 layout_info.inserted = true;
             }
-            Some(c) if end_line_comment_char!(c) => {
+            Some(c) if c == "%" => {
                 self.single_line_comment()?;
                 layout_info.inserted = true;
             }
-            Some(c) if comment_1_char!(c) => {
+            Some(c) if c == "/" => {
                 if self.bracketed_comment()? {
                     layout_info.inserted = true;
                 } else {
@@ -935,14 +940,14 @@ impl<'a, R: CharRead> Lexer<'a, R> {
     }
 
     pub fn scan_for_layout(&mut self) -> Result<bool, ParserError> {
-        match self.lookahead_char() {
+        match self.peek_grapheme(0) {
             Err(e) => Err(e),
             Ok(c) => {
                 let mut layout_info = LayoutInfo {
                     inserted: false,
                     more: true,
                 };
-                let mut cr = Some(c);
+                let mut cr = Some(CompactString::new(c));
 
                 loop {
                     self.consume_layout(cr, &mut layout_info)?;
@@ -951,7 +956,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         break;
                     }
 
-                    cr = self.lookahead_char().ok();
+                    cr = self.peek_grapheme(0).ok().map(CompactString::new);
                 }
 
                 Ok(layout_info.inserted)
@@ -961,13 +966,13 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
     pub fn next_number_token(&mut self) -> Result<Token, ParserError> {
         self.scan_for_layout()?;
-        let c = self.lookahead_char()?;
+        let g = CompactString::new(self.peek_grapheme(0)?);
 
-        if !decimal_digit_char!(c) {
-            return self.name_token(c);
+        if !is_decimal_digit_grapheme(g.as_str()) {
+            return self.name_token(g);
         }
 
-        match self.number_token(c) {
+        match self.number_token(g) {
             Ok(NumberToken::Partial(token_string)) => match self.parse_integer(&token_string) {
                 Ok(n) => Ok(Token::Literal(n.to_literal())),
                 Err(_) => {
@@ -984,26 +989,26 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
     pub fn next_token(&mut self) -> Result<Token, ParserError> {
         let layout_inserted = self.scan_for_layout()?;
-        let cr = self.lookahead_char();
+        let cr = self.peek_grapheme(0);
 
         match cr {
-            Ok(c) => {
-                if capital_letter_char!(c) || variable_indicator_char!(c) {
+            Ok(g) => {
+                if is_uppercase_grapheme(g) || is_underscore_grapheme(g) {
                     return self.variable_token();
                 }
 
-                if c == ',' {
-                    self.skip_char(c);
+                if g == "," {
+                    self.skip_grapheme()?;
                     return Ok(Token::Comma);
                 }
 
-                if c == ')' {
-                    self.skip_char(c);
+                if g == ")" {
+                    self.skip_grapheme()?;
                     return Ok(Token::Close);
                 }
 
-                if c == '(' {
-                    self.skip_char(c);
+                if g == "(" {
+                    self.skip_grapheme()?;
                     return Ok(if layout_inserted {
                         Token::Open
                     } else {
@@ -1011,81 +1016,81 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                     });
                 }
 
-                if c == '.' {
-                    self.skip_char(c);
+                if g == "." {
+                    return match self.peek_grapheme(".".len()) {
+                        Ok(g) if is_layout_grapheme(g) || g == "%" => {
+                            let g = CompactString::new(g);
+                            self.skip_grapheme()?; // skip '.'
 
-                    match self.lookahead_char() {
-                        Ok(c) if layout_char!(c) || c == '%' => {
-                            if new_line_char!(c) {
-                                self.skip_char(c);
+                            if g == "\n" {
+                                self.skip_grapheme()?;
                             }
 
-                            return Ok(Token::End);
+                            Ok(Token::End)
                         }
                         Err(e) if e.is_unexpected_eof() => {
-                            return Ok(Token::End);
+                            self.skip_grapheme()?;
+                            Ok(Token::End)
                         }
-                        _ => {
-                            self.return_char('.');
-                        }
+                        _ => self.name_token(CompactString::new(".")),
                     };
-
-                    return self.name_token(c);
                 }
 
-                if decimal_digit_char!(c) {
+                if is_decimal_digit_grapheme(g) {
+                    let c = CompactString::new(g);
                     return self.number_token(c).and_then(|nt| match nt.to_token() {
                         Some(token) => Ok(token),
                         None => Err(ParserError::unexpected_eof()),
                     });
                 }
 
-                if c == ']' {
-                    self.skip_char(c);
+                if g == "]" {
+                    self.skip_grapheme()?;
                     return Ok(Token::CloseList);
                 }
 
-                if c == '[' {
-                    self.skip_char(c);
+                if g == "[" {
+                    self.skip_grapheme()?;
                     return Ok(Token::OpenList);
                 }
 
-                if c == '|' {
-                    self.skip_char(c);
-                    let next = self.lookahead_char()?;
-                    if next == '|' {
-                        self.skip_char(next);
+                if g == "|" {
+                    self.skip_grapheme()?;
+                    let next = self.peek_grapheme(0)?;
+                    if next == "|" {
+                        self.skip_grapheme()?;
                         return Ok(Token::DoubleBar);
                     }
                     return Ok(Token::HeadTailSeparator);
                 }
 
-                if c == '{' {
-                    self.skip_char(c);
+                if g == "{" {
+                    self.skip_grapheme()?;
                     return Ok(Token::OpenCurly);
                 }
 
-                if c == '}' {
-                    self.skip_char(c);
+                if g == "}" {
+                    self.skip_grapheme()?;
                     return Ok(Token::CloseCurly);
                 }
 
-                if c == '"' {
-                    let s = self.char_code_list_token(c)?;
+                if g == "\"" {
+                    let string = self.char_code_list_token()?;
 
                     return if let DoubleQuotes::Atom = self.machine_st.flags.double_quotes {
-                        let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &s);
+                        let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &string);
                         Ok(Token::Literal(Literal::Atom(atom)))
                     } else {
-                        Ok(Token::String(s))
+                        Ok(Token::String(string))
                     };
                 }
 
-                if c == '\u{0}' {
+                if g == "\u{0}" {
                     return Err(ParserError::unexpected_eof());
                 }
 
-                self.name_token(c)
+                let g = CompactString::new(g);
+                self.name_token(g)
             }
             Err(e) => Err(e),
         }

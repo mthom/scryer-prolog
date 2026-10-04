@@ -31,7 +31,7 @@ pub(super) fn bootstrapping_compile(
 ) -> Result<(), SessionError> {
     let (wam_prelude, machine_st) = wam.prelude_view_and_machine_st();
 
-    let term_stream = BootstrappingTermStream::from_char_reader(stream, machine_st, listing_src);
+    let term_stream = BootstrappingTermStream::from_reader(stream, machine_st, listing_src);
 
     let payload =
         BootstrappingLoadState(LoadStatePayload::new(wam_prelude.code.len(), term_stream));

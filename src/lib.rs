@@ -9,9 +9,9 @@ extern crate static_assertions;
 pub(crate) mod macros;
 #[macro_use]
 pub(crate) mod atom_table;
+pub(crate) mod offset_table;
 #[macro_use]
 pub(crate) mod arena;
-pub(crate) mod offset_table;
 #[macro_use]
 pub(crate) mod parser;
 #[macro_use]

@@ -1,5 +1,5 @@
 use crate::allocator::*;
-use crate::arena::*;
+use crate::arena::alloc::*;
 use crate::atom_table::*;
 use crate::debray_allocator::*;
 use crate::forms::*;
@@ -22,7 +22,6 @@ use ordered_float::{Float, OrderedFloat};
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::convert::TryFrom;
-use std::f64;
 use std::num::FpCategory;
 use std::ops::Div;
 use std::vec::Vec;
@@ -622,18 +621,18 @@ impl TryFrom<(HeapCellValue, &'_ F64Table)> for Number {
     #[inline]
     fn try_from((value, f64_tbl): (HeapCellValue, &F64Table)) -> Result<Number, Self::Error> {
         read_heap_cell!(value,
-           (HeapCellValueTag::Cons, c) => {
-               match_untyped_arena_ptr!(c,
-                  (ArenaHeaderTag::Integer, n) => {
+           (HeapCellValueTag::Cons, cons_ptr) => {
+               match cons_ptr.get_tag() {
+                  ArenaHeaderTag::Integer => {
+                      let n = unsafe { cons_ptr.as_typed_ptr::<Integer>() };
                       Ok(Number::Integer(n))
                   }
-                  (ArenaHeaderTag::Rational, n) => {
+                  ArenaHeaderTag::Rational => {
+                      let n = unsafe { cons_ptr.as_typed_ptr::<Rational>() };
                       Ok(Number::Rational(n))
                   }
-                  _ => {
-                      Err(())
-                  }
-               )
+                  _ => Err(()),
+               }
            }
            (HeapCellValueTag::F64Offset, offset) => {
                let n = f64_tbl.get_entry(offset);

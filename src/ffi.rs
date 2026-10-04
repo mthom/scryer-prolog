@@ -19,7 +19,7 @@ and for each field: we add to the pointer until we're aligned to the next data t
 and finally we add the pointer the size of what we've written.
 */
 
-use crate::arena::Arena;
+use crate::arena::alloc::Arena;
 use crate::atom_table::Atom;
 use crate::forms::Number;
 use crate::machine::machine_errors::DomainErrorType;

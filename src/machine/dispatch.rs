@@ -1,6 +1,6 @@
 use std::sync::atomic;
 
-use crate::arena::*;
+use crate::arena::alloc::*;
 use crate::atom_table::*;
 use crate::indexing_iter::IndexedClauseView;
 use crate::instructions::*;
@@ -761,7 +761,7 @@ impl MachineState {
             if let Some(r) = cell.as_var() {
                 let target_cell = backtrack_on_resource_error!(
                     self,
-                    self.heap.allocate_pstr(string_cursor),
+                    self.heap.allocate_pstr(string_cursor.as_bytes()),
                     return
                 );
 
@@ -823,7 +823,7 @@ impl MachineState {
                             break;
                         }
                     } else if let Some(r) = cell.as_var() {
-                        self.bind(r, char_as_cell!(c));
+                        self.bind(r, codepoint_as_cell!(c));
                     } else {
                         self.fail = true;
                     }
@@ -850,7 +850,7 @@ impl MachineState {
                             break;
                         }
                     } else if let Some(r) = cell.as_var() {
-                        self.bind(r, char_as_cell!(c));
+                        self.bind(r, codepoint_as_cell!(c));
                     } else {
                         self.fail = true;
                         break;
@@ -869,7 +869,7 @@ impl MachineState {
                     if h == v {
                         let target_cell = backtrack_on_resource_error!(
                             self,
-                            self.heap.allocate_pstr(string_cursor),
+                            self.heap.allocate_pstr(string_cursor.as_bytes()),
                             return
                         );
 
@@ -1078,12 +1078,12 @@ impl MachineState {
                 HeapPtr::HeapCell(_) => self.s_offset += n,
                 &HeapPtr::PStr(pstr_loc) => {
                     debug_assert!(n <= 2);
-                    let mut char_iter = self.heap.char_iter(pstr_loc);
+                    let mut c_iter = self.heap.char_iter(pstr_loc);
 
                     // this only matters in the case that n == 1, but the case
                     // analysis isn't worth doing since the effect is benign if n ==
                     // 2
-                    self.s_offset += char_iter.next().unwrap().len_utf8();
+                    self.s_offset += c_iter.next().unwrap().len_utf8();
                 }
             },
             MachineMode::Write => {
@@ -1112,7 +1112,8 @@ impl MachineState {
 
     #[inline(always)]
     fn put_partial_string_instr(&mut self, string: &str, r: RegType) {
-        self[r] = backtrack_on_resource_error!(self, self.heap.allocate_pstr(string), return);
+        self[r] =
+            backtrack_on_resource_error!(self, self.heap.allocate_pstr(string.as_bytes()), return);
         self.p += 1;
     }
 
@@ -3219,15 +3220,12 @@ impl Machine {
                             .store(self.machine_st.deref(self.machine_st[r]));
 
                         read_heap_cell!(d,
-                            (HeapCellValueTag::Cons, ptr) => {
-                                match_untyped_arena_ptr!(ptr,
-                                     (ArenaHeaderTag::Rational | ArenaHeaderTag::Integer, _r) => {
-                                         self.machine_st.p += 1;
-                                     }
-                                     _ => {
-                                         self.machine_st.backtrack();
-                                     }
-                                );
+                            (HeapCellValueTag::Cons, cons_ptr) => {
+                                if matches!(cons_ptr.get_tag(), ArenaHeaderTag::Rational | ArenaHeaderTag::Integer) {
+                                    self.machine_st.p += 1;
+                                } else {
+                                    self.machine_st.backtrack();
+                                }
                             }
                             (HeapCellValueTag::Fixnum) => {
                                 self.machine_st.p += 1;
@@ -3243,15 +3241,12 @@ impl Machine {
                             .store(self.machine_st.deref(self.machine_st[r]));
 
                         read_heap_cell!(d,
-                            (HeapCellValueTag::Cons, ptr) => {
-                                match_untyped_arena_ptr!(ptr,
-                                     (ArenaHeaderTag::Rational | ArenaHeaderTag::Integer, _r) => {
-                                         self.machine_st.p = self.machine_st.cp;
-                                     }
-                                     _ => {
-                                         self.machine_st.backtrack();
-                                     }
-                                );
+                            (HeapCellValueTag::Cons, cons_ptr) => {
+                                if matches!(cons_ptr.get_tag(), ArenaHeaderTag::Rational | ArenaHeaderTag::Integer) {
+                                    self.machine_st.p = self.machine_st.cp;
+                                } else {
+                                    self.machine_st.backtrack();
+                                }
                             }
                             (HeapCellValueTag::Fixnum) => {
                                 self.machine_st.p = self.machine_st.cp;

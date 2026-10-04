@@ -90,17 +90,16 @@ ryu = "1.0.18"
 sha3 = "0.10.8"
 smallvec = "1.13.2"
 static_assertions = "1.1.0"
-
 scraper = { version = "0.23.1", default-features = false, features = [
     "errors",
 ] }
 ego-tree = "0.10.0"
-
-
 serde_json = "1.0.122"
 serde = "1.0.204"
 parking_lot = "0.12.4"
 hashbrown = "0.17.0"
+bstr = "1.13.1"
+compact_str = "0.10.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 crossterm = { version = "0.28.1", optional = true }

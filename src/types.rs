@@ -1,9 +1,9 @@
-use crate::arena::*;
+use crate::arena::alloc::*;
+use crate::arena::stream_layout::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::machine::heap::*;
 use crate::machine::machine_indices::*;
-use crate::machine::streams::*;
 use crate::offset_table::*;
 use crate::parser::ast::Fixnum;
 use crate::parser::ast::Literal;
@@ -339,17 +339,15 @@ impl TryFrom<(HeapCellValue, &'_ F64Table)> for Literal {
                 Ok(Literal::CodeIndexOffset(idx))
             }
             (HeapCellValueTag::Cons, cons_ptr) => {
-                match_untyped_arena_ptr!(cons_ptr,
-                     (ArenaHeaderTag::Integer, n) => {
-                         Ok(Literal::Integer(n))
-                     }
-                     (ArenaHeaderTag::Rational, n) => {
-                         Ok(Literal::Rational(n))
-                     }
-                     _ => {
-                         Err(())
-                     }
-                )
+                match cons_ptr.get_tag() {
+                    ArenaHeaderTag::Integer => {
+                        Ok(Literal::Integer(unsafe { cons_ptr.as_typed_ptr::<Integer>() }))
+                    }
+                    ArenaHeaderTag::Rational => {
+                        Ok(Literal::Rational(unsafe { cons_ptr.as_typed_ptr::<Rational>() }))
+                    }
+                    _ => Err(()),
+                }
             }
             _ => {
                 Err(())
@@ -452,22 +450,6 @@ impl HeapCellValue {
     }
 
     #[inline]
-    pub fn as_char(self) -> Option<char> {
-        read_heap_cell!(self,
-            (HeapCellValueTag::Atom, (name, arity)) => {
-                if arity > 0 {
-                    return None;
-                }
-
-                name.as_char()
-            }
-            _ => {
-                None
-            }
-        )
-    }
-
-    #[inline]
     pub fn is_constant(self) -> bool {
         match self.get_tag() {
             HeapCellValueTag::Cons
@@ -556,6 +538,22 @@ impl HeapCellValue {
     }
 
     #[inline]
+    pub fn as_char(&self) -> Option<char> {
+        read_heap_cell!(self,
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                if arity > 0 {
+                    return None;
+                }
+
+                name.as_char()
+            }
+            _ => {
+                None
+            }
+        )
+    }
+
+    #[inline]
     pub fn to_fixnum(self) -> Option<Fixnum> {
         match self.get_tag() {
             HeapCellValueTag::Fixnum => Some(Fixnum::from_bytes(self.into_bytes())),
@@ -638,17 +636,12 @@ impl HeapCellValue {
     pub fn order_category(self, heap: &Heap) -> Option<TermOrderCategory> {
         read_heap_cell!(self,
             (HeapCellValueTag::Cons, c) => {
-                match_untyped_arena_ptr!(c,
-                   (ArenaHeaderTag::Integer, _n) => {
-                       Some(TermOrderCategory::Integer)
-                   }
-                   (ArenaHeaderTag::Rational, _n) => {
-                       Some(TermOrderCategory::Integer)
-                   }
-                   _ => {
-                       None
-                   }
-                )
+                match c.get_tag() {
+                    ArenaHeaderTag::Integer | ArenaHeaderTag::Rational => {
+                        Some(TermOrderCategory::Integer)
+                    }
+                    _ => None
+                }
             }
             (HeapCellValueTag::F64Offset) => {
                 Some(TermOrderCategory::FloatingPoint)

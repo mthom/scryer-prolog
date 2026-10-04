@@ -2,9 +2,9 @@
  * of token trees.
 */
 
-macro_rules! char_as_cell {
+macro_rules! codepoint_as_cell {
     ($c: expr) => {
-        HeapCellValue::from_bytes(AtomCell::new_char_inlined($c).into_bytes())
+        HeapCellValue::from_bytes(AtomCell::from_codepoint($c).into_bytes())
     };
 }
 
@@ -149,14 +149,14 @@ macro_rules! untyped_arena_ptr_as_cell {
 
 macro_rules! stream_as_cell {
     ($ptr:expr) => {
-        raw_ptr_as_cell!($ptr.as_ptr())
+        raw_ptr_as_cell!($ptr.header_ptr())
     };
 }
 
 macro_rules! cell_as_stream {
     ($cell:expr) => {{
         let ptr = cell_as_untyped_arena_ptr!($cell);
-        Stream::from_tag(ptr.get_tag(), ptr)
+        Stream::from_tag(ptr)
     }};
 }
 
@@ -165,112 +165,6 @@ macro_rules! cell_as_load_state_payload {
         let ptr = cell_as_untyped_arena_ptr!($cell);
         unsafe { ptr.as_typed_ptr::<LiveLoadState>() }
     }};
-}
-
-macro_rules! match_untyped_arena_ptr_pat_body {
-    ($ptr:ident, Integer, $n:ident, $code:expr) => {{
-        let $n = unsafe { $ptr.as_typed_ptr::<Integer>() };
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($ptr:ident, Rational, $n:ident, $code:expr) => {{
-        let $n = unsafe { $ptr.as_typed_ptr::<Rational>() };
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($ptr:ident, OssifiedOpDir, $n:ident, $code:expr) => {{
-        let $n = unsafe { $ptr.as_typed_ptr::<OssifiedOpDir>() };
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($ptr:ident, LiveLoadState, $n:ident, $code:expr) => {{
-        let $n = unsafe { $ptr.as_typed_ptr::<LiveLoadState>() };
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($ptr:ident, Stream, $s:ident, $code:expr) => {{
-        let $s = Stream::from_tag($ptr.get_tag(), $ptr);
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($ptr:ident, TcpListener, $listener:ident, $code:expr) => {{
-        #[allow(unused_mut)]
-        let mut $listener = unsafe { $ptr.as_typed_ptr::<TcpListener>() };
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($ptr:ident, HttpListener, $listener:ident, $code:expr) => {{
-        #[allow(unused_mut)]
-        let mut $listener = unsafe { $ptr.as_typed_ptr::<HttpListener>() };
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($ptr:ident, HttpResponse, $listener:ident, $code:expr) => {{
-        #[allow(unused_mut)]
-        let mut $listener = unsafe { $ptr.as_typed_ptr::<HttpResponse>() };
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($ptr:ident, PipeReader, $listener:ident, $code:expr) => {{
-        #[allow(unused_mut)]
-        let mut $listener = unsafe { $ptr.as_typed_ptr::<PipeReader>() };
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($ptr:ident, PipeWriter, $listener:ident, $code:expr) => {{
-        #[allow(unused_mut)]
-        let mut $listener = unsafe { $ptr.as_typed_ptr::<PipeWriter>() };
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($ptr:ident, ChildProcess, $listener:ident, $code:expr) => {{
-        #[allow(unused_mut)]
-        let mut $listener = unsafe { $ptr.as_typed_ptr::<std::process::Child>() };
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($ptr:ident, $($tags:tt)|+, $s:ident, $code:expr) => {{
-        let $s = Stream::from_tag($ptr.get_tag(), $ptr);
-        #[allow(unused_braces)]
-        $code
-    }};
-}
-
-macro_rules! match_untyped_arena_ptr_pat {
-    (Stream) => {
-        ArenaHeaderTag::InputFileStream
-            | ArenaHeaderTag::OutputFileStream
-            | ArenaHeaderTag::NamedTcpStream
-            | ArenaHeaderTag::NamedTlsStream
-            | ArenaHeaderTag::HttpReadStream
-            | ArenaHeaderTag::HttpWriteStream
-            | ArenaHeaderTag::ReadlineStream
-            | ArenaHeaderTag::StaticStringStream
-            | ArenaHeaderTag::ByteStream
-            | ArenaHeaderTag::CallbackStream
-            | ArenaHeaderTag::InputChannelStream
-            | ArenaHeaderTag::StandardOutputStream
-            | ArenaHeaderTag::StandardErrorStream
-            | ArenaHeaderTag::PipeReader
-            | ArenaHeaderTag::PipeWriter
-    };
-    ($tag:ident) => {
-        ArenaHeaderTag::$tag
-    };
-}
-
-macro_rules! match_untyped_arena_ptr {
-    ($ptr:expr, $( ($(ArenaHeaderTag::$tag:tt)|+, $n:ident) => $code:block $(,)?)+ $(_ => $misc_code:expr $(,)?)?) => ({
-        let ptr_id = $ptr;
-
-        #[allow(clippy::toplevel_ref_arg)]
-        match ptr_id.get_tag() {
-            $($(match_untyped_arena_ptr_pat!($tag) => {
-                match_untyped_arena_ptr_pat_body!(ptr_id, $tag, $n, $code)
-            })+)+
-            $(_ => $misc_code)?
-        }
-    });
 }
 
 macro_rules! read_heap_cell_pat_body {

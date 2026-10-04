@@ -4,12 +4,12 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 
 use rand::{SeedableRng, rngs::StdRng};
 
-use crate::Machine;
-
 use super::{
-    Arena, Atom, Callback, CompilationTarget, IndexStore, ListingSource, MachineArgs, MachineState,
-    Stream, bootstrapping_compile, current_dir, import_builtin_impls, libraries, load_module,
+    Arena, Atom, CompilationTarget, IndexStore, ListingSource, MachineArgs, MachineState, Stream,
+    bootstrapping_compile, current_dir, import_builtin_impls, libraries, load_module,
 };
+use crate::Machine;
+use crate::arena::stream_insts::Callback;
 
 #[derive(Default)]
 enum OutputStreamConfigInner {

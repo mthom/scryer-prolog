@@ -1,4 +1,4 @@
-use crate::arena::*;
+use crate::arena::alloc::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::heap_iter::*;
@@ -1450,16 +1450,19 @@ impl MachineState {
                 (HeapCellValueTag::PStrLoc, h) => {
                     let HeapStringScan { string, .. } = iter.heap.scan_slice_to_str(h);
                     let tail = term_stack.pop().unwrap();
+                    let string = unsafe {
+                        std::str::from_utf8_unchecked(string)
+                    };
 
                     term_stack.push(if matches!(tail, Term::Literal(_, Literal::Atom(atom!("[]")))) {
                         Term::CompleteString(
                             Cell::default(),
-                            Rc::new(string.to_owned()),
+                            Rc::new(String::from(string)),
                         )
                     } else {
                         Term::PartialString(
                             Cell::default(),
-                            Rc::new(string.to_owned()),
+                            Rc::new(String::from(string)),
                             Box::new(tail),
                         )
                     });
@@ -1975,7 +1978,7 @@ impl Machine {
     pub(crate) fn load_context_stream(&mut self) {
         if let Some(load_context) = self.load_contexts.last() {
             self.machine_st.unify_constant(
-                UntypedArenaPtr::from(load_context.stream.as_ptr()),
+                UntypedArenaPtr::from(load_context.stream),
                 self.machine_st.registers[1],
             );
         } else {

@@ -690,7 +690,8 @@ mod tests {
 
         // term is: [a, <stream ptr>]
         let stream = Stream::from_static_string("test", &mut wam.machine_st.arena);
-        let stream_cell = HeapCellValue::from_arena_header_ptr(stream.as_ptr());
+        let stream_cell =
+            HeapCellValue::from_arena_header_ptr(UntypedArenaPtr::from(stream).get_ptr());
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
 
@@ -764,7 +765,7 @@ mod tests {
         // two-part complete string, then a three-part cyclic string
         // involving an uncompacted list of chars.
 
-        let pstr_cell = wam.machine_st.heap.allocate_pstr("abc ").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_pstr(b"abc ").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(1)).unwrap();
 
@@ -798,7 +799,7 @@ mod tests {
 
         wam.machine_st.heap[1] = pstr_loc_as_cell!(heap_index!(3));
 
-        wam.machine_st.heap.allocate_pstr("abcdef ").unwrap();
+        wam.machine_st.heap.allocate_pstr(b"abcdef ").unwrap();
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(5)).unwrap();
 
         mark_cells(&mut wam.machine_st.heap, 2);
@@ -998,10 +999,10 @@ mod tests {
 
         writer.write_with(|section| {
             section.push_cell(atom_as_cell!(atom!("irrelevant stuff")));
-            section.push_pstr("abc ");
+            section.push_pstr(b"abc ");
             section.push_cell(pstr_loc_as_cell!(heap_index!(4)));
             section.push_cell(atom_as_cell!(atom!("irrelevant stuff")));
-            section.push_pstr("def");
+            section.push_pstr(b"def");
             section.push_cell(pstr_loc_as_cell!(heap_index!(1) + 2));
             section.push_cell(atom_as_cell!(atom!("irrelevant stuff")));
             section.push_cell(pstr_loc_as_cell!(heap_index!(1) + 2));
@@ -1162,7 +1163,7 @@ mod tests {
         let mut writer = wam.machine_st.heap.reserve(8).unwrap();
 
         writer.write_with(|section| {
-            section.push_pstr("abc ");
+            section.push_pstr(b"abc ");
             section.push_cell(pstr_loc_as_cell!(heap_index!(0) + 3)); // 3 character offset into pstr_cell
             section.push_cell(list_loc_as_cell!(3));
             section.push_cell(pstr_loc_as_cell!(0));

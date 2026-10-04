@@ -1,10 +1,9 @@
 #[cfg(feature = "http")]
 use crate::http::{HttpListener, HttpResponse};
+use crate::machine::arena::streams::*;
 use crate::machine::heap::AllocError;
 use crate::machine::loader::LiveLoadState;
-use crate::machine::streams::*;
 use crate::offset_table::*;
-use crate::read::*;
 use crate::types::UntypedArenaPtr;
 
 use crate::parser::dashu::{Integer, Rational};
@@ -193,10 +192,102 @@ impl<P, T: ?Sized + ArenaAllocated<Payload = ManuallyDrop<P>>> TypedArenaPtr<T> 
     }
 }
 
+#[derive(Debug)]
+pub struct DynamicArenaPtr<T: ?Sized> {
+    // keep track of the header_loc in case the datum is Dropped.
+    header_loc: *const ArenaHeader,
+    ptr: ptr::NonNull<T>,
+}
+
+impl<T: ?Sized> DynamicArenaPtr<T> {
+    #[inline]
+    pub(in crate::arena) unsafe fn from_raw(header_loc: *const ArenaHeader, ptr: *mut T) -> Self {
+        Self {
+            header_loc,
+            ptr: NonNull::new_unchecked(ptr),
+        }
+    }
+
+    #[inline]
+    pub fn tag(self) -> ArenaHeaderTag {
+        unsafe { (*self.header_loc).get_tag() }
+    }
+
+    #[inline]
+    pub fn as_ptr(&self) -> *const T {
+        self.ptr.as_ptr()
+    }
+}
+
+impl<T: ?Sized> PartialOrd for DynamicArenaPtr<T>
+where
+    T: PartialOrd,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        (**self).partial_cmp(&**other)
+    }
+}
+
+impl<T: ?Sized> PartialEq for DynamicArenaPtr<T>
+where
+    T: PartialEq,
+{
+    fn eq(&self, other: &DynamicArenaPtr<T>) -> bool {
+        std::ptr::addr_eq(self.ptr.as_ptr(), other.0.as_ptr()) || **self == **other
+    }
+}
+
+impl<T: ?Sized> Eq for DynamicArenaPtr<T> where T: Eq {}
+
+impl<T: ?Sized> Ord for DynamicArenaPtr<T>
+where
+    T: Ord,
+{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (**self).cmp(&**other)
+    }
+}
+
+impl<T: ?Sized> Hash for DynamicArenaPtr<T>
+where
+    T: Hash,
+{
+    #[inline(always)]
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        (self as &T).hash(hasher)
+    }
+}
+
+impl<T: ?Sized> Clone for DynamicArenaPtr<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T: ?Sized> Copy for DynamicArenaPtr<T> {}
+
+impl<T: ?Sized> Deref for DynamicArenaPtr<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.ptr.as_ref() }
+    }
+}
+
+impl<T: ?Sized> DerefMut for DynamicArenaPtr<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { self.ptr.as_mut() }
+    }
+}
+
 impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T>
 where
     T::Payload: Sized,
 {
+    pub(in crate::arena) unsafe fn from_raw(ptr: *mut T::Payload) -> Self {
+        Self(NonNull::new_unchecked(ptr))
+    }
+
     #[inline]
     pub fn header_ptr(&self) -> *const ArenaHeader {
         unsafe { self.as_ptr().byte_sub(T::header_offset_from_payload()) as *const _ }
@@ -550,7 +641,7 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {
                 drop_typed_slab_in_place!(HttpWriteStream, value);
             }
             ArenaHeaderTag::ReadlineStream => {
-                drop_typed_slab_in_place!(ReadlineStream, value);
+                drop_typed_slab_in_place!(read_line::ReadlineStream, value);
             }
             ArenaHeaderTag::StaticStringStream => {
                 drop_typed_slab_in_place!(StaticStringStream, value);
@@ -619,7 +710,7 @@ const_assert!(mem::size_of::<OrderedFloat<f64>>() == 8);
 
 #[cfg(test)]
 mod tests {
-    use crate::arena::*;
+    use crate::arena::alloc::*;
     use crate::atom_table::*;
     use crate::machine::mock_wam::*;
     use crate::types::*;
@@ -721,21 +812,17 @@ mod tests {
             }
         };
 
-        match_untyped_arena_ptr!(untyped_arena_ptr,
-           (ArenaHeaderTag::Integer, n) => {
-               assert_eq!(&*n, &(2 * Integer::from(1u64 << 63)))
-           }
-           _ => unreachable!()
-        );
+        if matches!(untyped_arena_ptr.get_tag(), ArenaHeaderTag::Integer) {
+            let n = unsafe { n.as_typed_ptr::<Integer>() };
+            assert_eq!(&*n, &(2 * Integer::from(1u64 << 63)))
+        }
 
         read_heap_cell!(cell,
            (HeapCellValueTag::Cons, cons_ptr) => {
-               match_untyped_arena_ptr!(cons_ptr,
-                  (ArenaHeaderTag::Integer, n) => {
-                      assert_eq!(&*n, &(2 * Integer::from(1u64 << 63)))
-                  }
-                  _ => { unreachable!() }
-               )
+               if matches!(cons_ptr.get_tag(), ArenaHeaderTag::Integer) {
+                   let n = unsafe { cons_ptr.as_typed_ptr::<Integer>() };
+                   assert_eq!(&*n, &(2 * Integer::from(1u64 << 63)))
+               }
            }
            _ => { unreachable!() }
         );
@@ -766,12 +853,10 @@ mod tests {
 
         read_heap_cell!(rat_cell,
           (HeapCellValueTag::Cons, cons_ptr) => {
-              match_untyped_arena_ptr!(cons_ptr,
-                 (ArenaHeaderTag::Rational, n) => {
-                     assert_eq!(&*n, &(Rational::from(2) * Rational::from(1u64 << 63)));
-                 }
-                 _ => unreachable!()
-              )
+              if matches!(cons_ptr.get_tag(), ArenaHeaderTag::Rational) {
+                  let n = unsafe { n.as_typed_ptr::<Rational>() };
+                  assert_eq!(&*n, &(Rational::from(2) * Rational::from(1u64 << 63)));
+              }
           }
           _ => { unreachable!() }
         );
@@ -881,7 +966,7 @@ mod tests {
         // char
 
         let c = 'c';
-        let char_cell = char_as_cell!(c);
+        let char_cell = graphemes_as_cell!(c);
 
         read_heap_cell!(char_cell,
             (HeapCellValueTag::Atom, (c, _arity)) => {
@@ -891,7 +976,7 @@ mod tests {
         );
 
         let c = 'Ћ';
-        let cyrillic_char_cell = char_as_cell!(c);
+        let cyrillic_char_cell = graphemes_as_cell!(c);
 
         read_heap_cell!(cyrillic_char_cell,
             (HeapCellValueTag::Atom, (c, _arity)) => {

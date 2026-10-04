@@ -1,448 +1,436 @@
-/*
- * CharReader is a not entirely redundant flattening/chimera of std's
- * BufReader and unicode_reader's CodePoints, introduced to allow
- * peekable buffered UTF-8 codepoints and access to the underlying
- * reader.
- *
- * Unlike CodePoints, it doesn't make the reader inaccessible by
- * wrapping it a Bytes struct.
- *
- * Unlike BufReader, its buffer is peekable as a char.
-*/
-
-use smallvec::*;
-
-use std::error::Error;
-use std::fmt;
-use std::io;
-use std::io::{ErrorKind, IoSliceMut, Read};
+use std::io::{self, BufRead, Cursor, Read};
 use std::str;
 
-pub struct CharReader<R> {
-    inner: R,
-    buf: SmallVec<[u8; 32]>,
-    pos: usize,
-}
+use bstr::ByteSlice;
+use compact_str::*;
 
-/// An error raised when parsing a UTF-8 byte stream fails.
+const DEFAULT_BUF_SIZE: usize = 8192;
+
+// lazily augment a Read instance with a buffer in situations when a
+// buffer is needed for peeking graphemes and reducing the number of
+// system calls, e.g. when parsing very large files. "lazy" in the
+// sense that buf's value will remain None until explicitly allocated
+// by peek_grapheme or fill_buf.
 #[derive(Debug)]
-pub struct BadUtf8Error {
-    /// The bytes that could not be parsed as a code point.
-    pub bytes: Vec<u8>,
+pub struct OptInBufReader<S> {
+    pub(in crate::arena) reader: S,
+    pub(in crate::arena) buf: Option<Cursor<Vec<u8>>>,
 }
 
-impl Error for BadUtf8Error {
-    fn description(&self) -> &str {
-        "BadUtf8Error"
-    }
-}
-
-impl fmt::Display for BadUtf8Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Bad UTF-8: {:?}", self.bytes)
-    }
-}
-
-impl<R> CharReader<R> {
-    pub fn new(inner: R) -> CharReader<R> {
-        Self {
-            inner,
-            buf: SmallVec::new(),
-            pos: 0,
-        }
+impl<S> OptInBufReader<S> {
+    pub(in crate::arena) fn new(reader: S) -> Self {
+        Self { reader, buf: None }
     }
 
-    #[inline]
-    pub fn inner_mut(&mut self) -> &mut R {
-        &mut self.inner
+    pub(in crate::arena) fn reader(&self) -> &S {
+        &self.reader
     }
 
-    // Return the number of bytes remaining to be read.  Useful for,
-    // e.g., determining the position relative to the end of the
-    // owning stream.
-    #[inline]
-    pub fn rem_buf_len(&self) -> usize {
-        self.buf.len() - self.pos
-    }
-}
-
-pub trait CharRead {
-    fn read_char(&mut self) -> Option<io::Result<char>> {
-        match self.peek_char() {
-            Some(Ok(c)) => {
-                self.consume(c.len_utf8());
-                Some(Ok(c))
-            }
-            result => result,
-        }
+    pub(in crate::arena) fn reader_mut(&mut self) -> &S {
+        &mut self.reader
     }
 
-    fn peek_char(&mut self) -> Option<io::Result<char>>;
-    fn put_back_char(&mut self, c: char);
-    fn consume(&mut self, nread: usize);
-}
-
-impl<R> CharReader<R> {
-    pub fn get_ref(&self) -> &R {
-        &self.inner
-    }
-
-    pub fn get_mut(&mut self) -> &mut R {
-        &mut self.inner
-    }
-
-    pub fn buffer(&self) -> &[u8] {
-        &self.buf[self.pos..]
-    }
-
-    pub fn reset_buffer(&mut self) {
-        self.buf.clear();
-        self.pos = 0;
-    }
-}
-
-impl<R: Read> CharReader<R> {
-    pub fn read_chunk(&mut self) -> io::Result<usize> {
-        let mut chunk = [0u8; 8 * 1024];
-        let nread = self.inner.read(&mut chunk)?;
-        self.buf.extend_from_slice(&chunk[..nread]);
-        Ok(nread)
-    }
-
-    pub fn refresh_buffer(&mut self) -> io::Result<&[u8]> {
-        // If we've reached the end of our internal buffer then we need to fetch
-        // some more data from the underlying reader.
-        // Branch using `>=` instead of the more correct `==`
-        // to tell the compiler that the pos..cap slice is always valid.
-        if self.pos >= self.buf.len() {
-            // make some space in buf
-            if self.buf.len() > char::MAX_LEN_UTF8 {
-                // keep char::MAX_LEN_UTF8 (4) bytes so that put_back_char can put back at least one char
-                self.buf.drain(char::MAX_LEN_UTF8..);
-            }
-            self.pos = self.buf.len();
-
-            self.read_chunk()?;
-        }
-
-        Ok(&self.buf[self.pos..])
-    }
-
-    pub fn peek_byte(&mut self) -> Option<io::Result<u8>> {
-        match self.refresh_buffer() {
-            Ok(_buf) => _buf.first().cloned().map(Ok),
-            Err(e) => Some(Err(e)),
-        }
-    }
-}
-
-impl<R: Read> CharRead for CharReader<R> {
-    fn peek_char(&mut self) -> Option<io::Result<char>> {
-        match self.refresh_buffer() {
-            Ok(_buf) => {}
-            Err(e) => return Some(Err(e)),
-        }
-
-        fn bad_bytes_error(buf: &[u8]) -> std::io::Error {
-            // If we have char::MAX_LEN_UTF8 (4) bytes that still don't make up
-            // a valid code point, then we have garbage.
-
-            // We have bad data in the buffer. Remove
-            // leading bytes until either the buffer is
-            // empty, or we have a valid code point.
-
-            // note we might have a sequence of invalid bytes followed by valid bytes followed by invalid bytes
-
-            let err = str::from_utf8(buf).expect_err("the start of buf should be invalid utf-8");
-            assert_eq!(err.valid_up_to(), 0, "the error should be a prefix");
-
-            let invalid_prefix = err.error_len().expect("we should have at least 4 bytes");
-
-            let bad_bytes = buf[..invalid_prefix].to_vec();
-
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                BadUtf8Error { bytes: bad_bytes },
-            )
-        }
-
-        // while we haven't consumed all bytes from the buffer
-        while self.pos < self.buf.len() {
-            // buf must be non-empty
-            let buf = &self.buf[self.pos..];
-
-            // we need at most char::MAX_LEN_UTF8 (4) bytes for a char so don't decode the whole buffer
-            // as it can be quite large and we are going to discard the remaining chars anyway
-            // if there is a valid prefix
-            let prefix = if buf.len() > char::MAX_LEN_UTF8 {
-                &buf[..char::MAX_LEN_UTF8]
-            } else {
-                buf
-            };
-
-            let e = match str::from_utf8(prefix) {
-                Ok(s) => {
-                    let mut chars = s.chars();
-                    let c = chars.next().expect(
-                        "a non-empty buffer that is valid utf-8 contains at least one character",
-                    );
-
-                    return Some(Ok(c));
-                }
-                Err(e) => e,
-            };
-
-            if e.valid_up_to() != 0 {
-                // the valid prefix is non-empty so it is guaranteed that we can decode at least one char
-                let c = str::from_utf8(&prefix[..e.valid_up_to()])
-                    .expect("prefix is verified valid up to this point")
-                    .chars()
-                    .next()
-                    .expect("the valid prefix was non-empty");
-                return Some(Ok(c));
-            }
-
-            if e.error_len().is_some() {
-                return Some(Err(bad_bytes_error(buf)));
-            }
-
-            // buf is too short to determine if the remaining bytes in buf are a valid char
-            // i.e. the content of buf is a prefix of a valid utf-8 encoded char
-            //
-            // we need to read more data from the underlying stream
-            // so that we can determine its validity
-
-            if self.buf.len() > char::MAX_LEN_UTF8 {
-                // keep a prefix of char::MAX_LEN_UTF8 (4) bytes so that we can put back at least one char
-                self.buf.drain(char::MAX_LEN_UTF8..self.pos);
-                self.pos = char::MAX_LEN_UTF8;
-            }
-
-            match self.read_chunk() {
-                Err(e) => return Some(Err(e)),
-                Ok(0) => return Some(Err(bad_bytes_error(&self.buf))),
-                Ok(_) => {
-                    // successfully filled the buffer with another chunk of data
-                }
-            }
-        }
-
-        None
-    }
-
-    #[inline(always)]
-    fn put_back_char(&mut self, c: char) {
-        let c_len = c.len_utf8();
-        if c_len <= self.pos {
-            self.pos -= c_len;
+    pub(in crate::arena) fn remaining_buf_len(&self) -> usize {
+        if let Some(cursor) = &self.buf {
+            let pos = cursor.position() as usize;
+            cursor.get_ref().len() - pos
         } else {
-            self.buf
-                .insert_from_slice(0, &[0u8; char::MAX_LEN_UTF8][..c_len - self.pos]);
-            self.pos = 0;
+            0
         }
-
-        c.encode_utf8(&mut self.buf[self.pos..]);
-    }
-
-    #[inline(always)]
-    fn consume(&mut self, nread: usize) {
-        self.pos += nread;
     }
 }
 
-impl<R: Read> Read for CharReader<R> {
+impl<S: Read> Read for OptInBufReader<S> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // // If we don't have any buffered data and we're doing a massive read
-        // // (larger than our internal buffer), bypass our internal buffer
-        // // entirely.
-        // if self.pos == self.cap && buf.len() >= self.buf.len() {
-        //     self.discard_buffer();
-        //     return self.inner.read(buf);
-        // }
-
-        let mut inner_buf = self.refresh_buffer()?;
-        let nread = inner_buf.read(buf)?;
-
-        // let nread = {
-        //     let mut rem = self.fill_buf()?;
-        //     rem.read(buf)?
-        // };
-
-        self.consume(nread);
-        Ok(nread)
-    }
-
-    // Small read_exacts from a BufReader are extremely common when used with a deserializer.
-    // The default implementation calls read in a loop, which results in surprisingly poor code
-    // generation for the common path where the buffer has enough bytes to fill the passed-in
-    // buffer.
-    fn read_exact(&mut self, mut buf: &mut [u8]) -> io::Result<()> {
-        if self.buffer().len() >= buf.len() {
-            buf.copy_from_slice(&self.buffer()[..buf.len()]);
-            self.consume(buf.len());
-            return Ok(());
-        }
-
-        while !buf.is_empty() {
-            match self.read(buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    let tmp = buf;
-                    buf = &mut tmp[n..];
-                }
-                Err(e) if e.kind() == ErrorKind::Interrupted => {}
-                Err(e) => return Err(e),
-            }
-        }
-
-        if !buf.is_empty() {
-            Err(io::Error::new(
-                ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            ))
+        if let Some(cursor) = &mut self.buf {
+            cursor.read(buf)
         } else {
-            Ok(())
+            self.reader.read(buf)
         }
-    }
-
-    fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
-        let total_len = bufs.iter().map(|b| b.len()).sum::<usize>();
-
-        if self.pos == self.buf.len() && total_len >= self.buf.len() {
-            self.reset_buffer(); // self.discard_buffer();
-            return self.inner.read_vectored(bufs);
-        }
-
-        self.refresh_buffer()?;
-
-        let nread = (&self.buf[self.pos..]).read_vectored(bufs)?;
-        self.consume(nread);
-
-        Ok(nread)
     }
 }
 
-/*
-#[stable(feature = "rust1", since = "1.0.0")]
-impl<R: Read> BufRead for BufReader<R> {
+impl<S: Read> BufRead for OptInBufReader<S> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        // If we've reached the end of our internal buffer then we need to fetch
-        // some more data from the underlying reader.
-        // Branch using `>=` instead of the more correct `==`
-        // to tell the compiler that the pos..cap slice is always valid.
-        if self.pos >= self.cap {
-            debug_assert!(self.pos == self.cap);
-            self.cap = self.inner.read(&mut self.buf)?;
-            self.pos = 0;
+        let cursor = self
+            .buf
+            .get_or_insert_with(|| Cursor::new(Vec::with_capacity(DEFAULT_BUF_SIZE)));
+
+        if cursor.fill_buf()?.is_empty() {
+            let vec = cursor.get_mut();
+
+            match self.reader.read(vec) {
+                Ok(0) => {
+                    vec.clear();
+                    cursor.set_position(0);
+                    return Ok(&[]);
+                }
+                Ok(n) => {
+                    vec.truncate(n);
+                    cursor.set_position(0);
+                }
+                Err(e) => {
+                    vec.clear();
+                    cursor.set_position(0);
+                    return Err(e);
+                }
+            }
         }
-        Ok(&self.buf[self.pos..self.cap])
+
+        cursor.fill_buf()
     }
 
     fn consume(&mut self, amt: usize) {
-        self.pos = cmp::min(self.pos + amt, self.cap);
+        if let Some(ref mut cursor) = self.buf {
+            cursor.consume(amt);
+        }
     }
 }
-*/
 
-impl<R> fmt::Debug for CharReader<R>
-where
-    R: fmt::Debug,
-{
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("CharReader")
-            .field("reader", &self.inner)
-            .field(
-                "buf",
-                &format_args!("{}/{}", self.buf.capacity() - self.pos, self.buf.len()),
-            )
-            .finish()
+fn fill_cursor<'a, R: Read>(
+    reader: &mut R,
+    cursor: &'a mut Cursor<Vec<u8>>,
+) -> io::Result<&'a [u8]> {
+    let pos = cursor.position() as usize;
+    let vec = cursor.get_mut();
+
+    if vec.capacity() == 0 {
+        vec.reserve(DEFAULT_BUF_SIZE);
+    }
+
+    let old_len = vec.len();
+    let cap = vec.capacity();
+
+    if pos >= old_len {
+        if old_len < cap {
+            vec.resize(cap, 0);
+            match reader.read(&mut vec[old_len..cap]) {
+                Ok(n) => vec.truncate(old_len + n),
+                Err(e) => {
+                    vec.truncate(old_len);
+                    return Err(e);
+                }
+            }
+        } else {
+            let amt = reader.read(&mut vec[0..cap])?;
+            vec.truncate(amt);
+            cursor.set_position(0);
+            return Ok(&cursor.get_ref()[..]);
+        }
+    }
+
+    Ok(&cursor.get_ref()[pos..])
+}
+
+pub(in crate::arena) fn peek_grapheme<'a, R: Read>(
+    reader: &mut R,
+    at: usize,
+    cursor: &'a mut Cursor<Vec<u8>>,
+) -> io::Result<Option<&'a str>> {
+    if peek_grapheme_impl(reader, at, cursor)? {
+        let pos = cursor.position() as usize;
+        Ok(cursor
+            .get_ref()
+            .get(pos + at..)
+            .and_then(|slice| slice.graphemes().next()))
+    } else {
+        Ok(None)
+    }
+}
+
+// returns true if `g` ends with an unextendable character (like \n,
+// \r, or control bytes) under UAX #29 rules, preventing it from
+// merging with subsequent bytes
+#[inline]
+fn is_boundary_safe_grapheme(g: &str) -> bool {
+    g.as_bytes().last().map_or(false, |b| b.is_ascii_control())
+}
+
+pub(in crate::arena) fn peek_grapheme_impl<R: Read>(
+    reader: &mut R,
+    at: usize,
+    cursor: &mut Cursor<Vec<u8>>,
+) -> io::Result<bool> {
+    let buf = fill_cursor(reader, cursor)?;
+
+    if buf.is_empty() {
+        return Ok(false);
+    }
+
+    match buf.get(at..).and_then(|slice| slice.graphemes().next()) {
+        Some(g) => {
+            if is_boundary_safe_grapheme(g) || at + g.len() < buf.len() {
+                Ok(true)
+            } else {
+                debug_assert_eq!(at + g.len(), buf.len());
+                resolve_boundary(reader, at, cursor)?;
+                Ok(true)
+            }
+        }
+        None => Ok(false), // EOF
+    }
+}
+
+fn resolve_boundary<'a, R: Read>(
+    reader: &mut R,
+    at: usize,
+    cursor: &'a mut Cursor<Vec<u8>>,
+) -> io::Result<()> {
+    let pos = cursor.position() as usize;
+    let mut old_len = cursor.get_ref().len() - pos;
+
+    // slide the grapheme beginning at pos to 0.
+    cursor.get_mut().copy_within(pos.., 0);
+    cursor.set_position(old_len as u64);
+    cursor.get_mut().truncate(old_len);
+
+    loop {
+        fill_cursor(reader, cursor)?;
+        cursor.set_position(0);
+
+        if cursor.get_ref().len() == old_len {
+            // EOF: whatever is in scratch is the final grapheme.
+
+            // can't return the first grapheme here without being
+            // blocked by the borrow checker, so return () and recover
+            // the grapheme up the call stack.
+            return Ok(());
+        }
+
+        if let Some(mut iter) = cursor.get_ref().get(at..).map(|slice| slice.graphemes()) {
+            let first = iter.next();
+            let second = iter.next();
+
+            if let (Some(_g1), Some(_g2)) = (first, second) {
+                // second grapheme detected, _g1 is now complete.
+                return Ok(());
+            }
+        }
+
+        let cap = cursor.get_ref().capacity();
+        old_len = cursor.get_ref().len();
+
+        cursor.get_mut().reserve(2 * cap);
+        cursor.set_position(old_len as u64);
+    }
+}
+
+pub(in crate::arena) fn read_char<R: Read>(reader: &mut R) -> io::Result<Option<char>> {
+    let mut buf = [0u8; 4];
+    let mut len = 0;
+
+    loop {
+        if reader.read(&mut buf[len..len + 1])? == 0 {
+            if len == 0 {
+                return Ok(None); // EOF
+            }
+            // bad UTF-8 mid-codepoint!
+            return Ok(Some(char::REPLACEMENT_CHARACTER));
+        }
+
+        len += 1;
+
+        let (ch, size) = bstr::decode_utf8(&buf[..len]);
+
+        if size > 0 {
+            return Ok(Some(ch.unwrap_or(char::REPLACEMENT_CHARACTER)));
+        }
+    }
+}
+
+pub trait GraphemeRead: Read {
+    fn read_grapheme(&mut self) -> io::Result<Option<CompactString>>;
+    // peek the grapheme at the byte offset from current position "at"
+    fn peek_grapheme(&mut self, at: usize) -> io::Result<Option<&str>>;
+
+    // doesn't e.g. invoke resolve_boundary in OptInBufReader, since
+    // UTF-8 codepoints don't prefix each other, which makes it more
+    // suitable for IPC streams like TcpStream, PipeReader, etc.
+    // peek_grapheme and read_grapheme are meant mainly for use in the
+    // parser whose (character) streams use sentinel characters like
+    // ".".
+    fn read_char(&mut self) -> io::Result<Option<char>>;
+    fn peek_char(&mut self) -> io::Result<Option<char>>;
+}
+
+impl<R: Read> GraphemeRead for OptInBufReader<R> {
+    fn read_grapheme(&mut self) -> io::Result<Option<CompactString>> {
+        match self.peek_grapheme(0)?.map(CompactString::new) {
+            Some(g) => {
+                self.consume(g.len());
+                Ok(Some(g))
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn peek_grapheme(&mut self, at: usize) -> io::Result<Option<&str>> {
+        let cursor = self
+            .buf
+            .get_or_insert_with(|| Cursor::new(Vec::with_capacity(DEFAULT_BUF_SIZE)));
+
+        peek_grapheme(&mut self.reader, at, cursor)
+    }
+
+    fn read_char(&mut self) -> io::Result<Option<char>> {
+        if self.buf.is_none() {
+            // if buf isn't already instantiated, don't instantiate it.
+            return read_char(&mut self.reader);
+        }
+
+        let c = match self.peek_char()? {
+            Some(c) => c,
+            None => return Ok(None),
+        };
+
+        if let Some(cursor) = self.buf.as_mut() {
+            let pos = cursor.position() as usize;
+            let slice = &cursor.get_ref()[pos..];
+
+            let bytes_to_consume = if c == char::REPLACEMENT_CHARACTER {
+                let (_c_opt, amt) = bstr::decode_utf8(slice);
+                // if decode_utf8 produced amt 0 from an incomplete
+                // sequence at EOF, consume at least 1 byte so we
+                // still advance
+                amt.max(1)
+            } else {
+                c.len_utf8()
+            };
+
+            cursor.consume(bytes_to_consume);
+        }
+
+        Ok(Some(c))
+    }
+
+    fn peek_char(&mut self) -> io::Result<Option<char>> {
+        // peeking requires buffering. only a scratch buffer is
+        // created if a large buffer hasn't been already.
+        let cursor = self
+            .buf
+            .get_or_insert_with(|| Cursor::new(Vec::with_capacity(std::mem::size_of::<char>())));
+
+        loop {
+            let pos = cursor.position() as usize;
+            let slice = &cursor.get_ref()[pos..];
+
+            match bstr::decode_utf8(slice) {
+                // return Option<char>, amount of bytes read.
+                (Some(c), _) => return Ok(Some(c)),
+                (None, 0) => {
+                    // `amt == 0` means `slice` is empty or ends in an incomplete UTF-8 prefix.
+                    // shift unread bytes to the start of the buffer if necessary.
+                    if pos > 0 {
+                        let unread = slice.len();
+                        cursor.get_mut().copy_within(pos.., 0);
+                        cursor.get_mut().truncate(unread);
+                        cursor.set_position(0);
+                    }
+
+                    if cursor.get_ref().len() >= std::mem::size_of::<char>() {
+                        return Ok(Some(char::REPLACEMENT_CHARACTER));
+                    }
+
+                    let mut byte = [0u8; 1];
+
+                    if self.reader.read(&mut byte)? == 0 {
+                        // Stream EOF
+                        return Ok(if cursor.get_ref().is_empty() {
+                            None
+                        } else {
+                            Some(char::REPLACEMENT_CHARACTER)
+                        });
+                    }
+
+                    cursor.get_mut().push(byte[0]);
+                }
+                (None, amt) => {
+                    debug_assert!(amt > 0);
+                    return Ok(Some(char::REPLACEMENT_CHARACTER));
+                }
+            }
+        }
+    }
+}
+
+impl<T: AsRef<[u8]>> GraphemeRead for Cursor<T> {
+    fn read_grapheme(&mut self) -> io::Result<Option<CompactString>> {
+        match self.peek_grapheme(0)?.map(CompactString::new) {
+            Some(g) => {
+                self.consume(g.len());
+                Ok(Some(g))
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn peek_grapheme(&mut self, at: usize) -> io::Result<Option<&str>> {
+        let pos = self.position() as usize;
+        Ok(self
+            .get_ref()
+            .as_ref()
+            .get(pos + at..)
+            .and_then(|slice| slice.as_bytes().graphemes().next()))
+    }
+
+    fn read_char(&mut self) -> io::Result<Option<char>> {
+        if let Some(c) = self.peek_char()? {
+            self.consume(c.len_utf8());
+            Ok(Some(c))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn peek_char(&mut self) -> io::Result<Option<char>> {
+        let pos = self.position() as usize;
+        Ok(self
+            .get_ref()
+            .as_ref()
+            .get(pos..)
+            .and_then(|slice| slice.chars().next()))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::char_reader::*;
+    use crate::arena::opt_in_buf_reader::*;
     use std::io::Cursor;
 
     #[test]
     fn plain_string() {
-        let mut read_string = CharReader::new(Cursor::new("a string"));
+        let mut read_string = Cursor::new("a string");
 
-        for c in "a string".chars() {
-            assert_eq!(read_string.peek_char().unwrap().ok(), Some(c));
-            assert_eq!(read_string.read_char().unwrap().ok(), Some(c));
+        for g in "a string".as_bytes().graphemes() {
+            assert_eq!(read_string.peek_grapheme(0).unwrap().unwrap(), g);
+            assert_eq!(read_string.read_grapheme().unwrap().unwrap(), g);
         }
 
-        assert!(read_string.read_char().is_none());
-    }
-
-    #[test]
-    fn interspersed_bad_utf8() {
-        let mut read_string = CharReader::new(Cursor::new(b"a string\xffmore_text\xff"));
-
-        for c in "a string".chars() {
-            assert_eq!(read_string.peek_char().unwrap().ok(), Some(c));
-            assert_eq!(read_string.read_char().unwrap().ok(), Some(c));
-        }
-
-        assert_eq!(
-            read_string.peek_char().unwrap().unwrap_err().kind(),
-            std::io::ErrorKind::InvalidData
-        );
-
-        let err = read_string
-            .read_char()
-            .unwrap()
-            .unwrap_err()
-            .downcast::<BadUtf8Error>()
-            .unwrap();
-
-        read_string.consume(err.bytes.len());
-
-        for c in "more_text".chars() {
-            assert_eq!(read_string.peek_char().unwrap().ok(), Some(c));
-            assert_eq!(read_string.read_char().unwrap().ok(), Some(c));
-        }
-
-        assert_eq!(
-            read_string.peek_char().unwrap().unwrap_err().kind(),
-            std::io::ErrorKind::InvalidData
-        );
-
-        let err = read_string
-            .read_char()
-            .unwrap()
-            .unwrap_err()
-            .downcast::<BadUtf8Error>()
-            .unwrap();
-
-        read_string.consume(err.bytes.len());
-
-        assert!(read_string.read_char().is_none());
+        assert!(read_string.peek_grapheme(0).unwrap().is_none());
     }
 
     #[test]
     fn greek_string() {
-        let mut read_string = CharReader::new(Cursor::new("λέξη"));
+        let mut read_string = Cursor::new("λέξη");
 
-        for c in "λέξη".chars() {
-            assert_eq!(read_string.peek_char().unwrap().ok(), Some(c));
-            assert_eq!(read_string.read_char().unwrap().ok(), Some(c));
+        for g in "λέξη".as_bytes().graphemes() {
+            assert_eq!(read_string.peek_grapheme(0).unwrap().unwrap(), g);
+            assert_eq!(read_string.read_grapheme().unwrap().unwrap(), g);
         }
 
-        assert!(read_string.read_char().is_none());
+        assert!(read_string.read_grapheme().unwrap().is_none());
     }
 
     #[test]
     fn russian_string() {
-        let mut read_string = CharReader::new(Cursor::new("слово"));
+        let mut read_string = Cursor::new("слово");
 
-        for c in "слово".chars() {
-            assert_eq!(read_string.peek_char().unwrap().ok(), Some(c));
-            assert_eq!(read_string.read_char().unwrap().ok(), Some(c));
+        for g in "слово".as_bytes().graphemes() {
+            assert_eq!(read_string.peek_grapheme(0).unwrap().unwrap(), g);
+            assert_eq!(read_string.read_grapheme().unwrap().unwrap(), g);
         }
 
-        assert!(read_string.read_char().is_none());
+        assert!(read_string.read_grapheme().unwrap().is_none());
     }
 
     #[test]
@@ -506,14 +494,14 @@ mod tests {
     αδ. Μεα αφφερτ νοστερ ατ, ναμ αν σολεατ ερροριβθσ. Εξ σεα αεqθε
     μθνερε cετερο, εοσ ηινc ελειφενδ δεμοcριτθμ.";
 
-        let mut lorem_ipsum_reader = CharReader::new(Cursor::new(lorem_ipsum));
+        let mut lorem_ipsum_reader = Cursor::new(lorem_ipsum);
 
-        for c in lorem_ipsum.chars() {
-            assert_eq!(lorem_ipsum_reader.peek_char().unwrap().ok(), Some(c));
-            assert_eq!(lorem_ipsum_reader.read_char().unwrap().ok(), Some(c));
+        for g in lorem_ipsum.as_bytes().graphemes() {
+            assert_eq!(lorem_ipsum_reader.peek_grapheme(0).unwrap().unwrap(), g);
+            assert_eq!(lorem_ipsum_reader.read_grapheme().unwrap().unwrap(), g);
         }
 
-        assert!(lorem_ipsum_reader.read_char().is_none());
+        assert!(lorem_ipsum_reader.read_grapheme().unwrap().is_none());
     }
 
     #[test]
@@ -579,14 +567,14 @@ mod tests {
         ադոլեսծենս մեի եա. ին մեա զռիլ պռոբաթուս սալութաթուս. եոս ադ
         մինիմ թեմպոռիբուս. սեա նե եթիամ.";
 
-        let mut lorem_ipsum_reader = CharReader::new(Cursor::new(lorem_ipsum));
+        let mut lorem_ipsum_reader = Cursor::new(lorem_ipsum);
 
-        for c in lorem_ipsum.chars() {
-            assert_eq!(lorem_ipsum_reader.peek_char().unwrap().ok(), Some(c));
-            assert_eq!(lorem_ipsum_reader.read_char().unwrap().ok(), Some(c));
+        for g in lorem_ipsum.as_bytes().graphemes() {
+            assert_eq!(lorem_ipsum_reader.peek_grapheme(0).unwrap().unwrap(), g);
+            assert_eq!(lorem_ipsum_reader.read_grapheme().unwrap().unwrap(), g);
         }
 
-        assert!(lorem_ipsum_reader.read_char().is_none());
+        assert!(lorem_ipsum_reader.read_grapheme().unwrap().is_none());
     }
 
     #[test]
@@ -654,18 +642,13 @@ mod tests {
         дефинитионем, елитр лаборамус перципитур про не, хас феугаит
         фастидии луцилиус ид. Фастидии интеллегат ех.";
 
-        let mut lorem_ipsum_reader = CharReader::new(Cursor::new(lorem_ipsum));
+        let mut lorem_ipsum_reader = Cursor::new(lorem_ipsum);
 
-        for c in lorem_ipsum.chars() {
-            assert_eq!(lorem_ipsum_reader.peek_char().unwrap().ok(), Some(c));
-            assert_eq!(lorem_ipsum_reader.read_char().unwrap().ok(), Some(c));
-
-            lorem_ipsum_reader.put_back_char(c);
-
-            assert_eq!(lorem_ipsum_reader.peek_char().unwrap().ok(), Some(c));
-            assert_eq!(lorem_ipsum_reader.read_char().unwrap().ok(), Some(c));
+        for g in lorem_ipsum.as_bytes().graphemes() {
+            assert_eq!(lorem_ipsum_reader.peek_grapheme(0).unwrap().unwrap(), g);
+            assert_eq!(lorem_ipsum_reader.read_grapheme().unwrap().unwrap(), g);
         }
 
-        assert!(lorem_ipsum_reader.read_char().is_none());
+        assert!(lorem_ipsum_reader.read_grapheme().unwrap().is_none());
     }
 }

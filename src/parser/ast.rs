@@ -1,4 +1,4 @@
-use crate::arena::*;
+use crate::arena::alloc::*;
 use crate::atom_table::*;
 use crate::offset_table::*;
 use crate::types::HeapCellValueTag;
@@ -436,6 +436,15 @@ impl Location {
     pub fn column(&self) -> usize {
         self.column
     }
+
+    pub(in crate::parser) fn incr(&mut self, c: &str) {
+        if c == "\n" {
+            self.line += 1;
+            self.column = 0;
+        } else {
+            self.column += 1;
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -453,12 +462,12 @@ pub(crate) enum ParserErrorKind {
     IO(IOError),
     IncompleteReduction,
     InfiniteFloat,
-    InvalidSingleQuotedCharacter(char),
+    InvalidSingleQuotedGrapheme(String),
     ParseFloat,
     MissingQuote,
     NonPrologChar,
     ParseBigInt,
-    UnexpectedChar(char),
+    UnexpectedGrapheme(String),
     // UnexpectedEOF,
     Utf8Error,
 }
@@ -472,7 +481,7 @@ impl ParserError {
         match &self.kind {
             ParserErrorKind::BackQuotedString => atom!("back_quoted_string"),
             ParserErrorKind::IncompleteReduction => atom!("incomplete_reduction"),
-            ParserErrorKind::InvalidSingleQuotedCharacter(..) => {
+            ParserErrorKind::InvalidSingleQuotedGrapheme(..) => {
                 atom!("invalid_single_quoted_character")
             }
             ParserErrorKind::InfiniteFloat => {
@@ -489,7 +498,7 @@ impl ParserError {
             ParserErrorKind::MissingQuote => atom!("missing_quote"),
             ParserErrorKind::NonPrologChar => atom!("non_prolog_character"),
             ParserErrorKind::ParseBigInt => atom!("cannot_parse_big_int"),
-            ParserErrorKind::UnexpectedChar(..) => atom!("unexpected_char"),
+            ParserErrorKind::UnexpectedGrapheme(..) => atom!("unexpected_char"),
             ParserErrorKind::Utf8Error => atom!("utf8_conversion_error"),
         }
     }
