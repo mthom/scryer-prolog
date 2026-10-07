@@ -359,18 +359,17 @@ test_71 :- catch((op(1001,xfy,','),
                  error(permission_error(modify, operator, ','), op/3),
                  true).
 
-test_72 :- catch((op(999,xfy,'|'),
-                  false),
-                 error(permission_error(create, operator, '|'), op/3),
-                 true).
-
-test_73 :- _ = [a|b].
-
-test_285 :- test_syntax_error("X = [(a|b)].", syntax_error(_)).
-
-test_219 :- [a|[]] = [a].
-
-test_74 :- test_syntax_error("X = [a|b|c].", syntax_error(incomplete_reduction)).
+test_72_73_285_219_74 :-
+    setup_call_cleanup(catch((op(0,xfy,'|'), op(999,xfy,'|'), false), % test_72
+                             error(permission_error(create, operator, '|'), op/3),
+                             true),
+                       ( _ = [a|b], % test #73
+                         test_syntax_error("X = [(a|b)].", syntax_error(_)), % test #285
+                         [a|[]]=[a], % test #219
+                         test_syntax_error("X = [a|b|c].", syntax_error(incomplete_reduction)) % test #74
+                       ),
+                       op(0,xfy,'|')
+                      ).
 
 test_75 :- test_syntax_error("var(a:-b).", syntax_error(incomplete_reduction)).
 
