@@ -724,6 +724,28 @@ pub struct InputChannelStream {
     pub(in crate::arena) channel: Receiver<Vec<u8>>,
 }
 
+struct ReceiverBifurcatedReader<'a> {
+    channel: &'a mut Receiver<Vec<u8>>,
+    eof: &'a mut bool,
+}
+
+impl Read for ReceiverBifurcatedReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self.channel.try_recv() {
+            Ok(data) => {
+                let amt = data.len().min(buf.len());
+                buf[..amt].copy_from_slice(&data[..amt]);
+                Ok(amt)
+            }
+            Err(TryRecvError::Disconnected) => {
+                *self.eof = true;
+                Ok(0)
+            }
+            Err(TryRecvError::Empty) => Ok(0),
+        }
+    }
+}
+
 impl Read for InputChannelStream {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
@@ -778,45 +800,14 @@ impl GraphemeRead for InputChannelStream {
     }
 
     fn peek_grapheme(&mut self, at: usize) -> io::Result<Option<&str>> {
-        use std::sync::Once;
-
-        struct GraphemeReader<'a> {
-            channel: &'a mut Receiver<Vec<u8>>,
-            eof: &'a mut bool,
-        }
-
-        static INIT_CAP: Once = Once::new();
-
-        INIT_CAP.call_once(|| {
-            // unless the capacity of self.inner's Vec is > 0,
-            // peek_grapheme is a no-op. this is somewhat kludgy but
-            // it is at least contained to the GraphemeRead instance.
-            if self.inner.get_ref().capacity() == 0 {
-                self.inner.get_mut().reserve(256);
-            }
-        });
-
-        impl Read for GraphemeReader<'_> {
-            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-                match self.channel.try_recv() {
-                    Ok(data) => {
-                        let amt = data.len().min(buf.len());
-                        buf[..amt].copy_from_slice(&data[..amt]);
-                        Ok(amt)
-                    }
-                    Err(TryRecvError::Disconnected) => {
-                        *self.eof = true;
-                        Ok(0)
-                    }
-                    Err(TryRecvError::Empty) => Ok(0),
-                }
-            }
-        }
-
-        let mut reader = GraphemeReader {
+        let mut reader = ReceiverBifurcatedReader {
             channel: &mut self.channel,
             eof: &mut self.eof,
         };
+
+        if self.inner.get_ref().is_empty() {
+            self.inner = Cursor::new(Vec::with_capacity(256));
+        }
 
         peek_grapheme(&mut reader, at, &mut self.inner)
     }
@@ -831,11 +822,16 @@ impl GraphemeRead for InputChannelStream {
     }
 
     fn peek_char(&mut self) -> io::Result<Option<char>> {
-        if let Some(g) = self.peek_grapheme(0)? {
-            Ok(g.chars().next())
-        } else {
-            Ok(None)
+        let mut reader = ReceiverBifurcatedReader {
+            channel: &mut self.channel,
+            eof: &mut self.eof,
+        };
+
+        if self.inner.get_ref().is_empty() {
+            self.inner = Cursor::new(Vec::with_capacity(256));
         }
+
+        peek_char(&mut reader, &mut self.inner)
     }
 }
 

@@ -238,6 +238,53 @@ pub(in crate::arena) fn read_char<R: Read>(reader: &mut R) -> io::Result<Option<
     }
 }
 
+pub(in crate::arena) fn peek_char<R: Read>(
+    reader: &mut R,
+    cursor: &mut Cursor<Vec<u8>>,
+) -> io::Result<Option<char>> {
+    loop {
+        let pos = cursor.position() as usize;
+        let slice = &cursor.get_ref()[pos..];
+
+        match bstr::decode_utf8(slice) {
+            // return Option<char>, amount of bytes read.
+            (Some(c), _) => return Ok(Some(c)),
+            (None, 0) => {
+                // `amt == 0` means `slice` is empty or ends in an incomplete UTF-8 prefix.
+                // shift unread bytes to the start of the buffer if necessary.
+                if pos > 0 {
+                    let unread = slice.len();
+
+                    cursor.get_mut().copy_within(pos.., 0);
+                    cursor.get_mut().truncate(unread);
+                    cursor.set_position(0);
+                }
+
+                if cursor.get_ref().len() >= std::mem::size_of::<char>() {
+                    return Ok(Some(char::REPLACEMENT_CHARACTER));
+                }
+
+                let mut byte = [0u8; 1];
+
+                if reader.read(&mut byte)? == 0 {
+                    // Stream EOF
+                    return Ok(if cursor.get_ref().is_empty() {
+                        None
+                    } else {
+                        Some(char::REPLACEMENT_CHARACTER)
+                    });
+                }
+
+                cursor.get_mut().push(byte[0]);
+            }
+            (None, amt) => {
+                debug_assert!(amt > 0);
+                return Ok(Some(char::REPLACEMENT_CHARACTER));
+            }
+        }
+    }
+}
+
 pub trait GraphemeRead: Read {
     fn read_grapheme(&mut self) -> io::Result<Option<CompactString>>;
     // peek the grapheme at the byte offset from current position "at"
@@ -310,46 +357,7 @@ impl<R: Read> GraphemeRead for OptInBufReader<R> {
             .buf
             .get_or_insert_with(|| Cursor::new(Vec::with_capacity(std::mem::size_of::<char>())));
 
-        loop {
-            let pos = cursor.position() as usize;
-            let slice = &cursor.get_ref()[pos..];
-
-            match bstr::decode_utf8(slice) {
-                // return Option<char>, amount of bytes read.
-                (Some(c), _) => return Ok(Some(c)),
-                (None, 0) => {
-                    // `amt == 0` means `slice` is empty or ends in an incomplete UTF-8 prefix.
-                    // shift unread bytes to the start of the buffer if necessary.
-                    if pos > 0 {
-                        let unread = slice.len();
-                        cursor.get_mut().copy_within(pos.., 0);
-                        cursor.get_mut().truncate(unread);
-                        cursor.set_position(0);
-                    }
-
-                    if cursor.get_ref().len() >= std::mem::size_of::<char>() {
-                        return Ok(Some(char::REPLACEMENT_CHARACTER));
-                    }
-
-                    let mut byte = [0u8; 1];
-
-                    if self.reader.read(&mut byte)? == 0 {
-                        // Stream EOF
-                        return Ok(if cursor.get_ref().is_empty() {
-                            None
-                        } else {
-                            Some(char::REPLACEMENT_CHARACTER)
-                        });
-                    }
-
-                    cursor.get_mut().push(byte[0]);
-                }
-                (None, amt) => {
-                    debug_assert!(amt > 0);
-                    return Ok(Some(char::REPLACEMENT_CHARACTER));
-                }
-            }
-        }
+        peek_char(&mut self.reader, cursor)
     }
 }
 
