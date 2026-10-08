@@ -47,23 +47,6 @@ pub(crate) fn devour_whitespace<R: CharRead>(
     }
 }
 
-pub(crate) fn error_after_read_term<R>(
-    err: ParserError,
-    prior_num_lines_read: usize,
-    parser: &Parser<R>,
-) -> CompilationError {
-    if err.is_unexpected_eof() {
-        let location = &parser.lexer.location;
-
-        // rough overlap with errors 8.14.1.3 k) & l) of the ISO standard here
-        if !(location.line() == prior_num_lines_read && location.column() == 0) {
-            return CompilationError::from(parser.lexer.incomplete_reduction());
-        }
-    }
-
-    CompilationError::from(err)
-}
-
 impl MachineState {
     pub(crate) fn read(
         &mut self,
@@ -77,9 +60,7 @@ impl MachineState {
 
             parser.add_lines_read(prior_num_lines_read);
 
-            let term = parser
-                .read_term(&op_dir, Tokens::Default)
-                .map_err(|err| error_after_read_term(err, prior_num_lines_read, &parser))?; // CompilationError::from
+            let term = parser.read_term(&op_dir, Tokens::Default)?;
 
             (term, parser.lines_read() - prior_num_lines_read)
         };

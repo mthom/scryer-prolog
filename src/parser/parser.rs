@@ -243,11 +243,28 @@ pub struct Parser<'a, R> {
 }
 
 pub fn read_tokens<R: CharRead>(lexer: &mut Lexer<'_, R>) -> Result<Vec<Token>, ParserError> {
+    // EOF before any non-layout character is end of file; any later EOF is mid-term.
+    lexer.lookahead_char()?;
+
+    let layout_inserted = match lexer.scan_for_layout() {
+        Ok(layout_inserted) => layout_inserted,
+        Err(e) if e.is_unexpected_eof() => return Err(lexer.incomplete_reduction()),
+        Err(e) => return Err(e),
+    };
+
+    lexer.lookahead_char()?;
+
     let mut tokens = vec![];
 
     loop {
         match lexer.next_token() {
             Ok(token) => {
+                // the leading layout was consumed above, so next_token can't see it
+                let token = match token {
+                    Token::OpenCT if tokens.is_empty() && layout_inserted => Token::Open,
+                    token => token,
+                };
+
                 let at_end = token.is_end();
                 tokens.push(token);
 
@@ -255,7 +272,7 @@ pub fn read_tokens<R: CharRead>(lexer: &mut Lexer<'_, R>) -> Result<Vec<Token>, 
                     break;
                 }
             }
-            Err(e) if e.is_unexpected_eof() && !tokens.is_empty() => {
+            Err(e) if e.is_unexpected_eof() => {
                 return Err(lexer.incomplete_reduction());
             }
             Err(e) => {
