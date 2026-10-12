@@ -111,7 +111,7 @@ strings.
 Precompiled binaries for several platforms are available for download
 at:
 
-**https://github.com/mthom/scryer-prolog/releases/latest**
+**https://codeberg.org/mthom/scryer-prolog/releases**
 
 ### Native Compilation
 
