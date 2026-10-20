@@ -8,7 +8,6 @@ use crate::parser::grapheme_classifiers::*;
 
 use ordered_float::OrderedFloat;
 
-use bstr::ByteSlice;
 use compact_str::*;
 
 use std::convert::TryFrom;
@@ -657,8 +656,8 @@ impl<'a, R: GraphemeRead> Lexer<'a, R> {
                 self.skip_grapheme()?;
 
                 // use exactly_one once stable in our msrv https://github.com/rust-lang/rust/issues/149266
-                if let Some(c) = token.as_bytes().chars().next()
-                    && token.as_bytes().chars().nth(1).is_none()
+                if let Some(c) = token.chars().next()
+                    && token.chars().nth(1).is_none()
                 {
                     let atom = AtomCell::from_codepoint(c).get_name();
                     return Ok(Token::Literal(Literal::Atom(atom)));

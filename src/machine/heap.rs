@@ -357,7 +357,7 @@ impl ReservedHeapSection {
 
                 src = &src[null_byte_idx + 1..];
 
-                if src.as_bytes().is_empty() {
+                if src.is_empty() {
                     return ret;
                 }
             } else {
@@ -372,7 +372,7 @@ impl ReservedHeapSection {
                     }
                 }
 
-                self.push_pstr_segment(src.as_bytes());
+                self.push_pstr_segment(src);
                 return ret;
             }
         }
@@ -789,7 +789,7 @@ impl Heap {
     }
 
     pub fn allocate_pstr(&mut self, src: &[u8]) -> Result<HeapCellValue, AllocError> {
-        let size_in_heap = Self::compute_pstr_size(src.as_bytes());
+        let size_in_heap = Self::compute_pstr_size(src);
         let mut writer = self.reserve(size_in_heap)?;
         let HeapSectionWriteResult { result, .. } =
             writer.write_with(|section| match section.push_pstr(src) {
@@ -804,7 +804,7 @@ impl Heap {
     // (completing it with the empty list) unlike any version of
     // allocate_pstr.
     pub fn allocate_cstr(&mut self, src: &[u8]) -> Result<HeapCellValue, AllocError> {
-        let size_in_heap = Self::compute_pstr_size(src.as_bytes());
+        let size_in_heap = Self::compute_pstr_size(src);
         let mut writer = self.reserve(size_in_heap + 1)?;
         let HeapSectionWriteResult { result, .. } =
             writer.write_with(|section| match section.push_pstr(src) {
@@ -848,7 +848,7 @@ impl Heap {
     // the tail location
     pub(crate) fn copy_pstr_within(&mut self, pstr_loc: usize) -> Result<usize, AllocError> {
         let HeapStringScan { string, tail_idx } = self.scan_slice_to_str(pstr_loc);
-        let s_len = string.as_bytes().len();
+        let s_len = string.len();
 
         let align_offset = pstr_sentinel_length(s_len);
         let copy_size = s_len + align_offset;
@@ -936,7 +936,7 @@ impl Heap {
             let HeapStringScan { string, tail_idx } =
                 unsafe { scan_slice_to_str_from_start(src_bytes) };
 
-            src_bytes = &src_bytes[string.as_bytes().len()..];
+            src_bytes = &src_bytes[string.len()..];
             byte_size += heap_index!(tail_idx);
         }
 

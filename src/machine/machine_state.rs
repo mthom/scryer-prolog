@@ -17,7 +17,6 @@ use crate::parser::ast::*;
 use crate::read::TermWriteResult;
 use crate::types::*;
 
-use bstr::ByteSlice;
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
@@ -314,7 +313,7 @@ impl Ball {
 
             pstr_threshold += dest_writer
                 .write_with(|section| {
-                    if section.push_pstr(string.as_bytes()).is_some() {
+                    if section.push_pstr(string).is_some() {
                         section.push_cell(self.stub[tail_idx] - diff);
                     }
                 })
