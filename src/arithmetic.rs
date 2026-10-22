@@ -77,7 +77,7 @@ impl<'a> ArithInstructionIterator<'a> {
 #[derive(Debug)]
 pub(crate) enum ArithTermRef<'a> {
     Literal(Literal),
-    Op(Level, &'a Cell<RegType>, Atom, usize), // name, arity.
+    Op(&'a Cell<RegType>, Atom, usize), // name, arity.
     Var(Level, &'a Cell<VarReg>, VarPtr),
 }
 
@@ -92,7 +92,7 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
                     let arity = subterms.len();
 
                     if child_num == arity {
-                        return Some(Ok(ArithTermRef::Op(lvl, cell, name, arity)));
+                        return Some(Ok(ArithTermRef::Op(cell, name, arity)));
                     } else {
                         self.state_stack.push(TermIterState::Clause(
                             lvl,
@@ -312,9 +312,18 @@ impl<'a> ArithmeticEvaluator<'a> {
 
                     self.interm.push(ArithmeticTerm::Reg(r));
                 }
-                ArithTermRef::Op(lvl, cell, name, arity) => {
-                    self.marker
-                        .mark_non_var::<QueryInstruction>(lvl, term_loc, cell, &mut code);
+                ArithTermRef::Op(cell, name, arity) => {
+                    // arithmetic ops should never be marked as
+                    // shallow terms, since they may appear in inlined
+                    // predicates where the temporary variable they
+                    // would then overwrite could be needed
+                    // immediately after.
+                    self.marker.mark_non_var::<QueryInstruction>(
+                        Level::Deep,
+                        term_loc,
+                        cell,
+                        &mut code,
+                    );
 
                     if let RegType::Temp(t) = cell.get() {
                         code.push_back(self.instr_from_clause(name, arity, t)?);
