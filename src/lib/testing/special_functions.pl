@@ -29,7 +29,7 @@ The underlying Rust implementations come from the
               ,witness/1
           ]).
 
-:- use_module(library(numerics/testutils)).
+:- use_module(library(testing/testutils)).
 
 %% erf(+Xexpr, -Erf)
 %
