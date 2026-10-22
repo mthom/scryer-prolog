@@ -18,7 +18,7 @@ The homepage of the project is: [**https://www.scryer.pl**](https://www.scryer.p
 
 Produce an implementation of the Warren Abstract Machine in Rust, done
 according to the progression of languages in [Warren's Abstract
-Machine: A Tutorial Reconstruction](https://github.com/mthom/scryer-prolog/blob/master/wambook/wambook.pdf).
+Machine: A Tutorial Reconstruction](https://codeberg.org/mthom/scryer-prolog/raw/branch/master/wambook/wambook.pdf).
 
 Phase 1 has been completed in that Scryer Prolog implements in some form
 all of the WAM book, including lists, cuts, Debray allocation, first
@@ -111,7 +111,7 @@ strings.
 Precompiled binaries for several platforms are available for download
 at:
 
-**https://github.com/mthom/scryer-prolog/releases/latest**
+**https://codeberg.org/mthom/scryer-prolog/releases**
 
 ### Native Compilation
 
@@ -133,7 +133,7 @@ under the `package.rust-version` key.
 ### From a local git checkout
 
 ```
-$> git clone https://github.com/mthom/scryer-prolog
+$> git clone https://codeberg.org/mthom/scryer-prolog
 $> cd scryer-prolog
 $> cargo build --release
 ```
@@ -910,8 +910,8 @@ in&nbsp;person.
 ## Support and discussions
 
 If Scryer Prolog crashes or yields unexpected errors, consider filing
-an&nbsp;[issue](https://github.com/mthom/scryer-prolog/issues).
+an&nbsp;[issue](https://codeberg.org/mthom/scryer-prolog/issues).
 
-To get in touch with the Scryer Prolog community, participate in
-[discussions](https://github.com/mthom/scryer-prolog/discussions)
+To get in touch with the Scryer Prolog community, participate in the
+[Matrix&nbsp;space](https://app.element.io/#/room/#scryer-prolog:matrix.org)
 or visit our #scryer IRC channel on [Libera](https://libera.chat)!
