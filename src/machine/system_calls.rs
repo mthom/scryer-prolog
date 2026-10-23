@@ -6693,7 +6693,7 @@ impl Machine {
 
         let term_write_result = parser
             .read_term(&op_dir, Tokens::Default)
-            .map_err(|err| error_after_read_term(err, 0, &parser))
+            .map_err(CompilationError::from)
             .and_then(|term| write_term_to_heap(&term, &mut self.machine_st.heap));
 
         match term_write_result {

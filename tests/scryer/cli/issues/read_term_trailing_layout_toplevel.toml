@@ -1,0 +1,2 @@
+# toplevel must reach end of file, not a syntax error, after trailing layout
+args = ["-f", "--no-add-history"]

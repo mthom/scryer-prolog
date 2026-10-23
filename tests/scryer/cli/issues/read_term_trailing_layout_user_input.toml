@@ -1,0 +1,2 @@
+# read/1 from user_input must return end_of_file after trailing layout
+args = ["-f", "--no-add-history", "-g", "read(X), read(Y), writeq(X-Y), nl", "-g", "halt"]
