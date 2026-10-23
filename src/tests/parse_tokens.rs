@@ -107,3 +107,115 @@ fn comment_then_eof() -> Result<(), ParserError> {
     assert!(read_all_tokens("% only a comment").is_err());
     Ok(())
 }
+
+#[test]
+fn decimal_with_underscore() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("1_000")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(1000)))]);
+    Ok(())
+}
+
+#[test]
+fn decimal_with_multiple_underscores() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("1_000_000")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(1000000)))]);
+    Ok(())
+}
+
+#[test]
+fn decimal_with_underscore_and_whitespace() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("123_ 456")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(123456)))]);
+    Ok(())
+}
+
+#[test]
+fn decimal_with_underscore_and_comment() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("123_ /* comment */ 456")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(123456)))]);
+    Ok(())
+}
+
+#[test]
+fn hexadecimal_with_underscore() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("0xDE_AD")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(0xDEAD)))]);
+    Ok(())
+}
+
+#[test]
+fn hexadecimal_with_multiple_underscores() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("0x1_2_3_4")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(0x1234)))]);
+    Ok(())
+}
+
+#[test]
+fn hexadecimal_with_underscore_and_whitespace() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("0xFF_ 00")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(0xFF00)))]);
+    Ok(())
+}
+
+#[test]
+fn hexadecimal_with_underscore_and_comment() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("0xDE_ /* test */ AD")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(0xDEAD)))]);
+    Ok(())
+}
+
+#[test]
+fn octal_with_underscore() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("0o7_6")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(0o76)))]);
+    Ok(())
+}
+
+#[test]
+fn octal_with_multiple_underscores() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("0o1_2_3")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(0o123)))]);
+    Ok(())
+}
+
+#[test]
+fn octal_with_underscore_and_whitespace() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("0o77_ 00")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(0o7700)))]);
+    Ok(())
+}
+
+#[test]
+fn octal_with_underscore_and_comment() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("0o1_ /* octal */ 23")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(0o123)))]);
+    Ok(())
+}
+
+#[test]
+fn binary_with_underscore() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("0b10_11")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(0b1011)))]);
+    Ok(())
+}
+
+#[test]
+fn binary_with_multiple_underscores() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("0b1_0_1_0")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(0b1010)))]);
+    Ok(())
+}
+
+#[test]
+fn binary_with_underscore_and_whitespace() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("0b1111_ 0000")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(0b11110000)))]);
+    Ok(())
+}
+
+#[test]
+fn binary_with_underscore_and_comment() -> Result<(), ParserError> {
+    let tokens = read_all_tokens("0b10_ /* binary */ 11")?;
+    assert_eq!(tokens, [Token::Literal(Literal::Fixnum(Fixnum::build_with(0b1011)))]);
+    Ok(())
+}

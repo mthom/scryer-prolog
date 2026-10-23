@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/digit_separators.pl", "-f", "-g", "use_module(library(digit_separators_tests)), digit_separators_tests:main_quiet(digit_separators_tests)"]
