@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/issue_5_bar_list.pl", "-f", "-g", "use_module(library(issue_5_bar_list_tests)), issue_5_bar_list_tests:setup, issue_5_bar_list_tests:main_quiet(issue_5_bar_list_tests)"]
