@@ -321,6 +321,12 @@ impl PrologStream for InputFileStream {
     fn position_relative_to_end(&mut self) -> AtEndOfStream {
         let pos = self.position();
 
+        if let Some(buf) = &self.file.buf
+            && (buf.position() as usize) < buf.get_ref().len()
+        {
+            return AtEndOfStream::Not;
+        }
+
         match self.file.reader().metadata() {
             Ok(metadata) if let Some(pos) = pos => match pos.cmp(&metadata.len()) {
                 Ordering::Less => AtEndOfStream::Not,
@@ -343,6 +349,7 @@ impl PrologStream for InputFileStream {
     }
 
     fn set_position(&mut self, pos: u64) -> io::Result<u64> {
+        self.file.buf = None;
         self.file.reader_mut().seek(SeekFrom::Start(pos))
     }
 
@@ -372,7 +379,7 @@ impl PrologStream for OutputFileStream {
         Some(self.file_name)
     }
 }
-
+O
 pub struct BufferedNamedTcpStream(OptInBufReader<NamedTcpStream>);
 
 impl Read for BufferedNamedTcpStream {

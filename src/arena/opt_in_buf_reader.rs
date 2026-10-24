@@ -33,7 +33,7 @@ impl<S> OptInBufReader<S> {
     pub(in crate::arena) fn remaining_buf_len(&self) -> usize {
         if let Some(cursor) = &self.buf {
             let pos = cursor.position() as usize;
-            cursor.get_ref().len() - pos
+            cursor.get_ref().len().saturating_sub(pos)
         } else {
             0
         }
