@@ -75,11 +75,19 @@ pub(crate) fn as_partial_string(
             if let Some(c) = atom.as_char() {
                 c.to_string()
             } else {
-                return Err(Term::Cons(Cell::default(), Box::new(head), Box::new(tail)));
+                return Err(Term::ConsCell(
+                    Cell::default(),
+                    Box::new(head),
+                    Box::new(tail),
+                ));
             }
         }
         _ => {
-            return Err(Term::Cons(Cell::default(), Box::new(head), Box::new(tail)));
+            return Err(Term::ConsCell(
+                Cell::default(),
+                Box::new(head),
+                Box::new(tail),
+            ));
         }
     };
 
@@ -88,17 +96,17 @@ pub(crate) fn as_partial_string(
 
     loop {
         match &mut **tail_ref {
-            Term::Cons(_, prev, succ) => {
+            Term::ConsCell(_, prev, succ) => {
                 match prev.as_ref() {
                     Term::Literal(_, Literal::Atom(atom)) => {
                         if let Some(c) = atom.as_char() {
                             string.push(c);
                         } else {
-                            return Err(Term::Cons(Cell::default(), Box::new(head), orig_tail));
+                            return Err(Term::ConsCell(Cell::default(), Box::new(head), orig_tail));
                         }
                     }
                     _ => {
-                        tail = Term::Cons(
+                        tail = Term::ConsCell(
                             Cell::default(),
                             Box::new((**prev).clone()),
                             Box::new((**succ).clone()),
@@ -312,7 +320,7 @@ impl<'a, R: GraphemeRead> Parser<'a, R> {
     }
 
     fn replace_cons_tail(&self, mut list: &mut Term, new_tail: Term) {
-        while let Term::Cons(_cell, _head, tail) = list {
+        while let Term::ConsCell(_cell, _head, tail) = list {
             list = tail.as_mut();
         }
 
@@ -361,7 +369,7 @@ impl<'a, R: GraphemeRead> Parser<'a, R> {
                         // Empty string in codes mode: ""||K => K
                         arg2
                     }
-                    Term::Cons(_, _, _) => {
+                    Term::ConsCell(_, _, _) => {
                         self.replace_cons_tail(&mut arg1, arg2);
                         arg1
                     }
@@ -420,7 +428,7 @@ impl<'a, R: GraphemeRead> Parser<'a, R> {
                 let mut list = Term::Literal(Cell::default(), Literal::Atom(atom!("[]")));
 
                 for c in s.as_str().chars().rev() {
-                    list = Term::Cons(
+                    list = Term::ConsCell(
                         Cell::default(),
                         Box::new(Term::Literal(
                             Cell::default(),
@@ -760,7 +768,7 @@ impl<'a, R: GraphemeRead> Parser<'a, R> {
         let idx = self.terms.len() - arity;
 
         let list = self.terms.drain(idx..).rev().fold(end_term, |acc, t| {
-            Term::Cons(Cell::default(), Box::new(t), Box::new(acc))
+            Term::ConsCell(Cell::default(), Box::new(t), Box::new(acc))
         });
 
         self.stack.truncate(list_len);
@@ -773,7 +781,7 @@ impl<'a, R: GraphemeRead> Parser<'a, R> {
         });
 
         self.terms.push(match list {
-            Term::Cons(_, head, tail) => match as_partial_string(*head, *tail) {
+            Term::ConsCell(_, head, tail) => match as_partial_string(*head, *tail) {
                 Ok((string_buf, Some(tail))) => {
                     Term::PartialString(Cell::default(), Rc::new(string_buf), tail)
                 }
@@ -1058,7 +1066,7 @@ impl<'a, R: GraphemeRead> Parser<'a, R> {
                         match last_term {
                             Term::CompleteString(_, _) => true,
                             Term::PartialString(_, _, _) => true,
-                            Term::Cons(_, _, _) => true, // Allows codes mode: "abc" becomes [97,98,99]
+                            Term::ConsCell(_, _, _) => true, // Allows codes mode: "abc" becomes [97,98,99]
                             Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true, // Empty string in codes mode
                             _ => false,
                         }
@@ -1116,7 +1124,7 @@ impl<'a, R: GraphemeRead> Parser<'a, R> {
                     match last_term {
                         Term::CompleteString(_, _) => true,
                         Term::PartialString(_, _, _) => true,
-                        Term::Cons(_, _, _) => true, // Allows codes mode: "abc" becomes [97,98,99]
+                        Term::ConsCell(_, _, _) => true, // Allows codes mode: "abc" becomes [97,98,99]
                         Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true, // Empty string in codes mode
                         _ => false,
                     }

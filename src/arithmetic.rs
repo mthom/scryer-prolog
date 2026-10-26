@@ -59,13 +59,19 @@ impl<'a> ArithInstructionIterator<'a> {
                 TermIterState::Clause(Level::Shallow, 0, cell, *name, terms)
             }
             Term::Literal(cell, cons) => TermIterState::Literal(Level::Shallow, cell, cons),
-            Term::Cons(..) | Term::PartialString(..) | Term::CompleteString(..) => {
+            Term::ConsCell(..) | Term::PartialString(..) | Term::CompleteString(..) => {
                 return Err(ArithmeticError::NonEvaluableFunctor(
                     Literal::Atom(atom!(".")),
                     2,
                 ));
             }
             Term::Var(cell, var_ptr) => TermIterState::Var(Level::Shallow, cell, var_ptr.clone()),
+            Term::Stream(_cell, stream) => {
+                return Err(ArithmeticError::NonEvaluableStream(*stream));
+            }
+            Term::Process(_cell, process) => {
+                return Err(ArithmeticError::NonEvaluableProcess(*process));
+            }
         };
 
         Ok(ArithInstructionIterator {
@@ -108,6 +114,12 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
                 TermIterState::Literal(_, _, c) => return Some(Ok(ArithTermRef::Literal(*c))),
                 TermIterState::Var(lvl, cell, var_ptr) => {
                     return Some(Ok(ArithTermRef::Var(lvl, cell, var_ptr)));
+                }
+                TermIterState::Process(_, _, process) => {
+                    return Some(Err(ArithmeticError::NonEvaluableProcess(process)));
+                }
+                TermIterState::Stream(_, _, stream) => {
+                    return Some(Err(ArithmeticError::NonEvaluableStream(stream)));
                 }
                 _ => {
                     return Some(Err(ArithmeticError::NonEvaluableFunctor(

@@ -1418,8 +1418,24 @@ impl MachineState {
                         Err(cons_term) => term_stack.push(cons_term),
                     }
                 }
-                (HeapCellValueTag::Cons | HeapCellValueTag::Fixnum | HeapCellValueTag::F64Offset) => {
-                    term_stack.push(Term::Literal(Cell::default(), Literal::try_from((addr, &self.arena.f64_tbl)).unwrap()));
+                (HeapCellValueTag::Cons, cons_ptr) => {
+                    if cons_ptr.get_tag() == ArenaHeaderTag::ChildProcess {
+                        use std::process::Child;
+
+                        let process = unsafe { Child::typed_ptr(cons_ptr) };
+                        term_stack.push(Term::Process(Cell::default(), process));
+                    } else if let Some(stream) = Stream::from_tag(cons_ptr) {
+                        term_stack.push(Term::Stream(Cell::default(), stream));
+                    } else {
+                        term_stack.push(Term::Literal(Cell::default(), Literal::try_from((addr, &self.arena.f64_tbl)).unwrap()));
+                    }
+                }
+                (HeapCellValueTag::Fixnum, n) => {
+                    term_stack.push(Term::Literal(Cell::default(), Literal::Fixnum(n)));
+                }
+                (HeapCellValueTag::F64Offset, offset) => {
+                    let entry = self.arena.f64_tbl.get_entry(offset);
+                    term_stack.push(Term::Literal(Cell::default(), Literal::F64(offset, entry)));
                 }
                 (HeapCellValueTag::StackVar, h) => {
                     term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("s_{h}"))));

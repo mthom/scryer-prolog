@@ -937,7 +937,7 @@ impl From<&'_ Term> for OptArgIndexKey {
     fn from(term: &'_ Term) -> OptArgIndexKey {
         match term {
             &Term::Clause(_, atom!("."), ref terms) if terms.len() == 2 => OptArgIndexKey::List,
-            &Term::Cons(..) | &Term::PartialString(..) | &Term::CompleteString(..) => {
+            &Term::ConsCell(..) | &Term::PartialString(..) | &Term::CompleteString(..) => {
                 OptArgIndexKey::List
             }
             &Term::Clause(_, name, ref terms) => OptArgIndexKey::Structure(name, terms.len()),
@@ -945,7 +945,9 @@ impl From<&'_ Term> for OptArgIndexKey {
                 let literal = HeapCellValue::from(constant);
                 OptArgIndexKey::Literal(literal)
             }
-            &Term::Var(..) | &Term::AnonVar => OptArgIndexKey::None,
+            &Term::Var(..) | &Term::AnonVar | Term::Stream(..) | Term::Process(..) => {
+                OptArgIndexKey::None
+            }
         }
     }
 }

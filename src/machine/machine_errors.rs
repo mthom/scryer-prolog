@@ -530,6 +530,14 @@ impl MachineState {
                 let culprit = functor!(atom!("/"), [literal(cell), fixnum(arity)]);
                 self.type_error(ValidType::Evaluable, culprit)
             }
+            ArithmeticError::NonEvaluableStream(stream) => self.type_error(
+                ValidType::Evaluable,
+                functor!(atom!("stream"), [stream(stream)]),
+            ),
+            ArithmeticError::NonEvaluableProcess(process) => self.type_error(
+                ValidType::Evaluable,
+                functor!(atom!("process"), [process(process)]),
+            ),
             ArithmeticError::UninstantiatedVar => self.instantiation_error(),
         }
     }

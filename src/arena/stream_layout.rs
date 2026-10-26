@@ -379,7 +379,7 @@ impl PrologStream for OutputFileStream {
         Some(self.file_name)
     }
 }
-O
+
 pub struct BufferedNamedTcpStream(OptInBufReader<NamedTcpStream>);
 
 impl Read for BufferedNamedTcpStream {

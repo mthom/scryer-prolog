@@ -138,6 +138,8 @@ impl<'a> TermWriter<'a> {
             &TermRef::Literal(_, _, literal) => HeapCellValue::from(*literal),
             &TermRef::Clause(_, _, _, subterms) if subterms.is_empty() => heap_loc_as_cell!(h),
             &TermRef::Clause(..) => str_loc_as_cell!(h),
+            &TermRef::Stream(_, _, stream) => HeapCellValue::from(stream),
+            &TermRef::Process(_, _, process) => HeapCellValue::from(process),
         }
     }
 

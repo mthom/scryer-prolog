@@ -132,7 +132,7 @@ pub(super) fn setup_module_export_list(
 ) -> Result<Vec<ModuleExport>, CompilationError> {
     let mut exports = vec![];
 
-    while let Term::Cons(_, t1, t2) = export_list {
+    while let Term::ConsCell(_, t1, t2) = export_list {
         let module_export = setup_module_export(*t1)?;
 
         exports.push(module_export);
@@ -190,7 +190,7 @@ fn setup_qualified_import(mut terms: Vec<Term>) -> Result<UseModuleExport, Compi
 
     let mut exports = IndexSet::new();
 
-    while let Term::Cons(_, t1, t2) = export_list {
+    while let Term::ConsCell(_, t1, t2) = export_list {
         exports.insert(setup_module_export(*t1)?);
         export_list = *t2;
     }

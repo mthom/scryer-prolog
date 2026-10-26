@@ -16,7 +16,7 @@ pub(crate) trait CompilationTarget<'a> {
 
     fn iter(term: &'a Term) -> Self::Iterator;
 
-    fn to_constant(lvl: Level, constant: Literal, r: RegType) -> Instruction;
+    fn to_value<ToHCV: Into<HeapCellValue>>(lvl: Level, value: ToHCV, r: RegType) -> Instruction;
     fn to_list(lvl: Level, r: RegType) -> Instruction;
     fn to_structure(lvl: Level, name: Atom, arity: usize, r: RegType) -> Instruction;
 
@@ -27,12 +27,11 @@ pub(crate) trait CompilationTarget<'a> {
 
     fn incr_void_instr(instr: &mut Instruction);
 
-    fn constant_subterm(literal: Literal) -> Instruction;
+    fn value_subterm<ToHCV: Into<HeapCellValue>>(hcv: ToHCV) -> Instruction;
 
     fn argument_to_variable(r: RegType, r: usize) -> Instruction;
     fn argument_to_value(r: RegType, val: usize) -> Instruction;
     fn unsafe_argument_to_value(r: RegType, val: usize) -> Instruction;
-
     fn move_to_register(r: RegType, val: usize) -> Instruction;
 
     fn subterm_to_variable(r: RegType) -> Instruction;
@@ -49,8 +48,8 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         breadth_first_iter(term, RootIterationPolicy::NotIterated)
     }
 
-    fn to_constant(lvl: Level, constant: Literal, reg: RegType) -> Instruction {
-        Instruction::GetConstant(lvl, HeapCellValue::from(constant), reg)
+    fn to_value<ToHCV: Into<HeapCellValue>>(lvl: Level, value: ToHCV, r: RegType) -> Instruction {
+        Instruction::GetConstant(lvl, value.into(), r)
     }
 
     fn to_structure(lvl: Level, name: Atom, arity: usize, reg: RegType) -> Instruction {
@@ -79,8 +78,8 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         }
     }
 
-    fn constant_subterm(constant: Literal) -> Instruction {
-        Instruction::UnifyConstant(HeapCellValue::from(constant))
+    fn value_subterm<ToHCV: Into<HeapCellValue>>(hcv: ToHCV) -> Instruction {
+        Instruction::UnifyConstant(hcv.into())
     }
 
     fn argument_to_variable(arg: RegType, val: usize) -> Instruction {
@@ -149,12 +148,12 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
         }
     }
 
-    fn constant_subterm(constant: Literal) -> Instruction {
-        Instruction::SetConstant(HeapCellValue::from(constant))
+    fn value_subterm<ToHCV: Into<HeapCellValue>>(hcv: ToHCV) -> Instruction {
+        Instruction::SetConstant(hcv.into())
     }
 
-    fn to_constant(lvl: Level, constant: Literal, reg: RegType) -> Instruction {
-        Instruction::PutConstant(lvl, HeapCellValue::from(constant), reg)
+    fn to_value<ToHCV: Into<HeapCellValue>>(lvl: Level, value: ToHCV, r: RegType) -> Instruction {
+        Instruction::PutConstant(lvl, value.into(), r)
     }
 
     fn argument_to_variable(arg: RegType, val: usize) -> Instruction {

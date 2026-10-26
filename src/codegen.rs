@@ -329,7 +329,7 @@ impl<'a> AddToFreeList<'_, QueryInstruction> for CodeGenerator<'_> {
 
 fn structure_cell(term: &Term) -> Option<&Cell<RegType>> {
     match term {
-        Term::Cons(cell, ..)
+        Term::ConsCell(cell, ..)
         | Term::Clause(cell, ..)
         | Term::PartialString(cell, ..)
         | Term::CompleteString(cell, ..) => Some(cell),
@@ -393,7 +393,7 @@ impl<'a> CodeGenerator<'a> {
             &Term::AnonVar => {
                 Self::add_or_increment_void_instr::<Target>(target);
             }
-            Term::Cons(cell, ..)
+            Term::ConsCell(cell, ..)
             | Term::Clause(cell, ..)
             | Term::PartialString(cell, ..)
             | Term::CompleteString(cell, ..) => {
@@ -402,7 +402,13 @@ impl<'a> CodeGenerator<'a> {
                 target.push_back(Target::clause_arg_to_instr(cell.get()));
             }
             Term::Literal(_, constant) => {
-                target.push_back(Target::constant_subterm(*constant));
+                target.push_back(Target::value_subterm(*constant));
+            }
+            Term::Stream(_, stream) => {
+                target.push_back(Target::value_subterm(*stream));
+            }
+            Term::Process(_, child) => {
+                target.push_back(Target::value_subterm(*child));
             }
             Term::Var(cell, var_ptr) => {
                 self.deep_var_instr::<Target>(
@@ -479,10 +485,20 @@ impl<'a> CodeGenerator<'a> {
                     <CodeGenerator as AddToFreeList<Target>>::add_subterm_to_free_list(self, head);
                     <CodeGenerator as AddToFreeList<Target>>::add_subterm_to_free_list(self, tail);
                 }
+                TermRef::Stream(lvl @ Level::Shallow, cell, stream) => {
+                    self.marker
+                        .mark_non_var::<Target>(lvl, context, cell, &mut target);
+                    target.push_back(Target::to_value(lvl, stream, cell.get()));
+                }
+                TermRef::Process(lvl @ Level::Shallow, cell, process) => {
+                    self.marker
+                        .mark_non_var::<Target>(lvl, context, cell, &mut target);
+                    target.push_back(Target::to_value(lvl, process, cell.get()));
+                }
                 TermRef::Literal(lvl @ Level::Shallow, cell, constant) => {
                     self.marker
                         .mark_non_var::<Target>(lvl, context, cell, &mut target);
-                    target.push_back(Target::to_constant(lvl, *constant, cell.get()));
+                    target.push_back(Target::to_value(lvl, *constant, cell.get()));
                 }
                 TermRef::PartialString(lvl, cell, string, tail) => {
                     self.marker
@@ -496,7 +512,7 @@ impl<'a> CodeGenerator<'a> {
                         .mark_non_var::<Target>(lvl, context, cell, &mut target);
 
                     target.push_back(Target::to_pstr(lvl, string.clone(), cell.get()));
-                    target.push_back(Target::constant_subterm(Literal::Atom(atom!("[]"))));
+                    target.push_back(Target::value_subterm(Literal::Atom(atom!("[]"))));
                 }
                 TermRef::Var(lvl @ Level::Shallow, cell, var) => {
                     self.marker.mark_var::<Target>(
@@ -580,12 +596,12 @@ impl<'a> CodeGenerator<'a> {
             InlinedClauseType::IsAtomic(..) => match &terms[0] {
                 Term::AnonVar
                 | Term::Clause(..)
-                | Term::Cons(..)
+                | Term::ConsCell(..)
                 | Term::PartialString(..)
                 | Term::CompleteString(..) => {
                     instr!("$fail")
                 }
-                Term::Literal(..) => {
+                Term::Stream(..) | Term::Process(..) | Term::Literal(..) => {
                     instr!("$succeed")
                 }
                 Term::Var(vr, name) => {
@@ -604,7 +620,7 @@ impl<'a> CodeGenerator<'a> {
             },
             InlinedClauseType::IsCompound(..) => match &terms[0] {
                 Term::Clause(..)
-                | Term::Cons(..)
+                | Term::ConsCell(..)
                 | Term::PartialString(..)
                 | Term::CompleteString(..) => {
                     instr!("$succeed")
@@ -741,9 +757,11 @@ impl<'a> CodeGenerator<'a> {
             InlinedClauseType::IsVar(..) => match &terms[0] {
                 Term::Literal(..)
                 | Term::Clause(..)
-                | Term::Cons(..)
+                | Term::ConsCell(..)
                 | Term::PartialString(..)
-                | Term::CompleteString(..) => {
+                | Term::CompleteString(..)
+                | Term::Stream(..)
+                | Term::Process(..) => {
                     instr!("$fail")
                 }
                 Term::AnonVar => {

@@ -141,6 +141,24 @@ macro_rules! build_functor {
                         1 + $res_len,
                         [$($subfunctor),*])
     });
+    ([stream($e:expr) $(, $dt:ident($($value:tt),*))*],
+     [$($res:expr),*],
+     $res_len:expr,
+     [$($subfunctor:expr),*]) => ({
+         build_functor!([$($dt($($value),*)),*],
+                        [$($res, )* FunctorElement::AbsoluteCell(HeapCellValue::from($e))],
+                        1 + $res_len,
+                        [$($subfunctor),*])
+    });
+    ([process($e:expr) $(, $dt:ident($($value:tt),*))*],
+     [$($res:expr),*],
+     $res_len:expr,
+     [$($subfunctor:expr),*]) => ({
+         build_functor!([$($dt($($value),*)),*],
+                        [$($res, )* FunctorElement::AbsoluteCell(HeapCellValue::from($e))],
+                        1 + $res_len,
+                        [$($subfunctor),*])
+    });
     ([number($n:expr, $arena:expr) $(, $dt:ident($($value:tt),*))*],
      [$($res:expr),*],
      $res_len:expr,
