@@ -693,7 +693,7 @@ impl<'a, R: GraphemeRead> Lexer<'a, R> {
         if let g = CompactString::new(self.peek_grapheme(0)?)
             && !is_underscore_grapheme(g.as_str())
         {
-            return Ok(g);
+            Ok(g)
         } else {
             self.skip_grapheme()?;
             self.scan_for_layout()?;
