@@ -160,6 +160,7 @@ pub enum StaticIndexedChoiceInstructionOffset {
 }
 
 impl StaticIndexedChoiceInstructionOffset {
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn to_functor(&self) -> MachineStub {
         let offset = self.offset() as i64;
 

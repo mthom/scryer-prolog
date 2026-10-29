@@ -269,6 +269,7 @@ impl<'a, I: Indexer> CodeOffsets<'a, I> {
         entry[arg_index] = key;
     }
 
+    #[allow(clippy::type_complexity)]
     fn map_offsets_to_index_keys(
         optimal_index: usize,
     ) -> impl for<'b> FnOnce(

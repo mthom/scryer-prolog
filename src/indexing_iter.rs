@@ -190,6 +190,7 @@ pub(crate) enum IndexingLineOffset<'a> {
 }
 
 impl<'code> IndexingLineOffset<'code> {
+    #[allow(clippy::wrong_self_convention)]
     #[inline]
     fn to_place(self, cursor: TableLocation) -> IndexingLinePlace<'code> {
         match self {
