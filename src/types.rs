@@ -595,6 +595,13 @@ impl HeapCellValue {
         }
     }
 
+    pub fn to_typed_arena_ptr<T: ArenaAllocated>(self) -> Option<TypedArenaPtr<T>>
+    where
+        T::Payload: Sized,
+    {
+        self.to_untyped_arena_ptr()?.to_typed_ptr::<T>()
+    }
+
     #[inline(always)]
     pub fn get_forwarding_bit(self) -> bool {
         match self.get_tag() {
@@ -745,6 +752,20 @@ impl UntypedArenaPtr {
             let header = *self.get_ptr().cast::<ArenaHeader>();
             header.get_tag()
         }
+    }
+
+    pub fn to_typed_ptr<T: ArenaAllocated>(self) -> Option<TypedArenaPtr<T>>
+    where
+        T::Payload: Sized,
+    {
+        if T::tag() != self.get_tag() {
+            return None;
+        }
+
+        // Safety:
+        // - ptr is non-null per UntypedArenaPtr invariant (asserted in build_with above)
+        // - type is T as the tag matched above
+        Some(unsafe { self.as_typed_ptr::<T>() })
     }
 
     /// # Safety

@@ -531,9 +531,7 @@ pub(crate) fn numbervar(offset: &Integer, addr: HeapCellValue) -> Option<String>
 
     read_heap_cell!(addr,
         (HeapCellValueTag::Cons, cons_ptr) => {
-            if matches!(cons_ptr.get_tag(), ArenaHeaderTag::Integer) {
-                let n = unsafe { cons_ptr.as_typed_ptr::<Integer>() };
-
+            if let Some(n) = cons_ptr.to_typed_ptr::<Integer>() {
                 if !n.is_negative() {
                     Some(numbervar(Integer::from(offset + &*n)))
                 } else {

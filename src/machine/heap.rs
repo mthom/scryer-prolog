@@ -2,7 +2,7 @@ use bstr::ByteSlice;
 
 use crate::atom_table::*;
 use crate::functor_macro::*;
-use crate::machine::{ArenaHeaderTag, Fixnum, Integer};
+use crate::machine::{Fixnum, Integer};
 use crate::types::*;
 
 use std::alloc;
@@ -1161,12 +1161,10 @@ pub(crate) fn to_local_code_ptr(heap: &Heap, addr: HeapCellValue) -> Option<usiz
     let extract_integer = |s: usize| -> Option<usize> {
         read_heap_cell!(heap[s],
             (HeapCellValueTag::Cons, cons_ptr) => {
-                match cons_ptr.get_tag() {
-                    ArenaHeaderTag::Integer => {
-                        let n = unsafe { cons_ptr.as_typed_ptr::<Integer>() };
-                        (&*n).try_into().ok()
-                    }
-                    _ => None,
+                if let Some(n) = cons_ptr.to_typed_ptr::<Integer>() {
+                    (&*n).try_into().ok()
+                } else {
+                    None
                 }
             }
             (HeapCellValueTag::Fixnum, n) => {

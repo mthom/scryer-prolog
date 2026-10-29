@@ -821,29 +821,11 @@ mod tests {
         let cell = HeapCellValue::from(big_int_ptr);
         assert_eq!(cell.get_tag(), HeapCellValueTag::Cons);
 
-        let untyped_arena_ptr = match cell.to_untyped_arena_ptr() {
-            Some(ptr) => ptr,
-            None => {
-                unreachable!()
-            }
-        };
-
-        assert!(matches!(
-            untyped_arena_ptr.get_tag(),
-            ArenaHeaderTag::Integer
-        ));
-
-        let n = unsafe { untyped_arena_ptr.as_typed_ptr::<Integer>() };
+        let n = cell.to_typed_arena_ptr::<Integer>().unwrap();
         assert_eq!(&*n, &(2 * Integer::from(1u64 << 63)));
 
-        read_heap_cell!(cell,
-           (HeapCellValueTag::Cons, cons_ptr) => {
-               assert!(matches!(cons_ptr.get_tag(), ArenaHeaderTag::Integer));
-               let n = unsafe { cons_ptr.as_typed_ptr::<Integer>() };
-               assert_eq!(&*n, &(2 * Integer::from(1u64 << 63)))
-           }
-           _ => { unreachable!() }
-        );
+        let n = cell.to_typed_arena_ptr::<Integer>().unwrap();
+        assert_eq!(&*n, &(2 * Integer::from(1u64 << 63)));
 
         // rational
 
@@ -869,14 +851,8 @@ mod tests {
 
         // assert_eq!(wam.machine_st.heap[1usize].get_tag(), HeapCellValueTag::Cons);
 
-        read_heap_cell!(rat_cell,
-          (HeapCellValueTag::Cons, cons_ptr) => {
-              assert!(matches!(cons_ptr.get_tag(), ArenaHeaderTag::Rational));
-              let n = unsafe { cons_ptr.as_typed_ptr::<Rational>() };
-              assert_eq!(&*n, &(Rational::from(2) * Rational::from(1u64 << 63)));
-          }
-          _ => { unreachable!() }
-        );
+        let n = rat_cell.to_typed_arena_ptr::<Rational>().unwrap();
+        assert_eq!(&*n, &(Rational::from(2) * Rational::from(1u64 << 63)));
 
         // atom
 

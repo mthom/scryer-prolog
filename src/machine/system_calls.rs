@@ -4555,19 +4555,9 @@ impl Machine {
     pub(crate) fn http_listen_stop(&mut self) -> CallResult {
         let culprit = self.deref_register(1);
 
-        read_heap_cell!(culprit,
-            (HeapCellValueTag::Cons, cons_ptr) => {
-                if matches!(cons_ptr.get_tag(), ArenaHeaderTag::HttpListener) {
-                    let http_listener = unsafe { cons_ptr.as_typed_ptr::<HttpListener>() };
-                    http_listener.warp_shutdown.notify_one();
-                } else {
-                    unreachable!()
-                }
-            }
-            _ => {
-                unreachable!();
-            }
-        );
+        // shouldn't this throw an error when culprit isn't an http listner instead of panicking?
+        let http_listener = culprit.to_typed_arena_ptr::<HttpListener>().unwrap();
+        http_listener.warp_shutdown.notify_one();
 
         Ok(())
     }
@@ -4582,113 +4572,126 @@ impl Machine {
         let stream_addr = self.deref_register(6);
         let handle_addr = self.deref_register(7);
 
-        read_heap_cell!(culprit,
-            (HeapCellValueTag::Cons, cons_ptr) => {
-                if matches!(cons_ptr.get_tag(), ArenaHeaderTag::HttpListener) {
-                    let http_listener = unsafe { cons_ptr.as_typed_ptr::<HttpListener>() };
+        // shouldn't this throw an error when culprit isn't an http listner instead of panicking?
 
-                    loop {
-                        match http_listener.incoming.recv_timeout(std::time::Duration::from_millis(200)) {
-                            Ok(request) => {
-                                let method_atom = match request.request_data.method {
-                                    Method::GET => atom!("get"),
-                                    Method::POST => atom!("post"),
-                                    Method::PUT => atom!("put"),
-                                    Method::DELETE => atom!("delete"),
-                                    Method::PATCH => atom!("patch"),
-                                    Method::HEAD => atom!("head"),
-                                    Method::OPTIONS => atom!("options"),
-                                    Method::TRACE => atom!("trace"),
-                                    Method::CONNECT => atom!("connect"),
-                                    _ => atom!("unsupported_extension"),
-                                };
+        let http_listener = culprit.to_typed_arena_ptr::<HttpListener>().unwrap();
 
-                                let path_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &request.request_data.path);
-                                let path_cell = resource_error_call_result!(
-                                    self.machine_st,
-                                    self.machine_st.heap.allocate_cstr(request.request_data.path.as_bytes())
-                                );
+        loop {
+            match http_listener
+                .incoming
+                .recv_timeout(std::time::Duration::from_millis(200))
+            {
+                Ok(request) => {
+                    let method_atom = match request.request_data.method {
+                        Method::GET => atom!("get"),
+                        Method::POST => atom!("post"),
+                        Method::PUT => atom!("put"),
+                        Method::DELETE => atom!("delete"),
+                        Method::PATCH => atom!("patch"),
+                        Method::HEAD => atom!("head"),
+                        Method::OPTIONS => atom!("options"),
+                        Method::TRACE => atom!("trace"),
+                        Method::CONNECT => atom!("connect"),
+                        _ => atom!("unsupported_extension"),
+                    };
 
-                                let mut headers = vec![];
+                    let path_atom = AtomTable::build_with(
+                        &self.machine_st.atom_tbl,
+                        &request.request_data.path,
+                    );
+                    let path_cell = resource_error_call_result!(
+                        self.machine_st,
+                        self.machine_st
+                            .heap
+                            .allocate_cstr(request.request_data.path.as_bytes())
+                    );
 
-                                for (header_name, header_value) in request.request_data.headers {
-                                    let header_value = resource_error_call_result!(
-                                        self.machine_st,
-                                        self.machine_st.heap.allocate_cstr(header_value.as_bytes())
-                                    );
+                    let mut headers = vec![];
 
-                                    let header_term = functor!(
-                                        AtomTable::build_with(&self.machine_st.atom_tbl, header_name.unwrap().as_str()),
-                                        [cell(header_value)]
-                                    );
+                    for (header_name, header_value) in request.request_data.headers {
+                        let header_value = resource_error_call_result!(
+                            self.machine_st,
+                            self.machine_st.heap.allocate_cstr(header_value.as_bytes())
+                        );
 
-                                    let mut functor_writer = Heap::functor_writer(header_term);
+                        let header_term = functor!(
+                            AtomTable::build_with(
+                                &self.machine_st.atom_tbl,
+                                header_name.unwrap().as_str()
+                            ),
+                            [cell(header_value)]
+                        );
 
-                                    let functor_cell = resource_error_call_result!(
-                                        self.machine_st,
-                                        functor_writer(&mut self.machine_st.heap)
-                                    );
+                        let mut functor_writer = Heap::functor_writer(header_term);
 
-                                    headers.push(functor_cell);
-                                }
+                        let functor_cell = resource_error_call_result!(
+                            self.machine_st,
+                            functor_writer(&mut self.machine_st.heap)
+                        );
 
-                                let headers_list_cell = resource_error_call_result!(
-                                    self.machine_st,
-                                    sized_iter_to_heap_list(
-                                        &mut self.machine_st.heap,
-                                        headers.len(),
-                                        headers.into_iter(),
-                                    )
-                                );
-
-                                let query_str  = request.request_data.query;
-                                let query_cell = resource_error_call_result!(
-                                    self.machine_st,
-                                    self.machine_st.heap.allocate_cstr(query_str.as_bytes())
-                                );
-
-                                let mut stream = Stream::from_http_stream(
-                                    path_atom,
-                                    request.request_data.body,
-                                    &mut self.machine_st.arena
-                                );
-
-                                stream.options = StreamOptions::default();
-                                stream.options.set_stream_type(StreamType::Binary);
-
-                                self.indices.add_stream(stream, atom!("http_accept"), 7)
-                                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
-
-                                let stream = stream_as_cell!(stream);
-
-                                let handle = arena_alloc!(request.response, &mut self.machine_st.arena)
-                                    as TypedArenaPtr<HttpResponse>;
-
-                                self.machine_st.bind(method.as_var().unwrap(), atom_as_cell!(method_atom));
-                                self.machine_st.bind(path.as_var().unwrap(), path_cell);
-                                unify!(self.machine_st, headers_list_cell, self.machine_st.registers[4]);
-                                self.machine_st.bind(query.as_var().unwrap(), query_cell);
-                                self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
-                                self.machine_st.bind(handle_addr.as_var().unwrap(), typed_arena_ptr_as_cell!(handle));
-
-                                break
-                            }
-                            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                                self.machine_st.check_for_interrupt(|| functor_stub(atom!("http_accept"), 7))?;
-                            }
-                            Err(_) => {
-                                self.machine_st.fail = true;
-                            }
-                        }
+                        headers.push(functor_cell);
                     }
-                } else {
-                    unreachable!();
+
+                    let headers_list_cell = resource_error_call_result!(
+                        self.machine_st,
+                        sized_iter_to_heap_list(
+                            &mut self.machine_st.heap,
+                            headers.len(),
+                            headers.into_iter(),
+                        )
+                    );
+
+                    let query_str = request.request_data.query;
+                    let query_cell = resource_error_call_result!(
+                        self.machine_st,
+                        self.machine_st.heap.allocate_cstr(query_str.as_bytes())
+                    );
+
+                    let mut stream = Stream::from_http_stream(
+                        path_atom,
+                        request.request_data.body,
+                        &mut self.machine_st.arena,
+                    );
+
+                    stream.options = StreamOptions::default();
+                    stream.options.set_stream_type(StreamType::Binary);
+
+                    self.indices
+                        .add_stream(stream, atom!("http_accept"), 7)
+                        .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+
+                    let stream = stream_as_cell!(stream);
+
+                    let handle = arena_alloc!(request.response, &mut self.machine_st.arena)
+                        as TypedArenaPtr<HttpResponse>;
+
+                    self.machine_st
+                        .bind(method.as_var().unwrap(), atom_as_cell!(method_atom));
+                    self.machine_st.bind(path.as_var().unwrap(), path_cell);
+                    unify!(
+                        self.machine_st,
+                        headers_list_cell,
+                        self.machine_st.registers[4]
+                    );
+                    self.machine_st.bind(query.as_var().unwrap(), query_cell);
+                    self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
+                    self.machine_st.bind(
+                        handle_addr.as_var().unwrap(),
+                        typed_arena_ptr_as_cell!(handle),
+                    );
+
+                    break;
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    self.machine_st
+                        .check_for_interrupt(|| functor_stub(atom!("http_accept"), 7))?;
+                }
+                Err(_) => {
+                    self.machine_st.fail = true;
                 }
             }
-            _ => {
-                unreachable!();
-            }
-        );
+        }
+
         Ok(())
     }
 
@@ -4734,31 +4737,23 @@ impl Machine {
         };
         let stream_addr = self.deref_register(4);
 
-        read_heap_cell!(culprit,
-            (HeapCellValueTag::Cons, cons_ptr) => {
-                if matches!(cons_ptr.get_tag(), ArenaHeaderTag::HttpResponse) {
-                    let http_response = unsafe { cons_ptr.as_typed_ptr::<HttpResponse>() };
-                    let mut stream = Stream::from_http_sender(
-                        http_response,
-                        status_code,
-                        headers,
-                        &mut self.machine_st.arena
-                    );
+        let http_response = culprit.to_typed_arena_ptr::<HttpResponse>().unwrap();
 
-                    stream.options = StreamOptions::default();
-                    stream.options.set_stream_type(StreamType::Binary);
-
-                    self.indices.add_stream(stream, atom!("http_answer"), 4)
-                        .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
-                    self.machine_st.bind(stream_addr.as_var().unwrap(), stream.into());
-                } else {
-                    unreachable!();
-                }
-            }
-            _ => {
-                unreachable!();
-            }
+        let mut stream = Stream::from_http_sender(
+            http_response,
+            status_code,
+            headers,
+            &mut self.machine_st.arena,
         );
+
+        stream.options = StreamOptions::default();
+        stream.options.set_stream_type(StreamType::Binary);
+
+        self.indices
+            .add_stream(stream, atom!("http_answer"), 4)
+            .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+        self.machine_st
+            .bind(stream_addr.as_var().unwrap(), stream.into());
 
         Ok(())
     }
@@ -7010,55 +7005,51 @@ impl Machine {
         let culprit = self.deref_register(1);
 
         use std::io::ErrorKind;
-        read_heap_cell!(culprit,
-            (HeapCellValueTag::Cons, cons_ptr) => {
-                if matches!(cons_ptr.get_tag(), ArenaHeaderTag::TcpListener) {
-                    let tcp_listener = unsafe { cons_ptr.as_typed_ptr::<TcpListener>() };
 
-                    loop {
-                        match tcp_listener.accept() {
-                            Ok((tcp_stream, socket_addr)) => {
-                                let client = AtomTable::build_with(&self.machine_st.atom_tbl, &socket_addr.to_string());
+        // shouldn't this throw an error if culprit isn't a TcpListener?
+        if let Some(tcp_listener) = culprit.to_typed_arena_ptr::<TcpListener>() {
+            loop {
+                match tcp_listener.accept() {
+                    Ok((tcp_stream, socket_addr)) => {
+                        let client = AtomTable::build_with(
+                            &self.machine_st.atom_tbl,
+                            &socket_addr.to_string(),
+                        );
 
-                                let mut tcp_stream = Stream::from_tcp_stream(
-                                    client,
-                                    tcp_stream,
-                                    &mut self.machine_st.arena,
-                                );
+                        let mut tcp_stream =
+                            Stream::from_tcp_stream(client, tcp_stream, &mut self.machine_st.arena);
 
-                                tcp_stream.options = options;
+                        tcp_stream.options = options;
 
-                                self.indices.add_stream(tcp_stream, atom!("socket_server_accept"), 4)
-                                    .map_err(|stub_gen| {
-                                        stub_gen(&mut self.machine_st)
-                                    })?;
+                        self.indices
+                            .add_stream(tcp_stream, atom!("socket_server_accept"), 4)
+                            .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
-                                let client = atom_as_cell!(client);
+                        let client = atom_as_cell!(client);
 
-                                let client_addr = self.deref_register(2);
-                                let stream_addr = self.deref_register(3);
+                        let client_addr = self.deref_register(2);
+                        let stream_addr = self.deref_register(3);
 
-                                self.machine_st.bind(client_addr.as_var().unwrap(), client);
-                                self.machine_st.bind(stream_addr.as_var().unwrap(), tcp_stream.into());
+                        self.machine_st.bind(client_addr.as_var().unwrap(), client);
+                        self.machine_st
+                            .bind(stream_addr.as_var().unwrap(), tcp_stream.into());
 
-                                break;
-                            }
-                            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                                std::thread::sleep(std::time::Duration::from_millis(200));
-                                self.machine_st.check_for_interrupt(|| functor_stub(atom!("socket_server_accept"), 4))?;
-                            }
-                            Err(_) => {
-                                println!("IO error");
-                                self.machine_st.fail = true;
-                                break;
-                            }
-                        }
-                     }
+                        break;
+                    }
+                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(200));
+                        self.machine_st.check_for_interrupt(|| {
+                            functor_stub(atom!("socket_server_accept"), 4)
+                        })?;
+                    }
+                    Err(_) => {
+                        println!("IO error");
+                        self.machine_st.fail = true;
+                        break;
+                    }
                 }
             }
-            _ => {
-            }
-        );
+        }
 
         Ok(())
     }
@@ -7166,17 +7157,10 @@ impl Machine {
     pub(crate) fn socket_server_close(&mut self) -> CallResult {
         let culprit = self.deref_register(1);
 
-        read_heap_cell!(culprit,
-            (HeapCellValueTag::Cons, cons_ptr) => {
-                if matches!(cons_ptr.get_tag(), ArenaHeaderTag::TcpListener) {
-                    let mut tcp_listener = unsafe { cons_ptr.as_typed_ptr::<TcpListener>() };
-                    tcp_listener.drop_payload();
-                    return Ok(());
-                }
-            }
-            _ => {
-            }
-        );
+        if let Some(mut tcp_listener) = culprit.to_typed_arena_ptr::<TcpListener>() {
+            tcp_listener.drop_payload();
+            return Ok(());
+        }
 
         let err = self.machine_st.type_error(ValidType::TcpListener, culprit);
         let stub = functor_stub(atom!("socket_server_close"), 1);
@@ -8954,12 +8938,9 @@ impl Machine {
 
         let process = self.deref_register(1);
 
-        if let Some(cons_ptr) = process.to_untyped_arena_ptr() {
-            if matches!(cons_ptr.get_tag(), ArenaHeaderTag::ChildProcess) {
-                let mut child_process = unsafe { cons_ptr.as_typed_ptr::<std::process::Child>() };
-                child_process.drop_payload();
-                return Ok(());
-            }
+        if let Some(mut child_process) = process.to_typed_arena_ptr::<std::process::Child>() {
+            child_process.drop_payload();
+            return Ok(());
         }
 
         let err = self.machine_st.type_error(ValidType::Process, process);
