@@ -51,7 +51,7 @@ start_repl :-
     ;   Args = Args0
     ),
     (   Args = [_|TaskArgs] ->
-	delegate_task(TaskArgs, [])
+	      delegate_task(TaskArgs, [])
     ;   true
     ),
     (\+ disabled_init_file -> load_scryerrc ; true),

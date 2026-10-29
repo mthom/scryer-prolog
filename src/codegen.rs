@@ -1203,6 +1203,7 @@ impl<'a> CodeGenerator<'a> {
         let index_loc = code.len();
 
         for (i, clause) in clauses.iter_mut().enumerate() {
+            let prev_clause_code_len = code.len();
             self.marker.reset();
             let clause_code = match clause {
                 PredicateClause::Fact(fact, var_data) => {
@@ -1277,7 +1278,7 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     None
                 },
-                clause_start: index_loc,
+                clause_start: prev_clause_code_len,
             });
 
             code.extend(clause_code);
