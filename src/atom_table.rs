@@ -1,6 +1,5 @@
 use crate::machine::heap::AllocError;
 use crate::parser::ast::MAX_ARITY;
-use crate::parser::grapheme_classifiers::is_prolog_grapheme;
 use crate::raw_block::*;
 use crate::types::*;
 
