@@ -305,7 +305,7 @@ pub(crate) enum FlattenedIndexLine<'a> {
 }
 
 pub(crate) fn flatten_indexing_line_at<'a>(
-    index: &'a mut Vec<IndexingLine>,
+    index: &'a mut [IndexingLine],
     table_loc: usize,
 ) -> Option<FlattenedIndexLine<'a>> {
     index
