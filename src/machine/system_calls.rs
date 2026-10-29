@@ -8429,9 +8429,7 @@ impl Machine {
                 Ok(value) => {
                     let cstr = step_or_resource_error!(
                         self.machine_st,
-                        self.machine_st
-                            .heap
-                            .allocate_cstr(value.as_str().as_bytes())
+                        self.machine_st.heap.allocate_cstr(value.as_bytes())
                     );
 
                     unify!(self.machine_st, self.machine_st.registers[2], cstr);
