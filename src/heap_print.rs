@@ -271,7 +271,7 @@ fn non_quoted_graphic_token<'a, Iter: Iterator<Item = char>>(mut iter: Iter, c: 
             Some('*') => false, // if we start with comment token, we must quote.
             Some(c) => {
                 if is_graphic_token_grapheme(c) {
-                    iter.all(|c| is_graphic_token_grapheme(c))
+                    iter.all(is_graphic_token_grapheme)
                 } else {
                     false
                 }
@@ -282,14 +282,14 @@ fn non_quoted_graphic_token<'a, Iter: Iterator<Item = char>>(mut iter: Iter, c: 
             None => false,
             Some(c) => {
                 if is_graphic_token_grapheme(c) {
-                    iter.all(|c| is_graphic_token_grapheme(c))
+                    iter.all(is_graphic_token_grapheme)
                 } else {
                     false
                 }
             }
         }
     } else {
-        iter.all(|c| is_graphic_token_grapheme(c))
+        iter.all(is_graphic_token_grapheme)
     }
 }
 
