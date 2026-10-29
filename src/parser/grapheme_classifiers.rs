@@ -103,7 +103,7 @@ pub fn is_binary_grapheme<G: MatchGrapheme>(g: G) -> bool {
 
 #[inline]
 pub fn is_hexadecimal_digit_grapheme<G: MatchGrapheme>(g: G) -> bool {
-    g.matches_char_pred(|c| matches!(c, '0'..='9' | 'A'..='F' | 'a'..='f'))
+    g.matches_char_pred(|c: char| c.is_ascii_hexdigit())
 }
 
 #[inline]
