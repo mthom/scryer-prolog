@@ -9387,10 +9387,12 @@ impl Machine {
     }
 
     pub(super) fn u8s_to_string(&mut self, data: &[u8]) -> Result<HeapCellValue, AllocError> {
+        let buffer = String::from_iter(data.iter().map(|b| *b as char));
+
         if data.is_empty() {
             Ok(empty_list_as_cell!())
         } else {
-            self.machine_st.heap.allocate_cstr(data)
+            self.machine_st.heap.allocate_cstr(buffer.as_bytes())
         }
     }
 }

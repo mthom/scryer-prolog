@@ -400,7 +400,6 @@ impl Atom {
         if let Some(g1) = g1
             && let None = g2
             && let Some(c1) = g1.chars().next()
-            && is_prolog_grapheme(c1)
         {
             // an atom of one grapheme is still technically a "char"
             // whose code is the first codepoint, which is a Prolog
