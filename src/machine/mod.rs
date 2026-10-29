@@ -655,54 +655,47 @@ impl Machine {
     fn next_inner_applicable_clause(&mut self) -> Option<u32> {
         let mut inner_offset = 1u32;
 
-        loop {
-            match &self.code[self.machine_st.p] {
-                Instruction::IndexingCode { code, .. } => {
-                    match &code[self.machine_st.oip as usize] {
-                        IndexingLine::StaticIndexedChoice(indexed_choice) => {
-                            match &indexed_choice.offsets
-                                [(self.machine_st.iip + inner_offset) as usize]
-                            {
-                                &StaticIndexedChoiceInstructionOffset::Retry(o)
-                                | &StaticIndexedChoiceInstructionOffset::DefaultRetry(o) => {
-                                    if self.next_clause_applicable(self.machine_st.p + o) {
-                                        return Some(inner_offset);
-                                    }
-
-                                    inner_offset += 1;
-                                }
-                                &StaticIndexedChoiceInstructionOffset::Trust(o)
-                                | &StaticIndexedChoiceInstructionOffset::DefaultTrust(o) => {
-                                    return if self.next_clause_applicable(self.machine_st.p + o) {
-                                        Some(inner_offset)
-                                    } else {
-                                        None
-                                    };
-                                }
-                                _ => unreachable!(),
+        while let Instruction::IndexingCode { code, .. } = &self.code[self.machine_st.p] {
+            match &code[self.machine_st.oip as usize] {
+                IndexingLine::StaticIndexedChoice(indexed_choice) => {
+                    match &indexed_choice.offsets[(self.machine_st.iip + inner_offset) as usize] {
+                        &StaticIndexedChoiceInstructionOffset::Retry(o)
+                        | &StaticIndexedChoiceInstructionOffset::DefaultRetry(o) => {
+                            if self.next_clause_applicable(self.machine_st.p + o) {
+                                return Some(inner_offset);
                             }
-                        }
-                        IndexingLine::DynamicIndexedChoice(indexed_choice) => {
-                            let idx = (self.machine_st.iip + inner_offset) as usize;
-                            let o = indexed_choice.offsets[idx].offset();
 
-                            if idx + 1 == indexed_choice.offsets.len() {
-                                return if self.next_clause_applicable(self.machine_st.p + o) {
-                                    Some(inner_offset)
-                                } else {
-                                    None
-                                };
+                            inner_offset += 1;
+                        }
+                        &StaticIndexedChoiceInstructionOffset::Trust(o)
+                        | &StaticIndexedChoiceInstructionOffset::DefaultTrust(o) => {
+                            return if self.next_clause_applicable(self.machine_st.p + o) {
+                                Some(inner_offset)
                             } else {
-                                if self.next_clause_applicable(self.machine_st.p + o) {
-                                    return Some(inner_offset);
-                                }
-
-                                inner_offset += 1;
-                            }
+                                None
+                            };
                         }
+                        _ => unreachable!(),
                     }
                 }
-                _ => break,
+                IndexingLine::DynamicIndexedChoice(indexed_choice) => {
+                    let idx = (self.machine_st.iip + inner_offset) as usize;
+                    let o = indexed_choice.offsets[idx].offset();
+
+                    if idx + 1 == indexed_choice.offsets.len() {
+                        return if self.next_clause_applicable(self.machine_st.p + o) {
+                            Some(inner_offset)
+                        } else {
+                            None
+                        };
+                    } else {
+                        if self.next_clause_applicable(self.machine_st.p + o) {
+                            return Some(inner_offset);
+                        }
+
+                        inner_offset += 1;
+                    }
+                }
             }
         }
 
