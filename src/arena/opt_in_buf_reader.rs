@@ -143,7 +143,7 @@ pub(in crate::arena) fn peek_grapheme<'a, R: Read>(
 // merging with subsequent bytes
 #[inline]
 fn is_boundary_safe_grapheme(g: &str) -> bool {
-    g.as_bytes().last().map_or(false, |b| b.is_ascii_control())
+    g.as_bytes().last().is_some_and(|b| b.is_ascii_control())
 }
 
 pub(in crate::arena) fn peek_grapheme_impl<R: Read>(

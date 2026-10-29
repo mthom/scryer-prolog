@@ -55,19 +55,19 @@ impl MatchGrapheme for &'_ str {
     fn is_alphabetic_grapheme(self) -> bool {
         self.chars()
             .next()
-            .map_or(false, |c| c.is_alphabetic_grapheme())
+            .is_some_and(|c| c.is_alphabetic_grapheme())
     }
 
     #[inline]
     fn is_alphanumeric_grapheme(self) -> bool {
         self.chars()
             .next()
-            .map_or(false, |c| c.is_alphanumeric_grapheme())
+            .is_some_and(|c| c.is_alphanumeric_grapheme())
     }
 
     #[inline]
     fn matches_char_pred(self, f: impl FnOnce(char) -> bool) -> bool {
-        self.chars().next().map_or(false, f) && self.chars().nth(1).is_none()
+        self.chars().next().is_some_and(f) && self.chars().nth(1).is_none()
     }
 
     #[inline]
