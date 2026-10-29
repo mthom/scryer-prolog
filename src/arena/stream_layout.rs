@@ -236,7 +236,7 @@ arena_allocated_impl_for_stream!(ReadlineStream, ReadlineStream);
 pub(crate) trait PrologStream: GraphemeRead + Write {
     fn peek_byte(&mut self) -> io::Result<Option<u8>> {
         let buf = self.peek_grapheme(0)?;
-        Ok(buf.and_then(|buf| buf.as_bytes().get(0)).cloned())
+        Ok(buf.and_then(|buf| buf.as_bytes().first()).cloned())
     }
 
     fn position_relative_to_end(&mut self) -> AtEndOfStream;
@@ -422,10 +422,10 @@ impl PrologStream for BufferedNamedTcpStream {
         if self.0.buf.is_none() {
             let mut b = [0u8; 1];
             self.0.reader.tcp_stream.peek(&mut b)?;
-            Ok(b.get(0).cloned())
+            Ok(b.first().cloned())
         } else {
             let buf = self.peek_grapheme(0)?;
-            Ok(buf.and_then(|buf| buf.as_bytes().get(0)).cloned())
+            Ok(buf.and_then(|buf| buf.as_bytes().first()).cloned())
         }
     }
 
