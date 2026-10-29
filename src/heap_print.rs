@@ -237,7 +237,7 @@ enum TokenOrRedirect {
 }
 
 pub(crate) fn requires_space(atom: &str, op: &str) -> bool {
-    match atom.as_bytes().chars().last() {
+    match atom.as_bytes().chars().next_back() {
         Some(ac) => op
             .as_bytes()
             .chars()
