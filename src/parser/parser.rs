@@ -324,11 +324,8 @@ impl<'a, R: GraphemeRead> Parser<'a, R> {
             list = tail.as_mut();
         }
 
-        match list {
-            Term::Literal(_, Literal::Atom(atom!("[]"))) => {
-                *list = new_tail;
-            }
-            _ => {}
+        if let Term::Literal(_, Literal::Atom(atom!("[]"))) = list {
+            *list = new_tail;
         }
     }
 
