@@ -623,7 +623,7 @@ impl<'a, R: GraphemeRead> Lexer<'a, R> {
                 let g = self.peek_grapheme(0)?;
 
                 if g.is_alphanumeric_grapheme() {
-                    token.push_str(&g);
+                    token.push_str(g);
                     self.skip_grapheme()?;
                 } else {
                     break;
@@ -637,7 +637,7 @@ impl<'a, R: GraphemeRead> Lexer<'a, R> {
                 let g = self.peek_grapheme(0)?;
 
                 if is_graphic_token_grapheme(g) {
-                    token.push_str(&g);
+                    token.push_str(g);
                     self.skip_grapheme()?;
                 } else {
                     break;
