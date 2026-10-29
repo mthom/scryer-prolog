@@ -307,7 +307,7 @@ trait AddToFreeList<'a, Target: CompilationTarget<'a>> {
     fn add_subterm_to_free_list(&mut self, term: &Term);
 }
 
-impl<'a> AddToFreeList<'_, FactInstruction> for CodeGenerator<'_> {
+impl AddToFreeList<'_, FactInstruction> for CodeGenerator<'_> {
     fn add_term_to_free_list(&mut self, r: RegType) {
         self.marker.add_reg_to_free_list(r);
     }
@@ -315,7 +315,7 @@ impl<'a> AddToFreeList<'_, FactInstruction> for CodeGenerator<'_> {
     fn add_subterm_to_free_list(&mut self, _term: &Term) {}
 }
 
-impl<'a> AddToFreeList<'_, QueryInstruction> for CodeGenerator<'_> {
+impl AddToFreeList<'_, QueryInstruction> for CodeGenerator<'_> {
     #[inline(always)]
     fn add_term_to_free_list(&mut self, _r: RegType) {}
 

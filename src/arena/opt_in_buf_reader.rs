@@ -171,10 +171,10 @@ pub(in crate::arena) fn peek_grapheme_impl<R: Read>(
     }
 }
 
-fn resolve_boundary<'a, R: Read>(
+fn resolve_boundary<R: Read>(
     reader: &mut R,
     at: usize,
-    cursor: &'a mut Cursor<Vec<u8>>,
+    cursor: &mut Cursor<Vec<u8>>,
 ) -> io::Result<()> {
     let pos = cursor.position() as usize;
     let mut old_len = cursor.get_ref().len() - pos;

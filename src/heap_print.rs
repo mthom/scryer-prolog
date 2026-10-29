@@ -264,7 +264,7 @@ pub(crate) fn requires_space(atom: &str, op: &str) -> bool {
     }
 }
 
-fn non_quoted_graphic_token<'a, Iter: Iterator<Item = char>>(mut iter: Iter, c: char) -> bool {
+fn non_quoted_graphic_token<Iter: Iterator<Item = char>>(mut iter: Iter, c: char) -> bool {
     if c == '/' {
         match iter.next() {
             None => true,
@@ -293,7 +293,7 @@ fn non_quoted_graphic_token<'a, Iter: Iterator<Item = char>>(mut iter: Iter, c: 
     }
 }
 
-pub(super) fn non_quoted_token<'a, Iter: Iterator<Item = char>>(mut iter: Iter) -> bool {
+pub(super) fn non_quoted_token<Iter: Iterator<Item = char>>(mut iter: Iter) -> bool {
     if let Some(c) = iter.next() {
         if is_lowercase_grapheme(c) {
             iter.all(|c| c.is_alphanumeric_grapheme())
