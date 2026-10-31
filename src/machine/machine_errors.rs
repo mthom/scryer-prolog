@@ -625,6 +625,7 @@ impl MachineState {
                     stub,
                 )
             }
+            SessionError::UnexpectedSubterm => self.representation_error(RepFlag::Term),
         }
     }
 
@@ -1216,6 +1217,7 @@ pub enum SessionError {
     NamelessEntry,
     OpIsInfixAndPostFix(Atom),
     PredicateNotMultifileOrDiscontiguous(CompilationTarget, PredicateKey),
+    UnexpectedSubterm,
 }
 
 impl From<std::io::Error> for SessionError {

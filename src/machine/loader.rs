@@ -490,7 +490,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         }
     }
 
-    pub(crate) fn read_term_from_heap(&mut self, r: RegType) -> Term {
+    pub(crate) fn read_term_from_heap(&mut self, r: RegType) -> Option<Term> {
         let machine_st = LS::machine_st(&mut self.payload);
         let cell = machine_st[r];
 
@@ -1018,7 +1018,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let machine_st = LS::machine_st(&mut self.payload);
         let cell = machine_st[r];
 
-        let export_list = machine_st.read_term_from_heap(cell);
+        let export_list = machine_st
+            .read_term_from_heap(cell)
+            .ok_or_else(|| SessionError::UnexpectedSubterm)?;
         let export_list = setup_module_export_list(export_list)?;
 
         Ok(export_list.into_iter().collect())
@@ -1383,14 +1385,22 @@ impl<'a> MachinePreludeView<'a> {
 }
 
 impl MachineState {
-    pub(super) fn read_term_from_heap(&mut self, term_addr: HeapCellValue) -> Term {
+    // returns None if the term read is e.g. cyclic or contains
+    // values that cannot be represented within a Term AST.
+    pub(super) fn read_term_from_heap(&mut self, term_addr: HeapCellValue) -> Option<Term> {
         let mut term_stack = vec![];
         self.heap[0] = term_addr;
         let mut iter =
             stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, 0);
 
-        while let Some(addr) = iter.next() {
-            let addr = unmark_cell_bits!(addr);
+        while let Some(cell) = iter.next() {
+            if cell.get_forwarding_bit() && cell.is_compound(iter.heap) {
+                // in this case, the heap term is cyclic and cannot be
+                // the basis of a Term.
+                return None;
+            }
+
+            let addr = unmark_cell_bits!(cell);
 
             let addr = if addr.is_var() {
                 unmark_cell_bits!(heap_bound_store(
@@ -1426,8 +1436,10 @@ impl MachineState {
                         term_stack.push(Term::Process(Cell::default(), process));
                     } else if let Some(stream) = Stream::from_tag(cons_ptr) {
                         term_stack.push(Term::Stream(Cell::default(), stream));
+                    } else if let Ok(literal) = Literal::try_from((addr, &self.arena.f64_tbl)) {
+                        term_stack.push(Term::Literal(Cell::default(), literal));
                     } else {
-                        term_stack.push(Term::Literal(Cell::default(), Literal::try_from((addr, &self.arena.f64_tbl)).unwrap()));
+                        return None;
                     }
                 }
                 (HeapCellValueTag::Fixnum, n) => {
@@ -1489,7 +1501,7 @@ impl MachineState {
         }
 
         debug_assert!(term_stack.len() == 1);
-        term_stack.pop().unwrap()
+        term_stack.pop()
     }
 }
 
@@ -1665,7 +1677,9 @@ impl Machine {
         let mut loader = self.loader_from_heap_evacuable(temp_v!(2));
 
         let add_clause = || {
-            let term = loader.read_term_from_heap(temp_v!(1));
+            let term = loader
+                .read_term_from_heap(temp_v!(1))
+                .ok_or_else(|| SessionError::UnexpectedSubterm)?;
 
             loader.incremental_compile_clause(
                 (atom!("term_expansion"), 2),
@@ -1696,7 +1710,9 @@ impl Machine {
         };
 
         let add_clause = || {
-            let term = loader.read_term_from_heap(temp_v!(2));
+            let term = loader
+                .read_term_from_heap(temp_v!(2))
+                .ok_or_else(|| SessionError::UnexpectedSubterm)?;
 
             let indexing_arg = match term.name() {
                 Some(atom!(":-")) => term.first_arg().and_then(Term::first_arg),
@@ -2029,8 +2045,9 @@ impl Machine {
 
             loader.payload.compilation_target = compilation_target;
 
-            let head =
-                LiveLoadAndMachineState::machine_st(&mut loader.payload).read_term_from_heap(head);
+            let head = LiveLoadAndMachineState::machine_st(&mut loader.payload)
+                .read_term_from_heap(head)
+                .ok_or_else(|| SessionError::UnexpectedSubterm)?;
 
             let name = if let Some(name) = head.name() {
                 name
@@ -2077,7 +2094,9 @@ impl Machine {
                 return LiveLoadAndMachineState::evacuate(loader);
             }
 
-            let body = loader.read_term_from_heap(temp_v!(3));
+            let body = loader
+                .read_term_from_heap(temp_v!(3))
+                .ok_or_else(|| SessionError::UnexpectedSubterm)?;
 
             let asserted_clause = Term::Clause(
                 Cell::default(),
@@ -2562,7 +2581,9 @@ impl<'a> Loader<'a, LiveLoadAndMachineState<'a>> {
             self.payload.predicates.compilation_target = compilation_target;
         }
 
-        let term = self.read_term_from_heap(term_reg);
+        let term = self
+            .read_term_from_heap(term_reg)
+            .ok_or_else(|| SessionError::UnexpectedSubterm)?;
 
         self.add_clause_clause_if_dynamic(&term)?;
         self.payload.term_stream.term_queue.push_back(term);

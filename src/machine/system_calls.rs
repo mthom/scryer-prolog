@@ -1518,7 +1518,13 @@ impl Machine {
             let helper_clause_loc = self.code.len();
             let body_term = self
                 .machine_st
-                .read_term_from_heap(self.machine_st.registers[1]);
+                .read_term_from_heap(self.machine_st.registers[1])
+                .ok_or_else(|| {
+                    functor!(
+                        atom!("representation_error"),
+                        [atom_as_cell((RepFlag::Term.as_atom()))]
+                    )
+                })?;
 
             let compile = || {
                 let mut loader: Loader<'_, InlineLoadState<'_>> =
