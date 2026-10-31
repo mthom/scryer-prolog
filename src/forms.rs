@@ -1121,10 +1121,9 @@ impl HeapCellValue {
                        }
                     }
                     _ => {
-                       // we shouldn't be hashing pointer-based types like
-                       // streams, load states, etc. This hash is meant only
-                       // for indexing syntactic values.
-                   }
+                        // pointer-based types like streams are compared by identity
+                        cons_ptr.hash(&mut hasher);
+                    }
                 }
             }
             _ => {}
@@ -1184,7 +1183,11 @@ impl HeapCellValue {
                 )
             }
             (HeapCellValueTag::Cons) => {
-                Number::try_from((self, f64_tbl)) == Number::try_from((cell_2, f64_tbl))
+                match (Number::try_from((self, f64_tbl)), Number::try_from((cell_2, f64_tbl))) {
+                    (Ok(n1), Ok(n2)) => n1 == n2,
+                    (Err(_), Err(_)) => self == cell_2,
+                    _ => false,
+                }
             }
             _ => {
                 false
