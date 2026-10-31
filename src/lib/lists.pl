@@ -53,6 +53,7 @@ List manipulation predicates
 
 :- meta_predicate(foldl(3, ?, ?, ?)).
 :- meta_predicate(foldl(4, ?, ?, ?, ?)).
+:- meta_predicate(foldl(5, ?, ?, ?, ?, ?)).
 
 :- use_module(library(error)).
 
