@@ -931,5 +931,5 @@ If Scryer Prolog crashes or yields unexpected errors, consider filing
 an&nbsp;[issue](https://codeberg.org/mthom/scryer-prolog/issues).
 
 To get in touch with the Scryer Prolog community, participate in the
-[Matrix&nbsp;space](https://app.element.io/#/room/#scryer-prolog:matrix.org)
-or visit our #scryer IRC channel on [Libera](https://libera.chat)!
+[Matrix&nbsp;space](https://matrix.to/#/#scryer-prolog:matrix.org) or
+visit our #scryer IRC channel on [Libera](https://libera.chat)!
