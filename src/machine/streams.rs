@@ -37,7 +37,7 @@ impl MachineState {
                 Ok(())
             }
             EOFAction::Reset => {
-                if !stream.reset_layout() {
+                if !stream.reset() {
                     stream.past_end_of_stream = true;
                 }
 

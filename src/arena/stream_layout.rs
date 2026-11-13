@@ -246,7 +246,7 @@ pub(crate) trait PrologStream: GraphemeRead + Write {
         Ok(())
     }
 
-    fn reset(&mut self) -> bool {
+    fn reset_impl(&mut self) -> bool {
         false
     }
 
@@ -265,7 +265,7 @@ pub(crate) trait PrologStream: GraphemeRead + Write {
 }
 
 impl PrologStream for ByteStream {
-    fn reset(&mut self) -> bool {
+    fn reset_impl(&mut self) -> bool {
         self.0.set_position(0);
         true
     }
@@ -310,7 +310,7 @@ impl PrologStream for StaticStringStream {
 }
 
 impl PrologStream for InputFileStream {
-    fn reset(&mut self) -> bool {
+    fn reset_impl(&mut self) -> bool {
         if self.set_position(0).is_err() {
             return false;
         }
@@ -474,7 +474,7 @@ impl PrologStream for OptInBufReader<NamedTlsStream> {
 }
 
 impl PrologStream for InputChannelStream {
-    fn reset(&mut self) -> bool {
+    fn reset_impl(&mut self) -> bool {
         self.inner.set_position(0);
         true
     }
@@ -637,8 +637,8 @@ impl PrologStream for Stream {
     }
 
     #[inline]
-    fn reset(&mut self) -> bool {
-        self.stream.reset()
+    fn reset_impl(&mut self) -> bool {
+        self.stream.reset_impl()
     }
 
     #[inline]
@@ -1056,10 +1056,10 @@ pub(in crate::arena) fn cursor_position<T>(cursor: &Cursor<T>, cursor_len: u64) 
 }
 
 impl<S: ?Sized + PrologStream> StreamLayout<S> {
-    pub(crate) fn reset_layout(&mut self) -> bool {
+    pub(crate) fn reset(&mut self) -> bool {
         self.lines_read = 0;
         self.past_end_of_stream = false;
-        self.stream.reset()
+        self.stream.reset_impl()
     }
 
     pub(crate) fn position_and_lines_read(&mut self) -> Option<(u64, usize)> {

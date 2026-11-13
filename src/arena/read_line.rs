@@ -291,7 +291,7 @@ impl PrologStream for ReadlineStream {
         }
     }
 
-    fn reset(&mut self) -> bool {
+    fn reset_impl(&mut self) -> bool {
         self.reset();
         true
     }
