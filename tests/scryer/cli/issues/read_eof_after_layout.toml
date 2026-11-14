@@ -1,0 +1,2 @@
+# read/1 at end of stream after trailing layout (whitespace / comments)
+args = ["-f", "--no-add-history", "-g", "use_module(library(lists)),test,halt", "test.pl"]

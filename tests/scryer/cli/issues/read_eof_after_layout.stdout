@@ -1,0 +1,7 @@
+spaces.txt:a/end_of_file
+line_comment.txt:a/end_of_file
+block_comment.txt:a/end_of_file
+only_layout.txt:end_of_file/end_of_file
+open_quote.txt:none/error(syntax_error(incomplete_reduction))
+open_comment.txt:none/error(syntax_error(incomplete_reduction))
+no_end.txt:none/error(syntax_error(incomplete_reduction))

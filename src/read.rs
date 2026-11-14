@@ -55,8 +55,12 @@ pub(crate) fn error_after_read_term<R>(
     if err.is_unexpected_eof() {
         let location = &parser.lexer.location;
 
-        // rough overlap with errors 8.14.1.3 k) & l) of the ISO standard here
-        if !(location.line() == prior_num_lines_read && location.column() == 0) {
+        // rough overlap with errors 8.14.1.3 k) & l) of the ISO standard here.
+        // End of stream after nothing but layout text (e.g. a final clause followed by a
+        // newline and trailing spaces) is a genuine end of file, not an incomplete term.
+        if !parser.lexer.eof_at_token_start
+            && !(location.line() == prior_num_lines_read && location.column() == 0)
+        {
             return CompilationError::from(parser.lexer.incomplete_reduction());
         }
     }
