@@ -191,10 +191,14 @@ impl MachineState {
         Ok(())
     }
 
-    fn is(&mut self, r: RegType, at: ArithmeticTerm) -> CallResult {
-        let n1 = self.store(self.deref(self[r]));
+    fn is(&mut self, at_1: ArithmeticTerm, at_2: ArithmeticTerm) -> CallResult {
+        let n1 = match at_1 {
+            ArithmeticTerm::Interm(t) => self.heap[self.interms_offset + t],
+            ArithmeticTerm::Reg(r) => self[r],
+            ArithmeticTerm::Number(n) => HeapCellValue::from((n, &mut self.arena)),
+        };
 
-        match self.get_number(&at)? {
+        match self.get_number(&at_2)? {
             Number::Fixnum(n) => self.unify_fixnum(n, n1),
             Number::Float(n) => {
                 let n = float_alloc!(n.into_inner(), self.arena);
@@ -246,7 +250,7 @@ impl MachineState {
             try_numeric_result!(add(n1, n2, &mut self.arena), stub_gen)
         );
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -262,7 +266,7 @@ impl MachineState {
             try_numeric_result!(sub(n1, n2, &mut self.arena), stub_gen)
         );
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -278,7 +282,7 @@ impl MachineState {
             try_numeric_result!(mul(n1, n2, &mut self.arena), stub_gen)
         );
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -289,7 +293,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, max(n1, n2));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -300,7 +304,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, min(n1, n2));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -311,7 +315,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, int_pow(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -322,7 +326,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, gcd(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -333,7 +337,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, pow(n1, n2, atom!("**")));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -349,7 +353,7 @@ impl MachineState {
             &mut self.arena
         ));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -360,7 +364,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, int_floor_div(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -371,7 +375,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, idiv(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -380,7 +384,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
 
         let value = abs(n1, &mut self.arena);
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -389,7 +393,7 @@ impl MachineState {
         let n = try_or_throw!(self, self.get_number(a1), return);
         let value = n.sign();
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -398,7 +402,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = neg(n1, &mut self.arena);
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -407,7 +411,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = try_or_throw_gen!(self, bitwise_complement(n1, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -417,7 +421,7 @@ impl MachineState {
         let n2 = try_or_throw!(self, self.get_number(a2), return);
         let value = try_or_throw_gen!(self, div(n1, n2));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -428,7 +432,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, shr(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -439,7 +443,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, shl(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -450,7 +454,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, xor(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -461,7 +465,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, and(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -472,7 +476,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, or(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -483,7 +487,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, modulus(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -494,7 +498,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, remainder(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -503,7 +507,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, cos(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -512,7 +516,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, sin(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -521,7 +525,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, tan(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -530,7 +534,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, sqrt(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -539,7 +543,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, log(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -548,7 +552,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, exp(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -557,7 +561,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, acos(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -566,7 +570,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, asin(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -575,7 +579,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, atan(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -586,7 +590,7 @@ impl MachineState {
 
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, atan2(n1, n2))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -595,7 +599,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, float(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -604,7 +608,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
 
         let value = truncate(n1, &mut self.arena);
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -613,7 +617,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = try_or_throw_gen!(self, round(n1, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -622,7 +626,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
 
         let value = ceiling(n1, &mut self.arena);
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -631,7 +635,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
 
         let value = floor(n1, &mut self.arena);
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -644,7 +648,7 @@ impl MachineState {
             float_fractional_part(n1)
         )));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -657,14 +661,14 @@ impl MachineState {
             float_integer_part(n1)
         )));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
     #[inline(always)]
     fn plus_instr(&mut self, a1: &ArithmeticTerm, t: usize) {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
-        self.registers[t] = HeapCellValue::from((n1, &mut self.arena));
+        self.heap[self.interms_offset + t] = HeapCellValue::from((n1, &mut self.arena));
         self.p += 1;
     }
 
@@ -1433,6 +1437,22 @@ impl Machine {
                         let (_, arity) = self.code[self.machine_st.p].to_name_and_arity();
                         self.run_verify_attr_interrupt(arity);
                     }
+                    &Instruction::AllocateOnHeap(num_cells) => {
+                        let old_len = self.machine_st.heap.cell_len();
+                        self.machine_st.interms_offset = old_len;
+
+                        let mut writer = backtrack_on_resource_error!(
+                            self.machine_st,
+                            self.machine_st.heap.reserve(num_cells),
+                            continue
+                        );
+
+                        unsafe {
+                            writer.set_len(old_len + num_cells);
+                        }
+
+                        self.machine_st.p += 1;
+                    }
                     &Instruction::Add(ref a1, ref a2, t) => self.machine_st.add_instr(a1, a2, t),
                     &Instruction::Sub(ref a1, ref a2, t) => self.machine_st.sub_instr(a1, a2, t),
                     &Instruction::Mul(ref a1, ref a2, t) => self.machine_st.mul_instr(a1, a2, t),
@@ -2003,12 +2023,12 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::DefaultCallIs(r, at) => {
-                        try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
+                    &Instruction::DefaultCallIs(at_1, at_2) => {
+                        try_or_throw!(self.machine_st, self.machine_st.is(at_1, at_2), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::DefaultExecuteIs(r, at) => {
-                        try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
+                    &Instruction::DefaultExecuteIs(at_1, at_2) => {
+                        try_or_throw!(self.machine_st, self.machine_st.is(at_1, at_2), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
                     Instruction::DefaultCallGetNumber(at) => {
@@ -2329,8 +2349,8 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallIs(r, at) => {
-                        try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
+                    &Instruction::CallIs(at_1, at_2) => {
+                        try_or_throw!(self.machine_st, self.machine_st.is(at_1, at_2), continue);
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
@@ -2339,8 +2359,8 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteIs(r, at) => {
-                        try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
+                    &Instruction::ExecuteIs(at_1, at_2) => {
+                        try_or_throw!(self.machine_st, self.machine_st.is(at_1, at_2), continue);
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();

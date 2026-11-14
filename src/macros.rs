@@ -1,6 +1,6 @@
 /* A simple macro to count the arguments in a variadic list
  * of token trees.
-*/
+ */
 
 macro_rules! codepoint_as_cell {
     ($c: expr) => {
@@ -247,13 +247,6 @@ macro_rules! read_heap_cell {
             })+
         }
     });
-}
-
-macro_rules! compare_number_instr {
-    ($cmp: expr, $at_1: expr, $at_2: expr) => {{
-        $cmp.set_terms($at_1, $at_2);
-        ClauseType::Inlined(InlinedClauseType::CompareNumber($cmp)).to_instr()
-    }};
 }
 
 macro_rules! ar_reg {

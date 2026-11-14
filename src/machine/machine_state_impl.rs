@@ -37,6 +37,7 @@ impl MachineState {
             unify_tabu_list: IndexSet::with_hasher(FxBuildHasher::default()),
             s: HeapPtr::default(),
             s_offset: 0,
+            interms_offset: 0,
             p: 0,
             oip: 0,
             iip: 0,

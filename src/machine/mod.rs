@@ -449,7 +449,7 @@ impl Machine {
             Instruction::ExecuteNumberLessThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
             Instruction::ExecuteNumberEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
             Instruction::ExecuteNumberNotEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-            Instruction::ExecuteIs(temp_v!(1), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteIs(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
             Instruction::ExecuteAcyclicTerm,
             Instruction::ExecuteArg,
             Instruction::ExecuteCompare,

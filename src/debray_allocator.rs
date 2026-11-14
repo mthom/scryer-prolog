@@ -448,6 +448,57 @@ impl DebrayAllocator {
         p
     }
 
+    fn mark_var_in_non_callable(
+        &mut self,
+        lvl: Level,
+        var_num: usize,
+        term_loc: GenContext,
+        vr: &Cell<VarReg>,
+        code: &mut CodeDeque,
+    ) -> RegType {
+        self.mark_var::<QueryInstruction>(var_num, lvl, vr, term_loc, code);
+        vr.get().norm()
+    }
+
+    pub(crate) fn mark_non_callable(
+        &mut self,
+        lvl: Level,
+        var_num: usize,
+        term_loc: GenContext,
+        vr: &Cell<VarReg>,
+        code: &mut CodeDeque,
+    ) -> RegType {
+        match self.get_binding(var_num) {
+            RegType::Temp(t) if t != 0 => RegType::Temp(t),
+            RegType::Perm(p) if p != 0 => {
+                // first of all, the variable needs to be marked if
+                // the allocation is pending; secondly, it needs to be
+                // reallocated to a temporary register if it's in the
+                // last call of a shallow inlined/"non-callable"
+                // predicate, and hasn't already been placed in one.
+                let call_mark_var = matches!(
+                    self.var_data.records[var_num].allocation,
+                    VarAlloc::Perm(_, PermVarAllocation::Pending)
+                ) || (self.in_tail_position
+                    && term_loc.is_last()
+                    && matches!(vr.get(), VarReg::Norm(_))
+                    && matches!(lvl, Level::Shallow));
+
+                if call_mark_var {
+                    self.mark_var_in_non_callable(lvl, var_num, term_loc, vr, code);
+                } else {
+                    self.increment_running_count(var_num);
+                }
+
+                match vr.get() {
+                    VarReg::ArgAndNorm(_, k) => temp_v!(k),
+                    VarReg::Norm(_) => RegType::Perm(p),
+                }
+            }
+            _ => self.mark_var_in_non_callable(lvl, var_num, term_loc, vr, code),
+        }
+    }
+
     pub(crate) fn add_reg_to_free_list(&mut self, r: RegType) {
         if let RegType::Temp(r) = r {
             self.in_use.remove(r);
@@ -501,30 +552,6 @@ impl DebrayAllocator {
         if let VarAlloc::Perm(_, allocation) = &mut self.var_data.records[var_num].allocation {
             *allocation = PermVarAllocation::Pending;
             self.add_perm_to_free_list(chunk_num, var_num);
-        }
-    }
-
-    pub(crate) fn mark_safe_var_unconditionally(&mut self, var_num: usize) {
-        let branch_designator = Arc::new(self.branch_stack.current_branch_designator());
-
-        match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(
-                _,
-                PermVarAllocation::Done {
-                    deep_safety,
-                    shallow_safety,
-                    ..
-                },
-            ) => {
-                *deep_safety = VarSafetyStatus::unneeded(&branch_designator);
-                *shallow_safety = VarSafetyStatus::unneeded(&branch_designator);
-            }
-            VarAlloc::Temp { safety, .. } => {
-                *safety = VarSafetyStatus::unneeded(&branch_designator);
-            }
-            _ => {
-                unreachable!()
-            }
         }
     }
 
@@ -779,13 +806,10 @@ impl Allocator for DebrayAllocator {
                 self.arg_c += 1;
             }
             Level::Deep if is_new_var => {
-                if let GenContext::Head = term_loc {
-                    if self.occurs_shallowly_in_head(var_num, r.reg_num()) {
-                        code.push_back(self.subterm_to_value::<Target>(var_num, r));
-                    } else {
-                        self.mark_safe_var(var_num, lvl, term_loc);
-                        code.push_back(Target::subterm_to_variable(r));
-                    }
+                if let GenContext::Head = term_loc
+                    && self.occurs_shallowly_in_head(var_num, r.reg_num())
+                {
+                    code.push_back(self.subterm_to_value::<Target>(var_num, r));
                 } else {
                     self.mark_safe_var(var_num, lvl, term_loc);
                     code.push_back(Target::subterm_to_variable(r));

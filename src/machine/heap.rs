@@ -501,6 +501,11 @@ impl<'a> HeapWriter<'a> {
             result,
         }
     }
+
+    #[inline]
+    pub(crate) unsafe fn set_len(&mut self, new_cell_len: usize) {
+        *self.heap_byte_len = heap_index!(new_cell_len);
+    }
 }
 
 impl<'a> Index<usize> for HeapWriter<'a> {
@@ -624,20 +629,18 @@ impl Heap {
     }
 
     pub fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, AllocError> {
-        let section;
         let len = heap_index_checked!(num_cells).ok_or(AllocError)?;
 
-        loop {
+        let section = loop {
             if self.free_space() >= len {
-                section = ReservedHeapSection {
+                break ReservedHeapSection {
                     heap_ptr: self.inner.ptr,
                     heap_cell_len: self.cell_len(),
                 };
-                break;
             } else if unsafe { !self.grow() } {
                 return Err(AllocError);
             }
-        }
+        };
 
         Ok(HeapWriter {
             section,
