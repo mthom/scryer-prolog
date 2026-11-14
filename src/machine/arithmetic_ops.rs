@@ -1134,7 +1134,7 @@ impl MachineState {
     pub fn get_number(&mut self, at: &ArithmeticTerm) -> Result<Number, MachineStub> {
         let value = match at {
             &ArithmeticTerm::Reg(r) => self.store(self.deref(self[r])),
-            &ArithmeticTerm::Interm(o) => self.heap[self.interms_offset + o],
+            &ArithmeticTerm::Interm(o) => self.heap[self.s_offset + o],
             ArithmeticTerm::Number(n) => return Ok(*n),
         };
 

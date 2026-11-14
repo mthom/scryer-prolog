@@ -122,7 +122,6 @@ pub struct MachineState {
     pub(super) unify_tabu_list: IndexSet<(HeapCellValue, HeapCellValue), FxBuildHasher>,
     pub(super) s: HeapPtr,
     pub(super) s_offset: usize,
-    pub(super) interms_offset: usize,
     pub(super) p: usize,
     pub(super) oip: u32, // first internal code ptr
     pub(super) iip: u32, // second internal code ptr

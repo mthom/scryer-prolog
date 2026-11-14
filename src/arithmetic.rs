@@ -40,6 +40,11 @@ impl ArithmeticTerm {
             interm
         }
     }
+
+    #[inline]
+    pub(crate) fn is_interm(&self) -> bool {
+        matches!(self, ArithmeticTerm::Interm(_))
+    }
 }
 
 impl Default for ArithmeticTerm {
