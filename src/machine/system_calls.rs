@@ -65,9 +65,11 @@ use std::process::Child;
 use std::process::Stdio;
 #[cfg(feature = "http")]
 use std::str::FromStr;
+#[cfg(feature = "crypto-full")]
 use std::sync::LazyLock;
 #[cfg(feature = "http")]
 use std::sync::{Arc, Condvar, Mutex};
+#[cfg(feature = "http")]
 use tokio::sync::Notify;
 
 use chrono::{DateTime, offset::Local};
