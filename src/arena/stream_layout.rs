@@ -311,11 +311,7 @@ impl PrologStream for StaticStringStream {
 
 impl PrologStream for InputFileStream {
     fn reset_impl(&mut self) -> bool {
-        if self.set_position(0).is_err() {
-            return false;
-        }
-
-        true
+        !self.set_position(0).is_err()
     }
 
     fn position_relative_to_end(&mut self) -> AtEndOfStream {

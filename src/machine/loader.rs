@@ -47,7 +47,7 @@ use std::rc::Rc;
  * loader fail later, all changes must be rolled back, restoring the
  * WAM to its prior state. Retraction records describe individual changes
  * made by the loader, and they may be used later.
-*/
+ */
 
 #[derive(Debug)]
 pub(crate) enum RetractionRecord {
@@ -107,7 +107,7 @@ pub(crate) enum RetractionRecord {
  * "extent" of a code vector is its length prior to an attempted
  * module load. The only code vector of the WAM's IndexStore, "code",
  * is shared by all modules, including the default "user" module.
-*/
+ */
 
 pub(crate) struct RetractionInfo {
     orig_code_extent: usize,
@@ -1020,7 +1020,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let export_list = machine_st
             .read_term_from_heap(cell)
-            .ok_or_else(|| SessionError::UnexpectedSubterm)?;
+            .ok_or(SessionError::UnexpectedSubterm)?;
         let export_list = setup_module_export_list(export_list)?;
 
         Ok(export_list.into_iter().collect())
@@ -1679,7 +1679,7 @@ impl Machine {
         let add_clause = || {
             let term = loader
                 .read_term_from_heap(temp_v!(1))
-                .ok_or_else(|| SessionError::UnexpectedSubterm)?;
+                .ok_or(SessionError::UnexpectedSubterm)?;
 
             loader.incremental_compile_clause(
                 (atom!("term_expansion"), 2),
@@ -1712,7 +1712,7 @@ impl Machine {
         let add_clause = || {
             let term = loader
                 .read_term_from_heap(temp_v!(2))
-                .ok_or_else(|| SessionError::UnexpectedSubterm)?;
+                .ok_or(SessionError::UnexpectedSubterm)?;
 
             let indexing_arg = match term.name() {
                 Some(atom!(":-")) => term.first_arg().and_then(Term::first_arg),
@@ -2047,7 +2047,7 @@ impl Machine {
 
             let head = LiveLoadAndMachineState::machine_st(&mut loader.payload)
                 .read_term_from_heap(head)
-                .ok_or_else(|| SessionError::UnexpectedSubterm)?;
+                .ok_or(SessionError::UnexpectedSubterm)?;
 
             let name = if let Some(name) = head.name() {
                 name
@@ -2096,7 +2096,7 @@ impl Machine {
 
             let body = loader
                 .read_term_from_heap(temp_v!(3))
-                .ok_or_else(|| SessionError::UnexpectedSubterm)?;
+                .ok_or(SessionError::UnexpectedSubterm)?;
 
             let asserted_clause = Term::Clause(
                 Cell::default(),
@@ -2583,7 +2583,7 @@ impl<'a> Loader<'a, LiveLoadAndMachineState<'a>> {
 
         let term = self
             .read_term_from_heap(term_reg)
-            .ok_or_else(|| SessionError::UnexpectedSubterm)?;
+            .ok_or(SessionError::UnexpectedSubterm)?;
 
         self.add_clause_clause_if_dynamic(&term)?;
         self.payload.term_stream.term_queue.push_back(term);

@@ -362,7 +362,7 @@ pub fn eager_stackful_preorder_iter(
  * cyclic terms for the sake of skipping them at the second visit but
  * leaves them marked until it is dropped. This makes for, e.g., more
  * efficient ground/1 and term_variables/2 definitions.
-*/
+ */
 
 pub struct EagerStackfulPreOrderHeapIter<'a> {
     start_value: HeapCellValue,

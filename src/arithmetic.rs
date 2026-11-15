@@ -364,7 +364,7 @@ impl<'a> ArithmeticEvaluator<'a> {
         let mut prelude_code = CodeDeque::new();
         let mut code = CodeDeque::new();
 
-        while let Some(term_ref) = iter.next() {
+        for term_ref in iter.by_ref() {
             match term_ref? {
                 ArithTermRef::Literal(lvl, c) => {
                     if matches!(lvl, Level::Shallow) {
@@ -410,7 +410,7 @@ impl<'a> ArithmeticEvaluator<'a> {
         let l_op = self.interm.pop().unwrap();
 
         iter.root_term
-            .emit_call(&mut self.marker, l_op, r_op, &mut prelude_code, call_policy);
+            .emit_call(self.marker, l_op, r_op, &mut prelude_code, call_policy);
 
         Ok(prelude_code)
     }

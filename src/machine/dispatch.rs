@@ -2485,7 +2485,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Less | Ordering::Equal => {
                                 increment_call_count!(self.machine_st);
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2508,7 +2508,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Less | Ordering::Equal => {
                                 increment_call_count!(self.machine_st);
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2531,7 +2531,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Equal => {
                                 increment_call_count!(self.machine_st);
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2554,7 +2554,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Equal => {
                                 increment_call_count!(self.machine_st);
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2580,7 +2580,7 @@ impl Machine {
                             }
                             _ => {
                                 increment_call_count!(self.machine_st);
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                         }
@@ -2603,7 +2603,7 @@ impl Machine {
                             }
                             _ => {
                                 increment_call_count!(self.machine_st);
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                         }
@@ -2623,7 +2623,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Greater | Ordering::Equal => {
                                 increment_call_count!(self.machine_st);
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2646,7 +2646,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Greater | Ordering::Equal => {
                                 increment_call_count!(self.machine_st);
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2669,7 +2669,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Greater => {
                                 increment_call_count!(self.machine_st);
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2692,7 +2692,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Greater => {
                                 increment_call_count!(self.machine_st);
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2715,7 +2715,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Less => {
                                 increment_call_count!(self.machine_st);
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2738,7 +2738,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Less => {
                                 increment_call_count!(self.machine_st);
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2760,7 +2760,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Less | Ordering::Equal => {
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2782,7 +2782,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Less | Ordering::Equal => {
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2807,7 +2807,7 @@ impl Machine {
                                 self.machine_st.backtrack();
                             }
                             _ => {
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                         }
@@ -2829,7 +2829,7 @@ impl Machine {
                                 self.machine_st.backtrack();
                             }
                             _ => {
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                         }
@@ -2848,7 +2848,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Equal => {
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2870,7 +2870,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Equal => {
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2892,7 +2892,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Greater | Ordering::Equal => {
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2914,7 +2914,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Greater | Ordering::Equal => {
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2936,7 +2936,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Greater => {
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2958,7 +2958,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Greater => {
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2980,7 +2980,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Less => {
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -3002,7 +3002,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Less => {
-                                self.machine_st.pop_interms(&at_1, &at_2);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
