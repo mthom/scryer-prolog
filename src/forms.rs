@@ -1,4 +1,4 @@
-use crate::arena::*;
+use crate::arena::alloc::*;
 use crate::atom_table::*;
 use crate::functor_macro::*;
 use crate::instructions::*;
@@ -85,11 +85,6 @@ impl GenContext {
             GenContext::Head => 0,
             &GenContext::Mid(cn) | &GenContext::Last(cn) => cn,
         }
-    }
-
-    #[inline]
-    pub fn is_last(self) -> bool {
-        matches!(self, GenContext::Last(_))
     }
 }
 
@@ -937,7 +932,7 @@ impl From<&'_ Term> for OptArgIndexKey {
     fn from(term: &'_ Term) -> OptArgIndexKey {
         match term {
             &Term::Clause(_, atom!("."), ref terms) if terms.len() == 2 => OptArgIndexKey::List,
-            &Term::Cons(..) | &Term::PartialString(..) | &Term::CompleteString(..) => {
+            &Term::ConsCell(..) | &Term::PartialString(..) | &Term::CompleteString(..) => {
                 OptArgIndexKey::List
             }
             &Term::Clause(_, name, ref terms) => OptArgIndexKey::Structure(name, terms.len()),
@@ -945,7 +940,9 @@ impl From<&'_ Term> for OptArgIndexKey {
                 let literal = HeapCellValue::from(constant);
                 OptArgIndexKey::Literal(literal)
             }
-            &Term::Var(..) | &Term::AnonVar => OptArgIndexKey::None,
+            &Term::Var(..) | &Term::AnonVar | Term::Stream(..) | Term::Process(..) => {
+                OptArgIndexKey::None
+            }
         }
     }
 }
@@ -1089,7 +1086,7 @@ impl HeapCellValue {
                 hasher.write_u64(atom!(".").index);
                 hasher.write_usize(2);
             }
-            (HeapCellValueTag::Cons, c) => {
+            (HeapCellValueTag::Cons, cons_ptr) => {
                 let signed_int_hasher = |hasher: &mut H, sign, words: &[u64]| {
                     if matches!(sign, dashu::base::Sign::Negative) {
                         hasher.write_i8(-1);
@@ -1100,13 +1097,15 @@ impl HeapCellValue {
                     }
                 };
 
-                match_untyped_arena_ptr!(c,
-                   (ArenaHeaderTag::Integer, n) => {
-                       let (sign, words) = n.as_sign_words();
-                       signed_int_hasher(&mut hasher, sign, words);
-                   }
-                   (ArenaHeaderTag::Rational, r) => {
-                       let (sign, words) = r.numerator().as_sign_words();
+                match cons_ptr.get_tag() {
+                    ArenaHeaderTag::Integer => {
+                        let n = unsafe { cons_ptr.as_typed_ptr::<Integer>() };
+                        let (sign, words) = n.as_sign_words();
+                        signed_int_hasher(&mut hasher, sign, words);
+                    }
+                    ArenaHeaderTag::Rational => {
+                        let r = unsafe { cons_ptr.as_typed_ptr::<Rational>() };
+                        let (sign, words) = r.numerator().as_sign_words();
                        signed_int_hasher(&mut hasher, sign, words);
 
                        // ensure a Rational hashes exactly the equivalent integer
@@ -1115,13 +1114,12 @@ impl HeapCellValue {
                            let words = r.denominator().as_words();
                            signed_int_hasher(&mut hasher, dashu::base::Sign::Positive, words);
                        }
-                   }
-                   _ => {
-                       // we shouldn't be hashing pointer-based types like
-                       // streams, load states, etc. This hash is meant only
-                       // to index syntactic values.
-                   }
-                )
+                    }
+                    _ => {
+                        // pointer-based types like streams are compared by identity
+                        cons_ptr.hash(&mut hasher);
+                    }
+                }
             }
             _ => {}
         );
@@ -1180,7 +1178,11 @@ impl HeapCellValue {
                 )
             }
             (HeapCellValueTag::Cons) => {
-                Number::try_from((self, f64_tbl)) == Number::try_from((cell_2, f64_tbl))
+                match (Number::try_from((self, f64_tbl)), Number::try_from((cell_2, f64_tbl))) {
+                    (Ok(n1), Ok(n2)) => n1 == n2,
+                    (Err(_), Err(_)) => self == cell_2,
+                    _ => false,
+                }
             }
             _ => {
                 false

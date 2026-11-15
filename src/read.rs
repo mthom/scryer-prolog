@@ -7,6 +7,8 @@ use crate::parser::ast::*;
 use crate::parser::lexer::Lexer;
 use crate::parser::parser::*;
 
+use crate::arena::opt_in_buf_reader::*;
+use crate::arena::stream_layout::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::iterators::*;
@@ -14,30 +16,15 @@ use crate::machine::heap::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::MachineState;
-use crate::machine::streams::*;
-use crate::parser::char_reader::*;
-#[cfg(feature = "repl")]
-use crate::repl_helper::Helper;
 use crate::types::*;
 
 use fxhash::FxBuildHasher;
 
-#[cfg(feature = "repl")]
-use rustyline::error::ReadlineError;
-#[cfg(feature = "repl")]
-use rustyline::history::DefaultHistory;
-#[cfg(feature = "repl")]
-use rustyline::{Config, Editor};
-
 use std::collections::VecDeque;
-use std::io::{Cursor, Read};
-#[cfg(feature = "repl")]
-use std::io::{Error, ErrorKind};
-use std::sync::Arc;
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 
-pub(crate) fn devour_whitespace<R: CharRead>(
+pub(crate) fn devour_whitespace<R: GraphemeRead>(
     lexer: &mut Lexer<'_, R>,
 ) -> Result<bool, ParserError> {
     match lexer.scan_for_layout() {
@@ -75,7 +62,7 @@ impl MachineState {
         op_dir: &OpDir,
     ) -> Result<TermWriteResult, CompilationError> {
         let (term, num_lines_read) = {
-            let prior_num_lines_read = inner.lines_read();
+            let prior_num_lines_read = inner.lines_read;
             let mut parser = Parser::new(inner, self);
             let op_dir = CompositeOpDir::new(op_dir, None);
 
@@ -83,250 +70,13 @@ impl MachineState {
 
             let term = parser
                 .read_term(&op_dir, Tokens::Default)
-                .map_err(|err| error_after_read_term(err, prior_num_lines_read, &parser))?; // CompilationError::from
+                .map_err(|err| error_after_read_term(err, prior_num_lines_read, &parser))?;
 
             (term, parser.lines_read() - prior_num_lines_read)
         };
 
-        inner.add_lines_read(num_lines_read);
+        inner.lines_read += num_lines_read;
         write_term_to_heap(&term, &mut self.heap)
-    }
-}
-
-static mut PROMPT: bool = false;
-#[cfg(feature = "repl")]
-const HISTORY_FILE: &str = ".scryer_history";
-
-pub(crate) fn set_prompt(value: bool) {
-    unsafe {
-        PROMPT = value;
-    }
-}
-
-#[cfg(feature = "repl")]
-#[inline]
-fn get_prompt() -> &'static str {
-    if unsafe { PROMPT } { "?- " } else { "" }
-}
-
-thread_local! {
-    static RAW_READ: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
-pub struct RawReadGuard;
-
-impl RawReadGuard {
-    pub fn new() -> RawReadGuard {
-        if RAW_READ.get() {
-            panic!("Nested RawReadGuards");
-        }
-        RAW_READ.set(true);
-        RawReadGuard
-    }
-}
-
-impl Drop for RawReadGuard {
-    fn drop(&mut self) {
-        RAW_READ.set(false);
-    }
-}
-
-#[derive(Debug)]
-pub struct ReadlineStream {
-    #[cfg(feature = "repl")]
-    rl: Editor<Helper, DefaultHistory>,
-    pending_input: CharReader<Cursor<String>>,
-    #[allow(dead_code)]
-    add_history: bool,
-}
-
-impl ReadlineStream {
-    #[inline]
-    pub fn new(pending_input: &str, add_history: bool) -> Self {
-        #[cfg(feature = "repl")]
-        {
-            let config = Config::builder().check_cursor_position(true).build();
-
-            let helper = Helper::new();
-
-            let mut rl = Editor::with_config(config).unwrap();
-            rl.set_helper(Some(helper));
-
-            if let Some(mut path) = dirs_next::home_dir() {
-                path.push(HISTORY_FILE);
-                if path.exists() && rl.load_history(&path).is_err() {
-                    println!("% Warning: loading history failed");
-                }
-            }
-
-            ReadlineStream {
-                rl,
-                pending_input: CharReader::new(Cursor::new(pending_input.to_owned())),
-                add_history,
-            }
-        }
-
-        #[cfg(not(feature = "repl"))]
-        {
-            ReadlineStream {
-                pending_input: CharReader::new(Cursor::new(pending_input.to_owned())),
-                add_history,
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    pub fn set_atoms_for_completion(&mut self, atoms: &Arc<AtomTable>) {
-        #[cfg(feature = "repl")]
-        {
-            let helper = self.rl.helper_mut().unwrap();
-            helper.atoms = Arc::downgrade(atoms);
-        }
-    }
-
-    #[inline]
-    pub fn reset(&mut self) {
-        self.pending_input.reset_buffer();
-
-        let pending_input = self.pending_input.get_mut();
-
-        pending_input.get_mut().clear();
-        pending_input.set_position(0);
-    }
-
-    #[cfg(feature = "repl")]
-    fn call_readline(&mut self) -> std::io::Result<usize> {
-        let text = if RAW_READ.get() {
-            let mut buffer = String::new();
-            let stdin = std::io::stdin();
-            match stdin.read_line(&mut buffer) {
-                Ok(_) => Ok(buffer),
-                Err(e) => Err(e),
-            }
-        } else {
-            match self.rl.readline(get_prompt()) {
-                Ok(text) => Ok(text),
-                Err(ReadlineError::Eof) => Err(Error::from(ErrorKind::UnexpectedEof)),
-                Err(e) => Err(Error::new(ErrorKind::InvalidInput, e)),
-            }
-        };
-
-        match text {
-            Ok(text) => {
-                self.pending_input.reset_buffer();
-
-                *self.pending_input.get_mut().get_mut() = text;
-                self.pending_input.get_mut().set_position(0);
-
-                unsafe {
-                    if PROMPT {
-                        self.rl
-                            .add_history_entry(self.pending_input.get_ref().get_ref())
-                            .unwrap();
-                        self.save_history();
-                        PROMPT = false;
-                    }
-
-                    if !self.pending_input.get_ref().get_ref().ends_with('\n') {
-                        *self.pending_input.get_mut().get_mut() += "\n";
-                    }
-                }
-
-                Ok(self.pending_input.get_ref().get_ref().len())
-            }
-            Err(e) => Err(e),
-        }
-    }
-
-    #[cfg(not(feature = "repl"))]
-    fn call_readline(&mut self) -> std::io::Result<usize> {
-        Ok(0)
-    }
-
-    #[cfg(feature = "repl")]
-    fn save_history(&mut self) {
-        if !self.add_history {
-            return;
-        };
-        if let Some(mut path) = dirs_next::home_dir() {
-            path.push(HISTORY_FILE);
-            if path.exists() {
-                if self.rl.append_history(&path).is_err() {
-                    println!("% Warning: couldn't append history (existing file)");
-                }
-            } else if self.rl.save_history(&path).is_err() {
-                println!("% Warning: couldn't save history (new file)");
-            }
-        }
-    }
-
-    #[allow(dead_code)]
-    #[cfg(not(feature = "repl"))]
-    fn save_history(&mut self) {}
-
-    #[inline]
-    pub(crate) fn peek_byte(&mut self) -> std::io::Result<u8> {
-        let bytes = self.pending_input.refresh_buffer()?;
-        let byte = bytes.iter().next().cloned();
-
-        loop {
-            match byte {
-                Some(b) => {
-                    return Ok(b);
-                }
-                None => match self.call_readline() {
-                    Err(e) => {
-                        return Err(e);
-                    }
-                    _ => {
-                        set_prompt(false);
-                    }
-                },
-            }
-        }
-    }
-}
-
-impl Read for ReadlineStream {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self.pending_input.read(buf) {
-            Ok(0) => {
-                self.call_readline()?;
-                self.pending_input.read(buf)
-            }
-            result => result,
-        }
-    }
-}
-
-impl CharRead for ReadlineStream {
-    #[inline]
-    fn peek_char(&mut self) -> Option<std::io::Result<char>> {
-        loop {
-            match self.pending_input.peek_char() {
-                Some(Ok(c)) => {
-                    return Some(Ok(c));
-                }
-                _ => match self.call_readline() {
-                    Err(e) => {
-                        return Some(Err(e));
-                    }
-                    _ => {
-                        set_prompt(false);
-                    }
-                },
-            }
-        }
-    }
-
-    #[inline]
-    fn consume(&mut self, nread: usize) {
-        self.pending_input.consume(nread);
-    }
-
-    #[inline]
-    fn put_back_char(&mut self, c: char) {
-        self.pending_input.put_back_char(c);
     }
 }
 
@@ -392,6 +142,8 @@ impl<'a> TermWriter<'a> {
             &TermRef::Literal(_, _, literal) => HeapCellValue::from(*literal),
             &TermRef::Clause(_, _, _, subterms) if subterms.is_empty() => heap_loc_as_cell!(h),
             &TermRef::Clause(..) => str_loc_as_cell!(h),
+            &TermRef::Stream(_, _, stream) => HeapCellValue::from(stream),
+            &TermRef::Process(_, _, process) => HeapCellValue::from(process),
         }
     }
 
@@ -475,7 +227,7 @@ impl<'a> TermWriter<'a> {
                         self.push_stub_addr()?;
                     }
 
-                    let cell = self.heap.allocate_cstr(src)?;
+                    let cell = self.heap.allocate_cstr(src.as_bytes())?;
 
                     let new_h = self.heap.cell_len();
                     self.push_cell(cell)?;
@@ -493,7 +245,7 @@ impl<'a> TermWriter<'a> {
                         self.push_stub_addr()?;
                     }
 
-                    let cell = self.heap.allocate_pstr(src)?;
+                    let cell = self.heap.allocate_pstr(src.as_bytes())?;
 
                     let tail_h = self.heap.cell_len();
                     self.push_stub_addr()?;

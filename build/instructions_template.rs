@@ -16,7 +16,7 @@ use to_syn_value_derive::ToDeriveInput;
  * of Instruction. They mimic most of the structure of the previous
  * Line instruction type. The strum crate is used to provide reflection
  * on each of the node types to the tree walker.
-*/
+ */
 
 use std::any::*;
 use std::rc::Rc;
@@ -104,7 +104,7 @@ enum BuiltInClauseType {
     #[strum_discriminants(strum(props(Arity = "1", Name = "ground")))]
     Ground,
     #[strum_discriminants(strum(props(Arity = "2", Name = "is")))]
-    Is(RegType, ArithmeticTerm),
+    Is(ArithmeticTerm, ArithmeticTerm),
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_number")))]
     GetNumber(ArithmeticTerm),
     #[strum_discriminants(strum(props(Arity = "2", Name = "keysort")))]
@@ -840,6 +840,8 @@ enum InstructionTemplate {
     // run verify_attr, eventually.
     #[strum_discriminants(strum(props(Arity = "0", Name = "run_verify_attr")))]
     RunVerifyAttr,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "allocate_on_heap")))]
+    AllocateOnHeap(usize), // the number of HeapCellValue's to allocate on the heap
     // procedures
     CallClause(ClauseType, usize, usize, bool, bool), // ClauseType,
                                                       // arity,

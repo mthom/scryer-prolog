@@ -29,7 +29,8 @@ pub mod system_calls;
 pub mod term_stream;
 pub mod unify;
 
-use crate::arena::*;
+use crate::arena::alloc::*;
+use crate::arena::stream_layout::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
 #[cfg(feature = "ffi")]
@@ -48,7 +49,6 @@ use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::machine::stack::*;
-use crate::machine::streams::*;
 use crate::offset_table::*;
 use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
@@ -449,7 +449,7 @@ impl Machine {
             Instruction::ExecuteNumberLessThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
             Instruction::ExecuteNumberEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
             Instruction::ExecuteNumberNotEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-            Instruction::ExecuteIs(temp_v!(1), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteIs(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
             Instruction::ExecuteAcyclicTerm,
             Instruction::ExecuteArg,
             Instruction::ExecuteCompare,
@@ -500,12 +500,6 @@ impl Machine {
             .set_stream(atom!("user_output"), self.user_output);
         self.indices
             .set_stream(atom!("user_error"), self.user_error);
-
-        let mut null_options = StreamOptions::default();
-        null_options.set_alias_to_atom_opt(Some(atom!("null_stream")));
-
-        self.indices
-            .set_stream(atom!("null_stream"), Stream::Null(null_options));
     }
 
     #[inline(always)]
@@ -661,54 +655,47 @@ impl Machine {
     fn next_inner_applicable_clause(&mut self) -> Option<u32> {
         let mut inner_offset = 1u32;
 
-        loop {
-            match &self.code[self.machine_st.p] {
-                Instruction::IndexingCode { code, .. } => {
-                    match &code[self.machine_st.oip as usize] {
-                        IndexingLine::StaticIndexedChoice(indexed_choice) => {
-                            match &indexed_choice.offsets
-                                [(self.machine_st.iip + inner_offset) as usize]
-                            {
-                                &StaticIndexedChoiceInstructionOffset::Retry(o)
-                                | &StaticIndexedChoiceInstructionOffset::DefaultRetry(o) => {
-                                    if self.next_clause_applicable(self.machine_st.p + o) {
-                                        return Some(inner_offset);
-                                    }
-
-                                    inner_offset += 1;
-                                }
-                                &StaticIndexedChoiceInstructionOffset::Trust(o)
-                                | &StaticIndexedChoiceInstructionOffset::DefaultTrust(o) => {
-                                    return if self.next_clause_applicable(self.machine_st.p + o) {
-                                        Some(inner_offset)
-                                    } else {
-                                        None
-                                    };
-                                }
-                                _ => unreachable!(),
+        while let Instruction::IndexingCode { code, .. } = &self.code[self.machine_st.p] {
+            match &code[self.machine_st.oip as usize] {
+                IndexingLine::StaticIndexedChoice(indexed_choice) => {
+                    match &indexed_choice.offsets[(self.machine_st.iip + inner_offset) as usize] {
+                        &StaticIndexedChoiceInstructionOffset::Retry(o)
+                        | &StaticIndexedChoiceInstructionOffset::DefaultRetry(o) => {
+                            if self.next_clause_applicable(self.machine_st.p + o) {
+                                return Some(inner_offset);
                             }
-                        }
-                        IndexingLine::DynamicIndexedChoice(indexed_choice) => {
-                            let idx = (self.machine_st.iip + inner_offset) as usize;
-                            let o = indexed_choice.offsets[idx].offset();
 
-                            if idx + 1 == indexed_choice.offsets.len() {
-                                return if self.next_clause_applicable(self.machine_st.p + o) {
-                                    Some(inner_offset)
-                                } else {
-                                    None
-                                };
+                            inner_offset += 1;
+                        }
+                        &StaticIndexedChoiceInstructionOffset::Trust(o)
+                        | &StaticIndexedChoiceInstructionOffset::DefaultTrust(o) => {
+                            return if self.next_clause_applicable(self.machine_st.p + o) {
+                                Some(inner_offset)
                             } else {
-                                if self.next_clause_applicable(self.machine_st.p + o) {
-                                    return Some(inner_offset);
-                                }
-
-                                inner_offset += 1;
-                            }
+                                None
+                            };
                         }
+                        _ => unreachable!(),
                     }
                 }
-                _ => break,
+                IndexingLine::DynamicIndexedChoice(indexed_choice) => {
+                    let idx = (self.machine_st.iip + inner_offset) as usize;
+                    let o = indexed_choice.offsets[idx].offset();
+
+                    if idx + 1 == indexed_choice.offsets.len() {
+                        return if self.next_clause_applicable(self.machine_st.p + o) {
+                            Some(inner_offset)
+                        } else {
+                            None
+                        };
+                    } else {
+                        if self.next_clause_applicable(self.machine_st.p + o) {
+                            return Some(inner_offset);
+                        }
+
+                        inner_offset += 1;
+                    }
+                }
             }
         }
 

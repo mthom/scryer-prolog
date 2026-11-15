@@ -1,4 +1,5 @@
-use crate::arena::*;
+use crate::arena::alloc::*;
+use crate::arena::stream_layout::Stream;
 use crate::atom_table::*;
 use crate::offset_table::*;
 use crate::types::HeapCellValueTag;
@@ -11,6 +12,7 @@ use std::io::{Error as IOError, ErrorKind};
 use std::ops::Not;
 use std::ops::RangeInclusive;
 use std::ops::{Deref, Neg};
+use std::process::Child;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::vec::Vec;
@@ -416,6 +418,8 @@ pub fn default_op_dir() -> OpDir {
 #[derive(Debug, Copy, Clone)]
 pub enum ArithmeticError {
     NonEvaluableFunctor(Literal, usize),
+    NonEvaluableStream(Stream),
+    NonEvaluableProcess(TypedArenaPtr<Child>),
     UninstantiatedVar,
 }
 
@@ -436,6 +440,15 @@ impl Location {
     pub fn column(&self) -> usize {
         self.column
     }
+
+    pub(in crate::parser) fn incr(&mut self, c: &str) {
+        if c == "\n" {
+            self.line += 1;
+            self.column = 0;
+        } else {
+            self.column += 1;
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -453,12 +466,12 @@ pub(crate) enum ParserErrorKind {
     IO(IOError),
     IncompleteReduction,
     InfiniteFloat,
-    InvalidSingleQuotedCharacter(char),
+    InvalidSingleQuotedGrapheme(String),
     ParseFloat,
     MissingQuote,
     NonPrologChar,
     ParseBigInt,
-    UnexpectedChar(char),
+    UnexpectedGrapheme(String),
     // UnexpectedEOF,
     Utf8Error,
 }
@@ -472,7 +485,7 @@ impl ParserError {
         match &self.kind {
             ParserErrorKind::BackQuotedString => atom!("back_quoted_string"),
             ParserErrorKind::IncompleteReduction => atom!("incomplete_reduction"),
-            ParserErrorKind::InvalidSingleQuotedCharacter(..) => {
+            ParserErrorKind::InvalidSingleQuotedGrapheme(..) => {
                 atom!("invalid_single_quoted_character")
             }
             ParserErrorKind::InfiniteFloat => {
@@ -489,7 +502,7 @@ impl ParserError {
             ParserErrorKind::MissingQuote => atom!("missing_quote"),
             ParserErrorKind::NonPrologChar => atom!("non_prolog_character"),
             ParserErrorKind::ParseBigInt => atom!("cannot_parse_big_int"),
-            ParserErrorKind::UnexpectedChar(..) => atom!("unexpected_char"),
+            ParserErrorKind::UnexpectedGrapheme(..) => atom!("unexpected_char"),
             ParserErrorKind::Utf8Error => atom!("utf8_conversion_error"),
         }
     }
@@ -838,13 +851,17 @@ impl Var {
 pub enum Term {
     AnonVar,
     Clause(Cell<RegType>, Atom, Vec<Term>),
-    Cons(Cell<RegType>, Box<Term>, Box<Term>),
+    ConsCell(Cell<RegType>, Box<Term>, Box<Term>),
     Literal(Cell<RegType>, Literal),
     // PartialString wraps a String in anticipation of it absorbing
     // other PartialString variants in as_partial_string.
     PartialString(Cell<RegType>, Rc<String>, Box<Term>),
     CompleteString(Cell<RegType>, Rc<String>),
     Var(Cell<VarReg>, VarPtr),
+    // these variants are constructible only when buildings Term's
+    // from the heap since they have no syntactic representation.
+    Stream(Cell<RegType>, Stream),
+    Process(Cell<RegType>, TypedArenaPtr<Child>),
 }
 
 impl Term {

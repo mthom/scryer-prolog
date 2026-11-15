@@ -190,6 +190,7 @@ pub(crate) enum IndexingLineOffset<'a> {
 }
 
 impl<'code> IndexingLineOffset<'code> {
+    #[allow(clippy::wrong_self_convention)]
     #[inline]
     fn to_place(self, cursor: TableLocation) -> IndexingLinePlace<'code> {
         match self {
@@ -305,7 +306,7 @@ pub(crate) enum FlattenedIndexLine<'a> {
 }
 
 pub(crate) fn flatten_indexing_line_at<'a>(
-    index: &'a mut Vec<IndexingLine>,
+    index: &'a mut [IndexingLine],
     table_loc: usize,
 ) -> Option<FlattenedIndexLine<'a>> {
     index

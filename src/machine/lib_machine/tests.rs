@@ -1,6 +1,6 @@
 use super::*;
 use crate::MachineBuilder;
-use crate::arena::ArenaHeaderTag;
+use crate::arena::alloc::ArenaHeaderTag;
 
 const REPEATED_LOAD_PROBE_PROGRAM: &str = r#"
     :- discontiguous(repeated_loader_probe_predicate/2).

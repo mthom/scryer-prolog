@@ -1,17 +1,16 @@
 use crate::parser::ast::*;
 
+use crate::arena::stream_layout::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::machine::ClauseType;
 use crate::machine::MachineStubGen;
 use crate::machine::loader::*;
 use crate::machine::machine_state::*;
-use crate::machine::streams::{Stream, StreamOptions};
 use crate::offset_table::*;
 
 use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
-use modular_bitfield::specifiers::*;
 use modular_bitfield::{Specifier, bitfield};
 
 use std::cmp::Ordering;
@@ -495,7 +494,7 @@ impl IndexStore {
         stub_name: Atom,
         stub_arity: usize,
     ) -> Result<(), MachineStubGen> {
-        if let Some(alias) = stream.options().get_alias() {
+        if let Some(alias) = stream.options.get_alias() {
             if self.stream_aliases.contains_key(&alias) {
                 return Err(Box::new(move |machine_st| {
                     machine_st.occupied_alias_permission_error(alias, stub_name, stub_arity)
@@ -511,7 +510,7 @@ impl IndexStore {
     }
 
     pub(crate) fn remove_stream(&mut self, stream: Stream) {
-        if let Some(alias) = stream.options().get_alias() {
+        if let Some(alias) = stream.options.get_alias() {
             debug_assert_eq!(self.stream_aliases.get(&alias), Some(&stream));
             assert!(!is_protected_alias(alias));
 
@@ -525,10 +524,10 @@ impl IndexStore {
         mut stream: Stream,
         callback: F,
     ) {
-        if let Some(prev_alias) = stream.options().get_alias() {
+        if let Some(prev_alias) = stream.options.get_alias() {
             debug_assert_eq!(self.stream_aliases.get(&prev_alias), Some(&stream));
         }
-        let options = stream.options_mut();
+        let options = &mut stream.options;
         let prev_alias = options.get_alias();
 
         callback(options);
@@ -587,10 +586,10 @@ impl IndexStore {
                 return;
             }
 
-            prev_stream.options_mut().set_alias_to_atom_opt(None);
+            prev_stream.options.set_alias_to_atom_opt(None);
         }
 
-        stream.options_mut().set_alias_to_atom_opt(Some(alias));
+        stream.options.set_alias_to_atom_opt(Some(alias));
 
         self.stream_aliases.insert(alias, stream);
         self.streams.insert(stream);

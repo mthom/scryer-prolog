@@ -1,10 +1,11 @@
+use crate::arena::read_line::*;
+use crate::arena::stream_insts::*;
+use crate::arena::stream_layout::*;
 #[cfg(feature = "http")]
 use crate::http::{HttpListener, HttpResponse};
 use crate::machine::heap::AllocError;
 use crate::machine::loader::LiveLoadState;
-use crate::machine::streams::*;
 use crate::offset_table::*;
-use crate::read::*;
 use crate::types::UntypedArenaPtr;
 
 use crate::parser::dashu::{Integer, Rational};
@@ -13,8 +14,6 @@ use ordered_float::OrderedFloat;
 use std::fmt;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
-use std::io::PipeReader;
-use std::io::PipeWriter;
 use std::mem;
 use std::mem::ManuallyDrop;
 use std::net::TcpListener;
@@ -27,7 +26,7 @@ use std::ptr::addr_of_mut;
 macro_rules! arena_alloc {
     ($e:expr, $arena:expr) => {{
         let result = $e;
-        $crate::arena::AllocateInArena::arena_allocate(result, $arena)
+        $crate::arena::alloc::AllocateInArena::arena_allocate(result, $arena)
     }};
 }
 
@@ -56,7 +55,7 @@ pub enum ArenaHeaderTag {
     InactiveLoadState = 0b1011000,
     InputFileStream = 0b10000,
     OutputFileStream = 0b10100,
-    NamedTcpStream = 0b011100,
+    BufferedNamedTcpStream = 0b011100,
     NamedTlsStream = 0b100000,
     HttpReadStream = 0b100001,
     HttpWriteStream = 0b100010,
@@ -67,13 +66,12 @@ pub enum ArenaHeaderTag {
     InputChannelStream = 0b111010,
     StandardOutputStream = 0b1100,
     StandardErrorStream = 0b11000,
-    NullStream = 0b111100,
     TcpListener = 0b1000000,
     HttpListener = 0b1000001,
     HttpResponse = 0b1000010,
-    PipeWriter = 0b1000011,
+    PipeWriterStream = 0b1000011,
     Dropped = 0b1000100,
-    PipeReader = 0b1001001,
+    PipeReaderStream = 0b1001001,
     ChildProcess = 0b1001010,
 }
 
@@ -186,10 +184,124 @@ impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
 
 impl<P, T: ?Sized + ArenaAllocated<Payload = ManuallyDrop<P>>> TypedArenaPtr<T> {
     pub fn drop_payload(&mut self) {
-        if self.get_tag() != ArenaHeaderTag::Dropped {
+        if !matches!(self.get_tag(), ArenaHeaderTag::Dropped) {
             self.set_tag(ArenaHeaderTag::Dropped);
             unsafe { ManuallyDrop::drop(&mut *self.as_ptr()) }
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct DynamicArenaPtr<T: ?Sized> {
+    // keep track of the header_loc in case the datum is Dropped.
+    pub(in crate::arena) header_loc: *const ArenaHeader,
+    pub(in crate::arena) ptr: ptr::NonNull<T>,
+}
+
+impl<T: ?Sized> DynamicArenaPtr<T> {
+    #[inline]
+    pub(in crate::arena) unsafe fn from_raw(header_loc: *const ArenaHeader, ptr: *mut T) -> Self {
+        Self {
+            header_loc,
+            ptr: unsafe { NonNull::new_unchecked(ptr) },
+        }
+    }
+
+    #[inline]
+    unsafe fn set_tag(&mut self, tag: ArenaHeaderTag) {
+        unsafe {
+            let header_loc = self.header_loc as *mut ArenaHeader;
+            (*header_loc).set_tag(tag);
+        }
+    }
+
+    #[inline]
+    pub fn tag(self) -> ArenaHeaderTag {
+        unsafe { (*self.header_loc).get_tag() }
+    }
+
+    #[inline]
+    pub fn as_ptr(&self) -> *mut T {
+        self.ptr.as_ptr()
+    }
+}
+
+impl<T: ?Sized> DynamicArenaPtr<ManuallyDrop<T>> {
+    pub fn drop_payload(&mut self) {
+        if !matches!(self.tag(), ArenaHeaderTag::Dropped) {
+            unsafe {
+                self.set_tag(ArenaHeaderTag::Dropped);
+                ManuallyDrop::drop(&mut *self.as_ptr());
+            }
+        }
+    }
+}
+
+impl<T: ?Sized> From<DynamicArenaPtr<T>> for UntypedArenaPtr {
+    #[inline]
+    fn from(value: DynamicArenaPtr<T>) -> Self {
+        UntypedArenaPtr::from(value.header_loc)
+    }
+}
+
+impl<T: ?Sized> PartialOrd for DynamicArenaPtr<T>
+where
+    T: PartialOrd,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        (**self).partial_cmp(&**other)
+    }
+}
+
+impl<T: ?Sized> PartialEq for DynamicArenaPtr<T>
+where
+    T: PartialEq,
+{
+    fn eq(&self, other: &DynamicArenaPtr<T>) -> bool {
+        std::ptr::addr_eq(self.ptr.as_ptr(), other.ptr.as_ptr()) || **self == **other
+    }
+}
+
+impl<T: ?Sized> Eq for DynamicArenaPtr<T> where T: Eq {}
+
+impl<T: ?Sized> Ord for DynamicArenaPtr<T>
+where
+    T: Ord,
+{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (**self).cmp(&**other)
+    }
+}
+
+impl<T: ?Sized> Hash for DynamicArenaPtr<T>
+where
+    T: Hash,
+{
+    #[inline(always)]
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        (self as &T).hash(hasher)
+    }
+}
+
+impl<T: ?Sized> Clone for DynamicArenaPtr<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T: ?Sized> Copy for DynamicArenaPtr<T> {}
+
+impl<T: ?Sized> Deref for DynamicArenaPtr<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.ptr.as_ref() }
+    }
+}
+
+impl<T: ?Sized> DerefMut for DynamicArenaPtr<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { self.ptr.as_mut() }
     }
 }
 
@@ -197,6 +309,10 @@ impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T>
 where
     T::Payload: Sized,
 {
+    pub(in crate::arena) unsafe fn from_raw(ptr: *mut T::Payload) -> Self {
+        unsafe { Self(NonNull::new_unchecked(ptr)) }
+    }
+
     #[inline]
     pub fn header_ptr(&self) -> *const ArenaHeader {
         unsafe { self.as_ptr().byte_sub(T::header_offset_from_payload()) as *const _ }
@@ -534,8 +650,8 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {
             ArenaHeaderTag::OutputFileStream => {
                 drop_typed_slab_in_place!(OutputFileStream, value);
             }
-            ArenaHeaderTag::NamedTcpStream => {
-                drop_typed_slab_in_place!(NamedTcpStream, value);
+            ArenaHeaderTag::BufferedNamedTcpStream => {
+                drop_typed_slab_in_place!(BufferedNamedTcpStream, value);
             }
             ArenaHeaderTag::NamedTlsStream => {
                 #[cfg(feature = "tls")]
@@ -585,17 +701,14 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {
             ArenaHeaderTag::StandardErrorStream => {
                 drop_typed_slab_in_place!(StandardErrorStream, value);
             }
-            ArenaHeaderTag::PipeReader => {
-                drop_typed_slab_in_place!(PipeReader, value);
+            ArenaHeaderTag::PipeReaderStream => {
+                drop_typed_slab_in_place!(PipeReaderStream, value);
             }
-            ArenaHeaderTag::PipeWriter => {
-                drop_typed_slab_in_place!(PipeWriter, value);
+            ArenaHeaderTag::PipeWriterStream => {
+                drop_typed_slab_in_place!(PipeWriterStream, value);
             }
             ArenaHeaderTag::ChildProcess => {
                 drop_typed_slab_in_place!(Child, value);
-            }
-            ArenaHeaderTag::NullStream => {
-                unreachable!("NullStream is never arena allocated!");
             }
         }
     }
@@ -619,7 +732,8 @@ const_assert!(mem::size_of::<OrderedFloat<f64>>() == 8);
 
 #[cfg(test)]
 mod tests {
-    use crate::arena::*;
+    use super::*;
+
     use crate::atom_table::*;
     use crate::machine::mock_wam::*;
     use crate::types::*;
@@ -685,19 +799,12 @@ mod tests {
         }
 
         let stream = Stream::from_static_string("test", &mut wam.machine_st.arena);
-        let stream_cell = HeapCellValue::from_arena_header_ptr(stream.as_ptr());
+        let stream_cell = HeapCellValue::from_arena_header_ptr(stream.header_ptr());
 
-        match stream_cell.to_untyped_arena_ptr() {
-            Some(arena_ptr) => {
-                assert_eq!(
-                    arena_ptr.into_bytes(),
-                    stream_cell.to_untyped_arena_ptr_bytes()
-                );
-            }
-            None => {
-                unreachable!();
-            }
-        }
+        assert_eq!(
+            UntypedArenaPtr::from(stream).into_bytes(),
+            stream_cell.to_untyped_arena_ptr_bytes()
+        );
     }
 
     #[test]
@@ -714,31 +821,11 @@ mod tests {
         let cell = HeapCellValue::from(big_int_ptr);
         assert_eq!(cell.get_tag(), HeapCellValueTag::Cons);
 
-        let untyped_arena_ptr = match cell.to_untyped_arena_ptr() {
-            Some(ptr) => ptr,
-            None => {
-                unreachable!()
-            }
-        };
+        let n = cell.to_typed_arena_ptr::<Integer>().unwrap();
+        assert_eq!(&*n, &(2 * Integer::from(1u64 << 63)));
 
-        match_untyped_arena_ptr!(untyped_arena_ptr,
-           (ArenaHeaderTag::Integer, n) => {
-               assert_eq!(&*n, &(2 * Integer::from(1u64 << 63)))
-           }
-           _ => unreachable!()
-        );
-
-        read_heap_cell!(cell,
-           (HeapCellValueTag::Cons, cons_ptr) => {
-               match_untyped_arena_ptr!(cons_ptr,
-                  (ArenaHeaderTag::Integer, n) => {
-                      assert_eq!(&*n, &(2 * Integer::from(1u64 << 63)))
-                  }
-                  _ => { unreachable!() }
-               )
-           }
-           _ => { unreachable!() }
-        );
+        let n = cell.to_typed_arena_ptr::<Integer>().unwrap();
+        assert_eq!(&*n, &(2 * Integer::from(1u64 << 63)));
 
         // rational
 
@@ -764,17 +851,8 @@ mod tests {
 
         // assert_eq!(wam.machine_st.heap[1usize].get_tag(), HeapCellValueTag::Cons);
 
-        read_heap_cell!(rat_cell,
-          (HeapCellValueTag::Cons, cons_ptr) => {
-              match_untyped_arena_ptr!(cons_ptr,
-                 (ArenaHeaderTag::Rational, n) => {
-                     assert_eq!(&*n, &(Rational::from(2) * Rational::from(1u64 << 63)));
-                 }
-                 _ => unreachable!()
-              )
-          }
-          _ => { unreachable!() }
-        );
+        let n = rat_cell.to_typed_arena_ptr::<Rational>().unwrap();
+        assert_eq!(&*n, &(Rational::from(2) * Rational::from(1u64 << 63)));
 
         // atom
 
@@ -881,7 +959,7 @@ mod tests {
         // char
 
         let c = 'c';
-        let char_cell = char_as_cell!(c);
+        let char_cell = codepoint_as_cell!(c);
 
         read_heap_cell!(char_cell,
             (HeapCellValueTag::Atom, (c, _arity)) => {
@@ -891,7 +969,7 @@ mod tests {
         );
 
         let c = 'Ћ';
-        let cyrillic_char_cell = char_as_cell!(c);
+        let cyrillic_char_cell = codepoint_as_cell!(c);
 
         read_heap_cell!(cyrillic_char_cell,
             (HeapCellValueTag::Atom, (c, _arity)) => {

@@ -1,6 +1,8 @@
+use bstr::ByteSlice;
+
 use crate::atom_table::*;
 use crate::functor_macro::*;
-use crate::machine::{ArenaHeaderTag, Fixnum, Integer};
+use crate::machine::{Fixnum, Integer};
 use crate::types::*;
 
 use std::alloc;
@@ -99,12 +101,12 @@ unsafe impl Sync for Heap {}
 
 #[derive(Debug)]
 pub struct HeapStringScan<'a> {
-    pub string: &'a str,
+    pub string: &'a [u8],
     pub tail_idx: usize,
 }
 
 // The heap_slice should be inside the heap
-unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan<'_> {
+unsafe fn scan_slice_to_str<'a>(heap_slice: &'a [u8]) -> HeapStringScan<'a> {
     let string_len = heap_slice
         .iter()
         .position(|b| *b == 0u8)
@@ -121,7 +123,7 @@ unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan<'_> {
     let str_slice = &heap_slice[..string_len];
 
     HeapStringScan {
-        string: unsafe { std::str::from_utf8_unchecked(str_slice) },
+        string: str_slice,
         tail_idx,
     }
 }
@@ -143,7 +145,7 @@ unsafe fn scan_slice_to_str_from_start(heap_slice: &[u8]) -> HeapStringScan<'_> 
     let str_slice = &heap_slice[..string_len];
 
     HeapStringScan {
-        string: unsafe { std::str::from_utf8_unchecked(str_slice) },
+        string: str_slice,
         tail_idx,
     }
 }
@@ -266,7 +268,7 @@ impl ReservedHeapSection {
         self.heap_cell_len += 1;
     }
 
-    fn push_pstr_segment(&mut self, src: &str) -> usize {
+    fn push_pstr_segment(&mut self, src: &[u8]) -> usize {
         if src.is_empty() {
             return 0;
         }
@@ -304,11 +306,10 @@ impl ReservedHeapSection {
         };
 
         self.heap_cell_len += cells_written;
-
         cells_written
     }
 
-    pub(crate) fn push_pstr(&mut self, mut src: &str) -> Option<HeapCellValue> {
+    pub(crate) fn push_pstr(&mut self, mut src: &[u8]) -> Option<HeapCellValue> {
         let anchor = self.cell_len();
         let mut ret = None;
 
@@ -326,7 +327,7 @@ impl ReservedHeapSection {
                     }
                 }
 
-                self.push_cell(char_as_cell!('\u{0}'));
+                self.push_cell(codepoint_as_cell!('\u{0}'));
                 src = &src[1..];
             }
 
@@ -334,8 +335,8 @@ impl ReservedHeapSection {
                 return ret;
             }
 
-            if let Some(null_char_idx) = src.find('\u{0}') {
-                debug_assert_ne!(null_char_idx, 0);
+            if let Some(null_byte_idx) = src.iter().position(|b| *b == 0) {
+                debug_assert_ne!(null_byte_idx, 0);
 
                 match ret {
                     Some(_) => {
@@ -348,13 +349,13 @@ impl ReservedHeapSection {
                     }
                 }
 
-                self.push_pstr_segment(&src[0..null_char_idx]);
+                self.push_pstr_segment(&src[..null_byte_idx]);
 
                 // Put the \x0\
                 self.push_cell(list_loc_as_cell!(self.cell_len() + 1));
-                self.push_cell(char_as_cell!('\u{0}'));
+                self.push_cell(codepoint_as_cell!('\u{0}'));
 
-                src = &src[null_char_idx + 1..];
+                src = &src[null_byte_idx + 1..];
 
                 if src.is_empty() {
                     return ret;
@@ -408,7 +409,7 @@ impl ReservedHeapSection {
                             section.push_cell(cell + cell_offset);
                         }
                         FunctorElement::String(_cell_len, string) => {
-                            if section.push_pstr(string).is_some() {
+                            if section.push_pstr(string.as_bytes()).is_some() {
                                 section.push_cell(empty_list_as_cell!());
                             }
                         }
@@ -499,6 +500,11 @@ impl<'a> HeapWriter<'a> {
             bytes_written: heap_index!(self.section.heap_cell_len - old_section_cell_len),
             result,
         }
+    }
+
+    #[inline]
+    pub(crate) unsafe fn set_len(&mut self, new_cell_len: usize) {
+        *self.heap_byte_len = heap_index!(new_cell_len);
     }
 }
 
@@ -623,20 +629,18 @@ impl Heap {
     }
 
     pub fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter<'_>, AllocError> {
-        let section;
         let len = heap_index_checked!(num_cells).ok_or(AllocError)?;
 
-        loop {
+        let section = loop {
             if self.free_space() >= len {
-                section = ReservedHeapSection {
+                break ReservedHeapSection {
                     heap_ptr: self.inner.ptr,
                     heap_cell_len: self.cell_len(),
                 };
-                break;
             } else if unsafe { !self.grow() } {
                 return Err(AllocError);
             }
-        }
+        };
 
         Ok(HeapWriter {
             section,
@@ -787,7 +791,7 @@ impl Heap {
         Range { start, end }
     }
 
-    pub fn allocate_pstr(&mut self, src: &str) -> Result<HeapCellValue, AllocError> {
+    pub fn allocate_pstr(&mut self, src: &[u8]) -> Result<HeapCellValue, AllocError> {
         let size_in_heap = Self::compute_pstr_size(src);
         let mut writer = self.reserve(size_in_heap)?;
         let HeapSectionWriteResult { result, .. } =
@@ -799,10 +803,10 @@ impl Heap {
         Ok(result)
     }
 
-    // note that allocate_cstr emits a tail cell to the string (completing it with the empty list)
-    // unlike any version of allocate_pstr.
-
-    pub fn allocate_cstr(&mut self, src: &str) -> Result<HeapCellValue, AllocError> {
+    // note that allocate_cstr emits a tail cell to the string
+    // (completing it with the empty list) unlike any version of
+    // allocate_pstr.
+    pub fn allocate_cstr(&mut self, src: &[u8]) -> Result<HeapCellValue, AllocError> {
         let size_in_heap = Self::compute_pstr_size(src);
         let mut writer = self.reserve(size_in_heap + 1)?;
         let HeapSectionWriteResult { result, .. } =
@@ -824,34 +828,22 @@ impl Heap {
         size_of::<HeapCellValue>()
     }
 
-    #[inline]
-    pub(crate) fn char_at(&self, byte_idx: usize) -> char {
-        let s = unsafe {
-            let char_ptr = self.inner.ptr.add(byte_idx);
-            let slice = std::slice::from_raw_parts(char_ptr, size_of::<char>());
-            std::str::from_utf8_unchecked(slice)
+    pub(crate) fn chars_and_tail_at(&self, loc: usize) -> (char, HeapCellValue) {
+        let slice = unsafe {
+            let char_ptr = self.inner.ptr.add(loc);
+            std::slice::from_raw_parts(char_ptr, self.inner.byte_len - loc)
         };
 
-        s.chars().next().unwrap()
-    }
+        let mut c_iter = slice.chars();
+        let c = c_iter.next().unwrap();
+        let next_c_opt = c_iter.next();
 
-    pub(crate) fn last_str_char_and_tail(&self, loc: usize) -> (char, HeapCellValue) {
-        unsafe {
-            let char_ptr = self.inner.ptr.add(loc);
-            let slice = std::slice::from_raw_parts(char_ptr, self.inner.byte_len - loc);
-
-            let s = std::str::from_utf8_unchecked(slice);
-            let mut chars_iter = s.chars();
-            let c = chars_iter.next().unwrap();
-            let next_char_opt = chars_iter.next();
-
-            if next_char_opt.is_none() || next_char_opt == Some('\u{0}') {
-                let tail_idx = scan_slice_to_str(slice).tail_idx + cell_index!(loc);
-                (c, heap_loc_as_cell!(tail_idx))
-            } else {
-                let succ_len = loc + c.len_utf8();
-                (c, pstr_loc_as_cell!(succ_len))
-            }
+        if next_c_opt.is_none() || next_c_opt == Some('\u{0}') {
+            let tail_idx = unsafe { scan_slice_to_str(slice).tail_idx } + cell_index!(loc);
+            (c, heap_loc_as_cell!(tail_idx))
+        } else {
+            let succ_len = loc + c.len_utf8();
+            (c, pstr_loc_as_cell!(succ_len))
         }
     }
 
@@ -930,11 +922,11 @@ impl Heap {
         Ok(())
     }
 
-    /// Returns the number of bytes needed to store `src` as a `PStr`.
-    /// Assumes the string will be allocated on a ALIGN-byte boundary.
-    pub(crate) fn compute_pstr_size(src: &str) -> usize {
+    /// Returns the number of bytes needed to store `src_bytes` as a
+    /// `PStr`. Assumes the string will be allocated on a ALIGN-byte
+    /// boundary.
+    pub(crate) fn compute_pstr_size(mut src_bytes: &[u8]) -> usize {
         let mut byte_size = 0;
-        let mut src_bytes = src.as_bytes();
 
         while !src_bytes.is_empty() {
             if src_bytes[0] == 0 {
@@ -1007,20 +999,19 @@ impl Heap {
 }
 
 pub(crate) struct PStrSegmentIter<'a> {
-    string_buf: &'a str,
+    str_buf: &'a [u8],
 }
 
 impl<'a> PStrSegmentIter<'a> {
     fn from(heap: &'a Heap, pstr_loc: usize) -> Self {
         debug_assert!(pstr_loc <= heap.inner.byte_len);
 
-        let string_buf = unsafe {
+        let str_buf = unsafe {
             let char_ptr = heap.inner.ptr.add(pstr_loc);
-            let slice = std::slice::from_raw_parts(char_ptr, heap.inner.byte_len - pstr_loc);
-            std::str::from_utf8_unchecked(slice)
+            std::slice::from_raw_parts(char_ptr, heap.inner.byte_len - pstr_loc)
         };
 
-        PStrSegmentIter { string_buf }
+        PStrSegmentIter { str_buf }
     }
 }
 
@@ -1029,14 +1020,17 @@ impl<'a> Iterator for PStrSegmentIter<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.string_buf.chars().next().and_then(|c| {
-            if c == '\u{0}' {
-                None
-            } else {
-                self.string_buf = &self.string_buf[c.len_utf8()..];
-                Some(c)
+        match self.str_buf.chars().next() {
+            Some(c) => {
+                if c == '\u{0}' {
+                    None
+                } else {
+                    self.str_buf = &self.str_buf[c.len_utf8()..];
+                    Some(c)
+                }
             }
-        })
+            None => None,
+        }
     }
 }
 
@@ -1169,15 +1163,12 @@ pub fn sized_iter_to_heap_list<SrcT: Into<HeapCellValue>>(
 pub(crate) fn to_local_code_ptr(heap: &Heap, addr: HeapCellValue) -> Option<usize> {
     let extract_integer = |s: usize| -> Option<usize> {
         read_heap_cell!(heap[s],
-            (HeapCellValueTag::Cons, c) => {
-                match_untyped_arena_ptr!(c,
-                   (ArenaHeaderTag::Integer, n) => {
-                       (&*n).try_into().ok()
-                   }
-                   _ => {
-                       None
-                   }
-                )
+            (HeapCellValueTag::Cons, cons_ptr) => {
+                if let Some(n) = cons_ptr.to_typed_ptr::<Integer>() {
+                    (&*n).try_into().ok()
+                } else {
+                    None
+                }
             }
             (HeapCellValueTag::Fixnum, n) => {
                 usize::try_from(n.get_num()).ok()

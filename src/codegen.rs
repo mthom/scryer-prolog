@@ -10,8 +10,6 @@ use crate::machine::machine_indices::IndexingSpecs;
 use crate::offset_table::F64Table;
 use crate::parser::ast::*;
 use crate::targets::*;
-use crate::types::*;
-use crate::variable_records::*;
 
 use crate::machine::disjuncts::*;
 use crate::machine::machine_errors::*;
@@ -260,44 +258,45 @@ pub(crate) struct CodeGenerator<'a> {
 }
 
 impl DebrayAllocator {
-    fn mark_var_in_non_callable(
+    pub(crate) fn deep_var_instr<'b, Target: crate::targets::CompilationTarget<'b>>(
         &mut self,
+        cell: &'b Cell<VarReg>,
         var_num: usize,
         term_loc: GenContext,
-        vr: &Cell<VarReg>,
-        code: &mut CodeDeque,
-    ) -> RegType {
-        self.mark_var::<QueryInstruction>(var_num, Level::Shallow, vr, term_loc, code);
-        vr.get().norm()
+        target: &mut CodeDeque,
+    ) {
+        if self.var_data.records[var_num].num_occurrences > 1 {
+            self.mark_var::<Target>(var_num, Level::Deep, cell, term_loc, target);
+        } else {
+            add_or_increment_void_instr::<Target>(target);
+        }
     }
 
-    pub(crate) fn mark_non_callable(
+    pub(crate) fn add_call(
         &mut self,
-        var_num: usize,
-        arg: usize,
-        term_loc: GenContext,
-        vr: &Cell<VarReg>,
         code: &mut CodeDeque,
-    ) -> RegType {
-        match self.get_binding(var_num) {
-            RegType::Temp(t) if t != 0 => RegType::Temp(t),
-            RegType::Perm(p) if p != 0 => {
-                if let GenContext::Last(_) = term_loc {
-                    self.mark_var_in_non_callable(var_num, term_loc, vr, code);
-                    temp_v!(arg)
-                } else {
-                    if let VarAlloc::Perm(_, PermVarAllocation::Pending) =
-                        &self.var_data.records[var_num].allocation
-                    {
-                        self.mark_var_in_non_callable(var_num, term_loc, vr, code);
-                    } else {
-                        self.increment_running_count(var_num);
-                    }
+        call_instr: Instruction,
+        call_policy: CallPolicy,
+    ) {
+        if self.in_tail_position && self.var_data.allocates {
+            code.push_back(instr!("deallocate"));
+        }
 
-                    RegType::Perm(p)
+        match call_policy {
+            CallPolicy::Default => {
+                if self.in_tail_position {
+                    code.push_back(call_instr.into_execute().into_default());
+                } else {
+                    code.push_back(call_instr.into_default())
                 }
             }
-            _ => self.mark_var_in_non_callable(var_num, term_loc, vr, code),
+            CallPolicy::Counted => {
+                if self.in_tail_position {
+                    code.push_back(call_instr.into_execute());
+                } else {
+                    code.push_back(call_instr)
+                }
+            }
         }
     }
 }
@@ -307,7 +306,7 @@ trait AddToFreeList<'a, Target: CompilationTarget<'a>> {
     fn add_subterm_to_free_list(&mut self, term: &Term);
 }
 
-impl<'a> AddToFreeList<'_, FactInstruction> for CodeGenerator<'_> {
+impl AddToFreeList<'_, FactInstruction> for CodeGenerator<'_> {
     fn add_term_to_free_list(&mut self, r: RegType) {
         self.marker.add_reg_to_free_list(r);
     }
@@ -315,7 +314,7 @@ impl<'a> AddToFreeList<'_, FactInstruction> for CodeGenerator<'_> {
     fn add_subterm_to_free_list(&mut self, _term: &Term) {}
 }
 
-impl<'a> AddToFreeList<'_, QueryInstruction> for CodeGenerator<'_> {
+impl AddToFreeList<'_, QueryInstruction> for CodeGenerator<'_> {
     #[inline(always)]
     fn add_term_to_free_list(&mut self, _r: RegType) {}
 
@@ -329,12 +328,26 @@ impl<'a> AddToFreeList<'_, QueryInstruction> for CodeGenerator<'_> {
 
 fn structure_cell(term: &Term) -> Option<&Cell<RegType>> {
     match term {
-        Term::Cons(cell, ..)
+        Term::ConsCell(cell, ..)
         | Term::Clause(cell, ..)
         | Term::PartialString(cell, ..)
         | Term::CompleteString(cell, ..) => Some(cell),
         _ => None,
     }
+}
+
+fn add_or_increment_void_instr<'b, Target>(target: &mut CodeDeque)
+where
+    Target: crate::targets::CompilationTarget<'b>,
+{
+    if let Some(instr) = target.back_mut()
+        && Target::is_void_instr(instr)
+    {
+        Target::incr_void_instr(instr);
+        return;
+    }
+
+    target.push_back(Target::to_void(1));
 }
 
 impl<'a> CodeGenerator<'a> {
@@ -354,35 +367,6 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn add_or_increment_void_instr<'b, Target>(target: &mut CodeDeque)
-    where
-        Target: crate::targets::CompilationTarget<'b>,
-    {
-        if let Some(instr) = target.back_mut()
-            && Target::is_void_instr(instr)
-        {
-            Target::incr_void_instr(instr);
-            return;
-        }
-
-        target.push_back(Target::to_void(1));
-    }
-
-    fn deep_var_instr<'b, Target: crate::targets::CompilationTarget<'b>>(
-        &mut self,
-        cell: &'b Cell<VarReg>,
-        var_num: usize,
-        term_loc: GenContext,
-        target: &mut CodeDeque,
-    ) {
-        if self.marker.var_data.records[var_num].num_occurrences > 1 {
-            self.marker
-                .mark_var::<Target>(var_num, Level::Deep, cell, term_loc, target);
-        } else {
-            Self::add_or_increment_void_instr::<Target>(target);
-        }
-    }
-
     fn subterm_to_instr<'b, Target: crate::targets::CompilationTarget<'b>>(
         &mut self,
         subterm: &'b Term,
@@ -391,9 +375,9 @@ impl<'a> CodeGenerator<'a> {
     ) {
         match subterm {
             &Term::AnonVar => {
-                Self::add_or_increment_void_instr::<Target>(target);
+                add_or_increment_void_instr::<Target>(target);
             }
-            Term::Cons(cell, ..)
+            Term::ConsCell(cell, ..)
             | Term::Clause(cell, ..)
             | Term::PartialString(cell, ..)
             | Term::CompleteString(cell, ..) => {
@@ -402,10 +386,16 @@ impl<'a> CodeGenerator<'a> {
                 target.push_back(Target::clause_arg_to_instr(cell.get()));
             }
             Term::Literal(_, constant) => {
-                target.push_back(Target::constant_subterm(*constant));
+                target.push_back(Target::value_subterm(*constant));
+            }
+            Term::Stream(_, stream) => {
+                target.push_back(Target::value_subterm(*stream));
+            }
+            Term::Process(_, child) => {
+                target.push_back(Target::value_subterm(*child));
             }
             Term::Var(cell, var_ptr) => {
-                self.deep_var_instr::<Target>(
+                self.marker.deep_var_instr::<Target>(
                     cell,
                     var_ptr.to_var_num().unwrap(),
                     term_loc,
@@ -479,10 +469,20 @@ impl<'a> CodeGenerator<'a> {
                     <CodeGenerator as AddToFreeList<Target>>::add_subterm_to_free_list(self, head);
                     <CodeGenerator as AddToFreeList<Target>>::add_subterm_to_free_list(self, tail);
                 }
+                TermRef::Stream(lvl @ Level::Shallow, cell, stream) => {
+                    self.marker
+                        .mark_non_var::<Target>(lvl, context, cell, &mut target);
+                    target.push_back(Target::to_value(lvl, stream, cell.get()));
+                }
+                TermRef::Process(lvl @ Level::Shallow, cell, process) => {
+                    self.marker
+                        .mark_non_var::<Target>(lvl, context, cell, &mut target);
+                    target.push_back(Target::to_value(lvl, process, cell.get()));
+                }
                 TermRef::Literal(lvl @ Level::Shallow, cell, constant) => {
                     self.marker
                         .mark_non_var::<Target>(lvl, context, cell, &mut target);
-                    target.push_back(Target::to_constant(lvl, *constant, cell.get()));
+                    target.push_back(Target::to_value(lvl, *constant, cell.get()));
                 }
                 TermRef::PartialString(lvl, cell, string, tail) => {
                     self.marker
@@ -496,7 +496,7 @@ impl<'a> CodeGenerator<'a> {
                         .mark_non_var::<Target>(lvl, context, cell, &mut target);
 
                     target.push_back(Target::to_pstr(lvl, string.clone(), cell.get()));
-                    target.push_back(Target::constant_subterm(Literal::Atom(atom!("[]"))));
+                    target.push_back(Target::value_subterm(Literal::Atom(atom!("[]"))));
                 }
                 TermRef::Var(lvl @ Level::Shallow, cell, var) => {
                     self.marker.mark_var::<Target>(
@@ -514,29 +514,6 @@ impl<'a> CodeGenerator<'a> {
         target
     }
 
-    fn add_call(&mut self, code: &mut CodeDeque, call_instr: Instruction, call_policy: CallPolicy) {
-        if self.marker.in_tail_position && self.marker.var_data.allocates {
-            code.push_back(instr!("deallocate"));
-        }
-
-        match call_policy {
-            CallPolicy::Default => {
-                if self.marker.in_tail_position {
-                    code.push_back(call_instr.into_execute().into_default());
-                } else {
-                    code.push_back(call_instr.into_default())
-                }
-            }
-            CallPolicy::Counted => {
-                if self.marker.in_tail_position {
-                    code.push_back(call_instr.into_execute());
-                } else {
-                    code.push_back(call_instr)
-                }
-            }
-        }
-    }
-
     fn compile_inlined(
         &mut self,
         ct: &InlinedClauseType,
@@ -545,16 +522,25 @@ impl<'a> CodeGenerator<'a> {
         code: &mut CodeDeque,
     ) -> Result<(), CompilationError> {
         let call_instr = match ct {
-            &InlinedClauseType::CompareNumber(mut cmp) => {
+            &InlinedClauseType::CompareNumber(cmp) => {
                 self.marker.reset_arg(2);
+                let evaluator = ArithmeticEvaluator::new(&mut self.marker);
 
-                let (mut lcode, at_1) = self.compile_arith_expr(&terms[0], term_loc, 1)?;
-                let (mut rcode, at_2) = self.compile_arith_expr(&terms[1], term_loc, 2)?;
+                debug_assert_eq!(terms.len(), 2);
 
-                code.append(&mut lcode);
-                code.append(&mut rcode);
+                let is_code = evaluator.compile_is(
+                    ArithInstructionIterator::new(
+                        RootArithPred::CompareNumber(cmp),
+                        &terms[0],
+                        &terms[1],
+                    )?,
+                    term_loc,
+                    CallPolicy::Default,
+                )?;
 
-                compare_number_instr!(cmp, at_1, at_2)
+                code.extend(is_code);
+
+                return Ok(());
             }
             InlinedClauseType::IsAtom(..) => match &terms[0] {
                 Term::Literal(_, Literal::Atom(..)) => {
@@ -563,9 +549,9 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
+                        Level::Shallow,
                         name.to_var_num().unwrap(),
-                        1,
                         term_loc,
                         vr,
                         code,
@@ -580,20 +566,20 @@ impl<'a> CodeGenerator<'a> {
             InlinedClauseType::IsAtomic(..) => match &terms[0] {
                 Term::AnonVar
                 | Term::Clause(..)
-                | Term::Cons(..)
+                | Term::ConsCell(..)
                 | Term::PartialString(..)
                 | Term::CompleteString(..) => {
                     instr!("$fail")
                 }
-                Term::Literal(..) => {
+                Term::Stream(..) | Term::Process(..) | Term::Literal(..) => {
                     instr!("$succeed")
                 }
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
+                        Level::Shallow,
                         name.to_var_num().unwrap(),
-                        1,
                         term_loc,
                         vr,
                         code,
@@ -604,7 +590,7 @@ impl<'a> CodeGenerator<'a> {
             },
             InlinedClauseType::IsCompound(..) => match &terms[0] {
                 Term::Clause(..)
-                | Term::Cons(..)
+                | Term::ConsCell(..)
                 | Term::PartialString(..)
                 | Term::CompleteString(..) => {
                     instr!("$succeed")
@@ -612,9 +598,9 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
+                        Level::Shallow,
                         name.to_var_num().unwrap(),
-                        1,
                         term_loc,
                         vr,
                         code,
@@ -635,9 +621,9 @@ impl<'a> CodeGenerator<'a> {
                 }
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
+                        Level::Shallow,
                         name.to_var_num().unwrap(),
-                        1,
                         term_loc,
                         vr,
                         code,
@@ -655,9 +641,9 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
+                        Level::Shallow,
                         name.to_var_num().unwrap(),
-                        1,
                         term_loc,
                         vr,
                         code,
@@ -682,9 +668,9 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
+                        Level::Shallow,
                         name.to_var_num().unwrap(),
-                        1,
                         term_loc,
                         vr,
                         code,
@@ -703,9 +689,9 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
+                        Level::Shallow,
                         name.to_var_num().unwrap(),
-                        1,
                         term_loc,
                         vr,
                         code,
@@ -724,9 +710,9 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
+                        Level::Shallow,
                         name.to_var_num().unwrap(),
-                        1,
                         term_loc,
                         vr,
                         code,
@@ -741,9 +727,11 @@ impl<'a> CodeGenerator<'a> {
             InlinedClauseType::IsVar(..) => match &terms[0] {
                 Term::Literal(..)
                 | Term::Clause(..)
-                | Term::Cons(..)
+                | Term::ConsCell(..)
                 | Term::PartialString(..)
-                | Term::CompleteString(..) => {
+                | Term::CompleteString(..)
+                | Term::Stream(..)
+                | Term::Process(..) => {
                     instr!("$fail")
                 }
                 Term::AnonVar => {
@@ -752,9 +740,9 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
+                        Level::Shallow,
                         name.to_var_num().unwrap(),
-                        1,
                         term_loc,
                         vr,
                         code,
@@ -766,18 +754,8 @@ impl<'a> CodeGenerator<'a> {
         };
 
         // inlined predicates are never counted, so this overrides nothing.
-        self.add_call(code, call_instr, CallPolicy::Counted);
+        self.marker.add_call(code, call_instr, CallPolicy::Counted);
         Ok(())
-    }
-
-    fn compile_arith_expr(
-        &mut self,
-        term: &Term,
-        term_loc: GenContext,
-        arg: usize,
-    ) -> Result<ArithCont, ArithmeticError> {
-        let mut evaluator = ArithmeticEvaluator::new(&mut self.marker);
-        evaluator.compile_is(term, term_loc, arg)
     }
 
     fn compile_is_call(
@@ -787,84 +765,19 @@ impl<'a> CodeGenerator<'a> {
         term_loc: GenContext,
         call_policy: CallPolicy,
     ) -> Result<(), CompilationError> {
-        macro_rules! compile_expr {
-            ($self:expr, $terms:expr, $term_loc:expr, $code:expr) => {{
-                let (acode, at) = $self.compile_arith_expr($terms, $term_loc, 2)?;
-                $code.extend(acode.into_iter());
-                at
-            }};
-        }
-
         self.marker.reset_arg(2);
+        let evaluator = ArithmeticEvaluator::new(&mut self.marker);
 
-        let at = match &terms[0] {
-            Term::Var(vr, name) => {
-                let var_num = name.to_var_num().unwrap();
+        debug_assert_eq!(terms.len(), 2);
 
-                if self.marker.var_data.records[var_num].num_occurrences > 1 {
-                    self.marker.mark_var::<QueryInstruction>(
-                        var_num,
-                        Level::Shallow,
-                        vr,
-                        term_loc,
-                        code,
-                    );
+        let is_code = evaluator.compile_is(
+            ArithInstructionIterator::new(RootArithPred::Is, &terms[0], &terms[1])?,
+            term_loc,
+            call_policy,
+        )?;
 
-                    self.marker.mark_safe_var_unconditionally(var_num);
-                    compile_expr!(self, &terms[1], term_loc, code)
-                } else {
-                    self.marker
-                        .mark_anon_var::<QueryInstruction>(Level::Shallow, term_loc, code);
+        code.extend(is_code);
 
-                    if let Term::Var(vr, var) = &terms[1] {
-                        let var_num = var.to_var_num().unwrap();
-
-                        // if var is an anonymous variable, insert
-                        // is/2 call so that an instantiation error is
-                        // thrown when the predicate is run.
-                        if self.marker.var_data.records[var_num].num_occurrences > 1 {
-                            self.marker.mark_var::<QueryInstruction>(
-                                var_num,
-                                Level::Shallow,
-                                vr,
-                                term_loc,
-                                code,
-                            );
-
-                            self.marker.mark_safe_var_unconditionally(var_num);
-
-                            let at = ArithmeticTerm::Reg(vr.get().norm());
-                            self.add_call(code, instr!("$get_number", at), call_policy);
-
-                            return Ok(());
-                        }
-                    }
-
-                    compile_expr!(self, &terms[1], term_loc, code)
-                }
-            }
-            &Term::Literal(
-                ref cell,
-                c @ Literal::Integer(_)
-                | c @ Literal::F64(..)
-                | c @ Literal::Rational(_)
-                | c @ Literal::Fixnum(_),
-            ) => {
-                let v = HeapCellValue::from(c);
-
-                self.marker
-                    .mark_non_var::<QueryInstruction>(Level::Shallow, term_loc, cell, code);
-
-                code.push_back(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
-                compile_expr!(self, &terms[1], term_loc, code)
-            }
-            _ => {
-                code.push_back(instr!("$fail"));
-                return Ok(());
-            }
-        };
-
-        self.add_call(code, instr!("is", temp_v!(1), at), call_policy);
         Ok(())
     }
 
@@ -1094,7 +1007,7 @@ impl<'a> CodeGenerator<'a> {
 
         match term {
             QueryTerm::Clause(_, ct, _, call_policy) => {
-                self.add_call(code, ct.to_instr(), *call_policy);
+                self.marker.add_call(code, ct.to_instr(), *call_policy);
             }
             _ => unreachable!(),
         };
@@ -1185,6 +1098,7 @@ impl<'a> CodeGenerator<'a> {
         let index_loc = code.len();
 
         for (i, clause) in clauses.iter_mut().enumerate() {
+            let prev_clause_code_len = code.len();
             self.marker.reset();
             let clause_code = match clause {
                 PredicateClause::Fact(fact, var_data) => {
@@ -1259,7 +1173,7 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     None
                 },
-                clause_start: index_loc,
+                clause_start: prev_clause_code_len,
             });
 
             code.extend(clause_code);

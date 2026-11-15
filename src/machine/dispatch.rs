@@ -1,6 +1,6 @@
 use std::sync::atomic;
 
-use crate::arena::*;
+use crate::arena::alloc::*;
 use crate::atom_table::*;
 use crate::indexing_iter::IndexedClauseView;
 use crate::instructions::*;
@@ -191,10 +191,21 @@ impl MachineState {
         Ok(())
     }
 
-    fn is(&mut self, r: RegType, at: ArithmeticTerm) -> CallResult {
-        let n1 = self.store(self.deref(self[r]));
+    #[inline]
+    fn pop_interms(&mut self, at_1: &ArithmeticTerm, at_2: &ArithmeticTerm) {
+        if at_1.is_interm() || at_2.is_interm() {
+            self.heap.truncate(self.s_offset);
+        }
+    }
 
-        match self.get_number(&at)? {
+    fn is(&mut self, at_1: ArithmeticTerm, at_2: ArithmeticTerm) -> CallResult {
+        let n1 = match at_1 {
+            ArithmeticTerm::Interm(t) => self.heap[self.s_offset + t],
+            ArithmeticTerm::Reg(r) => self.store(self.deref(self[r])),
+            ArithmeticTerm::Number(n) => HeapCellValue::from((n, &mut self.arena)),
+        };
+
+        match self.get_number(&at_2)? {
             Number::Fixnum(n) => self.unify_fixnum(n, n1),
             Number::Float(n) => {
                 let n = float_alloc!(n.into_inner(), self.arena);
@@ -203,6 +214,8 @@ impl MachineState {
             Number::Integer(n) => self.unify_big_int(n, n1),
             Number::Rational(n) => self.unify_rational(n, n1),
         }
+
+        self.pop_interms(&at_1, &at_2);
 
         Ok(())
     }
@@ -246,7 +259,7 @@ impl MachineState {
             try_numeric_result!(add(n1, n2, &mut self.arena), stub_gen)
         );
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -262,7 +275,7 @@ impl MachineState {
             try_numeric_result!(sub(n1, n2, &mut self.arena), stub_gen)
         );
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -278,7 +291,7 @@ impl MachineState {
             try_numeric_result!(mul(n1, n2, &mut self.arena), stub_gen)
         );
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -289,7 +302,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, max(n1, n2));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -300,7 +313,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, min(n1, n2));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -311,7 +324,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, int_pow(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -322,7 +335,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, gcd(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -333,7 +346,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, pow(n1, n2, atom!("**")));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -349,7 +362,7 @@ impl MachineState {
             &mut self.arena
         ));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -360,7 +373,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, int_floor_div(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -371,7 +384,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, idiv(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -380,7 +393,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
 
         let value = abs(n1, &mut self.arena);
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -389,7 +402,7 @@ impl MachineState {
         let n = try_or_throw!(self, self.get_number(a1), return);
         let value = n.sign();
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -398,7 +411,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = neg(n1, &mut self.arena);
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -407,7 +420,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = try_or_throw_gen!(self, bitwise_complement(n1, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -417,7 +430,7 @@ impl MachineState {
         let n2 = try_or_throw!(self, self.get_number(a2), return);
         let value = try_or_throw_gen!(self, div(n1, n2));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -428,7 +441,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, shr(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -439,7 +452,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, shl(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -450,7 +463,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, xor(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -461,7 +474,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, and(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -472,7 +485,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, or(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -483,7 +496,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, modulus(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -494,7 +507,7 @@ impl MachineState {
 
         let value = try_or_throw_gen!(self, remainder(n1, n2, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -503,7 +516,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, cos(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -512,7 +525,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, sin(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -521,7 +534,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, tan(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -530,7 +543,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, sqrt(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -539,7 +552,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, log(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -548,7 +561,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, exp(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -557,7 +570,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, acos(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -566,7 +579,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, asin(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -575,7 +588,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, atan(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -586,7 +599,7 @@ impl MachineState {
 
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, atan2(n1, n2))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -595,7 +608,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = Number::Float(OrderedFloat(try_or_throw_gen!(self, float(n1))));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -604,7 +617,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
 
         let value = truncate(n1, &mut self.arena);
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -613,7 +626,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
         let value = try_or_throw_gen!(self, round(n1, &mut self.arena));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -622,7 +635,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
 
         let value = ceiling(n1, &mut self.arena);
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -631,7 +644,7 @@ impl MachineState {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
 
         let value = floor(n1, &mut self.arena);
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -644,7 +657,7 @@ impl MachineState {
             float_fractional_part(n1)
         )));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
@@ -657,14 +670,14 @@ impl MachineState {
             float_integer_part(n1)
         )));
 
-        self.registers[t] = HeapCellValue::from((value, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((value, &mut self.arena));
         self.p += 1;
     }
 
     #[inline(always)]
     fn plus_instr(&mut self, a1: &ArithmeticTerm, t: usize) {
         let n1 = try_or_throw!(self, self.get_number(a1), return);
-        self.registers[t] = HeapCellValue::from((n1, &mut self.arena));
+        self.heap[self.s_offset + t] = HeapCellValue::from((n1, &mut self.arena));
         self.p += 1;
     }
 
@@ -761,7 +774,7 @@ impl MachineState {
             if let Some(r) = cell.as_var() {
                 let target_cell = backtrack_on_resource_error!(
                     self,
-                    self.heap.allocate_pstr(string_cursor),
+                    self.heap.allocate_pstr(string_cursor.as_bytes()),
                     return
                 );
 
@@ -823,7 +836,7 @@ impl MachineState {
                             break;
                         }
                     } else if let Some(r) = cell.as_var() {
-                        self.bind(r, char_as_cell!(c));
+                        self.bind(r, codepoint_as_cell!(c));
                     } else {
                         self.fail = true;
                     }
@@ -850,7 +863,7 @@ impl MachineState {
                             break;
                         }
                     } else if let Some(r) = cell.as_var() {
-                        self.bind(r, char_as_cell!(c));
+                        self.bind(r, codepoint_as_cell!(c));
                     } else {
                         self.fail = true;
                         break;
@@ -869,7 +882,7 @@ impl MachineState {
                     if h == v {
                         let target_cell = backtrack_on_resource_error!(
                             self,
-                            self.heap.allocate_pstr(string_cursor),
+                            self.heap.allocate_pstr(string_cursor.as_bytes()),
                             return
                         );
 
@@ -1078,12 +1091,12 @@ impl MachineState {
                 HeapPtr::HeapCell(_) => self.s_offset += n,
                 &HeapPtr::PStr(pstr_loc) => {
                     debug_assert!(n <= 2);
-                    let mut char_iter = self.heap.char_iter(pstr_loc);
+                    let mut c_iter = self.heap.char_iter(pstr_loc);
 
                     // this only matters in the case that n == 1, but the case
                     // analysis isn't worth doing since the effect is benign if n ==
                     // 2
-                    self.s_offset += char_iter.next().unwrap().len_utf8();
+                    self.s_offset += c_iter.next().unwrap().len_utf8();
                 }
             },
             MachineMode::Write => {
@@ -1112,7 +1125,8 @@ impl MachineState {
 
     #[inline(always)]
     fn put_partial_string_instr(&mut self, string: &str, r: RegType) {
-        self[r] = backtrack_on_resource_error!(self, self.heap.allocate_pstr(string), return);
+        self[r] =
+            backtrack_on_resource_error!(self, self.heap.allocate_pstr(string.as_bytes()), return);
         self.p += 1;
     }
 
@@ -1431,6 +1445,22 @@ impl Machine {
                         self.machine_st.attr_var_init.cp = self.machine_st.p;
                         let (_, arity) = self.code[self.machine_st.p].to_name_and_arity();
                         self.run_verify_attr_interrupt(arity);
+                    }
+                    &Instruction::AllocateOnHeap(num_cells) => {
+                        let old_len = self.machine_st.heap.cell_len();
+                        self.machine_st.s_offset = old_len;
+
+                        let mut writer = backtrack_on_resource_error!(
+                            self.machine_st,
+                            self.machine_st.heap.reserve(num_cells),
+                            continue
+                        );
+
+                        unsafe {
+                            writer.set_len(old_len + num_cells);
+                        }
+
+                        self.machine_st.p += 1;
                     }
                     &Instruction::Add(ref a1, ref a2, t) => self.machine_st.add_instr(a1, a2, t),
                     &Instruction::Sub(ref a1, ref a2, t) => self.machine_st.sub_instr(a1, a2, t),
@@ -2002,12 +2032,12 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::DefaultCallIs(r, at) => {
-                        try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
+                    &Instruction::DefaultCallIs(at_1, at_2) => {
+                        try_or_throw!(self.machine_st, self.machine_st.is(at_1, at_2), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p += 1);
                     }
-                    &Instruction::DefaultExecuteIs(r, at) => {
-                        try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
+                    &Instruction::DefaultExecuteIs(at_1, at_2) => {
+                        try_or_throw!(self.machine_st, self.machine_st.is(at_1, at_2), continue);
                         step_or_fail!(self.machine_st, self.machine_st.p = self.machine_st.cp);
                     }
                     Instruction::DefaultCallGetNumber(at) => {
@@ -2328,8 +2358,8 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
-                    &Instruction::CallIs(r, at) => {
-                        try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
+                    &Instruction::CallIs(at_1, at_2) => {
+                        try_or_throw!(self.machine_st, self.machine_st.is(at_1, at_2), continue);
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
@@ -2338,8 +2368,8 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                     }
-                    &Instruction::ExecuteIs(r, at) => {
-                        try_or_throw!(self.machine_st, self.machine_st.is(r, at), continue);
+                    &Instruction::ExecuteIs(at_1, at_2) => {
+                        try_or_throw!(self.machine_st, self.machine_st.is(at_1, at_2), continue);
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
@@ -2455,6 +2485,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Less | Ordering::Equal => {
                                 increment_call_count!(self.machine_st);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2477,6 +2508,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Less | Ordering::Equal => {
                                 increment_call_count!(self.machine_st);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2499,6 +2531,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Equal => {
                                 increment_call_count!(self.machine_st);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2521,6 +2554,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Equal => {
                                 increment_call_count!(self.machine_st);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2546,6 +2580,7 @@ impl Machine {
                             }
                             _ => {
                                 increment_call_count!(self.machine_st);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                         }
@@ -2568,6 +2603,7 @@ impl Machine {
                             }
                             _ => {
                                 increment_call_count!(self.machine_st);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                         }
@@ -2587,6 +2623,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Greater | Ordering::Equal => {
                                 increment_call_count!(self.machine_st);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2609,6 +2646,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Greater | Ordering::Equal => {
                                 increment_call_count!(self.machine_st);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2631,6 +2669,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Greater => {
                                 increment_call_count!(self.machine_st);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2653,6 +2692,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Greater => {
                                 increment_call_count!(self.machine_st);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2675,6 +2715,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Less => {
                                 increment_call_count!(self.machine_st);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2697,6 +2738,7 @@ impl Machine {
                         match n1.cmp(&n2) {
                             Ordering::Less => {
                                 increment_call_count!(self.machine_st);
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2718,6 +2760,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Less | Ordering::Equal => {
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2739,6 +2782,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Less | Ordering::Equal => {
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2763,6 +2807,7 @@ impl Machine {
                                 self.machine_st.backtrack();
                             }
                             _ => {
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                         }
@@ -2784,6 +2829,7 @@ impl Machine {
                                 self.machine_st.backtrack();
                             }
                             _ => {
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                         }
@@ -2802,6 +2848,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Equal => {
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2823,6 +2870,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Equal => {
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2844,6 +2892,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Greater | Ordering::Equal => {
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2865,6 +2914,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Greater | Ordering::Equal => {
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2886,6 +2936,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Greater => {
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2907,6 +2958,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Greater => {
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2928,6 +2980,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Less => {
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2949,6 +3002,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Less => {
+                                self.machine_st.pop_interms(at_1, at_2);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -3219,15 +3273,12 @@ impl Machine {
                             .store(self.machine_st.deref(self.machine_st[r]));
 
                         read_heap_cell!(d,
-                            (HeapCellValueTag::Cons, ptr) => {
-                                match_untyped_arena_ptr!(ptr,
-                                     (ArenaHeaderTag::Rational | ArenaHeaderTag::Integer, _r) => {
-                                         self.machine_st.p += 1;
-                                     }
-                                     _ => {
-                                         self.machine_st.backtrack();
-                                     }
-                                );
+                            (HeapCellValueTag::Cons, cons_ptr) => {
+                                if matches!(cons_ptr.get_tag(), ArenaHeaderTag::Rational | ArenaHeaderTag::Integer) {
+                                    self.machine_st.p += 1;
+                                } else {
+                                    self.machine_st.backtrack();
+                                }
                             }
                             (HeapCellValueTag::Fixnum) => {
                                 self.machine_st.p += 1;
@@ -3243,15 +3294,12 @@ impl Machine {
                             .store(self.machine_st.deref(self.machine_st[r]));
 
                         read_heap_cell!(d,
-                            (HeapCellValueTag::Cons, ptr) => {
-                                match_untyped_arena_ptr!(ptr,
-                                     (ArenaHeaderTag::Rational | ArenaHeaderTag::Integer, _r) => {
-                                         self.machine_st.p = self.machine_st.cp;
-                                     }
-                                     _ => {
-                                         self.machine_st.backtrack();
-                                     }
-                                );
+                            (HeapCellValueTag::Cons, cons_ptr) => {
+                                if matches!(cons_ptr.get_tag(), ArenaHeaderTag::Rational | ArenaHeaderTag::Integer) {
+                                    self.machine_st.p = self.machine_st.cp;
+                                } else {
+                                    self.machine_st.backtrack();
+                                }
                             }
                             (HeapCellValueTag::Fixnum) => {
                                 self.machine_st.p = self.machine_st.cp;

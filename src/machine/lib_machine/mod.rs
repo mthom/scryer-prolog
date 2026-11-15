@@ -2,6 +2,8 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
+use crate::arena::stream_insts::ByteStream;
+use crate::arena::stream_layout::Stream;
 use crate::atom_table;
 use crate::heap_iter::{NonListElider, stackful_post_order_iter};
 use crate::machine::heap::AllocError;
@@ -19,7 +21,7 @@ use crate::types::UntypedArenaPtr;
 use dashu::{Integer, Rational};
 use indexmap::IndexMap;
 
-use super::{Atom, AtomCell, HeapCellValue, HeapCellValueTag, Machine, streams::Stream};
+use super::{Atom, AtomCell, HeapCellValue, HeapCellValueTag, Machine};
 
 #[cfg(test)]
 mod tests;
@@ -310,9 +312,12 @@ impl Term {
                             _ => { unreachable!() },
                         }
                     } else {
-                        match_untyped_arena_ptr!(ptr,
-                            (ArenaHeaderTag::Stream, stream) => {
-                                let stream_term = if let Some(alias) = stream.options().get_alias() {
+                        match ptr.get_tag() {
+                            ArenaHeaderTag::Dropped => {
+                                term_stack.push(Term::atom("$dropped_value"));
+                            }
+                            _ if let Some(stream) = Stream::from_tag(ptr) => {
+                                let stream_term = if let Some(alias) = stream.options.get_alias() {
                                     Term::atom(alias.as_str().to_string())
                                 } else {
                                     Term::compound("$stream", [
@@ -321,13 +326,8 @@ impl Term {
                                 };
                                 term_stack.push(stream_term);
                             }
-                            (ArenaHeaderTag::Dropped, _stream) => {
-                                term_stack.push(Term::atom("$dropped_value"));
-                            }
-                            _ => {
-                                unreachable!();
-                            }
-                        );
+                            _ => unreachable!(),
+                        }
                     }
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
@@ -348,7 +348,7 @@ impl Term {
                 }
                 (HeapCellValueTag::PStrLoc, pstr_loc) => {
                     let tail = term_stack.pop().unwrap();
-                    let char_iter = iter.base_iter.heap.char_iter(pstr_loc);
+                    let c_iter = iter.base_iter.heap.char_iter(pstr_loc);
 
                     match tail {
                         Term::Atom(atom) => {
@@ -357,17 +357,17 @@ impl Term {
                             }
                         },
                         Term::List(l) if l.is_empty() => {
-                            term_stack.push(Term::String(char_iter.collect()));
+                            term_stack.push(Term::String(c_iter.collect()));
                         }
                         Term::List(l) => {
-                            let mut list: Vec<Term> = char_iter
+                            let mut list: Vec<Term> = c_iter
                                 .map(|x| Term::Atom(x.to_string()))
                                 .collect();
                             list.extend(l.into_iter());
                             term_stack.push(Term::List(list));
                         },
                         _ => {
-                            let mut list: Vec<Term> = char_iter
+                            let mut list: Vec<Term> = c_iter
                                 .map(|x| Term::Atom(x.to_string()))
                                 .collect();
 
@@ -584,10 +584,9 @@ impl Machine {
 
     /// Runs a query.
     pub fn run_query(&mut self, query: impl Into<String>) -> QueryState<'_> {
-        let mut parser = Parser::new(
-            Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
-            &mut self.machine_st,
-        );
+        let byte_stream = ByteStream::from_string(query.into());
+
+        let mut parser = Parser::new(byte_stream, &mut self.machine_st);
         let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
         let term = parser
             .read_term(&op_dir, Tokens::Default)

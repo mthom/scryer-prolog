@@ -1,8 +1,13 @@
 use base64::Engine;
+use compact_str::CompactString;
 use dashu::integer::{Sign, UBig};
 use num_order::NumOrd;
 
-use crate::arena::*;
+use crate::arena::alloc::*;
+use crate::arena::opt_in_buf_reader::*;
+use crate::arena::read_line;
+use crate::arena::stream_insts::*;
+use crate::arena::stream_layout::*;
 use crate::atom_table::*;
 use crate::codegen::CodeGenSettings;
 #[cfg(feature = "ffi")]
@@ -28,16 +33,16 @@ use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
 use crate::machine::preprocessor::Preprocessor;
 use crate::machine::stack::*;
-use crate::machine::streams::*;
 use crate::machine::term_stream::InlineTermStream;
 use crate::machine::{Machine, get_structure_index};
 use crate::offset_table::*;
 use crate::parser::ast::*;
-use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
+use crate::parser::grapheme_classifiers::*;
 use crate::parser::parser::*;
 use crate::read::*;
 use crate::types::*;
+
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
@@ -156,12 +161,12 @@ impl ModuleQuantification {
 }
 
 fn pstr_segment_char_count_and_tail(heap: &Heap, pstr_loc: usize) -> (usize, usize) {
-    let char_iter = heap.char_iter(pstr_loc);
+    let c_iter = heap.char_iter(pstr_loc);
 
     let mut char_count = 0;
     let mut byte_offset = 0;
 
-    for c in char_iter {
+    for c in c_iter {
         if c == '\u{0}' {
             break;
         }
@@ -178,12 +183,12 @@ fn pstr_segment_char_count_up_to(
     pstr_loc: usize,
     max_chars: usize,
 ) -> PStrSegmentCountResult {
-    let mut char_iter = heap.char_iter(pstr_loc);
+    let mut c_iter = heap.char_iter(pstr_loc);
     let mut char_count = 0;
     let mut byte_offset = 0;
 
     if max_chars > 0 {
-        for c in &mut char_iter {
+        for c in &mut c_iter {
             if c == '\u{0}' {
                 break;
             }
@@ -197,7 +202,7 @@ fn pstr_segment_char_count_up_to(
         }
     }
 
-    if char_iter.next().is_some() {
+    if c_iter.next().is_some() {
         PStrSegmentCountResult::Mid {
             char_count,
             pstr_loc: pstr_loc + byte_offset,
@@ -328,7 +333,7 @@ impl BrentAlgState {
         if self.max_steps == -1 {
             let num_chars;
             (num_chars, next_cell_loc) = pstr_segment_char_count_and_tail(heap, pstr_loc);
-            self.pstr_chars += num_chars - 1;
+            self.pstr_chars += num_chars.saturating_sub(1);
         } else {
             let max_chars = self.max_steps as usize - self.num_steps();
 
@@ -952,9 +957,9 @@ impl MachineState {
         use crate::parser::lexer::*;
 
         let nx = self.store(self.deref(self.registers[2]));
-        let iter = std::io::Cursor::new(string);
+        let iter = BorrowedByteStream::from_str(string);
 
-        let mut lexer = Lexer::new(CharReader::new(iter), self);
+        let mut lexer = Lexer::new(iter, self);
         let mut tokens = vec![];
 
         match lexer.next_number_token() {
@@ -974,50 +979,48 @@ impl MachineState {
             }
         }
 
-        #[allow(clippy::never_loop)] // TODO why is there a loop here that never loops?
-        loop {
-            match lexer.lookahead_char() {
-                Err(e) if e.is_unexpected_eof() => {
-                    let mut parser = Parser::from_lexer(lexer);
-                    let op_dir = CompositeOpDir::new(&indices.op_dir, None);
+        match lexer.peek_grapheme(0) {
+            Err(e) if e.is_unexpected_eof() => {
+                let mut parser = Parser::from_lexer(lexer);
+                let op_dir = CompositeOpDir::new(&indices.op_dir, None);
 
-                    tokens.reverse();
+                tokens.reverse();
 
-                    match parser.read_term(&op_dir, Tokens::Provided(tokens)) {
-                        Err(err) => {
-                            let err = self.syntax_error(err);
-                            return Err(self.error_form(err, stub_gen()));
-                        }
-                        Ok(Term::Literal(_, Literal::Rational(n))) => {
-                            self.unify_rational(n, nx);
-                        }
-                        Ok(Term::Literal(_, Literal::F64(offset, _n))) => {
-                            self.unify_f64(offset, nx);
-                        }
-                        Ok(Term::Literal(_, Literal::Integer(n))) => {
-                            self.unify_big_int(n, nx);
-                        }
-                        Ok(Term::Literal(_, Literal::Fixnum(n))) => {
-                            self.unify_fixnum(n, nx);
-                        }
-                        _ => {
-                            let err = parser.lexer.parse_big_int_error();
-                            let err = self.syntax_error(err);
-
-                            return Err(self.error_form(err, stub_gen()));
-                        }
+                match parser.read_term(&op_dir, Tokens::Provided(tokens)) {
+                    Err(err) => {
+                        let err = self.syntax_error(err);
+                        return Err(self.error_form(err, stub_gen()));
                     }
+                    Ok(Term::Literal(_, Literal::Rational(n))) => {
+                        self.unify_rational(n, nx);
+                    }
+                    Ok(Term::Literal(_, Literal::F64(offset, _n))) => {
+                        self.unify_f64(offset, nx);
+                    }
+                    Ok(Term::Literal(_, Literal::Integer(n))) => {
+                        self.unify_big_int(n, nx);
+                    }
+                    Ok(Term::Literal(_, Literal::Fixnum(n))) => {
+                        self.unify_fixnum(n, nx);
+                    }
+                    _ => {
+                        let err = parser.lexer.parse_big_int_error();
+                        let err = self.syntax_error(err);
 
-                    return Ok(());
+                        return Err(self.error_form(err, stub_gen()));
+                    }
                 }
-                Ok(c) => {
-                    let err = lexer.unexpected_char(c);
-                    let err = self.syntax_error(err);
 
-                    return Err(self.error_form(err, stub_gen()));
-                }
-                Err(_) => unreachable!(),
+                Ok(())
             }
+            Ok(c) => {
+                let c = c.to_owned();
+                let err = lexer.unexpected_grapheme(c);
+                let err = self.syntax_error(err);
+
+                Err(self.error_form(err, stub_gen()))
+            }
+            Err(_) => unreachable!(),
         }
     }
 
@@ -1517,7 +1520,13 @@ impl Machine {
             let helper_clause_loc = self.code.len();
             let body_term = self
                 .machine_st
-                .read_term_from_heap(self.machine_st.registers[1]);
+                .read_term_from_heap(self.machine_st.registers[1])
+                .ok_or_else(|| {
+                    functor!(
+                        atom!("representation_error"),
+                        [atom_as_cell((RepFlag::Term.as_atom()))]
+                    )
+                })?;
 
             let compile = || {
                 let mut loader: Loader<'_, InlineLoadState<'_>> =
@@ -1817,27 +1826,19 @@ impl Machine {
 
         read_heap_cell!(addr,
             (HeapCellValueTag::Cons, cons_ptr) => {
-                match_untyped_arena_ptr!(cons_ptr,
-                    (ArenaHeaderTag::Stream, other_stream) => {
-                        self.machine_st.fail = stream != other_stream;
-                    }
-                    _ => {
-                        let stub = functor_stub(atom!("current_input"), 1);
-                        let err = self.machine_st.domain_error(DomainErrorType::Stream, addr);
-
-                        return Err(self.machine_st.error_form(err, stub));
-                    }
-                );
+                if let Some(other_stream) = Stream::from_tag(cons_ptr) {
+                    self.machine_st.fail = stream != other_stream;
+                    return Ok(());
+                }
             }
             _ => {
-                let stub = functor_stub(atom!("current_input"), 1);
-                let err = self.machine_st.domain_error(DomainErrorType::Stream, addr);
-
-                return Err(self.machine_st.error_form(err, stub));
             }
         );
 
-        Ok(())
+        let stub = functor_stub(atom!("current_input"), 1);
+        let err = self.machine_st.domain_error(DomainErrorType::Stream, addr);
+
+        Err(self.machine_st.error_form(err, stub))
     }
 
     #[inline(always)]
@@ -1852,27 +1853,19 @@ impl Machine {
 
         read_heap_cell!(addr,
             (HeapCellValueTag::Cons, cons_ptr) => {
-                match_untyped_arena_ptr!(cons_ptr,
-                    (ArenaHeaderTag::Stream, other_stream) => {
-                        self.machine_st.fail = stream != other_stream;
-                    }
-                    _ => {
-                        let stub = functor_stub(atom!("current_output"), 1);
-                        let err = self.machine_st.domain_error(DomainErrorType::Stream, addr);
-
-                        return Err(self.machine_st.error_form(err, stub));
-                    }
-                );
+                if let Some(other_stream) = Stream::from_tag(cons_ptr) {
+                    self.machine_st.fail = stream != other_stream;
+                    return Ok(());
+                }
             }
             _ => {
-                let stub = functor_stub(atom!("current_output"), 1);
-                let err = self.machine_st.domain_error(DomainErrorType::Stream, addr);
-
-                return Err(self.machine_st.error_form(err, stub));
             }
         );
 
-        Ok(())
+        let stub = functor_stub(atom!("current_output"), 1);
+        let err = self.machine_st.domain_error(DomainErrorType::Stream, addr);
+
+        Err(self.machine_st.error_form(err, stub))
     }
 
     #[inline(always)]
@@ -1889,7 +1882,7 @@ impl Machine {
                     {
                         let file_string_cell = resource_error_call_result!(
                             self.machine_st,
-                            self.machine_st.heap.allocate_cstr(name)
+                            self.machine_st.heap.allocate_cstr(name.as_bytes())
                         );
 
                         files.push(file_string_cell);
@@ -1996,7 +1989,7 @@ impl Machine {
 
                 let cstr_cell = step_or_resource_error!(
                     self.machine_st,
-                    self.machine_st.heap.allocate_cstr(&chars_string)
+                    self.machine_st.heap.allocate_cstr(chars_string.as_bytes())
                 );
 
                 unify!(self.machine_st, cstr_cell, self.machine_st.registers[3]);
@@ -2009,8 +2002,10 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn directory_separator(&mut self) {
-        self.machine_st
-            .unify_char(std::path::MAIN_SEPARATOR, self.machine_st.registers[1]);
+        self.machine_st.unify_atom(
+            AtomCell::from_codepoint(std::path::MAIN_SEPARATOR).get_name(),
+            self.machine_st.registers[1],
+        );
     }
 
     #[inline(always)]
@@ -2105,7 +2100,7 @@ impl Machine {
 
             let current_string = resource_error_call_result!(
                 self.machine_st,
-                self.machine_st.heap.allocate_cstr(current)
+                self.machine_st.heap.allocate_cstr(current.as_bytes())
             );
 
             unify!(
@@ -2149,7 +2144,7 @@ impl Machine {
 
             let canonical_string = resource_error_call_result!(
                 self.machine_st,
-                self.machine_st.heap.allocate_cstr(cs)
+                self.machine_st.heap.allocate_cstr(cs.as_bytes())
             );
 
             unify!(
@@ -2174,7 +2169,7 @@ impl Machine {
 
                 let cell = step_or_resource_error!(
                     self.machine_st,
-                    self.machine_st.heap.allocate_cstr(&name.as_str())
+                    self.machine_st.heap.allocate_cstr(name.as_str().as_bytes())
                 );
 
                 unify!(self.machine_st, self.machine_st.registers[2], cell);
@@ -2384,8 +2379,10 @@ impl Machine {
                 }
             };
 
-            let pstr_loc_cell =
-                step_or_resource_error!(self.machine_st, self.machine_st.heap.allocate_pstr(&str));
+            let pstr_loc_cell = step_or_resource_error!(
+                self.machine_st,
+                self.machine_st.heap.allocate_pstr(str.as_bytes())
+            );
 
             let tail_loc = self.machine_st.heap.cell_len();
 
@@ -2449,7 +2446,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn peek_byte(&mut self) -> CallResult {
-        let _guard = RawReadGuard::new();
+        let _guard = read_line::RawReadGuard::new();
         let stub_gen = || functor_stub(atom!("peek_byte"), 2);
 
         let mut stream = self.machine_st.get_stream_or_alias(
@@ -2467,7 +2464,7 @@ impl Machine {
             2,
         )?;
 
-        if stream.past_end_of_stream() {
+        if stream.past_end_of_stream {
             return Ok(());
         }
 
@@ -2512,7 +2509,7 @@ impl Machine {
 
         loop {
             match stream.peek_byte().map_err(|e| e.kind()) {
-                Ok(b) => {
+                Ok(Some(b)) => {
                     self.machine_st.unify_fixnum(Fixnum::build_with(b), addr);
                     break;
                 }
@@ -2528,7 +2525,7 @@ impl Machine {
                         2,
                     )?;
 
-                    if EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail {
+                    if EOFAction::Reset != stream.options.eof_action() || self.machine_st.fail {
                         break;
                     }
                 }
@@ -2540,7 +2537,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn peek_char(&mut self) -> CallResult {
-        let _guard = RawReadGuard::new();
+        let _guard = read_line::RawReadGuard::new();
         let stub_gen = || functor_stub(atom!("peek_char"), 2);
 
         let mut stream = self.machine_st.get_stream_or_alias(
@@ -2558,8 +2555,8 @@ impl Machine {
             2,
         )?;
 
-        if stream.past_end_of_stream()
-            && (EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail)
+        if stream.past_end_of_stream
+            && (EOFAction::Reset != stream.options.eof_action() || self.machine_st.fail)
         {
             return Ok(());
         }
@@ -2568,9 +2565,7 @@ impl Machine {
 
         if stream.at_end_of_stream() {
             let end_of_file = atom!("end_of_file");
-
             self.machine_st.unify_atom(end_of_file, a2);
-
             return Ok(());
         }
 
@@ -2582,8 +2577,8 @@ impl Machine {
             */
             (HeapCellValueTag::Atom, (name, arity)) => {
                 if arity == 0 {
-                    if let Some(c) = name.as_char() {
-                        char_as_cell!(c)
+                    if name.as_char().is_some() {
+                        a2
                     } else {
                         let err = self.machine_st.type_error(ValidType::InCharacter, a2);
                         return Err(self.machine_st.error_form(err, stub_gen()));
@@ -2603,15 +2598,14 @@ impl Machine {
         );
 
         loop {
-            match stream
-                .peek_char()
-                .map(|result| result.map_err(|e| e.kind()))
-            {
-                Some(Ok(d)) => {
-                    self.machine_st.unify_char(d, a2);
+            match stream.peek_char().map_err(|e| e.kind()) {
+                Ok(Some(d)) => {
+                    let d = CompactString::from_iter(once(d));
+                    let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &d);
+                    self.machine_st.unify_atom(atom, a2);
                     break;
                 }
-                Some(Err(ErrorKind::PermissionDenied)) => {
+                Err(ErrorKind::PermissionDenied) => {
                     self.machine_st.fail = true;
                     break;
                 }
@@ -2623,7 +2617,7 @@ impl Machine {
                         2,
                     )?;
 
-                    if EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail {
+                    if EOFAction::Reset != stream.options.eof_action() || self.machine_st.fail {
                         break;
                     }
                 }
@@ -2635,7 +2629,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn peek_code(&mut self) -> CallResult {
-        let _guard = RawReadGuard::new();
+        let _guard = read_line::RawReadGuard::new();
         let stub_gen = || functor_stub(atom!("peek_code"), 2);
 
         let mut stream = self.machine_st.get_stream_or_alias(
@@ -2653,8 +2647,8 @@ impl Machine {
             2,
         )?;
 
-        if stream.past_end_of_stream()
-            && (EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail)
+        if stream.past_end_of_stream
+            && (EOFAction::Reset != stream.options.eof_action() || self.machine_st.fail)
         {
             return Ok(());
         }
@@ -2710,13 +2704,13 @@ impl Machine {
         loop {
             let result = stream.peek_char();
 
-            match result.map(|result| result.map_err(|e| e.kind())) {
-                Some(Ok(c)) => {
+            match result.map_err(|e| e.kind()) {
+                Ok(Some(c)) => {
                     self.machine_st
                         .unify_fixnum(Fixnum::build_with(u32::from(c)), addr);
                     break;
                 }
-                Some(Err(ErrorKind::PermissionDenied)) => {
+                Err(ErrorKind::PermissionDenied) => {
                     self.machine_st.fail = true;
                     break;
                 }
@@ -2728,7 +2722,7 @@ impl Machine {
                         2,
                     )?;
 
-                    if EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail {
+                    if EOFAction::Reset != stream.options.eof_action() || self.machine_st.fail {
                         break;
                     }
                 }
@@ -2760,7 +2754,7 @@ impl Machine {
 
         let cstr_cell = step_or_resource_error!(
             self.machine_st,
-            self.machine_st.heap.allocate_cstr(string.trim())
+            self.machine_st.heap.allocate_cstr(string.trim().as_bytes())
         );
 
         unify!(self.machine_st, cstr_cell, chs);
@@ -2871,13 +2865,14 @@ impl Machine {
                             }
                         };
 
-                        self.machine_st.unify_char(c, a1);
+                        self.machine_st.unify_atom(AtomCell::from_codepoint(c).get_name(), a1);
                         return Ok(());
                     }
                     Ok(Number::Fixnum(n)) => {
                         if let Ok(n) = u32::try_from(n.get_num())
                             && let Some(c) = std::char::from_u32(n) {
-                                self.machine_st.unify_char(c, a1);
+                                let c_atom = AtomCell::from_codepoint(c).get_name();
+                                self.machine_st.unify_atom(c_atom, a1);
                                 return Ok(());
                             }
 
@@ -2903,89 +2898,55 @@ impl Machine {
         let a1 = self.deref_register(1);
         let a2 = self.deref_register(2);
 
-        let c = read_heap_cell!(a1,
-            /*
-            (HeapCellValueTag::Char, c) => {
-                c
-            }
-            */
+        let char_str_atom = read_heap_cell!(a1,
             (HeapCellValueTag::Atom, (name, _arity)) => {
-                name.as_char().unwrap()
+                name
             }
             (HeapCellValueTag::Str, s) => {
                 let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
                     .get_name_and_arity();
 
                 debug_assert_eq!(arity, 0);
-                name.as_char().unwrap()
+                name
             }
             _ => {
                 unreachable!()
             }
         );
 
+        let c = char_str_atom.as_char().unwrap();
+
         read_heap_cell!(a2,
             (HeapCellValueTag::Atom, (chars, _arity)) => {
-                self.machine_st.fail = true; // This predicate fails by default.
-                macro_rules! macro_check {
-                    ($id:ident, $name:expr) => {
-                        if $id!(c) && chars == $name {
-                            self.machine_st.fail = false;
-                            return;
-                        }
-                    };
-                }
+                let correctly_classified = match chars {
+                    atom!("alpha") => c.is_alphabetic_grapheme(),
+                    atom!("alphabetic") => c.is_alphabetic(),
+                    atom!("alnum") => c.is_alphanumeric_grapheme(),
+                    atom!("ascii") => c.is_ascii(),
+                    atom!("ascii_punctuation") => c.is_ascii_punctuation(),
+                    atom!("ascii_graphic") => c.is_ascii_graphic(),
+                    atom!("binary_digit") => is_binary_grapheme(c),
+                    atom!("control") => c.is_control(),
+                    atom!("decimal_digit") => is_decimal_digit_grapheme(c),
+                    atom!("exponent") => is_exponent_grapheme(c),
+                    atom!("graphic") => is_graphic_grapheme(c),
+                    atom!("graphic_token") => is_graphic_token_grapheme(c),
+                    atom!("layout") => is_layout_grapheme(c),
+                    atom!("lower") => c.is_lowercase(),
+                    atom!("meta") => is_meta_grapheme(c),
+                    atom!("numeric") => c.is_numeric(),
+                    atom!("octal_digit") => is_octal_digit_grapheme(c),
+                    atom!("octet") => is_octet_grapheme(c),
+                    atom!("prolog") => is_prolog_grapheme(c),
+                    atom!("solo") => is_solo_grapheme(c),
+                    atom!("symbolic_control") => is_symbol_control_grapheme(c),
+                    atom!("symbolic_hexadecimal") => is_symbolic_hexadecimal_grapheme(c),
+                    atom!("upper") => c.is_uppercase(),
+                    atom!("whitespace") => c.is_whitespace(),
+                    _ => false,
+                };
 
-                macro_rules! method_check {
-                    ($id:ident, $name:expr) => {
-                        if c.$id() && chars == $name {
-                            self.machine_st.fail = false;
-                            return;
-                        }
-                    };
-                }
-
-                macro_check!(alpha_char, atom!("alpha"));
-                method_check!(is_alphabetic, atom!("alphabetic"));
-                method_check!(is_alphanumeric, atom!("alphanumeric"));
-                macro_check!(alpha_numeric_char, atom!("alnum"));
-                method_check!(is_ascii, atom!("ascii"));
-                method_check!(is_ascii_punctuation, atom!("ascii_punctuation"));
-                method_check!(is_ascii_graphic, atom!("ascii_graphic"));
-                // macro_check!(backslash_char, atom!("backslash"));
-                // macro_check!(back_quote_char, atom!("back_quote"));
-                macro_check!(binary_digit_char, atom!("binary_digit"));
-                // macro_check!(capital_letter_char, atom!("upper"));
-                // macro_check!(comment_1_char, "comment_1");
-                // macro_check!(comment_2_char, "comment_2");
-                method_check!(is_control, atom!("control"));
-                // macro_check!(cut_char, atom!("cut"));
-                macro_check!(decimal_digit_char, atom!("decimal_digit"));
-                // macro_check!(decimal_point_char, atom!("decimal_point"));
-                // macro_check!(double_quote_char, atom!("double_quote"));
-                macro_check!(exponent_char, atom!("exponent"));
-                macro_check!(graphic_char, atom!("graphic"));
-                macro_check!(graphic_token_char, atom!("graphic_token"));
-                macro_check!(hexadecimal_digit_char, atom!("hexadecimal_digit"));
-                macro_check!(layout_char, atom!("layout"));
-                method_check!(is_lowercase, atom!("lower"));
-                macro_check!(meta_char, atom!("meta"));
-                // macro_check!(new_line_char, atom!("new_line"));
-                method_check!(is_numeric, atom!("numeric"));
-                macro_check!(octal_digit_char, atom!("octal_digit"));
-                macro_check!(octet_char, atom!("octet"));
-                macro_check!(prolog_char, atom!("prolog"));
-                // macro_check!(semicolon_char, atom!("semicolon"));
-                macro_check!(sign_char, atom!("sign"));
-                // macro_check!(single_quote_char, atom!("single_quote"));
-                // macro_check!(small_letter_char, atom!("lower"));
-                macro_check!(solo_char, atom!("solo"));
-                // macro_check!(space_char, atom!("space"));
-                macro_check!(symbolic_hexadecimal_char, atom!("symbolic_hexadecimal"));
-                macro_check!(symbolic_control_char, atom!("symbolic_control"));
-                method_check!(is_uppercase, atom!("upper"));
-                // macro_check!(variable_indicator_char, atom!("variable_indicator"));
-                method_check!(is_whitespace, atom!("whitespace"));
+                self.machine_st.fail = !correctly_classified;
             }
             (HeapCellValueTag::Str, s) => {
                 let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
@@ -2996,7 +2957,7 @@ impl Machine {
                         let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
                         let upper_str = step_or_resource_error!(
                             self.machine_st,
-                            self.machine_st.heap.allocate_cstr(&c.to_uppercase().to_string())
+                            self.machine_st.heap.allocate_cstr(c.to_uppercase().to_string().as_bytes())
                         );
                         unify!(self.machine_st, reg, upper_str);
                     }
@@ -3004,7 +2965,7 @@ impl Machine {
                         let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
                         let lower_str = step_or_resource_error!(
                             self.machine_st,
-                            self.machine_st.heap.allocate_cstr(&c.to_uppercase().to_string())
+                            self.machine_st.heap.allocate_cstr(c.to_uppercase().to_string().as_bytes())
                         );
 
                         unify!(self.machine_st, reg, lower_str);
@@ -3179,29 +3140,13 @@ impl Machine {
             2,
         )?;
 
-        let mut bytes = Vec::new();
         let stub_gen = || functor_stub(atom!("$put_chars"), 2);
 
         if let Some(string) = self
             .machine_st
             .value_to_str_like(self.machine_st.registers[2])
         {
-            if stream.options().stream_type() == StreamType::Binary {
-                for c in string.as_str().chars() {
-                    if c as u32 > 255 {
-                        let err = self
-                            .machine_st
-                            .type_error(ValidType::Byte, char_as_cell!(c));
-                        return Err(self.machine_st.error_form(err, stub_gen()));
-                    }
-
-                    bytes.push(c as u8);
-                }
-            } else {
-                bytes = string.as_str().as_bytes().to_vec();
-            }
-
-            match stream.write_all(&bytes) {
+            match stream.write_all(string.as_str().as_bytes()) {
                 Ok(_) => {}
                 _ => {
                     let addr = stream.into();
@@ -3288,7 +3233,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn get_byte(&mut self) -> CallResult {
-        let _guard = RawReadGuard::new();
+        let _guard = read_line::RawReadGuard::new();
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
             &self.indices,
@@ -3304,7 +3249,7 @@ impl Machine {
             2,
         )?;
 
-        if stream.past_end_of_stream() {
+        if stream.past_end_of_stream {
             self.machine_st.eof_action(
                 self.machine_st.registers[2],
                 stream,
@@ -3312,7 +3257,7 @@ impl Machine {
                 2,
             )?;
 
-            if EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail {
+            if EOFAction::Reset != stream.options.eof_action() || self.machine_st.fail {
                 return Ok(());
             }
         }
@@ -3362,7 +3307,7 @@ impl Machine {
                 self.machine_st.unify_fixnum(Fixnum::build_with(b[0]), addr);
             }
             _ => {
-                stream.set_past_end_of_stream(true);
+                stream.past_end_of_stream = true;
                 self.machine_st
                     .unify_fixnum(Fixnum::build_with(-1), self.machine_st.registers[2]);
             }
@@ -3373,7 +3318,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn get_char(&mut self) -> CallResult {
-        let _guard = RawReadGuard::new();
+        let _guard = read_line::RawReadGuard::new();
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
             &self.indices,
@@ -3389,8 +3334,8 @@ impl Machine {
             2,
         )?;
 
-        if stream.past_end_of_stream()
-            && (EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail)
+        if stream.past_end_of_stream
+            && (EOFAction::Reset != stream.options.eof_action() || self.machine_st.fail)
         {
             return Ok(());
         }
@@ -3399,7 +3344,7 @@ impl Machine {
 
         if stream.at_end_of_stream() {
             let end_of_file = atom!("end_of_file");
-            stream.set_past_end_of_stream(true);
+            stream.past_end_of_stream = true;
 
             self.machine_st.unify_atom(end_of_file, addr);
 
@@ -3445,8 +3390,9 @@ impl Machine {
 
         loop {
             match iter.read_char() {
-                Some(Ok(c)) => {
-                    self.machine_st.unify_char(c, addr);
+                Ok(Some(c)) => {
+                    let atom = AtomCell::from_codepoint(c).get_name();
+                    self.machine_st.unify_atom(atom, addr);
                     break;
                 }
                 _ => {
@@ -3457,7 +3403,7 @@ impl Machine {
                         2,
                     )?;
 
-                    if EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail {
+                    if EOFAction::Reset != stream.options.eof_action() || self.machine_st.fail {
                         break;
                     }
                 }
@@ -3469,7 +3415,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn get_n_chars(&mut self) -> CallResult {
-        let _guard = RawReadGuard::new();
+        let _guard = read_line::RawReadGuard::new();
         let stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
             &self.indices,
@@ -3493,7 +3439,7 @@ impl Machine {
 
         let mut string = String::new();
 
-        if stream.options().stream_type() == StreamType::Binary {
+        if stream.options.stream_type() == StreamType::Binary {
             let mut buf = vec![];
             let mut chunk = stream.take(num as u64);
 
@@ -3514,10 +3460,10 @@ impl Machine {
                 let result = iter.read_char();
 
                 match result {
-                    Some(Ok(c)) => {
+                    Ok(Some(c)) => {
                         string.push(c);
                     }
-                    Some(Err(e)) => {
+                    Err(e) => {
                         let stub = functor_stub(atom!("$get_n_chars"), 3);
                         let err = self.machine_st.session_error(SessionError::from(e));
 
@@ -3533,7 +3479,7 @@ impl Machine {
         let output = self.deref_register(3);
         let cstr_cell = resource_error_call_result!(
             self.machine_st,
-            self.machine_st.heap.allocate_cstr(&string)
+            self.machine_st.heap.allocate_cstr(string.as_bytes())
         );
 
         unify!(self.machine_st, cstr_cell, output);
@@ -3542,7 +3488,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn get_code(&mut self) -> CallResult {
-        let _guard = RawReadGuard::new();
+        let _guard = read_line::RawReadGuard::new();
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
             &self.indices,
@@ -3558,8 +3504,8 @@ impl Machine {
             2,
         )?;
 
-        if stream.past_end_of_stream()
-            && (EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail)
+        if stream.past_end_of_stream
+            && (EOFAction::Reset != stream.options.eof_action() || self.machine_st.fail)
         {
             return Ok(());
         }
@@ -3567,7 +3513,7 @@ impl Machine {
         let addr = self.deref_register(2);
 
         if stream.at_end_of_stream() {
-            stream.set_past_end_of_stream(true);
+            stream.past_end_of_stream = true;
 
             self.machine_st.unify_fixnum(Fixnum::build_with(-1), addr);
 
@@ -3627,7 +3573,7 @@ impl Machine {
             let result = iter.read_char();
 
             match result {
-                Some(Ok(c)) => {
+                Ok(Some(c)) => {
                     self.machine_st
                         .unify_fixnum(Fixnum::build_with(u32::from(c)), addr);
                     break;
@@ -3640,7 +3586,7 @@ impl Machine {
                         2,
                     )?;
 
-                    if EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail {
+                    if EOFAction::Reset != stream.options.eof_action() || self.machine_st.fail {
                         break;
                     }
                 }
@@ -3652,13 +3598,11 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn first_stream(&mut self) {
-        let first_stream = self.indices.iter_streams(..).find(|s| !s.is_null_stream());
+        let first_stream = self.indices.iter_streams(..).next();
 
         if let Some(first_stream) = first_stream {
             let stream = first_stream.into();
-
             let var = self.deref_register(1).as_var().unwrap();
-
             self.machine_st.bind(var, stream);
         } else {
             self.machine_st.fail = true;
@@ -3667,14 +3611,11 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn next_stream(&mut self) {
-        let prev_stream = cell_as_stream!(self.deref_register(1));
-        let next_stream = self
-            .indices
-            .iter_streams(prev_stream..)
-            .filter(|s| !s.is_null_stream())
-            .nth(1);
+        let prev_stream_opt = cell_as_stream!(self.deref_register(1));
 
-        if let Some(next_stream) = next_stream {
+        if let Some(prev_stream) = prev_stream_opt
+            && let Some(next_stream) = self.indices.iter_streams(prev_stream..).nth(1)
+        {
             let var = self.deref_register(2).as_var().unwrap();
 
             self.machine_st.bind(var, next_stream.into());
@@ -3727,7 +3668,8 @@ impl Machine {
             _ => unreachable!(),
         };
         let a1 = self.deref_register(1);
-        self.machine_st.unify_char(c, a1);
+        let atom = AtomCell::from_codepoint(c).get_name();
+        self.machine_st.unify_atom(atom, a1);
 
         Ok(())
     }
@@ -4371,9 +4313,7 @@ impl Machine {
                         for (header_name, header_value) in resp.headers().iter() {
                             let string_cell = resource_error_call_result!(
                                 self.machine_st,
-                                self.machine_st
-                                    .heap
-                                    .allocate_cstr(header_value.to_str().unwrap())
+                                self.machine_st.heap.allocate_cstr(header_value.as_bytes())
                             );
 
                             let header_term = functor!(
@@ -4417,7 +4357,8 @@ impl Machine {
                             reader,
                             &mut self.machine_st.arena,
                         );
-                        *stream.options_mut() = StreamOptions::default();
+
+                        stream.options = StreamOptions::default();
 
                         self.indices
                             .add_stream(stream, atom!("http_open"), 3)
@@ -4616,21 +4557,9 @@ impl Machine {
     pub(crate) fn http_listen_stop(&mut self) -> CallResult {
         let culprit = self.deref_register(1);
 
-        read_heap_cell!(culprit,
-            (HeapCellValueTag::Cons, cons_ptr) => {
-                match_untyped_arena_ptr!(cons_ptr,
-                    (ArenaHeaderTag::HttpListener, http_listener) => {
-                        http_listener.warp_shutdown.notify_one();
-                    }
-                    _ => {
-                            unreachable!();
-                        }
-                    );
-            }
-            _ => {
-                unreachable!();
-            }
-        );
+        // shouldn't this throw an error when culprit isn't an http listner instead of panicking?
+        let http_listener = culprit.to_typed_arena_ptr::<HttpListener>().unwrap();
+        http_listener.warp_shutdown.notify_one();
 
         Ok(())
     }
@@ -4644,114 +4573,127 @@ impl Machine {
         let query = self.deref_register(5);
         let stream_addr = self.deref_register(6);
         let handle_addr = self.deref_register(7);
-        read_heap_cell!(culprit,
-            (HeapCellValueTag::Cons, cons_ptr) => {
-                match_untyped_arena_ptr!(cons_ptr,
-                    (ArenaHeaderTag::HttpListener, http_listener) => {
-                        loop {
-                            match http_listener.incoming.recv_timeout(std::time::Duration::from_millis(200)) {
-                                Ok(request) => {
-                                    let method_atom = match request.request_data.method {
-                                        Method::GET => atom!("get"),
-                                        Method::POST => atom!("post"),
-                                        Method::PUT => atom!("put"),
-                                        Method::DELETE => atom!("delete"),
-                                        Method::PATCH => atom!("patch"),
-                                        Method::HEAD => atom!("head"),
-                                        Method::OPTIONS => atom!("options"),
-                                        Method::TRACE => atom!("trace"),
-                                        Method::CONNECT => atom!("connect"),
-                                        _ => atom!("unsupported_extension"),
-                                    };
 
-                                    let path_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &request.request_data.path);
-                                    let path_cell = resource_error_call_result!(
-                                        self.machine_st,
-                                        self.machine_st.heap.allocate_cstr(&request.request_data.path)
-                                    );
+        // shouldn't this throw an error when culprit isn't an http listner instead of panicking?
 
-                                    let mut headers = vec![];
+        let http_listener = culprit.to_typed_arena_ptr::<HttpListener>().unwrap();
 
-                                    for (header_name, header_value) in request.request_data.headers {
-                                        let header_value = resource_error_call_result!(
-                                            self.machine_st,
-                                            self.machine_st.heap.allocate_cstr(header_value.to_str().unwrap())
-                                        );
+        loop {
+            match http_listener
+                .incoming
+                .recv_timeout(std::time::Duration::from_millis(200))
+            {
+                Ok(request) => {
+                    let method_atom = match request.request_data.method {
+                        Method::GET => atom!("get"),
+                        Method::POST => atom!("post"),
+                        Method::PUT => atom!("put"),
+                        Method::DELETE => atom!("delete"),
+                        Method::PATCH => atom!("patch"),
+                        Method::HEAD => atom!("head"),
+                        Method::OPTIONS => atom!("options"),
+                        Method::TRACE => atom!("trace"),
+                        Method::CONNECT => atom!("connect"),
+                        _ => atom!("unsupported_extension"),
+                    };
 
-                                        let header_term = functor!(
-                                            AtomTable::build_with(&self.machine_st.atom_tbl, header_name.unwrap().as_str()),
-                                            [cell(header_value)]
-                                        );
+                    let path_atom = AtomTable::build_with(
+                        &self.machine_st.atom_tbl,
+                        &request.request_data.path,
+                    );
+                    let path_cell = resource_error_call_result!(
+                        self.machine_st,
+                        self.machine_st
+                            .heap
+                            .allocate_cstr(request.request_data.path.as_bytes())
+                    );
 
-                                        let mut functor_writer = Heap::functor_writer(header_term);
+                    let mut headers = vec![];
 
-                                        let functor_cell = resource_error_call_result!(
-                                            self.machine_st,
-                                            functor_writer(&mut self.machine_st.heap)
-                                        );
+                    for (header_name, header_value) in request.request_data.headers {
+                        let header_value = resource_error_call_result!(
+                            self.machine_st,
+                            self.machine_st.heap.allocate_cstr(header_value.as_bytes())
+                        );
 
-                                        headers.push(functor_cell);
-                                    }
+                        let header_term = functor!(
+                            AtomTable::build_with(
+                                &self.machine_st.atom_tbl,
+                                header_name.unwrap().as_str()
+                            ),
+                            [cell(header_value)]
+                        );
 
-                                    let headers_list_cell = resource_error_call_result!(
-                                        self.machine_st,
-                                        sized_iter_to_heap_list(
-                                            &mut self.machine_st.heap,
-                                            headers.len(),
-                                            headers.into_iter(),
-                                        )
-                                    );
+                        let mut functor_writer = Heap::functor_writer(header_term);
 
-                                    let query_str  = request.request_data.query;
-                                    let query_cell = resource_error_call_result!(
-                                        self.machine_st,
-                                        self.machine_st.heap.allocate_cstr(&query_str)
-                                    );
+                        let functor_cell = resource_error_call_result!(
+                            self.machine_st,
+                            functor_writer(&mut self.machine_st.heap)
+                        );
 
-                                    let mut stream = Stream::from_http_stream(
-                                        path_atom,
-                                        request.request_data.body,
-                                        &mut self.machine_st.arena
-                                    );
-                                    *stream.options_mut() = StreamOptions::default();
-                                    stream.options_mut().set_stream_type(StreamType::Binary);
-
-                                    self.indices.add_stream(stream, atom!("http_accept"), 7)
-                                        .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
-
-                                    let stream = stream_as_cell!(stream);
-
-                                    let handle = arena_alloc!(request.response, &mut self.machine_st.arena)
-                                        as TypedArenaPtr<HttpResponse>;
-
-                                    self.machine_st.bind(method.as_var().unwrap(), atom_as_cell!(method_atom));
-                                    self.machine_st.bind(path.as_var().unwrap(), path_cell);
-                                    unify!(self.machine_st, headers_list_cell, self.machine_st.registers[4]);
-                                    self.machine_st.bind(query.as_var().unwrap(), query_cell);
-                                    self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
-                                    self.machine_st.bind(handle_addr.as_var().unwrap(), typed_arena_ptr_as_cell!(handle));
-
-                                    break
-                                }
-                                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                                    self.machine_st.check_for_interrupt(|| functor_stub(atom!("http_accept"), 7))?;
-                                }
-                            Err(_) => {
-                                self.machine_st.fail = true;
-                            }
-                        }
+                        headers.push(functor_cell);
                     }
-                }
-                _ => {
-                        unreachable!();
 
+                    let headers_list_cell = resource_error_call_result!(
+                        self.machine_st,
+                        sized_iter_to_heap_list(
+                            &mut self.machine_st.heap,
+                            headers.len(),
+                            headers.into_iter(),
+                        )
+                    );
+
+                    let query_str = request.request_data.query;
+                    let query_cell = resource_error_call_result!(
+                        self.machine_st,
+                        self.machine_st.heap.allocate_cstr(query_str.as_bytes())
+                    );
+
+                    let mut stream = Stream::from_http_stream(
+                        path_atom,
+                        request.request_data.body,
+                        &mut self.machine_st.arena,
+                    );
+
+                    stream.options = StreamOptions::default();
+                    stream.options.set_stream_type(StreamType::Binary);
+
+                    self.indices
+                        .add_stream(stream, atom!("http_accept"), 7)
+                        .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+
+                    let stream = stream_as_cell!(stream);
+
+                    let handle = arena_alloc!(request.response, &mut self.machine_st.arena)
+                        as TypedArenaPtr<HttpResponse>;
+
+                    self.machine_st
+                        .bind(method.as_var().unwrap(), atom_as_cell!(method_atom));
+                    self.machine_st.bind(path.as_var().unwrap(), path_cell);
+                    unify!(
+                        self.machine_st,
+                        headers_list_cell,
+                        self.machine_st.registers[4]
+                    );
+                    self.machine_st.bind(query.as_var().unwrap(), query_cell);
+                    self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
+                    self.machine_st.bind(
+                        handle_addr.as_var().unwrap(),
+                        typed_arena_ptr_as_cell!(handle),
+                    );
+
+                    break;
                 }
-                );
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    self.machine_st
+                        .check_for_interrupt(|| functor_stub(atom!("http_accept"), 7))?;
+                }
+                Err(_) => {
+                    self.machine_st.fail = true;
+                }
             }
-            _ => {
-                unreachable!();
-            }
-        );
+        }
+
         Ok(())
     }
 
@@ -4797,33 +4739,23 @@ impl Machine {
         };
         let stream_addr = self.deref_register(4);
 
-        read_heap_cell!(culprit,
-            (HeapCellValueTag::Cons, cons_ptr) => {
-                match_untyped_arena_ptr!(cons_ptr,
-                    (ArenaHeaderTag::HttpResponse, http_response) => {
-                        let mut stream = Stream::from_http_sender(
-                            http_response,
-                            status_code,
-                            headers,
-                            &mut self.machine_st.arena
-                        );
+        let http_response = culprit.to_typed_arena_ptr::<HttpResponse>().unwrap();
 
-                        *stream.options_mut() = StreamOptions::default();
-                        stream.options_mut().set_stream_type(StreamType::Binary);
-
-                        self.indices.add_stream(stream, atom!("http_answer"), 4)
-                            .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
-                        self.machine_st.bind(stream_addr.as_var().unwrap(), stream.into());
-                    }
-                    _ => {
-                        unreachable!();
-                    }
-                );
-            }
-            _ => {
-                unreachable!();
-            }
+        let mut stream = Stream::from_http_sender(
+            http_response,
+            status_code,
+            headers,
+            &mut self.machine_st.arena,
         );
+
+        stream.options = StreamOptions::default();
+        stream.options.set_stream_type(StreamType::Binary);
+
+        self.indices
+            .add_stream(stream, atom!("http_answer"), 4)
+            .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+        self.machine_st
+            .bind(stream_addr.as_var().unwrap(), stream.into());
 
         Ok(())
     }
@@ -5035,7 +4967,7 @@ impl Machine {
                 let str_cell = match cstr.to_str() {
                     Ok(valid_str) => resource_error_call_result!(
                         self.machine_st,
-                        self.machine_st.heap.allocate_cstr(valid_str)
+                        self.machine_st.heap.allocate_cstr(valid_str.as_bytes())
                     ),
                     Err(_) => {
                         let cells: Vec<_> = cstr
@@ -5340,7 +5272,7 @@ impl Machine {
         for arg in env::args() {
             let pstr_cell = resource_error_call_result!(
                 self.machine_st,
-                self.machine_st.heap.allocate_cstr(&arg)
+                self.machine_st.heap.allocate_cstr(arg.as_bytes())
             );
 
             args_pstrs.push(pstr_cell);
@@ -5364,7 +5296,7 @@ impl Machine {
         let timestamp = self.systemtime_to_timestamp(SystemTime::now());
         let cstr_cell = step_or_resource_error!(
             self.machine_st,
-            self.machine_st.heap.allocate_cstr(&timestamp)
+            self.machine_st.heap.allocate_cstr(timestamp.as_bytes())
         );
 
         unify!(self.machine_st, cstr_cell, self.machine_st.registers[1]);
@@ -5389,7 +5321,7 @@ impl Machine {
                 self.machine_st
                     .stream_from_file_spec(file_spec, &mut self.indices, &options)?;
 
-            *stream.options_mut() = options;
+            stream.options = options;
 
             self.indices
                 .add_stream(stream, atom!("open"), 4)
@@ -6629,23 +6561,29 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn read_query_term(&mut self) -> CallResult {
-        match self.user_input {
-            Stream::Byte(_) | Stream::Readline(_) => self.user_input.reset(),
+        match self.user_input.tag() {
+            ArenaHeaderTag::ByteStream | ArenaHeaderTag::ReadlineStream => self.user_input.reset(),
             _ => true,
         };
 
-        set_prompt(true);
+        unsafe {
+            read_line::set_prompt(true);
+        }
         // let result = self.machine_st.read_term(self.user_input, &mut self.indices);
         let result = self
             .machine_st
             .read_term_from_user_input(self.user_input, &mut self.indices);
-        set_prompt(false);
+        unsafe {
+            read_line::set_prompt(false);
+        }
 
         match result {
             Ok(()) => Ok(()),
             Err(e) => {
-                match self.user_input {
-                    Stream::Byte(_) | Stream::Readline(_) => self.user_input.reset(),
+                match self.user_input.tag() {
+                    ArenaHeaderTag::ByteStream | ArenaHeaderTag::ReadlineStream => {
+                        self.user_input.reset()
+                    }
                     _ => true,
                 };
                 Err(e)
@@ -6655,7 +6593,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn read_term(&mut self) -> CallResult {
-        set_prompt(false);
+        unsafe { read_line::set_prompt(false) };
 
         let stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
@@ -6664,7 +6602,7 @@ impl Machine {
             3,
         )?;
 
-        if let Stream::Readline(..) = stream {
+        if matches!(stream.tag(), ArenaHeaderTag::ReadlineStream) {
             self.machine_st.read_term(
                 stream,
                 &mut self.indices,
@@ -6689,8 +6627,7 @@ impl Machine {
             _ => atom_or_string.into(),
         };
 
-        let chars = CharReader::new(ByteStream::from_string(string));
-        let mut parser = Parser::new(chars, &mut self.machine_st);
+        let mut parser = Parser::new(ByteStream::from_string(string), &mut self.machine_st);
         let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
 
         let term_write_result = parser
@@ -6931,7 +6868,7 @@ impl Machine {
                 let mut stream =
                     Stream::from_tcp_stream(socket_addr, tcp_stream, &mut self.machine_st.arena);
 
-                *stream.options_mut() = options;
+                stream.options = options;
 
                 self.indices
                     .add_stream(stream, atom!("socket_client_open"), 7)
@@ -7070,57 +7007,51 @@ impl Machine {
         let culprit = self.deref_register(1);
 
         use std::io::ErrorKind;
-        read_heap_cell!(culprit,
-            (HeapCellValueTag::Cons, cons_ptr) => {
-                match_untyped_arena_ptr!(cons_ptr,
-                     (ArenaHeaderTag::TcpListener, tcp_listener) => {
-                        loop {
-                         match tcp_listener.accept() {
-                             Ok((tcp_stream, socket_addr)) => {
-                                 let client = AtomTable::build_with(&self.machine_st.atom_tbl, &socket_addr.to_string());
 
-                                 let mut tcp_stream = Stream::from_tcp_stream(
-                                     client,
-                                     tcp_stream,
-                                     &mut self.machine_st.arena,
-                                 );
+        // shouldn't this throw an error if culprit isn't a TcpListener?
+        if let Some(tcp_listener) = culprit.to_typed_arena_ptr::<TcpListener>() {
+            loop {
+                match tcp_listener.accept() {
+                    Ok((tcp_stream, socket_addr)) => {
+                        let client = AtomTable::build_with(
+                            &self.machine_st.atom_tbl,
+                            &socket_addr.to_string(),
+                        );
 
-                                 *tcp_stream.options_mut() = options;
+                        let mut tcp_stream =
+                            Stream::from_tcp_stream(client, tcp_stream, &mut self.machine_st.arena);
 
-                                 self.indices.add_stream(tcp_stream, atom!("socket_server_accept"), 4)
-                                    .map_err(|stub_gen| {
-                                        stub_gen(&mut self.machine_st)
-                                    })?;
+                        tcp_stream.options = options;
 
-                                 let client = atom_as_cell!(client);
+                        self.indices
+                            .add_stream(tcp_stream, atom!("socket_server_accept"), 4)
+                            .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
-                                 let client_addr = self.deref_register(2);
-                                 let stream_addr = self.deref_register(3);
+                        let client = atom_as_cell!(client);
 
-                                 self.machine_st.bind(client_addr.as_var().unwrap(), client);
-                                 self.machine_st.bind(stream_addr.as_var().unwrap(), tcp_stream.into());
+                        let client_addr = self.deref_register(2);
+                        let stream_addr = self.deref_register(3);
 
-                                 break;
-                             }
-                            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                                std::thread::sleep(std::time::Duration::from_millis(200));
-                                self.machine_st.check_for_interrupt(|| functor_stub(atom!("socket_server_accept"), 4))?;
-                            }
-                            Err(_) => {
-                                println!("IO error");
-                                self.machine_st.fail = true;
-                                break;
-                            }
-                         }
-                        }
-                     }
-                     _ => {
-                     }
-                );
+                        self.machine_st.bind(client_addr.as_var().unwrap(), client);
+                        self.machine_st
+                            .bind(stream_addr.as_var().unwrap(), tcp_stream.into());
+
+                        break;
+                    }
+                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(200));
+                        self.machine_st.check_for_interrupt(|| {
+                            functor_stub(atom!("socket_server_accept"), 4)
+                        })?;
+                    }
+                    Err(_) => {
+                        println!("IO error");
+                        self.machine_st.fail = true;
+                        break;
+                    }
+                }
             }
-            _ => {
-            }
-        );
+        }
 
         Ok(())
     }
@@ -7228,21 +7159,10 @@ impl Machine {
     pub(crate) fn socket_server_close(&mut self) -> CallResult {
         let culprit = self.deref_register(1);
 
-        read_heap_cell!(culprit,
-            (HeapCellValueTag::Cons, cons_ptr) => {
-                match_untyped_arena_ptr!(cons_ptr,
-                    (ArenaHeaderTag::TcpListener, tcp_listener) => {
-                        tcp_listener.drop_payload();
-
-                        return Ok(());
-                    }
-                    _ => {
-                    }
-                );
-            }
-            _ => {
-            }
-        );
+        if let Some(mut tcp_listener) = culprit.to_typed_arena_ptr::<TcpListener>() {
+            tcp_listener.drop_payload();
+            return Ok(());
+        }
 
         let err = self.machine_st.type_error(ValidType::TcpListener, culprit);
         let stub = functor_stub(atom!("socket_server_close"), 1);
@@ -7259,7 +7179,7 @@ impl Machine {
             2,
         )?;
 
-        if !stream.options().reposition() {
+        if !stream.options.reposition() {
             let stub = functor_stub(atom!("set_stream_position"), 2);
 
             let err = self.machine_st.permission_error(
@@ -7289,8 +7209,15 @@ impl Machine {
             }
         };
 
-        stream.set_position(position);
-        Ok(())
+        match stream.set_layout_position(position) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                let err = self.machine_st.session_error(SessionError::from(e));
+                let stub = functor_stub(atom!("set_stream_position"), 2);
+
+                Err(self.machine_st.error_form(err, stub))
+            }
+        }
     }
 
     #[inline(always)]
@@ -7324,7 +7251,7 @@ impl Machine {
                 })
             }
             atom!("alias") => {
-                atom_as_cell!(if let Some(alias) = stream.options().get_alias() {
+                atom_as_cell!(if let Some(alias) = stream.options.get_alias() {
                     alias
                 } else {
                     self.machine_st.fail = true;
@@ -7332,7 +7259,7 @@ impl Machine {
                 })
             }
             atom!("position") => {
-                if let Some((position, lines_read)) = stream.position() {
+                if let Some((position, lines_read)) = stream.position_and_lines_read() {
                     let position_term = functor!(
                         atom!("position_and_lines_read"),
                         [
@@ -7357,15 +7284,15 @@ impl Machine {
                 atom_as_cell!(end_of_stream_pos.as_atom())
             }
             atom!("eof_action") => {
-                atom_as_cell!(stream.options().eof_action().as_atom())
+                atom_as_cell!(stream.options.eof_action().as_atom())
             }
-            atom!("reposition") => atom_as_cell!(if stream.options().reposition() {
+            atom!("reposition") => atom_as_cell!(if stream.options.reposition() {
                 atom!("true")
             } else {
                 atom!("false")
             }),
             atom!("type") => {
-                atom_as_cell!(stream.options().stream_type().as_property_atom())
+                atom_as_cell!(stream.options.stream_type().as_property_atom())
             }
             _ => {
                 unreachable!()
@@ -7688,7 +7615,7 @@ impl Machine {
 
         let opt_err = if !stream.is_output_stream() {
             Some(atom!("stream")) // 8.14.2.3 g)
-        } else if stream.options().stream_type() == StreamType::Binary {
+        } else if stream.options.stream_type() == StreamType::Binary {
             Some(atom!("binary_stream")) // 8.14.2.3 h)
         } else {
             None
@@ -7753,7 +7680,7 @@ impl Machine {
         let result = printer.print().result();
         let chars = resource_error_call_result!(
             self.machine_st,
-            self.machine_st.heap.allocate_cstr(&result)
+            self.machine_st.heap.allocate_cstr(result.as_bytes())
         );
 
         let result_addr = self.deref_register(1);
@@ -7769,8 +7696,10 @@ impl Machine {
         use git_version::git_version;
 
         let buffer = git_version!(cargo_prefix = "cargo:", fallback = "unknown");
-        let cstr_cell =
-            step_or_resource_error!(self.machine_st, self.machine_st.heap.allocate_cstr(buffer));
+        let cstr_cell = step_or_resource_error!(
+            self.machine_st,
+            self.machine_st.heap.allocate_cstr(buffer.as_bytes())
+        );
 
         unify!(self.machine_st, cstr_cell, self.machine_st.registers[1]);
     }
@@ -8278,7 +8207,7 @@ impl Machine {
             } else {
                 step_or_resource_error!(
                     self.machine_st,
-                    self.machine_st.heap.allocate_cstr(&buffer)
+                    self.machine_st.heap.allocate_cstr(buffer.as_bytes())
                 )
             }
         };
@@ -8486,7 +8415,7 @@ impl Machine {
                 Ok(value) => {
                     let cstr = step_or_resource_error!(
                         self.machine_st,
-                        self.machine_st.heap.allocate_cstr(&value)
+                        self.machine_st.heap.allocate_cstr(value.as_bytes())
                     );
 
                     unify!(self.machine_st, self.machine_st.registers[2], cstr);
@@ -8827,24 +8756,26 @@ impl Machine {
         // Pid
         let pid_r = self.deref_register(2);
 
-        let Some(ptr) = process_r.to_untyped_arena_ptr() else {
+        let Some(cons_ptr) = process_r.to_untyped_arena_ptr() else {
             let err = self.machine_st.type_error(ValidType::Process, process_r);
             return Err(self.machine_st.error_form(err, stub_gen()));
         };
 
-        let process = match_untyped_arena_ptr!(ptr,
-            (ArenaHeaderTag::ChildProcess, child_process) => {
-                child_process
-            }
-            (ArenaHeaderTag::Dropped, _dropped) => {
-                let err = self.machine_st.existence_error(ExistenceError::Process(process_r));
+        let process = match cons_ptr.get_tag() {
+            ArenaHeaderTag::ChildProcess => unsafe {
+                cons_ptr.as_typed_ptr::<std::process::Child>()
+            },
+            ArenaHeaderTag::Dropped => {
+                let err = self
+                    .machine_st
+                    .existence_error(ExistenceError::Process(process_r));
                 return Err(self.machine_st.error_form(err, stub_gen()));
             }
             _ => {
                 let err = self.machine_st.type_error(ValidType::Process, process_r);
                 return Err(self.machine_st.error_form(err, stub_gen()));
             }
-        );
+        };
 
         self.machine_st.bind(
             pid_r.as_var().unwrap(),
@@ -8866,24 +8797,26 @@ impl Machine {
         // timeout | 0
         let timeout_r = self.deref_register(3);
 
-        let Some(ptr) = process_r.to_untyped_arena_ptr() else {
+        let Some(cons_ptr) = process_r.to_untyped_arena_ptr() else {
             let err = self.machine_st.type_error(ValidType::Process, process_r);
             return Err(self.machine_st.error_form(err, stub_gen()));
         };
 
-        let mut process = match_untyped_arena_ptr!(ptr,
-            (ArenaHeaderTag::ChildProcess, child_process) => {
-                child_process
-            }
-            (ArenaHeaderTag::Dropped, _dropped) => {
-                let err = self.machine_st.existence_error(ExistenceError::Process(process_r));
+        let mut process = match cons_ptr.get_tag() {
+            ArenaHeaderTag::ChildProcess => unsafe {
+                cons_ptr.as_typed_ptr::<std::process::Child>()
+            },
+            ArenaHeaderTag::Dropped => {
+                let err = self
+                    .machine_st
+                    .existence_error(ExistenceError::Process(process_r));
                 return Err(self.machine_st.error_form(err, stub_gen()));
             }
             _ => {
                 let err = self.machine_st.type_error(ValidType::Process, process_r);
                 return Err(self.machine_st.error_form(err, stub_gen()));
             }
-        );
+        };
 
         let status = if let Some(atom) = timeout_r.to_atom() {
             match atom {
@@ -8970,24 +8903,26 @@ impl Machine {
         // Pid
         let process_r = self.deref_register(1);
 
-        let Some(ptr) = process_r.to_untyped_arena_ptr() else {
+        let Some(cons_ptr) = process_r.to_untyped_arena_ptr() else {
             let err = self.machine_st.type_error(ValidType::Process, process_r);
             return Err(self.machine_st.error_form(err, stub_gen()));
         };
 
-        let mut process = match_untyped_arena_ptr!(ptr,
-            (ArenaHeaderTag::ChildProcess, child_process) => {
-                child_process
-            }
-            (ArenaHeaderTag::Dropped, _dropped) => {
-                let err = self.machine_st.existence_error(ExistenceError::Process(process_r));
+        let mut process = match cons_ptr.get_tag() {
+            ArenaHeaderTag::ChildProcess => unsafe {
+                cons_ptr.as_typed_ptr::<std::process::Child>()
+            },
+            ArenaHeaderTag::Dropped => {
+                let err = self
+                    .machine_st
+                    .existence_error(ExistenceError::Process(process_r));
                 return Err(self.machine_st.error_form(err, stub_gen()));
             }
             _ => {
                 let err = self.machine_st.type_error(ValidType::Process, process_r);
                 return Err(self.machine_st.error_form(err, stub_gen()));
             }
-        );
+        };
 
         if process.kill().is_err() {
             let perm_error =
@@ -9005,16 +8940,9 @@ impl Machine {
 
         let process = self.deref_register(1);
 
-        if let Some(ptr) = process.to_untyped_arena_ptr() {
-            match_untyped_arena_ptr!(ptr,
-                (ArenaHeaderTag::ChildProcess, child_process) => {
-                    child_process.drop_payload();
-
-                    return Ok(());
-                }
-                _ => {
-                }
-            );
+        if let Some(mut child_process) = process.to_typed_arena_ptr::<std::process::Child>() {
+            child_process.drop_payload();
+            return Ok(());
         }
 
         let err = self.machine_st.type_error(ValidType::Process, process);
@@ -9131,10 +9059,10 @@ impl Machine {
         match devour_whitespace(&mut parser.lexer) {
             Ok(false) => {
                 // not at EOF.
-                stream.add_lines_read(parser.lines_read());
+                stream.lines_read += parser.lines_read();
             }
             Ok(true) => {
-                stream.add_lines_read(parser.lexer.location.line());
+                stream.lines_read += parser.lexer.location.line();
                 self.machine_st.fail = true;
             }
             Err(err) => {
@@ -9183,8 +9111,10 @@ impl Machine {
         if path.is_dir()
             && let Some(path) = path.to_str()
         {
-            let path_string =
-                step_or_resource_error!(self.machine_st, self.machine_st.heap.allocate_cstr(path));
+            let path_string = step_or_resource_error!(
+                self.machine_st,
+                self.machine_st.heap.allocate_cstr(path.as_bytes())
+            );
 
             unify!(self.machine_st, self.machine_st.registers[1], path_string);
             return;
@@ -9258,14 +9188,19 @@ impl Machine {
         &mut self,
         node: roxmltree::Node,
     ) -> Result<HeapCellValue, AllocError> {
-        if node.is_text() {
-            self.machine_st.heap.allocate_cstr(node.text().unwrap())
+        if node.is_text()
+            && let Some(text) = node.text()
+        {
+            self.machine_st.heap.allocate_cstr(text.as_bytes())
         } else {
             let mut avec = Vec::new();
 
             for attr in node.attributes() {
                 let name = AtomTable::build_with(&self.machine_st.atom_tbl, attr.name());
-                let value = self.machine_st.heap.allocate_cstr(attr.value())?;
+                let value = self
+                    .machine_st
+                    .heap
+                    .allocate_cstr(attr.value().as_bytes())?;
 
                 avec.push(str_loc_as_cell!(self.machine_st.heap.cell_len()));
 
@@ -9337,7 +9272,10 @@ impl Machine {
             }
             scraper::Node::Doctype(doctype) => {
                 // what about public and system id?
-                let name = self.machine_st.heap.allocate_cstr(&doctype.name)?;
+                let name = self
+                    .machine_st
+                    .heap
+                    .allocate_cstr(doctype.name.as_bytes())?;
 
                 let result = str_loc_as_cell!(self.machine_st.heap.cell_len());
                 let mut writer = self.machine_st.heap.reserve(2)?;
@@ -9350,7 +9288,7 @@ impl Machine {
                 Ok(result)
             }
             scraper::Node::Comment(comment) => {
-                let comment = self.machine_st.heap.allocate_cstr(comment)?;
+                let comment = self.machine_st.heap.allocate_cstr(comment.as_bytes())?;
 
                 let result = str_loc_as_cell!(self.machine_st.heap.cell_len());
                 let mut writer = self.machine_st.heap.reserve(2)?;
@@ -9362,13 +9300,13 @@ impl Machine {
 
                 Ok(result)
             }
-            scraper::Node::Text(text) => self.machine_st.heap.allocate_cstr(&text.text),
+            scraper::Node::Text(text) => self.machine_st.heap.allocate_cstr(text.text.as_bytes()),
             scraper::Node::Element(element) => {
                 let mut avec = Vec::new();
 
                 for attr in element.attrs() {
                     let name = AtomTable::build_with(&self.machine_st.atom_tbl, attr.0);
-                    let value = self.machine_st.heap.allocate_cstr(attr.1)?;
+                    let value = self.machine_st.heap.allocate_cstr(attr.1.as_bytes())?;
 
                     avec.push(str_loc_as_cell!(self.machine_st.heap.cell_len()));
 
@@ -9415,11 +9353,11 @@ impl Machine {
                 let target = self
                     .machine_st
                     .heap
-                    .allocate_cstr(&processing_instruction.target)?;
+                    .allocate_cstr(processing_instruction.target.as_bytes())?;
                 let data = self
                     .machine_st
                     .heap
-                    .allocate_cstr(&processing_instruction.data)?;
+                    .allocate_cstr(processing_instruction.data.as_bytes())?;
 
                 let result = str_loc_as_cell!(self.machine_st.heap.cell_len());
                 let mut writer = self.machine_st.heap.reserve(3)?;
@@ -9438,10 +9376,10 @@ impl Machine {
     pub(super) fn u8s_to_string(&mut self, data: &[u8]) -> Result<HeapCellValue, AllocError> {
         let buffer = String::from_iter(data.iter().map(|b| *b as char));
 
-        if buffer.is_empty() {
+        if data.is_empty() {
             Ok(empty_list_as_cell!())
         } else {
-            self.machine_st.heap.allocate_cstr(&buffer)
+            self.machine_st.heap.allocate_cstr(buffer.as_bytes())
         }
     }
 }

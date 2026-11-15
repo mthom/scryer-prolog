@@ -1,4 +1,4 @@
-use crate::arena::Arena;
+use crate::arena::alloc::Arena;
 use crate::forms::Number;
 #[cfg(test)]
 pub(crate) use crate::machine::gc::StacklessPreOrderHeapIter;
@@ -179,10 +179,12 @@ impl Iterator for ParallelHeapIter<'_> {
                                     // like the action of partial_string_to_stack here but the
                                     // ordering of stack pushes is (crucially for comparison
                                     // correctness) different.
-                                    let (c, succ_cell) = self.heap.last_str_char_and_tail(l2);
+                                    let (c, succ_cell) = self.heap.chars_and_tail_at(l2);
+
+                                    let atom = AtomCell::from_codepoint(c).get_name();
 
                                     self.stack.push((heap_loc_as_cell!(l1 + 1), succ_cell));
-                                    self.stack.push((heap_loc_as_cell!(l1), char_as_cell!(c)));
+                                    self.stack.push((heap_loc_as_cell!(l1), atom_as_cell!(atom)));
                                 }
                                 (HeapCellValueTag::Lis, l2) => {
                                     if self.tabu_list.contains(&(l1, l2)) {
@@ -244,10 +246,11 @@ impl Iterator for ParallelHeapIter<'_> {
 
                                     self.tabu_list.insert((l1, l2));
 
-                                    let (c, succ_cell) = self.heap.last_str_char_and_tail(l1);
+                                    let (c, succ_cell) = self.heap.chars_and_tail_at(l1);
+                                    let atom = AtomCell::from_codepoint(c).get_name();
 
                                     self.stack.push((succ_cell, heap_loc_as_cell!(l2 + 1)));
-                                    self.stack.push((char_as_cell!(c), heap_loc_as_cell!(l2)));
+                                    self.stack.push((atom_as_cell!(atom), heap_loc_as_cell!(l2)));
                                 }
                                 (HeapCellValueTag::Str, s2) => {
                                     if self.tabu_list.contains(&(l1, s2)) {
@@ -261,10 +264,12 @@ impl Iterator for ParallelHeapIter<'_> {
 
                                     some_or_return!(self.parallel_cmp((2, atom!(".")), (a2, n2), v1, v2));
 
-                                    let (c, succ_cell) = self.heap.last_str_char_and_tail(l1);
+                                    let (c, succ_cell) = self.heap.chars_and_tail_at(l1);
+
+                                    let atom = AtomCell::from_codepoint(c).get_name();
 
                                     self.stack.push((succ_cell, heap_loc_as_cell!(s2+2)));
-                                    self.stack.push((char_as_cell!(c), heap_loc_as_cell!(s2+1)));
+                                    self.stack.push((atom_as_cell!(atom), heap_loc_as_cell!(s2+1)));
                                 }
                                 _ => {
                                     unreachable!()
@@ -318,10 +323,11 @@ impl Iterator for ParallelHeapIter<'_> {
 
                                     self.tabu_list.insert((s1, l2));
 
-                                    let (c, succ_cell) = self.heap.last_str_char_and_tail(l2);
+                                    let (c, succ_cell) = self.heap.chars_and_tail_at(l2);
+                                    let atom = AtomCell::from_codepoint(c).get_name();
 
                                     self.stack.push((heap_loc_as_cell!(s1+2), succ_cell));
-                                    self.stack.push((heap_loc_as_cell!(s1+1), char_as_cell!(c)));
+                                    self.stack.push((heap_loc_as_cell!(s1+1), atom_as_cell!(atom)));
                                 }
                                 _ => {
                                     unreachable!()
@@ -356,7 +362,7 @@ pub fn eager_stackful_preorder_iter(
  * cyclic terms for the sake of skipping them at the second visit but
  * leaves them marked until it is dropped. This makes for, e.g., more
  * efficient ground/1 and term_variables/2 definitions.
-*/
+ */
 
 pub struct EagerStackfulPreOrderHeapIter<'a> {
     start_value: HeapCellValue,
@@ -1163,7 +1169,7 @@ mod tests {
         // two-part complete string, then a three-part cyclic string
         // involving an uncompacted list of chars.
 
-        wam.machine_st.heap.allocate_pstr("abc ").unwrap();
+        wam.machine_st.heap.allocate_pstr(b"abc ").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(1)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -1184,7 +1190,7 @@ mod tests {
 
         wam.machine_st.heap[1] = pstr_loc_as_cell!(heap_index!(3));
 
-        wam.machine_st.heap.allocate_pstr("def").unwrap();
+        wam.machine_st.heap.allocate_pstr(b"def").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(4)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -2213,7 +2219,7 @@ mod tests {
         // two-part complete string, then a three-part cyclic string
         // involving an uncompacted list of chars.
 
-        wam.machine_st.heap.allocate_pstr("abc ").unwrap();
+        wam.machine_st.heap.allocate_pstr(b"abc ").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(1)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -2237,7 +2243,7 @@ mod tests {
         }
 
         wam.machine_st.heap[1] = pstr_loc_as_cell!(heap_index!(3));
-        wam.machine_st.heap.allocate_pstr("def").unwrap();
+        wam.machine_st.heap.allocate_pstr(b"def").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(4)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -2481,7 +2487,7 @@ mod tests {
         let mut writer = wam.machine_st.heap.reserve(96).unwrap();
 
         writer.write_with(|section| {
-            section.push_pstr("a string");
+            section.push_pstr(b"a string");
             section.push_cell(empty_list_as_cell!());
             section.push_cell(pstr_loc_as_cell!(0));
         });
@@ -2815,7 +2821,7 @@ mod tests {
         // two-part complete string, then a three-part cyclic string
         // involving an uncompacted list of chars.
 
-        wam.machine_st.heap.allocate_pstr("abc ").unwrap();
+        wam.machine_st.heap.allocate_pstr(b"abc ").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(1)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -2839,7 +2845,7 @@ mod tests {
         }
 
         wam.machine_st.heap[1] = pstr_loc_as_cell!(heap_index!(3));
-        wam.machine_st.heap.allocate_pstr("def").unwrap();
+        wam.machine_st.heap.allocate_pstr(b"def").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(4)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -3276,7 +3282,7 @@ mod tests {
         // two-part complete string, then a three-part cyclic string
         // involving an uncompacted list of chars.
 
-        wam.machine_st.heap.allocate_pstr("abc ").unwrap();
+        wam.machine_st.heap.allocate_pstr(b"abc ").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(1)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
@@ -3299,7 +3305,7 @@ mod tests {
         wam.machine_st.heap[2] = heap_loc_as_cell!(2);
         assert_eq!(wam.machine_st.heap.cell_len(), 3);
 
-        wam.machine_st.heap.allocate_pstr("def").unwrap();
+        wam.machine_st.heap.allocate_pstr(b"def").unwrap();
         assert_eq!(wam.machine_st.heap.cell_len(), 4);
 
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();

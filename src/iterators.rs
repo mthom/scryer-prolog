@@ -1,3 +1,5 @@
+use crate::arena::alloc::TypedArenaPtr;
+use crate::arena::stream_layout::Stream;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::instructions::*;
@@ -6,6 +8,7 @@ use crate::parser::ast::*;
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::iter::*;
+use std::process::Child;
 use std::rc::Rc;
 use std::vec::Vec;
 
@@ -19,6 +22,8 @@ pub(crate) enum TermRef<'a> {
     PartialString(Level, &'a Cell<RegType>, Rc<String>, &'a Box<Term>),
     CompleteString(Level, &'a Cell<RegType>, Rc<String>),
     Var(Level, &'a Cell<VarReg>, VarPtr),
+    Stream(Level, &'a Cell<RegType>, Stream),
+    Process(Level, &'a Cell<RegType>, TypedArenaPtr<Child>),
 }
 
 #[allow(clippy::borrowed_box)]
@@ -27,6 +32,8 @@ pub(crate) enum TermIterState<'a> {
     AnonVar(Level),
     Clause(Level, usize, &'a Cell<RegType>, Atom, &'a Vec<Term>),
     Literal(Level, &'a Cell<RegType>, &'a Literal),
+    Stream(Level, &'a Cell<RegType>, Stream),
+    Process(Level, &'a Cell<RegType>, TypedArenaPtr<Child>),
     InitialCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     FinalCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     InitialPartialString(Level, &'a Cell<RegType>, Rc<String>, &'a Box<Term>),
@@ -42,7 +49,7 @@ impl<'a> TermIterState<'a> {
             Term::Clause(cell, name, subterms) => {
                 TermIterState::Clause(lvl, 0, cell, *name, subterms)
             }
-            Term::Cons(cell, head, tail) => {
+            Term::ConsCell(cell, head, tail) => {
                 TermIterState::InitialCons(lvl, cell, head.as_ref(), tail.as_ref())
             }
             Term::Literal(cell, constant) => TermIterState::Literal(lvl, cell, constant),
@@ -53,6 +60,8 @@ impl<'a> TermIterState<'a> {
                 TermIterState::CompleteString(lvl, cell, string.clone())
             }
             Term::Var(cell, var_ptr) => TermIterState::Var(lvl, cell, var_ptr.clone()),
+            Term::Stream(cell, stream) => TermIterState::Stream(lvl, cell, *stream),
+            Term::Process(cell, process) => TermIterState::Process(lvl, cell, *process),
         }
     }
 }
@@ -83,8 +92,10 @@ impl<'a> QueryIterator<'a> {
     fn from_term(term: &'a Term) -> Self {
         let state = match term {
             Term::AnonVar
-            | Term::Cons(..)
+            | Term::ConsCell(..)
             | Term::Literal(..)
+            | Term::Stream(..)
+            | Term::Process(..)
             | Term::PartialString(..)
             | Term::CompleteString(..) => {
                 return QueryIterator {
@@ -184,6 +195,12 @@ impl<'a> Iterator for QueryIterator<'a> {
                 TermIterState::Var(lvl, cell, var_ptr) => {
                     return Some(TermRef::Var(lvl, cell, var_ptr));
                 }
+                TermIterState::Stream(lvl, cell, stream) => {
+                    return Some(TermRef::Stream(lvl, cell, stream));
+                }
+                TermIterState::Process(lvl, cell, process) => {
+                    return Some(TermRef::Process(lvl, cell, process));
+                }
             };
         }
 
@@ -223,7 +240,7 @@ impl<'a> FactIterator<'a> {
             Term::Clause(cell, name, terms) => {
                 vec![TermIterState::Clause(Level::Root, 0, cell, *name, terms)]
             }
-            Term::Cons(cell, head, tail) => vec![TermIterState::InitialCons(
+            Term::ConsCell(cell, head, tail) => vec![TermIterState::InitialCons(
                 Level::Root,
                 cell,
                 head.as_ref(),
@@ -249,6 +266,12 @@ impl<'a> FactIterator<'a> {
             }
             Term::Var(cell, var_ptr) => {
                 vec![TermIterState::Var(Level::Root, cell, var_ptr.clone())]
+            }
+            Term::Stream(cell, stream) => {
+                vec![TermIterState::Stream(Level::Root, cell, *stream)]
+            }
+            Term::Process(cell, process) => {
+                vec![TermIterState::Process(Level::Root, cell, *process)]
             }
         };
 
@@ -296,6 +319,12 @@ impl<'a> Iterator for FactIterator<'a> {
                 }
                 TermIterState::Var(lvl, cell, var_ptr) => {
                     return Some(TermRef::Var(lvl, cell, var_ptr));
+                }
+                TermIterState::Stream(lvl, cell, stream) => {
+                    return Some(TermRef::Stream(lvl, cell, stream));
+                }
+                TermIterState::Process(lvl, cell, process) => {
+                    return Some(TermRef::Process(lvl, cell, process));
                 }
                 _ => {}
             }

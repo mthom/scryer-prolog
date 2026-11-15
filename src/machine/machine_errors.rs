@@ -1,7 +1,7 @@
-use crate::arena::*;
 use crate::atom_table::*;
 use crate::parser::ast::*;
 
+use crate::arena::stream_layout::*;
 #[cfg(feature = "ffi")]
 use crate::ffi::{self, FfiError};
 use crate::forms::*;
@@ -10,7 +10,6 @@ use crate::machine::heap::AllocError;
 use crate::machine::heap::*;
 use crate::machine::loader::CompilationTarget;
 use crate::machine::machine_state::*;
-use crate::machine::streams::*;
 use crate::machine::system_calls::BrentAlgState;
 use crate::types::*;
 
@@ -169,18 +168,11 @@ impl PermissionError for HeapCellValue {
     ) -> MachineError {
         let cell = read_heap_cell!(self,
             (HeapCellValueTag::Cons, ptr) => {
-                match_untyped_arena_ptr!(ptr,
-                    (ArenaHeaderTag::Stream, stream) => {
-                        if let Some(alias) = stream.options().get_alias() {
-                            atom_as_cell!(alias)
-                        } else {
-                            self
-                        }
-                    }
-                    _ => {
-                        self
-                    }
-                )
+                if let Some(stream) = Stream::from_tag(ptr) && let Some(alias) = stream.options.get_alias() {
+                    atom_as_cell!(alias)
+                } else {
+                    self
+                }
             }
             _ => {
                 self
@@ -538,6 +530,14 @@ impl MachineState {
                 let culprit = functor!(atom!("/"), [literal(cell), fixnum(arity)]);
                 self.type_error(ValidType::Evaluable, culprit)
             }
+            ArithmeticError::NonEvaluableStream(stream) => self.type_error(
+                ValidType::Evaluable,
+                functor!(atom!("stream"), [stream(stream)]),
+            ),
+            ArithmeticError::NonEvaluableProcess(process) => self.type_error(
+                ValidType::Evaluable,
+                functor!(atom!("process"), [process(process)]),
+            ),
             ArithmeticError::UninstantiatedVar => self.instantiation_error(),
         }
     }
@@ -625,6 +625,7 @@ impl MachineState {
                     stub,
                 )
             }
+            SessionError::UnexpectedSubterm => self.representation_error(RepFlag::Term),
         }
     }
 
@@ -1216,6 +1217,7 @@ pub enum SessionError {
     NamelessEntry,
     OpIsInfixAndPostFix(Atom),
     PredicateNotMultifileOrDiscontiguous(CompilationTarget, PredicateKey),
+    UnexpectedSubterm,
 }
 
 impl From<std::io::Error> for SessionError {

@@ -1,8 +1,8 @@
+use crate::arena::stream_layout::Stream;
 use crate::forms::*;
 use crate::machine::load_state::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
-use crate::machine::*;
 use crate::parser::ast::*;
 use crate::parser::lexer::*;
 use crate::parser::parser::*;
@@ -38,7 +38,7 @@ pub struct BootstrappingTermStream<'a> {
 
 impl<'a> BootstrappingTermStream<'a> {
     #[inline]
-    pub(super) fn from_char_reader(
+    pub(super) fn from_reader(
         stream: Stream,
         machine_st: &'a mut MachineState,
         listing_src: ListingSource,

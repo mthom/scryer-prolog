@@ -31,7 +31,7 @@ pub(super) fn bootstrapping_compile(
 ) -> Result<(), SessionError> {
     let (wam_prelude, machine_st) = wam.prelude_view_and_machine_st();
 
-    let term_stream = BootstrappingTermStream::from_char_reader(stream, machine_st, listing_src);
+    let term_stream = BootstrappingTermStream::from_reader(stream, machine_st, listing_src);
 
     let payload =
         BootstrappingLoadState(LoadStatePayload::new(wam_prelude.code.len(), term_stream));
@@ -1146,16 +1146,6 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
     target_pos: usize,
 ) -> Option<IndexPtr> {
     let payload_compilation_target = payload.compilation_target;
-    // let code_idx_offset = self.get_or_insert_code_index(key, payload_compilation_target);
-
-    /*
-    let skeleton = self
-        .wam_prelude
-        .indices
-        .get_predicate_skeleton_mut(&payload_compilation_target, &key)
-        .unwrap();
-    */
-
     let lower_bound = lower_bound_of_target_clause(skeleton, target_pos);
     let lower_bound_is_unindexed = skeleton.clause_indices[lower_bound].index_loc.is_none();
 
@@ -1193,18 +1183,6 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                         );
                     }
 
-                    payload.retraction_info.push_record(
-                        RetractionRecord::SkeletonClauseStartReplaced(
-                            payload_compilation_target,
-                            key,
-                            target_pos + 1,
-                            skeleton.clause_indices[target_pos + 1].clause_start,
-                        ),
-                    );
-
-                    skeleton.clause_indices[target_pos + 1].clause_start =
-                        skeleton.clause_indices[target_pos].clause_start;
-
                     let update_code_index = target_pos == 0
                         && skeleton.clause_indices[target_pos + 1].index_loc.is_none();
 
@@ -1213,6 +1191,14 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                     } else {
                         None
                     };
+
+                    delete_from_skeleton(
+                        payload_compilation_target,
+                        key,
+                        skeleton,
+                        target_pos,
+                        &mut payload.retraction_info,
+                    );
 
                     return index_ptr_opt;
                 }
@@ -1235,13 +1221,21 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                         )
                     };
 
+                    delete_from_skeleton(
+                        payload_compilation_target,
+                        key,
+                        skeleton,
+                        target_pos,
+                        &mut payload.retraction_info,
+                    );
+
                     return index_ptr_opt;
                 }
             }
         }
     }
 
-    match skeleton.clause_indices[lower_bound].index_loc {
+    let result = match skeleton.clause_indices[lower_bound].index_loc {
         Some(target_indexing_loc)
             if mergeable_indexed_subsequences(code, lower_bound, target_pos, skeleton) =>
         {
@@ -1360,11 +1354,10 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
 
                         let lower_bound_clause_start =
                             skeleton.clause_indices[lower_bound].clause_start;
-                        let preceding_choice_instr_loc;
 
                         match &mut code[clause_start] {
                             Instruction::TryMeElse(0) => {
-                                preceding_choice_instr_loc =
+                                let preceding_choice_instr_loc =
                                     if skeleton.clause_indices[lower_bound].index_loc.is_some() {
                                         lower_bound_clause_start - 2
                                     } else {
@@ -1401,21 +1394,9 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                                         &mut payload.retraction_info,
                                     );
                                 }
-
-                                payload.retraction_info.push_record(
-                                    RetractionRecord::SkeletonClauseStartReplaced(
-                                        payload_compilation_target,
-                                        key,
-                                        target_pos + 1,
-                                        skeleton.clause_indices[target_pos + 1].clause_start,
-                                    ),
-                                );
-
-                                skeleton.clause_indices[target_pos + 1].clause_start =
-                                    skeleton.clause_indices[target_pos].clause_start;
                             }
                             _ => {
-                                preceding_choice_instr_loc = find_inner_choice_instr(
+                                let preceding_choice_instr_loc = find_inner_choice_instr(
                                     code,
                                     skeleton.clause_indices[target_pos - 1].clause_start,
                                     index_loc,
@@ -1469,7 +1450,17 @@ pub(super) fn retract_clause<'a, LS: LoadState<'a>>(
                 )
             }
         }
-    }
+    };
+
+    delete_from_skeleton(
+        payload_compilation_target,
+        key,
+        skeleton,
+        target_pos,
+        &mut payload.retraction_info,
+    );
+
+    result
 }
 
 #[inline]
@@ -2152,7 +2143,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         self.retract_local_clauses_by_locs(
                             clause_clause_compilation_target,
                             (atom!("$clause"), 6),
-                            (0..skeleton.clause_indices.len()).map(Some).collect(),
+                            (0..skeleton.clause_indices.len()).collect(),
                             true, // the builtin M:'$clause'/4 is always dynamic.
                         );
                     }

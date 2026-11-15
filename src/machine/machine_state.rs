@@ -1,4 +1,6 @@
-use crate::arena::*;
+use crate::arena::alloc::*;
+use crate::arena::read_line::*;
+use crate::arena::stream_layout::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::heap_iter::*;
@@ -11,7 +13,6 @@ use crate::machine::heap::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::stack::*;
-use crate::machine::streams::*;
 use crate::parser::ast::*;
 use crate::read::TermWriteResult;
 use crate::types::*;
@@ -543,6 +544,7 @@ impl MachineState {
         self.iip = or_frame.prelude.biip;
 
         self.pdl.clear();
+
         self.fail = false;
     }
 
@@ -765,7 +767,7 @@ impl MachineState {
     ) -> Result<OnEOF, MachineStub> {
         self.eof_action(self.registers[2], stream, atom!("read_term"), 3)?;
 
-        if stream.options().eof_action() == EOFAction::Reset && !self.fail {
+        if stream.options.eof_action() == EOFAction::Reset && !self.fail {
             return Ok(OnEOF::Continue);
         }
 
@@ -779,61 +781,37 @@ impl MachineState {
         stream: Stream,
         indices: &mut IndexStore,
     ) -> CallResult {
-        match stream {
-            #[cfg(feature = "http")]
-            Stream::HttpRead(_) => self.read_term(
-                stream,
-                indices,
-                MachineState::read_term_from_user_input_eof_handler,
-            ),
-            #[cfg(feature = "tls")]
-            Stream::NamedTls(_) => self.read_term(
-                stream,
-                indices,
-                MachineState::read_term_from_user_input_eof_handler,
-            ),
-            Stream::Readline(ptr) => {
-                let readline = unsafe { ptr.as_ptr().as_mut() }.unwrap();
-                readline.set_atoms_for_completion(&self.atom_tbl);
-                self.read_term(
-                    stream,
-                    indices,
-                    MachineState::read_term_from_user_input_eof_handler,
-                )
-            }
-            Stream::Byte(_)
-            | Stream::InputChannel(_)
-            | Stream::InputFile(_)
-            | Stream::NamedTcp(_)
-            | Stream::Null(_)
-            | Stream::PipeReader(_)
-            | Stream::StaticString(_) => self.read_term(
-                stream,
-                indices,
-                MachineState::read_term_from_user_input_eof_handler,
-            ),
-            _ => {
-                let stub = functor_stub(atom!("read_term_from_user_input"), 3);
-                let err = self.permission_error(
-                    Permission::InputStream,
-                    atom!("stream"),
-                    atom_as_cell!(atom!("user_input")),
-                );
+        if !stream.is_input_stream() {
+            let stub = functor_stub(atom!("read_term_from_user_input"), 3);
+            let err = self.permission_error(
+                Permission::InputStream,
+                atom!("stream"),
+                atom_as_cell!(atom!("user_input")),
+            );
 
-                Err(self.error_form(err, stub))
-            }
+            return Err(self.error_form(err, stub));
         }
+
+        if let Some(mut readline_stream) = stream.as_typed_stream::<ReadlineStream>() {
+            readline_stream.set_atoms_for_completion(&self.atom_tbl);
+        }
+
+        self.read_term(
+            stream,
+            indices,
+            MachineState::read_term_from_user_input_eof_handler,
+        )
     }
 
     pub fn read_term_eof_handler(&mut self, mut stream: Stream) -> Result<OnEOF, MachineStub> {
         if stream.at_end_of_stream() {
             unify!(self, self.registers[2], atom_as_cell!(atom!("end_of_file")));
-            stream.set_past_end_of_stream(true);
+            stream.past_end_of_stream = true;
             return Ok(OnEOF::Return);
-        } else if stream.past_end_of_stream() {
+        } else if stream.past_end_of_stream {
             self.eof_action(self.registers[2], stream, atom!("read_term"), 3)?;
 
-            if stream.options().eof_action() == EOFAction::Reset && !self.fail {
+            if stream.options.eof_action() == EOFAction::Reset && !self.fail {
                 return Ok(OnEOF::Continue);
             }
         }
@@ -855,7 +833,7 @@ impl MachineState {
             3,
         )?;
 
-        if stream.past_end_of_stream() {
+        if stream.past_end_of_stream {
             return Ok(());
         }
 

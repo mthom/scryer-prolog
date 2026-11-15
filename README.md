@@ -73,8 +73,8 @@ Extend Scryer Prolog to include the following, among other features:
   - [ ] Inlining all built-ins and system call instructions.
   - [x] Greatly reducing the number of instructions used to compile disjunctives.
   - [x] Storing short atoms to heap cells without writing them to the atom table.
-- [ ] Configurable JIT/on-demand indexing over all arguments
-      (documented in "[Demand-Driven Indexing of Prolog Clauses](https://user.it.uu.se/~kostis/Papers/iclp07.pdf)"). ([_in progress_](https://github.com/mthom/scryer-prolog/pull/3413))
+- [x] Configurable JIT/on-demand indexing over all arguments
+      (documented in "[Demand-Driven Indexing of Prolog Clauses](https://user.it.uu.se/~kostis/Papers/iclp07.pdf)").
 - [ ] A compacting garbage collector satisfying the five properties of
       "[Precise Garbage Collection in Prolog](https://www.complang.tuwien.ac.at/ulrich/papers/PDF/2008-ciclops.pdf)." (_in progress_)
 
@@ -424,7 +424,7 @@ arithmetic operators with the usual precedences,
 
 New operators can be defined using the `op` declaration.
 
-### First instantiated argument indexing
+### Argument indexing
 
 Scryer Prolog indexes on the leftmost argument that is not a variable
 in all clauses of a predicate's&nbsp;definition. We call this strategy
@@ -453,6 +453,22 @@ needed to benefit from indexing in such cases.
 Conventional first argument&nbsp;indexing naturally arises as a
 special case of this strategy, if the first argument is instantiated
 in any clause of a predicate's definition.
+
+Scryer's indexing is further generalized to work over *all* arguments
+of a predicate following [*Demand-Driven Indexing of Prolog
+Clauses*](https://user.it.uu.se/~kostis/Papers/iclp07.pdf). The
+`indexing/1` directive is used to control indexing per argument:
+
+<pre>
+:- indexing(<i>pred</i>(Arg<sub>1</sub>, Arg<sub>2</sub>, ..., Arg<sub>n</sub>)).
+</pre>
+
+Specifying `+` in an argument position means index that column,
+assuming every clause has an instantiated argument there. If some
+clause has a variable in that column, no index gets built for
+it. `-`&nbsp;means don't index that column at all, even if it's
+instantiated everywhere. Default with no directive is&nbsp;`+` on
+every argument.
 
 ### Strings and partial strings
 
@@ -903,9 +919,11 @@ in&nbsp;person.
   in Vienna, Austria. Its [announcement and discussion](https://github.com/mthom/scryer-prolog/discussions/2377).
 - [Scryer Prolog Meetup 2025](https://hsd-pbsa.de/veranstaltung/scryer-prolog-meetup-2025/)
   in Düsseldorf, Germany. Its [announcement and discussion](https://github.com/mthom/scryer-prolog/discussions/2948).
-- **Attend, present and represent:** The [Scryer Prolog Meetup 2026](https://www.digitalaustria.gv.at/wissenswertes/events/scryerprologmeetup2026.html)
-  will take place on Oct.&nbsp;24th and 25th&nbsp;2026 in Vienna, Austria.
-  Its [announcement](https://github.com/mthom/scryer-prolog/discussions/3327).
+- [Scryer Prolog Meetup 2026](https://www.digitalaustria.gv.at/wissenswertes/events/scryerprologmeetup2026.html)
+  in Vienna, Austria. Its [announcement](https://github.com/mthom/scryer-prolog/discussions/3327).
+- **Save the date:** The Scryer Prolog Meetup 2027 will take place on
+  Oct.&nbsp;28th and 29th&nbsp;2027 in Düsseldorf, Germany. More
+  information will follow.
 
 ## Support and discussions
 
@@ -913,5 +931,5 @@ If Scryer Prolog crashes or yields unexpected errors, consider filing
 an&nbsp;[issue](https://codeberg.org/mthom/scryer-prolog/issues).
 
 To get in touch with the Scryer Prolog community, participate in the
-[Matrix&nbsp;space](https://app.element.io/#/room/#scryer-prolog:matrix.org)
-or visit our #scryer IRC channel on [Libera](https://libera.chat)!
+[Matrix&nbsp;space](https://matrix.to/#/#scryer-prolog:matrix.org) or
+visit our #scryer IRC channel on [Libera](https://libera.chat)!

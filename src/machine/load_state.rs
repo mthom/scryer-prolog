@@ -361,7 +361,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     clause_indices
                         .iter()
                         .cloned()
-                        .map(|clause_loc| skeleton.target_pos_of_clause_clause_loc(clause_loc))
+                        .filter_map(|clause_loc| {
+                            skeleton.target_pos_of_clause_clause_loc(clause_loc)
+                        })
                         .collect(),
                     skeleton.core.is_dynamic,
                 )
@@ -381,11 +383,17 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         &mut self,
         compilation_target: CompilationTarget,
         key: PredicateKey,
-        clause_target_poses: Vec<Option<usize>>,
+        mut clause_target_poses: Vec<usize>,
         is_dynamic: bool,
     ) {
         let old_compilation_target =
             mem::replace(&mut self.payload.compilation_target, compilation_target);
+
+        // "None" clause target_pos's were removed
+        // earlier, e.g., by retract, without updating the
+        // local skeleton. they can be safely removed.
+
+        clause_target_poses.sort();
 
         if is_dynamic {
             let skeleton = self
@@ -396,23 +404,14 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             let code = &mut self.wam_prelude.code;
             let global_clock = LS::machine_st(&mut self.payload).global_clock;
 
-            for target_pos_opt in clause_target_poses {
-                match target_pos_opt {
-                    Some(target_pos) => {
-                        let clause_index = skeleton.clause_indices[target_pos];
-                        retract_dynamic_clause(
-                            clause_index.clause_start,
-                            code,
-                            clause_index.index_loc,
-                            global_clock,
-                        );
-                    }
-                    None => {
-                        // Here because the clause was been removed
-                        // earlier, e.g., by retract, without updating the
-                        // local skeleton. In this case, do nothing.
-                    }
-                }
+            for target_pos in clause_target_poses.into_iter().rev() {
+                let clause_index = skeleton.clause_indices[target_pos];
+                retract_dynamic_clause(
+                    clause_index.clause_start,
+                    code,
+                    clause_index.index_loc,
+                    global_clock,
+                );
             }
         } else {
             let skeleton = self
@@ -423,37 +422,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             let code = &mut self.wam_prelude.code;
             let mut index_ptr_opt = None;
 
-            for target_pos_opt in clause_target_poses.iter().cloned() {
-                match target_pos_opt {
-                    Some(target_pos) => {
-                        let result = retract_clause::<LS>(
-                            code,
-                            key,
-                            skeleton,
-                            &mut self.payload,
-                            target_pos,
-                        );
+            for target_pos in clause_target_poses.into_iter().rev() {
+                let result =
+                    retract_clause::<LS>(code, key, skeleton, &mut self.payload, target_pos);
 
-                        if result.is_some() {
-                            index_ptr_opt = result;
-                        }
-                    }
-                    None => {
-                        // Here because the clause was been removed
-                        // earlier, e.g., by retract, without updating the
-                        // local skeleton. In this case, do nothing.
-                    }
+                if result.is_some() {
+                    index_ptr_opt = result;
                 }
-            }
-
-            for target_pos in clause_target_poses.iter().cloned().rev().flatten() {
-                delete_from_skeleton(
-                    self.payload.compilation_target,
-                    key,
-                    skeleton,
-                    target_pos,
-                    &mut self.payload.retraction_info,
-                );
             }
 
             if let Some(index_ptr) = index_ptr_opt {
@@ -1303,7 +1278,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         };
 
         let compilation_target = {
-            let term_stream = BootstrappingTermStream::from_char_reader(
+            let term_stream = BootstrappingTermStream::from_reader(
                 stream,
                 LS::machine_st(&mut self.payload),
                 listing_src,
@@ -1374,7 +1349,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         };
 
         let compilation_target = {
-            let term_stream = BootstrappingTermStream::from_char_reader(
+            let term_stream = BootstrappingTermStream::from_reader(
                 stream,
                 LS::machine_st(&mut self.payload),
                 listing_src,

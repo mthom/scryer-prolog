@@ -2,11 +2,11 @@ use dashu::Integer;
 use dashu::Rational;
 use ordered_float::OrderedFloat;
 
-use crate::arena::*;
+use crate::arena::alloc::*;
+use crate::arena::opt_in_buf_reader::GraphemeRead;
 use crate::atom_table::*;
 use crate::offset_table::*;
 use crate::parser::ast::*;
-use crate::parser::char_reader::*;
 use crate::parser::lexer::*;
 
 use std::cell::Cell;
@@ -75,11 +75,19 @@ pub(crate) fn as_partial_string(
             if let Some(c) = atom.as_char() {
                 c.to_string()
             } else {
-                return Err(Term::Cons(Cell::default(), Box::new(head), Box::new(tail)));
+                return Err(Term::ConsCell(
+                    Cell::default(),
+                    Box::new(head),
+                    Box::new(tail),
+                ));
             }
         }
         _ => {
-            return Err(Term::Cons(Cell::default(), Box::new(head), Box::new(tail)));
+            return Err(Term::ConsCell(
+                Cell::default(),
+                Box::new(head),
+                Box::new(tail),
+            ));
         }
     };
 
@@ -88,17 +96,17 @@ pub(crate) fn as_partial_string(
 
     loop {
         match &mut **tail_ref {
-            Term::Cons(_, prev, succ) => {
+            Term::ConsCell(_, prev, succ) => {
                 match prev.as_ref() {
                     Term::Literal(_, Literal::Atom(atom)) => {
                         if let Some(c) = atom.as_char() {
                             string.push(c);
                         } else {
-                            return Err(Term::Cons(Cell::default(), Box::new(head), orig_tail));
+                            return Err(Term::ConsCell(Cell::default(), Box::new(head), orig_tail));
                         }
                     }
                     _ => {
-                        tail = Term::Cons(
+                        tail = Term::ConsCell(
                             Cell::default(),
                             Box::new((**prev).clone()),
                             Box::new((**succ).clone()),
@@ -242,7 +250,7 @@ pub struct Parser<'a, R> {
     terms: Vec<Term>,
 }
 
-pub fn read_tokens<R: CharRead>(lexer: &mut Lexer<'_, R>) -> Result<Vec<Token>, ParserError> {
+pub fn read_tokens<R: GraphemeRead>(lexer: &mut Lexer<'_, R>) -> Result<Vec<Token>, ParserError> {
     let mut tokens = vec![];
 
     loop {
@@ -292,7 +300,7 @@ impl TokenType {
     }
 }
 
-impl<'a, R: CharRead> Parser<'a, R> {
+impl<'a, R: GraphemeRead> Parser<'a, R> {
     pub fn new(stream: R, machine_st: &'a mut MachineState) -> Self {
         Parser {
             lexer: Lexer::new(stream, machine_st),
@@ -312,15 +320,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     fn replace_cons_tail(&self, mut list: &mut Term, new_tail: Term) {
-        while let Term::Cons(_cell, _head, tail) = list {
+        while let Term::ConsCell(_cell, _head, tail) = list {
             list = tail.as_mut();
         }
 
-        match list {
-            Term::Literal(_, Literal::Atom(atom!("[]"))) => {
-                *list = new_tail;
-            }
-            _ => {}
+        if let Term::Literal(_, Literal::Atom(atom!("[]"))) = list {
+            *list = new_tail;
         }
     }
 
@@ -361,7 +366,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         // Empty string in codes mode: ""||K => K
                         arg2
                     }
-                    Term::Cons(_, _, _) => {
+                    Term::ConsCell(_, _, _) => {
                         self.replace_cons_tail(&mut arg1, arg2);
                         arg1
                     }
@@ -420,7 +425,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 let mut list = Term::Literal(Cell::default(), Literal::Atom(atom!("[]")));
 
                 for c in s.as_str().chars().rev() {
-                    list = Term::Cons(
+                    list = Term::ConsCell(
                         Cell::default(),
                         Box::new(Term::Literal(
                             Cell::default(),
@@ -435,8 +440,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
             }
             Token::String(s) => {
                 debug_assert!(self.lexer.machine_st.flags.double_quotes.is_chars());
-                self.terms
-                    .push(Term::CompleteString(Cell::default(), Rc::new(s)));
+                self.terms.push(Term::CompleteString(
+                    Cell::default(),
+                    Rc::new(s.to_string()),
+                ));
                 TokenType::Term
             }
             Token::Literal(c) => {
@@ -447,7 +454,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 if v.trim() == "_" {
                     self.terms.push(Term::AnonVar);
                 } else {
-                    self.terms.push(Term::Var(Cell::default(), VarPtr::from(v)));
+                    self.terms
+                        .push(Term::Var(Cell::default(), VarPtr::from(v.to_string())));
                 }
 
                 TokenType::Term
@@ -630,7 +638,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     pub fn reset(&mut self) {
-        self.stack.clear()
+        self.stack.clear();
     }
 
     fn expand_comma_compacted_terms(&mut self, index: usize) -> usize {
@@ -757,7 +765,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         let idx = self.terms.len() - arity;
 
         let list = self.terms.drain(idx..).rev().fold(end_term, |acc, t| {
-            Term::Cons(Cell::default(), Box::new(t), Box::new(acc))
+            Term::ConsCell(Cell::default(), Box::new(t), Box::new(acc))
         });
 
         self.stack.truncate(list_len);
@@ -770,7 +778,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         });
 
         self.terms.push(match list {
-            Term::Cons(_, head, tail) => match as_partial_string(*head, *tail) {
+            Term::ConsCell(_, head, tail) => match as_partial_string(*head, *tail) {
                 Ok((string_buf, Some(tail))) => {
                     Term::PartialString(Cell::default(), Rc::new(string_buf), tail)
                 }
@@ -1055,7 +1063,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         match last_term {
                             Term::CompleteString(_, _) => true,
                             Term::PartialString(_, _, _) => true,
-                            Term::Cons(_, _, _) => true, // Allows codes mode: "abc" becomes [97,98,99]
+                            Term::ConsCell(_, _, _) => true, // Allows codes mode: "abc" becomes [97,98,99]
                             Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true, // Empty string in codes mode
                             _ => false,
                         }
@@ -1113,7 +1121,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     match last_term {
                         Term::CompleteString(_, _) => true,
                         Term::PartialString(_, _, _) => true,
-                        Term::Cons(_, _, _) => true, // Allows codes mode: "abc" becomes [97,98,99]
+                        Term::ConsCell(_, _, _) => true, // Allows codes mode: "abc" becomes [97,98,99]
                         Term::Literal(_, Literal::Atom(atom)) if *atom == atom!("[]") => true, // Empty string in codes mode
                         _ => false,
                     }

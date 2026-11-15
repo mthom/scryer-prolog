@@ -593,10 +593,10 @@ mod tests {
         let mut writer = wam.machine_st.heap.reserve(4).unwrap();
 
         writer.write_with(|section| {
-            section.push_pstr("abc ");
+            section.push_pstr(b"abc ");
             section.push_cell(pstr_loc_as_cell!(heap_index!(2)));
 
-            section.push_pstr("def");
+            section.push_pstr(b"def");
             section.push_cell(pstr_loc_as_cell!(0));
         });
 
@@ -639,10 +639,10 @@ mod tests {
         let mut writer = wam.machine_st.heap.reserve(4).unwrap();
 
         writer.write_with(|section| {
-            section.push_pstr("abc ");
+            section.push_pstr(b"abc ");
             section.push_cell(pstr_loc_as_cell!(heap_index!(2) + 9));
 
-            section.push_pstr("defdefdefdef");
+            section.push_pstr(b"defdefdefdef");
             section.push_cell(pstr_loc_as_cell!(0));
         });
 
@@ -691,7 +691,7 @@ mod tests {
         let mut writer = wam.machine_st.heap.reserve(4).unwrap();
 
         writer.write_with(|section| {
-            section.push_pstr("012345678912345");
+            section.push_pstr(b"012345678912345");
             section.push_cell(pstr_loc_as_cell!(heap_index!(0)));
         });
 
@@ -721,7 +721,7 @@ mod tests {
         let mut writer = wam.machine_st.heap.reserve(4).unwrap();
 
         writer.write_with(|section| {
-            section.push_pstr("012345678912345");
+            section.push_pstr(b"012345678912345");
             section.push_cell(pstr_loc_as_cell!(heap_index!(0) + 9));
         });
 
@@ -758,7 +758,7 @@ mod tests {
         let mut writer = wam.machine_st.heap.reserve(4).unwrap();
 
         writer.write_with(|section| {
-            section.push_pstr("012345678912345");
+            section.push_pstr(b"012345678912345");
             section.push_cell(pstr_loc_as_cell!(heap_index!(0) + 7));
         });
 
@@ -798,7 +798,7 @@ mod tests {
         let mut writer = wam.machine_st.heap.reserve(4).unwrap();
 
         writer.write_with(|section| {
-            section.push_pstr("012345678912345");
+            section.push_pstr(b"012345678912345");
             section.push_cell(pstr_loc_as_cell!(heap_index!(0) + 12));
         });
 

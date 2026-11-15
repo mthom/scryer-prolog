@@ -1,4 +1,4 @@
-use crate::arena::*;
+use crate::arena::alloc::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
 use crate::forms::*;
@@ -42,8 +42,8 @@ impl ArithmeticTerm {
     fn into_functor(self, arena: &mut Arena) -> MachineStub {
         match self {
             ArithmeticTerm::Reg(r) => reg_type_into_functor(r),
-            ArithmeticTerm::IntermReg(i) => {
-                functor!(atom!("x"), [fixnum(i)])
+            ArithmeticTerm::Interm(i) => {
+                functor!(atom!("heap_s_offset"), [fixnum(i)])
             }
             ArithmeticTerm::Number(n) => {
                 functor!(atom!("number"), [number(n, arena)])
@@ -160,6 +160,7 @@ pub enum StaticIndexedChoiceInstructionOffset {
 }
 
 impl StaticIndexedChoiceInstructionOffset {
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn to_functor(&self) -> MachineStub {
         let offset = self.offset() as i64;
 
@@ -703,8 +704,12 @@ impl Instruction {
             &Instruction::FloatIntegerPart(ref at, t) => {
                 arith_instr_unary_functor(atom!("float_integer_part"), arena, at, t)
             }
-            &Instruction::Neg(ref at, t) => arith_instr_unary_functor(atom!("-"), arena, at, t),
-            &Instruction::Plus(ref at, t) => arith_instr_unary_functor(atom!("+"), arena, at, t),
+            &Instruction::Neg(ref at, t) => {
+                arith_instr_unary_functor(atom!("unary_neg"), arena, at, t)
+            }
+            &Instruction::Plus(ref at, t) => {
+                arith_instr_unary_functor(atom!("unary_pos"), arena, at, t)
+            }
             &Instruction::BitwiseComplement(ref at, t) => {
                 arith_instr_unary_functor(atom!("\\"), arena, at, t)
             }
@@ -750,19 +755,29 @@ impl Instruction {
             &Instruction::ExecuteFastCallN(arity) => {
                 functor!(atom!("execute_fast_call_n"), [fixnum(arity)])
             }
+            &Instruction::CallNumberGreaterThan(at_1, at_2)
+            | &Instruction::CallNumberLessThan(at_1, at_2)
+            | &Instruction::CallNumberGreaterThanOrEqual(at_1, at_2)
+            | &Instruction::CallNumberLessThanOrEqual(at_1, at_2)
+            | &Instruction::CallNumberEqual(at_1, at_2)
+            | &Instruction::CallNumberNotEqual(at_1, at_2)
+            | &Instruction::CallIs(at_1, at_2) => {
+                let (name, _arity) = self.to_name_and_arity();
+
+                let at_1_stub = at_1.into_functor(arena);
+                let at_2_stub = at_2.into_functor(arena);
+
+                functor!(
+                    atom!("call"),
+                    [atom_as_cell(name), functor(at_1_stub), functor(at_2_stub)]
+                )
+            }
             &Instruction::CallTermGreaterThan
             | &Instruction::CallTermLessThan
             | &Instruction::CallTermGreaterThanOrEqual
             | &Instruction::CallTermLessThanOrEqual
             | &Instruction::CallTermEqual
             | &Instruction::CallTermNotEqual
-            | &Instruction::CallNumberGreaterThan(..)
-            | &Instruction::CallNumberLessThan(..)
-            | &Instruction::CallNumberGreaterThanOrEqual(..)
-            | &Instruction::CallNumberLessThanOrEqual(..)
-            | &Instruction::CallNumberEqual(..)
-            | &Instruction::CallNumberNotEqual(..)
-            | &Instruction::CallIs(..)
             | &Instruction::CallAcyclicTerm
             | &Instruction::CallArg
             | &Instruction::CallCompare
@@ -775,6 +790,23 @@ impl Instruction {
                 let (name, arity) = self.to_name_and_arity();
                 functor!(atom!("call"), [atom_as_cell(name), fixnum(arity)])
             }
+            &Instruction::ExecuteNumberGreaterThan(at_1, at_2)
+            | &Instruction::ExecuteNumberLessThan(at_1, at_2)
+            | &Instruction::ExecuteNumberGreaterThanOrEqual(at_1, at_2)
+            | &Instruction::ExecuteNumberLessThanOrEqual(at_1, at_2)
+            | &Instruction::ExecuteNumberEqual(at_1, at_2)
+            | &Instruction::ExecuteNumberNotEqual(at_1, at_2)
+            | &Instruction::ExecuteIs(at_1, at_2) => {
+                let (name, _arity) = self.to_name_and_arity();
+
+                let at_1_stub = at_1.into_functor(arena);
+                let at_2_stub = at_2.into_functor(arena);
+
+                functor!(
+                    atom!("execute"),
+                    [atom_as_cell(name), functor(at_1_stub), functor(at_2_stub)]
+                )
+            }
             //
             &Instruction::ExecuteTermGreaterThan
             | &Instruction::ExecuteTermLessThan
@@ -782,19 +814,12 @@ impl Instruction {
             | &Instruction::ExecuteTermLessThanOrEqual
             | &Instruction::ExecuteTermEqual
             | &Instruction::ExecuteTermNotEqual
-            | &Instruction::ExecuteNumberGreaterThan(..)
-            | &Instruction::ExecuteNumberLessThan(..)
-            | &Instruction::ExecuteNumberGreaterThanOrEqual(..)
-            | &Instruction::ExecuteNumberLessThanOrEqual(..)
-            | &Instruction::ExecuteNumberEqual(..)
-            | &Instruction::ExecuteNumberNotEqual(..)
             | &Instruction::ExecuteAcyclicTerm
             | &Instruction::ExecuteArg
             | &Instruction::ExecuteCompare
             | &Instruction::ExecuteCopyTerm
             | &Instruction::ExecuteFunctor
             | &Instruction::ExecuteGround
-            | &Instruction::ExecuteIs(..)
             | &Instruction::ExecuteKeySort
             | &Instruction::ExecuteSort
             | &Instruction::ExecuteGetNumber(_) => {
@@ -808,24 +833,51 @@ impl Instruction {
             | &Instruction::DefaultCallTermLessThanOrEqual
             | &Instruction::DefaultCallTermEqual
             | &Instruction::DefaultCallTermNotEqual
-            | &Instruction::DefaultCallNumberGreaterThan(..)
-            | &Instruction::DefaultCallNumberLessThan(..)
-            | &Instruction::DefaultCallNumberGreaterThanOrEqual(..)
-            | &Instruction::DefaultCallNumberLessThanOrEqual(..)
-            | &Instruction::DefaultCallNumberEqual(..)
-            | &Instruction::DefaultCallNumberNotEqual(..)
             | &Instruction::DefaultCallAcyclicTerm
             | &Instruction::DefaultCallArg
             | &Instruction::DefaultCallCompare
             | &Instruction::DefaultCallCopyTerm
             | &Instruction::DefaultCallFunctor
             | &Instruction::DefaultCallGround
-            | &Instruction::DefaultCallIs(..)
             | &Instruction::DefaultCallKeySort
             | &Instruction::DefaultCallSort
             | &Instruction::DefaultCallGetNumber(_) => {
                 let (name, arity) = self.to_name_and_arity();
                 functor!(atom!("call_default"), [atom_as_cell(name), fixnum(arity)])
+            }
+            &Instruction::DefaultCallNumberGreaterThan(at_1, at_2)
+            | &Instruction::DefaultCallNumberLessThan(at_1, at_2)
+            | &Instruction::DefaultCallNumberGreaterThanOrEqual(at_1, at_2)
+            | &Instruction::DefaultCallNumberLessThanOrEqual(at_1, at_2)
+            | &Instruction::DefaultCallNumberEqual(at_1, at_2)
+            | &Instruction::DefaultCallNumberNotEqual(at_1, at_2)
+            | &Instruction::DefaultCallIs(at_1, at_2) => {
+                let (name, _arity) = self.to_name_and_arity();
+
+                let at_1_stub = at_1.into_functor(arena);
+                let at_2_stub = at_2.into_functor(arena);
+
+                functor!(
+                    atom!("call_default"),
+                    [atom_as_cell(name), functor(at_1_stub), functor(at_2_stub)]
+                )
+            }
+            &Instruction::DefaultExecuteNumberGreaterThan(at_1, at_2)
+            | &Instruction::DefaultExecuteNumberLessThan(at_1, at_2)
+            | &Instruction::DefaultExecuteNumberGreaterThanOrEqual(at_1, at_2)
+            | &Instruction::DefaultExecuteNumberLessThanOrEqual(at_1, at_2)
+            | &Instruction::DefaultExecuteNumberEqual(at_1, at_2)
+            | &Instruction::DefaultExecuteNumberNotEqual(at_1, at_2)
+            | &Instruction::DefaultExecuteIs(at_1, at_2) => {
+                let (name, _arity) = self.to_name_and_arity();
+
+                let at_1_stub = at_1.into_functor(arena);
+                let at_2_stub = at_2.into_functor(arena);
+
+                functor!(
+                    atom!("execute_default"),
+                    [atom_as_cell(name), functor(at_1_stub), functor(at_2_stub)]
+                )
             }
             //
             &Instruction::DefaultExecuteTermGreaterThan
@@ -834,19 +886,12 @@ impl Instruction {
             | &Instruction::DefaultExecuteTermLessThanOrEqual
             | &Instruction::DefaultExecuteTermEqual
             | &Instruction::DefaultExecuteTermNotEqual
-            | &Instruction::DefaultExecuteNumberGreaterThan(..)
-            | &Instruction::DefaultExecuteNumberLessThan(..)
-            | &Instruction::DefaultExecuteNumberGreaterThanOrEqual(..)
-            | &Instruction::DefaultExecuteNumberLessThanOrEqual(..)
-            | &Instruction::DefaultExecuteNumberEqual(..)
-            | &Instruction::DefaultExecuteNumberNotEqual(..)
             | &Instruction::DefaultExecuteAcyclicTerm
             | &Instruction::DefaultExecuteArg
             | &Instruction::DefaultExecuteCompare
             | &Instruction::DefaultExecuteCopyTerm
             | &Instruction::DefaultExecuteFunctor
             | &Instruction::DefaultExecuteGround
-            | &Instruction::DefaultExecuteIs(..)
             | &Instruction::DefaultExecuteKeySort
             | &Instruction::DefaultExecuteSort
             | &Instruction::DefaultExecuteGetNumber(_) => {
@@ -1550,6 +1595,9 @@ impl Instruction {
             }
             &Instruction::BreakFromDispatchLoop => {
                 functor!(atom!("$break_from_dispatch_loop"))
+            }
+            &Instruction::AllocateOnHeap(num_cells) => {
+                functor!(atom!("allocate_on_heap"), [fixnum(num_cells)])
             }
         }
     }

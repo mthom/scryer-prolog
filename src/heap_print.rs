@@ -1,19 +1,21 @@
-use crate::arena::*;
 use crate::atom_table::*;
 use crate::parser::ast::*;
 use crate::parser::dashu::base::RemEuclid;
 use crate::parser::dashu::integer::Sign;
 use crate::parser::dashu::{Integer, Rational, ibig};
+use crate::parser::grapheme_classifiers::*;
 
+use crate::arena::alloc::*;
+use crate::arena::stream_layout::*;
 use crate::forms::*;
 use crate::heap_iter::*;
 use crate::machine::heap::*;
 use crate::machine::partial_string::*;
 use crate::machine::stack::*;
-use crate::machine::streams::*;
 use crate::offset_table::*;
 use crate::types::*;
 
+use bstr::ByteSlice;
 use dashu::base::Signed;
 use ordered_float::OrderedFloat;
 
@@ -173,16 +175,14 @@ fn char_to_string(is_quoted: bool, c: char) -> String {
         '\u{08}' if is_quoted => "\\b".to_string(), // UTF-8 backspace
         '\u{07}' if is_quoted => "\\a".to_string(), // UTF-8 alert
         '\\' if is_quoted => "\\\\".to_string(),
-        ' ' | '\'' | '\n' | '\r' | '\t' | '\u{0b}' | '\u{0c}' | '\u{08}' | '\u{07}' | '"'
-        | '\\' => c.to_string(),
-        _ => {
-            if c.is_whitespace() || c.is_control() {
-                // print all other control and whitespace characters in hex.
-                format!("\\x{:x}\\", c as u32)
-            } else {
-                c.to_string()
-            }
+        ' ' | '\"' | '\n' | '\r' | '\t' | '\u{0b}' | '\u{0c}' | '\u{08}' | '\u{07}' | '\\' => {
+            c.to_string()
         }
+        _ if c.is_whitespace() || c.is_control() => {
+            // print all other control and whitespace characters in hex.
+            format!("\\x{:x}\\", c as u32)
+        }
+        _ => c.to_string(),
     }
 }
 
@@ -237,23 +237,24 @@ enum TokenOrRedirect {
 }
 
 pub(crate) fn requires_space(atom: &str, op: &str) -> bool {
-    match atom.chars().last() {
+    match atom.as_bytes().chars().next_back() {
         Some(ac) => op
+            .as_bytes()
             .chars()
             .next()
             .map(|oc| {
                 if ac == '0' {
-                    oc == '\'' || oc == '(' || alpha_numeric_char!(oc)
-                } else if alpha_numeric_char!(ac) {
-                    oc == '(' || alpha_numeric_char!(oc)
-                } else if graphic_token_char!(ac) {
-                    graphic_token_char!(oc)
-                } else if variable_indicator_char!(ac) || capital_letter_char!(ac) {
-                    alpha_numeric_char!(oc)
-                } else if sign_char!(ac) {
-                    sign_char!(oc) || decimal_digit_char!(oc)
-                } else if single_quote_char!(ac) {
-                    single_quote_char!(oc)
+                    oc == '\'' || oc == '(' || oc.is_alphanumeric_grapheme()
+                } else if ac.is_alphanumeric_grapheme() {
+                    oc == '(' || oc.is_alphanumeric_grapheme()
+                } else if is_graphic_token_grapheme(ac) {
+                    is_graphic_token_grapheme(oc)
+                } else if is_underscore_grapheme(ac) || is_uppercase_grapheme(ac) {
+                    oc.is_alphanumeric_grapheme()
+                } else if is_sign_grapheme(ac) {
+                    is_sign_grapheme(oc) || is_decimal_digit_grapheme(oc)
+                } else if is_single_quote_grapheme(ac) {
+                    is_single_quote_grapheme(oc)
                 } else {
                     false
                 }
@@ -269,8 +270,8 @@ fn non_quoted_graphic_token<Iter: Iterator<Item = char>>(mut iter: Iter, c: char
             None => true,
             Some('*') => false, // if we start with comment token, we must quote.
             Some(c) => {
-                if graphic_token_char!(c) {
-                    iter.all(|c| graphic_token_char!(c))
+                if is_graphic_token_grapheme(c) {
+                    iter.all(is_graphic_token_grapheme)
                 } else {
                     false
                 }
@@ -280,31 +281,31 @@ fn non_quoted_graphic_token<Iter: Iterator<Item = char>>(mut iter: Iter, c: char
         match iter.next() {
             None => false,
             Some(c) => {
-                if graphic_token_char!(c) {
-                    iter.all(|c| graphic_token_char!(c))
+                if is_graphic_token_grapheme(c) {
+                    iter.all(is_graphic_token_grapheme)
                 } else {
                     false
                 }
             }
         }
     } else {
-        iter.all(|c| graphic_token_char!(c))
+        iter.all(is_graphic_token_grapheme)
     }
 }
 
 pub(super) fn non_quoted_token<Iter: Iterator<Item = char>>(mut iter: Iter) -> bool {
     if let Some(c) = iter.next() {
-        if small_letter_char!(c) {
-            iter.all(|c| alpha_numeric_char!(c))
-        } else if graphic_token_char!(c) {
+        if is_lowercase_grapheme(c) {
+            iter.all(|c| c.is_alphanumeric_grapheme())
+        } else if is_graphic_token_grapheme(c) {
             non_quoted_graphic_token(iter, c)
-        } else if semicolon_char!(c) || cut_char!(c) {
+        } else if is_semicolon_grapheme(c) || is_cut_grapheme(c) {
             iter.next().is_none()
         } else if c == '[' {
             iter.next() == Some(']') && iter.next().is_none()
         } else if c == '{' {
             iter.next() == Some('}') && iter.next().is_none()
-        } else if solo_char!(c) {
+        } else if is_solo_grapheme(c) {
             !(c == '(' || c == ')' || c == '}' || c == ']' || c == ',' || c == '%' || c == '|')
         } else {
             false
@@ -493,7 +494,7 @@ fn ambiguity_check(
 ) -> bool {
     let tail = &outputter.as_str()[last_item_idx..];
 
-    if atom == "," || !quoted || non_quoted_token(atom.chars()) {
+    if atom == "," || !quoted || non_quoted_token(atom.as_bytes().chars()) {
         requires_space(tail, atom)
     } else {
         requires_space(tail, "'")
@@ -529,19 +530,16 @@ pub(crate) fn numbervar(offset: &Integer, addr: HeapCellValue) -> Option<String>
     }
 
     read_heap_cell!(addr,
-        (HeapCellValueTag::Cons, c) => {
-            match_untyped_arena_ptr!(c,
-               (ArenaHeaderTag::Integer, n) => {
-                   if !n.is_negative() {
-                       Some(numbervar(Integer::from(offset + &*n)))
-                   } else {
-                       None
-                   }
-               }
-               _ => {
-                   None
-               }
-            )
+        (HeapCellValueTag::Cons, cons_ptr) => {
+            if let Some(n) = cons_ptr.to_typed_ptr::<Integer>() {
+                if !n.is_negative() {
+                    Some(numbervar(Integer::from(offset + &*n)))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
         }
         (HeapCellValueTag::Fixnum, n) => {
             if n.get_num() >= 0 {
@@ -934,7 +932,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     }
 
     fn print_op_addendum(&mut self, atom: &str) -> String {
-        if !self.quoted || non_quoted_token(atom.chars()) {
+        if !self.quoted || non_quoted_token(atom.as_bytes().chars()) {
             atom.to_string()
         } else if atom == "''" {
             "''".to_string()
@@ -945,7 +943,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 result.push('\'');
             }
 
-            for c in atom.chars() {
+            for c in atom.as_bytes().chars() {
                 result += &char_to_string(self.quoted, c);
             }
 
@@ -1155,8 +1153,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             }
 
             match iteratee {
-                PStrIteratee::Char { value, .. } => {
-                    emit_char!(value);
+                PStrIteratee::Char { value } => {
+                    emit_char!(value)
                 }
                 PStrIteratee::PStrSlice {
                     slice_loc,
@@ -1164,7 +1162,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 } => {
                     let s = iter.heap.slice_to_str(slice_loc, slice_len);
 
-                    for c in s.chars() {
+                    for c in s.as_bytes().chars() {
                         emit_char!(c);
                     }
                 }
@@ -1182,7 +1180,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let mut iter = HeapPStrIter::new(self.iter.heap, focus);
 
         let char_to_string = |c: char| {
-            // refrain from quoting characters other than '"' and '\'
+            // refrain from quoting characters other than "\"" and '\'
             // unless self.quoted is true.
             match c {
                 '\\' => "\\\\".to_string(),
@@ -1194,7 +1192,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         if max_depth == 0 {
             while let Some(iteratee) = iter.next() {
                 let iter: Box<dyn Iterator<Item = char>> = match iteratee {
-                    PStrIteratee::Char { value: c, .. } => Box::new(std::iter::once(c)),
+                    PStrIteratee::Char { value: c } => Box::new(std::iter::once(c)),
                     PStrIteratee::PStrSlice {
                         slice_loc,
                         slice_len,
@@ -1215,7 +1213,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
             while let Some(iteratee) = iter.next() {
                 let iter: Box<dyn Iterator<Item = char>> = match iteratee {
-                    PStrIteratee::Char { value: c, .. } => Box::new(std::iter::once(c)),
+                    PStrIteratee::Char { value: c } => Box::new(std::iter::once(c)),
                     PStrIteratee::PStrSlice {
                         slice_loc,
                         slice_len,
@@ -1541,7 +1539,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             return;
         }
 
-        if let Some(alias) = stream.options().get_alias() {
+        if let Some(alias) = stream.options.get_alias() {
             self.print_impromptu_atom(alias);
         } else {
             let stream_atom = atom!("$stream");
@@ -1550,7 +1548,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 let atom = if stream.is_stdout() || stream.is_stdin() {
                     TokenOrRedirect::Atom(atom!("user"))
                 } else {
-                    TokenOrRedirect::RawPtr(stream.as_ptr())
+                    TokenOrRedirect::RawPtr(stream.header_ptr())
                 };
 
                 let stream_root = self.state_stack.pop().unwrap();
@@ -1571,9 +1569,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             max_depth,
         } = char_list;
 
-        let c = self.iter.heap.char_at(pstr_loc);
+        let mut c_iter = self.iter.heap.as_slice()[pstr_loc..].chars();
 
-        if c != '\u{0}' {
+        if let Some(c) = c_iter.next()
+            && c != '\u{0}'
+        {
             if !self.max_depth_exhausted(max_depth) {
                 self.state_stack
                     .push(TokenOrRedirect::CommaSeparatedCharList(
@@ -1584,9 +1584,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     ));
 
                 let max_depth_allows = self.max_depth == 0 || max_depth > 1;
-                let next_c = self.iter.heap.char_at(pstr_loc + c.len_utf8());
+                let next_g = c_iter.next();
 
-                if max_depth_allows && next_c != '\u{0}' {
+                if max_depth_allows && next_g.is_some() && next_g != Some('\u{0}') {
                     self.state_stack.push(TokenOrRedirect::Comma);
                 }
 
@@ -1744,34 +1744,33 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     }
                 }
             }
-            (HeapCellValueTag::Cons, c) => {
-                match_untyped_arena_ptr!(c,
-                   (ArenaHeaderTag::Integer, n) => {
-                       self.print_number(max_depth, NumberFocus::Unfocused(Number::Integer(n)), &op);
-                   }
-                   (ArenaHeaderTag::Rational, r) => {
-                       self.print_number(max_depth, NumberFocus::Unfocused(Number::Rational(r)), &op);
-                   }
-                   (ArenaHeaderTag::Stream, stream) => {
-                       self.print_stream(stream, max_depth);
-                   }
-                   (ArenaHeaderTag::TcpListener, listener) => {
-                       self.print_tcp_listener(&listener, max_depth);
-                   }
-                   (ArenaHeaderTag::Dropped, _value) => {
-                       if self.max_depth_exhausted(max_depth) {
-                           self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-                       } else {
-                           self.print_impromptu_atom(atom!("$dropped_value"));
-                       }
-                   }
-                   (ArenaHeaderTag::ChildProcess, process) => {
-
+            (HeapCellValueTag::Cons, cons_ptr) => {
+                match cons_ptr.get_tag() {
+                    ArenaHeaderTag::Integer => {
+                        let n = unsafe { cons_ptr.as_typed_ptr::<Integer>() };
+                        self.print_number(max_depth, NumberFocus::Unfocused(Number::Integer(n)), &op);
+                    }
+                    ArenaHeaderTag::Rational => {
+                        let r = unsafe { cons_ptr.as_typed_ptr::<Rational>() };
+                        self.print_number(max_depth, NumberFocus::Unfocused(Number::Rational(r)), &op);
+                    }
+                    ArenaHeaderTag::TcpListener => {
+                        let listener = unsafe { cons_ptr.as_typed_ptr::<TcpListener>() };
+                        self.print_tcp_listener(&listener, max_depth);
+                    }
+                    ArenaHeaderTag::Dropped => {
+                        if self.max_depth_exhausted(max_depth) {
+                            self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+                        } else {
+                            self.print_impromptu_atom(atom!("$dropped_value"));
+                        }
+                    }
+                    ArenaHeaderTag::ChildProcess => {
+                        let process = unsafe { cons_ptr.as_typed_ptr::<std::process::Child>() };
                         let process_atom = atom!("$process");
 
                         if self.format_struct(max_depth, 1, process_atom) {
                             let atom = TokenOrRedirect::NumberFocus(max_depth, NumberFocus::Unfocused(Number::Fixnum(Fixnum::build_with(process.id()))), op);
-
                             let process_root = self.state_stack.pop().unwrap();
 
                             self.state_stack.pop();
@@ -1781,10 +1780,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                             self.state_stack.push(TokenOrRedirect::Open);
                             self.state_stack.push(process_root);
                         }
-                   }
-                   _ => {
-                   }
-               );
+                    }
+                    _ if let Some(stream) = Stream::from_tag(cons_ptr) => {
+                        self.print_stream(stream, max_depth);
+                    }
+                    _ => {
+                    }
+                }
             }
             _ => {
                 unreachable!()
@@ -2110,7 +2112,7 @@ mod tests {
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.allocate_pstr("abc").unwrap();
+        wam.machine_st.heap.allocate_pstr(b"abc").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(1)).unwrap();
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();

@@ -18,6 +18,7 @@ use arcu::Rcu;
 use arcu::atomic::Arcu;
 use arcu::epoch_counters::GlobalEpochCounterPool;
 use arcu::rcu_ref::RcuRef;
+use bstr::ByteSlice;
 use indexmap::IndexSet;
 
 use modular_bitfield::prelude::*;
@@ -38,17 +39,17 @@ pub struct AtomCell {
     tag: B5,
 }
 
-const INLINED_ATOM_MAX_LEN: usize = 6;
+pub const MAX_INLINED_ATOM_LEN: usize = 6;
 
-const_assert!(INLINED_ATOM_MAX_LEN < mem::size_of::<AtomCell>());
+const_assert!(MAX_INLINED_ATOM_LEN < mem::size_of::<AtomCell>());
 const_assert!(mem::size_of::<AtomCell>() == 8);
 
-const_assert!(INLINED_ATOM_MAX_LEN < mem::size_of::<Atom>());
+const_assert!(MAX_INLINED_ATOM_LEN < mem::size_of::<Atom>());
 const_assert!(mem::size_of::<Atom>() == 8);
 
 impl AtomCell {
     #[inline]
-    fn new_static(index: u64) -> Self {
+    fn from_static(index: u64) -> Self {
         // upper 23 bits of index must be 0
         debug_assert_eq!(index & !((1 << 49) - 1), 0);
         AtomCell::new()
@@ -61,31 +62,15 @@ impl AtomCell {
     }
 
     #[inline]
-    fn new_inlined(string: &str, arity: u8) -> Self {
-        debug_assert!(string.len() <= INLINED_ATOM_MAX_LEN);
+    fn from_graphemes_inlined(c: &str) -> Self {
+        debug_assert!(c.len() <= MAX_INLINED_ATOM_LEN);
 
-        let mut string_buf: [u8; 8] = [0u8; 8];
-        string_buf[..string.len()].copy_from_slice(string.as_bytes());
-        let encoding = u64::from_le_bytes(string_buf);
-
-        AtomCell::new()
-            .with_name(encoding)
-            .with_arity(arity)
-            .with_m(false)
-            .with_f(false)
-            .with_is_inlined(true)
-            .with_tag(HeapCellValueTag::Atom as u8)
-    }
-
-    #[inline]
-    pub fn new_char_inlined(c: char) -> Self {
-        if c == '\u{0}' {
-            return Self::new_static(NULL_ATOM.flat_index());
+        if c == "\u{0}" {
+            return Self::from_static(NULL_ATOM.flat_index());
         }
 
         let mut char_buf = [0u8; 8];
-        c.encode_utf8(&mut char_buf);
-
+        char_buf[..c.len()].copy_from_slice(c.as_bytes());
         let encoding = u64::from_le_bytes(char_buf);
 
         AtomCell::new()
@@ -107,6 +92,25 @@ impl AtomCell {
             .with_f(false)
             .with_m(false)
             .with_is_inlined(atom_index & 1 == 1)
+            .with_tag(HeapCellValueTag::Atom as u8)
+    }
+
+    pub fn from_codepoint(c: char) -> Self {
+        if c == '\u{0}' {
+            return Self::from_static(NULL_ATOM.flat_index());
+        }
+
+        let mut char_buf = [0u8; 8];
+        c.encode_utf8(&mut char_buf);
+
+        let encoding = u64::from_le_bytes(char_buf);
+
+        AtomCell::new()
+            .with_name(encoding)
+            .with_arity(0u8)
+            .with_m(false)
+            .with_f(false)
+            .with_is_inlined(true)
             .with_tag(HeapCellValueTag::Atom as u8)
     }
 
@@ -249,7 +253,7 @@ fn inlined_to_str(bytes: &[u8; 8]) -> &str {
     let slice_len = bytes
         .iter()
         .position(|&b| b == 0u8)
-        .unwrap_or(INLINED_ATOM_MAX_LEN);
+        .unwrap_or(MAX_INLINED_ATOM_LEN);
 
     unsafe { str::from_utf8_unchecked(&bytes[..slice_len]) }
 }
@@ -289,11 +293,6 @@ impl rustyline::completion::Candidate for AtomString<'_> {
 }
 
 impl Atom {
-    #[inline]
-    fn new_inlined(string: &str) -> Self {
-        AtomCell::new_inlined(string, 0).get_name()
-    }
-
     #[inline(always)]
     fn is_static(self) -> bool {
         if self.is_inlined() {
@@ -355,16 +354,6 @@ impl Atom {
         self.len() == 0
     }
 
-    pub fn as_char(self) -> Option<char> {
-        let s = self.as_str();
-        let mut it = s.chars();
-
-        let c1 = it.next();
-        let c2 = it.next();
-
-        if c2.is_none() { c1 } else { None }
-    }
-
     #[inline]
     fn inlined_str<'a>(&self) -> Option<AtomString<'a>> {
         if self.is_inlined() {
@@ -398,6 +387,26 @@ impl Atom {
         };
 
         AtomTable::build_with(atom_tbl, sub_str)
+    }
+
+    pub fn as_char(self) -> Option<char> {
+        let self_str = self.as_str();
+        let mut g_iter = self_str.as_bytes().graphemes();
+
+        let g1 = g_iter.next();
+        let g2 = g_iter.next();
+
+        if let Some(g1) = g1
+            && let None = g2
+            && let Some(c1) = g1.chars().next()
+        {
+            // an atom of one grapheme is still technically a "char"
+            // whose code is the first codepoint, which is a Prolog
+            // char.
+            Some(c1)
+        } else {
+            None
+        }
     }
 }
 
@@ -487,8 +496,8 @@ impl AtomTable {
     }
 
     pub fn build_with(atom_table: &AtomTable, string: &str) -> Atom {
-        if !string.is_empty() && string.len() <= INLINED_ATOM_MAX_LEN && !string.contains('\u{0}') {
-            return Atom::new_inlined(string);
+        if !string.is_empty() && string.len() <= MAX_INLINED_ATOM_LEN && !string.contains('\u{0}') {
+            return AtomCell::from_graphemes_inlined(string).get_name();
         }
 
         loop {

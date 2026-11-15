@@ -1,4 +1,4 @@
-use crate::arena::*;
+use crate::arena::alloc::*;
 use crate::forms::*;
 use crate::heap_iter::{NonListElider, stackful_preorder_iter};
 use crate::machine::machine_state::*;
@@ -13,10 +13,10 @@ use num_order::NumOrd;
 
 impl MachineState {
     pub(crate) fn partial_string_to_pdl(&mut self, pstr_loc: usize, l: usize) {
-        let (c, succ_cell) = self.heap.last_str_char_and_tail(pstr_loc);
+        let (c, succ_cell) = self.heap.chars_and_tail_at(pstr_loc);
 
         self.pdl.push((succ_cell, heap_loc_as_cell!(l + 1)));
-        self.pdl.push((char_as_cell!(c), heap_loc_as_cell!(l)));
+        self.pdl.push((codepoint_as_cell!(c), heap_loc_as_cell!(l)));
     }
 }
 
@@ -173,40 +173,6 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
         );
     }
 
-    fn unify_char(&mut self, c: char, value: HeapCellValue) {
-        read_heap_cell!(value,
-            (HeapCellValueTag::Atom, (name, arity)) => {
-                if let Some(c2) = name.as_char() {
-                    self.fail = !(c == c2 && arity == 0);
-                } else {
-                    self.fail = true;
-                }
-            }
-            (HeapCellValueTag::Str, s) => {
-                let (name, arity) = cell_as_atom_cell!(self.heap[s])
-                    .get_name_and_arity();
-
-                if let Some(c2) = name.as_char() {
-                    self.fail = !(c == c2 && arity == 0);
-                } else {
-                    self.fail = true;
-                }
-            }
-            (HeapCellValueTag::AttrVar, h) => {
-                Self::bind(self, Ref::attr_var(h), char_as_cell!(c));
-            }
-            (HeapCellValueTag::Var, h) => {
-                Self::bind(self, Ref::heap_cell(h), char_as_cell!(c));
-            }
-            (HeapCellValueTag::StackVar, s) => {
-                Self::bind(self, Ref::stack_cell(s), char_as_cell!(c));
-            }
-            _ => {
-                self.fail = true;
-            }
-        );
-    }
-
     fn unify_fixnum(&mut self, n1: Fixnum, value: HeapCellValue) {
         if let Some(r) = value.as_var() {
             Self::bind(self, r, fixnum_as_cell!(n1));
@@ -297,51 +263,49 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
         );
     }
 
-    fn unify_constant(&mut self, ptr: UntypedArenaPtr, value: HeapCellValue) {
+    fn unify_constant(&mut self, cons_ptr: UntypedArenaPtr, value: HeapCellValue) {
         if let Some(ptr2) = value.to_untyped_arena_ptr()
-            && ptr.get_ptr() == ptr2.get_ptr()
+            && cons_ptr.get_ptr() == ptr2.get_ptr()
         {
             return;
         }
 
-        match_untyped_arena_ptr!(ptr,
-             (ArenaHeaderTag::Integer, int_ptr) => {
-                 Self::unify_big_integer(self, int_ptr, value);
-             }
-             (ArenaHeaderTag::Rational, rat_ptr) => {
-                 Self::unify_big_rational(self, rat_ptr, value);
-             }
-             (ArenaHeaderTag::Stream, stream) => {
-                 read_heap_cell!(value,
-                     (HeapCellValueTag::AttrVar | HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
-                         Self::bind(self, value.as_var().unwrap(), untyped_arena_ptr_as_cell!(ptr));
-                     }
-                     (HeapCellValueTag::Atom, (name, arity)) => {
-                         if arity > 0 {
-                             self.fail = true;
-                         } else {
-                             let stream_options = stream.options();
-
-                             if let Some(alias) = stream_options.get_alias() {
-                                 self.fail = name != alias;
-                             } else {
-                                 self.fail = true;
-                             }
-                         }
-                     }
-                     _ => {
-                         self.fail = true;
-                     }
-                 );
-             }
-             _ => {
-                 if let Some(r) = value.as_var() {
-                     Self::bind(self, r, untyped_arena_ptr_as_cell!(ptr));
-                 } else {
-                     self.fail = true;
-                 }
-             }
-        );
+        match cons_ptr.get_tag() {
+            ArenaHeaderTag::Integer => {
+                let int_ptr = unsafe { cons_ptr.as_typed_ptr::<Integer>() };
+                Self::unify_big_integer(self, int_ptr, value);
+            }
+            ArenaHeaderTag::Rational => {
+                let rat_ptr = unsafe { cons_ptr.as_typed_ptr::<Rational>() };
+                Self::unify_big_rational(self, rat_ptr, value);
+            }
+            _ if let Some(stream) = Stream::from_tag(cons_ptr) => {
+                read_heap_cell!(value,
+                    (HeapCellValueTag::AttrVar | HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
+                        Self::bind(self, value.as_var().unwrap(), untyped_arena_ptr_as_cell!(cons_ptr));
+                    }
+                    (HeapCellValueTag::Atom, (name, arity)) => {
+                        if arity > 0 {
+                            self.fail = true;
+                        } else if let Some(alias) = stream.options.get_alias() {
+                            self.fail = name != alias;
+                        } else {
+                            self.fail = true;
+                        }
+                    }
+                    _ => {
+                        self.fail = true;
+                    }
+                );
+            }
+            _ => {
+                if let Some(r) = value.as_var() {
+                    Self::bind(self, r, untyped_arena_ptr_as_cell!(cons_ptr));
+                } else {
+                    self.fail = true;
+                }
+            }
+        }
     }
 
     fn unify_internal(&mut self) {

@@ -1,4 +1,4 @@
-use crate::arena::*;
+use crate::arena::alloc::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::heap_iter::*;
@@ -47,7 +47,7 @@ use std::rc::Rc;
  * loader fail later, all changes must be rolled back, restoring the
  * WAM to its prior state. Retraction records describe individual changes
  * made by the loader, and they may be used later.
-*/
+ */
 
 #[derive(Debug)]
 pub(crate) enum RetractionRecord {
@@ -107,7 +107,7 @@ pub(crate) enum RetractionRecord {
  * "extent" of a code vector is its length prior to an attempted
  * module load. The only code vector of the WAM's IndexStore, "code",
  * is shared by all modules, including the default "user" module.
-*/
+ */
 
 pub(crate) struct RetractionInfo {
     orig_code_extent: usize,
@@ -490,7 +490,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         }
     }
 
-    pub(crate) fn read_term_from_heap(&mut self, r: RegType) -> Term {
+    pub(crate) fn read_term_from_heap(&mut self, r: RegType) -> Option<Term> {
         let machine_st = LS::machine_st(&mut self.payload);
         let cell = machine_st[r];
 
@@ -1018,7 +1018,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let machine_st = LS::machine_st(&mut self.payload);
         let cell = machine_st[r];
 
-        let export_list = machine_st.read_term_from_heap(cell);
+        let export_list = machine_st
+            .read_term_from_heap(cell)
+            .ok_or(SessionError::UnexpectedSubterm)?;
         let export_list = setup_module_export_list(export_list)?;
 
         Ok(export_list.into_iter().collect())
@@ -1383,14 +1385,22 @@ impl<'a> MachinePreludeView<'a> {
 }
 
 impl MachineState {
-    pub(super) fn read_term_from_heap(&mut self, term_addr: HeapCellValue) -> Term {
+    // returns None if the term read is e.g. cyclic or contains
+    // values that cannot be represented within a Term AST.
+    pub(super) fn read_term_from_heap(&mut self, term_addr: HeapCellValue) -> Option<Term> {
         let mut term_stack = vec![];
         self.heap[0] = term_addr;
         let mut iter =
             stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, 0);
 
-        while let Some(addr) = iter.next() {
-            let addr = unmark_cell_bits!(addr);
+        while let Some(cell) = iter.next() {
+            if cell.get_forwarding_bit() && cell.is_compound(iter.heap) {
+                // in this case, the heap term is cyclic and cannot be
+                // the basis of a Term.
+                return None;
+            }
+
+            let addr = unmark_cell_bits!(cell);
 
             let addr = if addr.is_var() {
                 unmark_cell_bits!(heap_bound_store(
@@ -1418,8 +1428,26 @@ impl MachineState {
                         Err(cons_term) => term_stack.push(cons_term),
                     }
                 }
-                (HeapCellValueTag::Cons | HeapCellValueTag::Fixnum | HeapCellValueTag::F64Offset) => {
-                    term_stack.push(Term::Literal(Cell::default(), Literal::try_from((addr, &self.arena.f64_tbl)).unwrap()));
+                (HeapCellValueTag::Cons, cons_ptr) => {
+                    if cons_ptr.get_tag() == ArenaHeaderTag::ChildProcess {
+                        use std::process::Child;
+
+                        let process = unsafe { Child::typed_ptr(cons_ptr) };
+                        term_stack.push(Term::Process(Cell::default(), process));
+                    } else if let Some(stream) = Stream::from_tag(cons_ptr) {
+                        term_stack.push(Term::Stream(Cell::default(), stream));
+                    } else if let Ok(literal) = Literal::try_from((addr, &self.arena.f64_tbl)) {
+                        term_stack.push(Term::Literal(Cell::default(), literal));
+                    } else {
+                        return None;
+                    }
+                }
+                (HeapCellValueTag::Fixnum, n) => {
+                    term_stack.push(Term::Literal(Cell::default(), Literal::Fixnum(n)));
+                }
+                (HeapCellValueTag::F64Offset, offset) => {
+                    let entry = self.arena.f64_tbl.get_entry(offset);
+                    term_stack.push(Term::Literal(Cell::default(), Literal::F64(offset, entry)));
                 }
                 (HeapCellValueTag::StackVar, h) => {
                     term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("s_{h}"))));
@@ -1450,16 +1478,19 @@ impl MachineState {
                 (HeapCellValueTag::PStrLoc, h) => {
                     let HeapStringScan { string, .. } = iter.heap.scan_slice_to_str(h);
                     let tail = term_stack.pop().unwrap();
+                    let string = unsafe {
+                        std::str::from_utf8_unchecked(string)
+                    };
 
                     term_stack.push(if matches!(tail, Term::Literal(_, Literal::Atom(atom!("[]")))) {
                         Term::CompleteString(
                             Cell::default(),
-                            Rc::new(string.to_owned()),
+                            Rc::new(String::from(string)),
                         )
                     } else {
                         Term::PartialString(
                             Cell::default(),
-                            Rc::new(string.to_owned()),
+                            Rc::new(String::from(string)),
                             Box::new(tail),
                         )
                     });
@@ -1470,7 +1501,7 @@ impl MachineState {
         }
 
         debug_assert!(term_stack.len() == 1);
-        term_stack.pop().unwrap()
+        term_stack.pop()
     }
 }
 
@@ -1646,7 +1677,9 @@ impl Machine {
         let mut loader = self.loader_from_heap_evacuable(temp_v!(2));
 
         let add_clause = || {
-            let term = loader.read_term_from_heap(temp_v!(1));
+            let term = loader
+                .read_term_from_heap(temp_v!(1))
+                .ok_or(SessionError::UnexpectedSubterm)?;
 
             loader.incremental_compile_clause(
                 (atom!("term_expansion"), 2),
@@ -1677,7 +1710,9 @@ impl Machine {
         };
 
         let add_clause = || {
-            let term = loader.read_term_from_heap(temp_v!(2));
+            let term = loader
+                .read_term_from_heap(temp_v!(2))
+                .ok_or(SessionError::UnexpectedSubterm)?;
 
             let indexing_arg = match term.name() {
                 Some(atom!(":-")) => term.first_arg().and_then(Term::first_arg),
@@ -1975,7 +2010,7 @@ impl Machine {
     pub(crate) fn load_context_stream(&mut self) {
         if let Some(load_context) = self.load_contexts.last() {
             self.machine_st.unify_constant(
-                UntypedArenaPtr::from(load_context.stream.as_ptr()),
+                UntypedArenaPtr::from(load_context.stream),
                 self.machine_st.registers[1],
             );
         } else {
@@ -2010,8 +2045,9 @@ impl Machine {
 
             loader.payload.compilation_target = compilation_target;
 
-            let head =
-                LiveLoadAndMachineState::machine_st(&mut loader.payload).read_term_from_heap(head);
+            let head = LiveLoadAndMachineState::machine_st(&mut loader.payload)
+                .read_term_from_heap(head)
+                .ok_or(SessionError::UnexpectedSubterm)?;
 
             let name = if let Some(name) = head.name() {
                 name
@@ -2058,7 +2094,9 @@ impl Machine {
                 return LiveLoadAndMachineState::evacuate(loader);
             }
 
-            let body = loader.read_term_from_heap(temp_v!(3));
+            let body = loader
+                .read_term_from_heap(temp_v!(3))
+                .ok_or(SessionError::UnexpectedSubterm)?;
 
             let asserted_clause = Term::Clause(
                 Cell::default(),
@@ -2543,7 +2581,9 @@ impl<'a> Loader<'a, LiveLoadAndMachineState<'a>> {
             self.payload.predicates.compilation_target = compilation_target;
         }
 
-        let term = self.read_term_from_heap(term_reg);
+        let term = self
+            .read_term_from_heap(term_reg)
+            .ok_or(SessionError::UnexpectedSubterm)?;
 
         self.add_clause_clause_if_dynamic(&term)?;
         self.payload.term_stream.term_queue.push_back(term);

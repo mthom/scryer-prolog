@@ -1,7 +1,7 @@
+pub use crate::arena::stream_layout::*;
 use crate::heap_print::*;
 pub use crate::machine::heap::*;
 pub use crate::machine::machine_state::*;
-pub use crate::machine::streams::*;
 pub use crate::machine::*;
 pub use crate::parser::ast::*;
 
@@ -411,19 +411,19 @@ mod tests {
         let mut writer = wam.heap.reserve(96).unwrap();
 
         writer.write_with(|section| {
-            section.push_pstr("this is a string"); // 0
+            section.push_pstr(b"this is a string"); // 0
 
             let h = section.cell_len();
             assert_eq!(h, 3);
 
             section.push_cell(heap_loc_as_cell!(h)); // 3
-            section.push_pstr("this is a string"); // 4
+            section.push_pstr(b"this is a string"); // 4
 
             let h = section.cell_len();
             assert_eq!(h + 1, 8);
 
             section.push_cell(pstr_loc_as_cell!(heap_index!(h + 1))); // 7
-            section.push_pstr("this is a string"); // 8
+            section.push_pstr(b"this is a string"); // 8
 
             section.push_cell(pstr_loc_as_cell!(heap_index!(h + 1)));
         });
@@ -600,7 +600,7 @@ mod tests {
             Some(Ordering::Equal)
         );
 
-        let cstr_cell = wam.heap.allocate_cstr("string").unwrap();
+        let cstr_cell = wam.heap.allocate_cstr(b"string").unwrap();
 
         assert_eq!(
             wam.compare_term_test(atom_as_cell!(atom!("atom")), cstr_cell),
@@ -686,7 +686,7 @@ mod tests {
             Some(Ordering::Greater)
         );
 
-        let cstr_cell = wam.heap.allocate_cstr("string").unwrap();
+        let cstr_cell = wam.heap.allocate_cstr(b"string").unwrap();
 
         assert_eq!(
             wam.compare_term_test(empty_list_as_cell!(), cstr_cell),
@@ -775,7 +775,7 @@ mod tests {
         wam.heap.clear();
 
         let h = wam.heap.cell_len();
-        wam.heap.allocate_cstr("a string").unwrap();
+        wam.heap.allocate_cstr(b"a string").unwrap();
 
         assert!(!wam.is_cyclic_term(h));
     }
