@@ -86,11 +86,6 @@ impl GenContext {
             &GenContext::Mid(cn) | &GenContext::Last(cn) => cn,
         }
     }
-
-    #[inline]
-    pub fn is_last(self) -> bool {
-        matches!(self, GenContext::Last(_))
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

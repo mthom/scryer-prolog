@@ -376,7 +376,7 @@ impl<'a> ArithmeticEvaluator<'a> {
                 ArithTermRef::Var(lvl, cell, name) => {
                     let var_num = name.to_var_num().unwrap();
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
                         lvl,
                         var_num,
                         term_loc,

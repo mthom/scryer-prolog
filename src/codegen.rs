@@ -549,7 +549,7 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
                         Level::Shallow,
                         name.to_var_num().unwrap(),
                         term_loc,
@@ -577,7 +577,7 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
                         Level::Shallow,
                         name.to_var_num().unwrap(),
                         term_loc,
@@ -598,7 +598,7 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
                         Level::Shallow,
                         name.to_var_num().unwrap(),
                         term_loc,
@@ -621,7 +621,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
                         Level::Shallow,
                         name.to_var_num().unwrap(),
                         term_loc,
@@ -641,7 +641,7 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
                         Level::Shallow,
                         name.to_var_num().unwrap(),
                         term_loc,
@@ -668,7 +668,7 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
                         Level::Shallow,
                         name.to_var_num().unwrap(),
                         term_loc,
@@ -689,7 +689,7 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
                         Level::Shallow,
                         name.to_var_num().unwrap(),
                         term_loc,
@@ -710,7 +710,7 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
                         Level::Shallow,
                         name.to_var_num().unwrap(),
                         term_loc,
@@ -740,7 +740,7 @@ impl<'a> CodeGenerator<'a> {
                 Term::Var(vr, name) => {
                     self.marker.reset_arg(1);
 
-                    let r = self.marker.mark_non_callable(
+                    let r = self.marker.mark_inlined_var(
                         Level::Shallow,
                         name.to_var_num().unwrap(),
                         term_loc,

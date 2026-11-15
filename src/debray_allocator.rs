@@ -448,19 +448,7 @@ impl DebrayAllocator {
         p
     }
 
-    fn mark_var_in_non_callable(
-        &mut self,
-        lvl: Level,
-        var_num: usize,
-        term_loc: GenContext,
-        vr: &Cell<VarReg>,
-        code: &mut CodeDeque,
-    ) -> RegType {
-        self.mark_var::<QueryInstruction>(var_num, lvl, vr, term_loc, code);
-        vr.get().norm()
-    }
-
-    pub(crate) fn mark_non_callable(
+    pub(crate) fn mark_inlined_var(
         &mut self,
         lvl: Level,
         var_num: usize,
@@ -480,12 +468,12 @@ impl DebrayAllocator {
                     self.var_data.records[var_num].allocation,
                     VarAlloc::Perm(_, PermVarAllocation::Pending)
                 ) || (self.in_tail_position
-                    && term_loc.is_last()
+                    && matches!(term_loc, GenContext::Last(_))
                     && matches!(vr.get(), VarReg::Norm(_))
                     && matches!(lvl, Level::Shallow));
 
                 if call_mark_var {
-                    self.mark_var_in_non_callable(lvl, var_num, term_loc, vr, code);
+                    self.mark_var::<QueryInstruction>(var_num, lvl, vr, term_loc, code);
                 } else {
                     self.increment_running_count(var_num);
                 }
@@ -495,7 +483,10 @@ impl DebrayAllocator {
                     VarReg::Norm(_) => RegType::Perm(p),
                 }
             }
-            _ => self.mark_var_in_non_callable(lvl, var_num, term_loc, vr, code),
+            _ => {
+                self.mark_var::<QueryInstruction>(var_num, lvl, vr, term_loc, code);
+                vr.get().norm()
+            }
         }
     }
 
