@@ -5,7 +5,7 @@
    X = "Scryer Prolog!".
 ```
 
-![scryer](scryer.png){width=128 style=float:right;} [Scryer Prolog](https://github.com/mthom/scryer-prolog) is a free software ISO Prolog system intended to be an industrial
+![scryer](scryer.png){width=128 style=float:right;} [Scryer Prolog](https://codeberg.org/mthom/scryer-prolog) is a free software ISO Prolog system intended to be an industrial
 strength production environment *and* a testbed for bleeding edge research in
 logic and constraint programming.
 
@@ -63,17 +63,17 @@ The latest version of Scryer Prolog is *0.10.0*. And it's already useful for lot
 | Linux (Ubuntu 22.04, 64 bits) | [Download](https://scryerprologrelease.blob.core.windows.net/release-0100/scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu.zip) |
 | Linux (Ubuntu 22.04, 32 bits) | [Download](https://scryerprologrelease.blob.core.windows.net/release-0100/scryer-prolog_ubuntu-22.04_i686-unknown-linux-gnu.zip) |
 
-Scryer Prolog can also be compiled from source, instructions are on the [GitHub README](https://github.com/mthom/scryer-prolog). It runs on Linux, macOS and Windows. Other operating systems may work but they're not regularly tested.
+Scryer Prolog can also be compiled from source, instructions are on the [Codeberg README](https://codeberg.org/mthom/scryer-prolog). It runs on Linux, macOS and Windows. Other operating systems may work but they're not regularly tested.
 
 If you're in Linux, maybe your distribution already has an Scryer Prolog package.
 
-There's also a [Docker image](https://github.com/mthom/scryer-prolog#docker-install) available.
+There's also a [Docker image](https://codeberg.org/mthom/scryer-prolog#docker-install) available.
 
 ## Support and discussions
 
 If Scryer Prolog crashes or yields unexpected errors, consider filing
-an [issue](https://github.com/mthom/scryer-prolog/issues).
+an [issue](https://codeberg.org/mthom/scryer-prolog/issues).
 
 To get in touch with the Scryer Prolog community, participate in
-[discussions](https://github.com/mthom/scryer-prolog/discussions)
-or visit our #scryer IRC channel on [Libera](https://libera.chat)!
+[discussions](https://codeberg.org/mthom/scryer-prolog/discussions) or
+visit our #scryer IRC channel on [Libera](https://libera.chat)!
