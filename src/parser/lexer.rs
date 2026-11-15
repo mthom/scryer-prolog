@@ -99,6 +99,9 @@ pub(crate) struct Lexer<'a, R> {
     pub(crate) reader: R,
     pub(crate) machine_st: &'a mut MachineState,
     pub(crate) location: Location,
+    /// Set when the last `next_token` call hit end of stream before any character of a token,
+    /// i.e. after nothing but layout text (whitespace and complete comments).
+    pub(crate) eof_at_token_start: bool,
 }
 
 impl<'a, R: fmt::Debug> fmt::Debug for Lexer<'a, R> {
@@ -137,6 +140,7 @@ impl<'a, R: GraphemeRead> Lexer<'a, R> {
             reader,
             machine_st,
             location: Location::BOF,
+            eof_at_token_start: false,
         }
     }
 
@@ -987,8 +991,21 @@ impl<'a, R: GraphemeRead> Lexer<'a, R> {
     }
 
     pub fn next_token(&mut self) -> Result<Token, ParserError> {
-        let layout_inserted = self.scan_for_layout()?;
-        let cr = self.peek_grapheme(0);
+        self.eof_at_token_start = false;
+        let layout_inserted = match self.scan_for_layout() {
+            Err(e) if e.is_unexpected_eof() => {
+                self.eof_at_token_start = true;
+                return Err(e);
+            }
+            r => r?,
+        };
+        let cr = self.lookahead_char();
+
+        if let Err(e) = &cr {
+            if e.is_unexpected_eof() {
+                self.eof_at_token_start = true;
+            }
+        }
 
         match cr {
             Ok(g) => {
