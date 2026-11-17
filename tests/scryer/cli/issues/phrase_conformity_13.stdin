@@ -1,0 +1,7 @@
+use_module(library(dcgs),[phrase/2]).
+catch(
+  (phrase(({fail},1),L) -> fail),
+  error(type_error(callable(1), _)),
+  true
+).
+halt.
