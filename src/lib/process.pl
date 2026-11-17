@@ -1,9 +1,9 @@
 :- module(process, [
-    process_create/3, 
+    process_create/3,
     process_id/2,
-    process_release/1, 
-    process_wait/2, 
-    process_wait/3, 
+    process_release/1,
+    process_wait/2,
+    process_wait/3,
     process_kill/1
 ]).
 
@@ -18,7 +18,7 @@
 % Create a new process by executing the executable Exe and passing it the Arguments Args.
 %
 % Note: On windows please take note of [windows argument splitting](https://doc.rust-lang.org/std/process/index.html#windows-argument-splitting).
-% 
+%
 % Options is a list consisting of the following options:
 %
 %  * `cwd(+Path)`           Set the processes working directory to `Path`
@@ -31,11 +31,11 @@
 %  `env/1` and `environment/1` may not be both specified.
 %
 %  The following stdio `Spec` are available:
-%  
+%
 %  * `std`          inherit the current processes original stdio streams (does currently not account for stdio being changed by `set_input` or `set_output`)
-%  * `file(+Path)`  attach the strea to the file at `Path`
+%  * `file(+Path)`  attach the stream to the file at `Path`
 %  * `null`         discards writes and behaves as eof for read. Equivalent to using `file(/dev/null)`
-%  * `pipe(-Steam)` create a new pipe and assigne one end to the created process and the other end to `Stream`
+%  * `pipe(-Steam)` create a new pipe and assign one end to the created process and the other end to `Stream`
 %
 % Specifying an option multiple times is an error, when an option is not specified the following defaults apply:
 %
@@ -104,7 +104,7 @@ process_wait(Process, Status) :- call_with_error_context(process_wait(Process, S
 %
 process_wait(Process, Status, Options) :- call_with_error_context(process_wait_(Process, Status, Options), predicate-process_wait/3).
 
-process_wait_(Process, Status, Options) :- 
+process_wait_(Process, Status, Options) :-
     valid_process(Process),
     check_options(
         [
@@ -138,10 +138,10 @@ valid_bool(false).
 % On Unix this sends SIGKILL.
 %
 % Only works for processes spawned with `process_create/3` that have not yet been release with `process_release/1`
-% 
+%
 process_kill(Process) :- call_with_error_context(process_kill_(Process), predicate-process_kill/1).
 
-process_kill_(Process) :- 
+process_kill_(Process) :-
     valid_process(Process),
     '$process_kill'(Process).
 
@@ -166,7 +166,7 @@ must_be_known_options_(Valid, Found, [X|XS], Domain) :-
     ; domain_error(Domain, X, [])
     ) ,
     ( member(Option, Found) -> domain_error(non_duplicate_options, Option , [])
-    ; member(Option, Valid) -> true 
+    ; member(Option, Valid) -> true
     ; domain_error(Domain, Option, [])
     ),
     must_be_known_options_(Valid, [Option | Found], XS, Domain).
@@ -184,17 +184,17 @@ option_names(option(Names,_,_,_), Names).
 extract_options(KnownOptions, Options) :- call_with_error_context(extract_options_(KnownOptions, Options), predicate-extract_options/2).
 
 extract_options_([], _).
-extract_options_([X | XS], Options) :- 
+extract_options_([X | XS], Options) :-
     option(Kinds, Pred, Default, Choice) = X,
     tfilter(find_option(Kinds), Options, Solutions),
     ( Solutions = [] -> Choice = Default
-    ; Solutions = [Provided] -> functor(Pred, Name, Arity), ArityP1 is Arity+1, call_with_error_context(call(Pred, Provided),predicate-Name/ArityP1), Choice = Provided 
+    ; Solutions = [Provided] -> functor(Pred, Name, Arity), ArityP1 is Arity+1, call_with_error_context(call(Pred, Provided),predicate-Name/ArityP1), Choice = Provided
     ; domain_error(non_conflicting_options, Solutions, [])
     ),
     extract_options_(XS, Options).
 
-find_option(Names, Found, T) :- 
-    functor(Found, Name, 1), 
+find_option(Names, Found, T) :-
+    functor(Found, Name, 1),
     memberd_t(Name, Names, T).
 
 valid_stdio(IO) :- arg(1, IO, Arg),
@@ -208,20 +208,20 @@ valid_stdio_(null).
 valid_stdio_(pipe(Stream)) :- must_be(var, Stream).
 valid_stdio_(file(Path)) :- must_be(chars, Path).
 
-valid_env(env(E)) :- 
+valid_env(env(E)) :-
     must_be(list, E),
-    ( valid_env_(E) -> true 
+    ( valid_env_(E) -> true
     ; domain_error(process_create_option, env(E), [])
     ).
-valid_env(environment(E)) :- 
+valid_env(environment(E)) :-
     must_be(list, E),
-    ( valid_env_(E) -> true 
+    ( valid_env_(E) -> true
     ; domain_error(process_create_option, environment(E), [])
     ).
 
 valid_env_([]).
-valid_env_([N=V|ES]) :- 
-    must_be(chars, N), 
+valid_env_([N=V|ES]) :-
+    must_be(chars, N),
     must_be(chars, V),
     valid_env_(ES).
 
