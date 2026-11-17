@@ -16,7 +16,8 @@ act(TargetFile, Time) :-
 
 main :-
     call_cleanup(
-       (setenv("TARGET_FILE", "file_time_test"),
+       (setenv("SHELL", "/bin/sh"),
+        setenv("TARGET_FILE", "file_time_test"),
         shell("touch file_time_test", 0),
         findall(T, check(T), Ts),
         length(Ts, 3)),
